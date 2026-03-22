@@ -5,13 +5,14 @@ import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
   id: string
+  agentId: string
   cwd?: string
   visible: boolean
   autoRunClaude?: boolean
   startupCommand?: string
 }
 
-export default function Terminal({ id, cwd, visible, autoRunClaude, startupCommand }: TerminalProps) {
+export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, startupCommand }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -85,7 +86,9 @@ export default function Terminal({ id, cwd, visible, autoRunClaude, startupComma
             if (startupCommand) {
               setTimeout(() => window.api.pty.write(id, startupCommand + '\r'), 500)
             } else if (autoRunClaude) {
-              setTimeout(() => window.api.pty.write(id, 'claude\r'), 500)
+              const soulPath = `~/.hive/souls/${agentId}.md`
+              const cmd = `claude --append-system-prompt-file ${soulPath}`
+              setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
             }
           })
           .catch((err) => {

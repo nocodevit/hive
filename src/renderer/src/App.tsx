@@ -3,6 +3,7 @@ import Terminal from './components/Terminal'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import CreateProjectModal from './components/CreateProjectModal'
 import CreateAgentModal from './components/CreateAgentModal'
+import ProjectSettingsModal from './components/ProjectSettingsModal'
 import type { Project, Agent, Zone, SkillInfo } from './types'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
@@ -47,6 +48,8 @@ export default function App() {
   const [activeTerminals, setActiveTerminals] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [showCreateAgent, setShowCreateAgent] = useState(false)
+  const [showProjectSettings, setShowProjectSettings] = useState(false)
+  const [projectTab, setProjectTab] = useState<'dashboard' | 'settings'>('dashboard')
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
   const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100 })
@@ -91,6 +94,7 @@ export default function App() {
 
   const handleCreateAgent = (agent: Agent) => {
     setAgents((prev) => [...prev, agent])
+    window.api.agent.writeSoul(agent.id, agent.soul)
   }
 
   // Scan all projects on load and when selected
@@ -339,6 +343,7 @@ export default function App() {
                                   const zone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
                                   if (zone) await window.api.git.worktreeRemove(zone.path, agent.worktreePath)
                                 }
+                                window.api.agent.deleteSoul(agent.id)
                                 setAgents((prev) => prev.filter((a) => a.id !== agent.id))
                                 if (selectedAgentId === agent.id) setSelectedAgentId(null)
                               }}
@@ -472,196 +477,314 @@ export default function App() {
             </div>
           )}
 
-          {/* Project Dashboard */}
+          {/* Project View (Dashboard / Settings tabs) */}
           {!selectedAgent && selectedProject && (
-            <div className="absolute inset-0 overflow-y-auto p-6 space-y-6">
-              {/* Project Status Card */}
-              <div className="p-5 rounded-xl bg-bg-secondary border border-border">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h1 className="text-xl font-heading font-bold text-text-primary">{selectedProject.name}</h1>
-                    <p className="text-xs text-text-muted mt-0.5 font-mono">{selectedProject.officePath}</p>
-                  </div>
+            <div className="absolute inset-0 flex flex-col">
+              {/* Project Header + Tabs in title bar area */}
+              <div className="px-6 pt-2 pb-3 border-b border-border flex items-center gap-4">
+                <div className="flex gap-1">
+                  {([['dashboard', 'Project'], ['settings', 'Settings']] as const).map(([key, label]) => (
+                    <button
+                      key={key}
+                      onClick={() => setProjectTab(key)}
+                      className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                        projectTab === key
+                          ? 'bg-accent text-text-on-purple'
+                          : 'text-text-muted hover:bg-bg-hover'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-2 ml-auto">
+                  <h1 className="text-sm font-heading font-semibold text-text-primary">{selectedProject.name}</h1>
                   {projectScan && (
-                    <span className={`px-3 py-1 rounded-full text-xs font-heading font-bold uppercase tracking-wider ${
-                      projectScan.projectStage === 'active-online' ? 'bg-status-working/20 text-status-working' :
-                      projectScan.projectStage === 'active' ? 'bg-status-working/20 text-status-working' :
-                      projectScan.projectStage === 'incubating' ? 'bg-status-waiting/20 text-status-waiting' :
-                      'bg-bg-hover text-text-muted'
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider ${
+                      projectScan.projectStage === 'active-online' || projectScan.projectStage === 'active'
+                        ? 'bg-status-working/20 text-status-working'
+                        : projectScan.projectStage === 'incubating'
+                        ? 'bg-status-waiting/20 text-status-waiting'
+                        : 'bg-bg-hover text-text-muted'
                     }`}>
                       {projectScan.projectStage.replace('-', ' ')}
                     </span>
                   )}
                 </div>
+              </div>
 
-                {/* Todo Summary */}
-                {projectScan && projectScan.todos.length > 0 && (
-                  <div className="grid grid-cols-2 gap-4 mt-3">
-                    {/* R&D Todos */}
-                    <div>
-                      {(() => {
+              {/* Dashboard Tab */}
+              {projectTab === 'dashboard' && (
+                <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                  {/* Glass Todo Cards */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* R&D Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+                        </svg>
+                        <h3 className="text-sm font-heading font-bold text-text-primary">R&D</h3>
+                        {projectScan && (() => {
+                          const rdTodos = projectScan.todos.filter((t) => t.category === 'rd' || (t.type === 'rnd' && t.category === 'other'))
+                          const open = rdTodos.filter((t) => !t.done).length
+                          const done = rdTodos.filter((t) => t.done).length
+                          return (
+                            <span className="text-[11px] text-text-muted ml-auto">
+                              {open} open{done > 0 ? ` · ${done} done` : ''}
+                            </span>
+                          )
+                        })()}
+                      </div>
+                      {projectScan && (() => {
                         const rdTodos = projectScan.todos
                           .filter((t) => t.category === 'rd' || (t.type === 'rnd' && t.category === 'other'))
-                          .sort((a, b) => Number(a.done) - Number(b.done))
-                        const openCount = rdTodos.filter((t) => !t.done).length
-                        const doneCount = rdTodos.filter((t) => t.done).length
-                        return <>
-                          <h4 className="text-[11px] font-heading font-semibold text-accent uppercase tracking-wider mb-2">
-                            R&D ({openCount} open{doneCount > 0 ? ` · ${doneCount} done` : ''})
-                          </h4>
-                          <div className="space-y-1">
-                            {rdTodos.filter((t) => !t.done).slice(0, 8).map((t, i) => (
+                          .filter((t) => !t.done)
+                        return rdTodos.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {rdTodos.slice(0, 8).map((t, i) => (
                               <div key={i} className="flex items-start gap-2 text-[12px]">
-                                <span className="text-text-muted">{'\u25CB'}</span>
+                                <span className="text-accent mt-0.5">{'\u25CB'}</span>
                                 <span className="text-text-primary">{t.text}</span>
                               </div>
                             ))}
-                            {doneCount > 0 && (
-                              <p className="text-[11px] text-text-muted mt-1">{doneCount} completed</p>
-                            )}
+                            {rdTodos.length > 8 && <p className="text-[11px] text-text-muted">+{rdTodos.length - 8} more</p>}
                           </div>
-                        </>
+                        ) : (
+                          <p className="text-xs text-text-muted py-2">No open R&D todos</p>
+                        )
                       })()}
                     </div>
 
-                    {/* Admin Todos */}
-                    <div>
-                      {(() => {
-                        const adminTodos = projectScan.todos
-                          .filter((t) => t.type === 'non-rnd')
-                          .sort((a, b) => Number(a.done) - Number(b.done))
-                        const openCount = adminTodos.filter((t) => !t.done).length
-                        const doneCount = adminTodos.filter((t) => t.done).length
-                        const hasNonRndZone = selectedProject.zones.some((z: Zone) => z.type === 'non-rnd')
-                        return <>
-                          <h4 className="text-[11px] font-heading font-semibold text-status-waiting uppercase tracking-wider mb-2">
-                            Admin {adminTodos.length > 0 ? `(${openCount} open${doneCount > 0 ? ` · ${doneCount} done` : ''})` : ''}
-                          </h4>
-                          {adminTodos.length === 0 ? (
-                            <div className="text-center py-3">
-                              <p className="text-xs text-text-muted mb-2">
-                                {hasNonRndZone ? 'No todos found in docs folder.' : 'No Non-R&D zone configured.'}
-                              </p>
-                              <button
-                                onClick={() => {
-                                  setShowCreateAgent(true)
-                                }}
-                                className="px-3 py-1.5 rounded-lg bg-accent text-text-on-purple text-xs font-medium
-                                  hover:bg-accent-hover transition-colors cursor-pointer"
-                              >
-                                Create Business Manager
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="space-y-1">
-                              {adminTodos.filter((t) => !t.done).slice(0, 8).map((t, i) => (
-                                <div key={i} className="flex items-start gap-2 text-[12px]">
-                                  <span className="text-text-muted">{'\u25CB'}</span>
-                                  <span className="text-text-primary">{t.text}</span>
-                                  <span className="text-[10px] text-text-muted ml-auto flex-shrink-0">{t.category}</span>
-                                </div>
-                              ))}
-                              {doneCount > 0 && (
-                                <p className="text-[11px] text-text-muted mt-1">{doneCount} completed</p>
-                              )}
-                            </div>
-                          )}
-                        </>
+                    {/* Admin Card */}
+                    <div className="glass-card-warm p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--status-waiting)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                        </svg>
+                        <h3 className="text-sm font-heading font-bold text-text-primary">Admin</h3>
+                        {projectScan && (() => {
+                          const adminTodos = projectScan.todos.filter((t) => t.type === 'non-rnd')
+                          const open = adminTodos.filter((t) => !t.done).length
+                          const done = adminTodos.filter((t) => t.done).length
+                          return (
+                            <span className="text-[11px] text-text-muted ml-auto">
+                              {open} open{done > 0 ? ` · ${done} done` : ''}
+                            </span>
+                          )
+                        })()}
+                      </div>
+                      {projectScan && (() => {
+                        const adminTodos = projectScan.todos.filter((t) => t.type === 'non-rnd').filter((t) => !t.done)
+                        const hasNonRnd = selectedProject.zones.some((z: Zone) => z.type === 'non-rnd')
+                        return adminTodos.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {adminTodos.slice(0, 8).map((t, i) => (
+                              <div key={i} className="flex items-start gap-2 text-[12px]">
+                                <span className="text-status-waiting mt-0.5">{'\u25CB'}</span>
+                                <span className="text-text-primary flex-1">{t.text}</span>
+                                <span className="text-[10px] text-text-muted flex-shrink-0">{t.category}</span>
+                              </div>
+                            ))}
+                            {adminTodos.length > 8 && <p className="text-[11px] text-text-muted">+{adminTodos.length - 8} more</p>}
+                          </div>
+                        ) : (
+                          <div className="text-center py-2">
+                            <p className="text-xs text-text-muted mb-2">{hasNonRnd ? 'No open admin todos' : 'No Non-R&D zone'}</p>
+                            <button
+                              onClick={() => setShowCreateAgent(true)}
+                              className="px-3 py-1.5 rounded-lg bg-accent text-text-on-purple text-xs font-medium
+                                hover:bg-accent-hover transition-colors cursor-pointer"
+                            >
+                              Create Business Manager
+                            </button>
+                          </div>
+                        )
                       })()}
                     </div>
                   </div>
-                )}
 
-                {projectScan && projectScan.todos.length === 0 && (
-                  <p className="text-xs text-text-muted mt-2">No todos found in project markdown files.</p>
-                )}
-              </div>
-
-              {/* Agent Kanban */}
-              <div>
-                <div className="grid grid-cols-3 gap-3">
-                  {(['working', 'waiting', 'done'] as const).map((status) => {
-                    const statusLabel = { working: 'Working', waiting: 'Waiting', done: 'Idle' }
-                    const statusColor = { working: 'bg-status-working', waiting: 'bg-status-waiting', done: 'bg-status-done' }
-                    const columnAgents = projectAgents.filter((a) => a.status === status)
-                    return (
-                      <div key={status} className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
-                        <div className="px-4 py-3 border-b border-border flex items-center gap-2.5">
-                          <span className={`w-2.5 h-2.5 rounded-full ${statusColor[status]}`} />
-                          <span className="text-sm font-heading font-bold text-text-primary">
-                            {statusLabel[status]}
-                          </span>
-                          <span className="text-lg font-heading font-bold text-text-primary ml-auto">{columnAgents.length}</span>
-                        </div>
-                        <div className="p-2 space-y-1.5 min-h-[80px]">
-                          {columnAgents.length === 0 && (
-                            <p className="text-[11px] text-text-muted text-center py-4">No agents</p>
-                          )}
-                          {columnAgents.map((agent) => (
-                            <button
-                              key={agent.id}
-                              onClick={() => {
-                                setSelectedAgentId(agent.id)
-                                if (!activeTerminals.has(agent.id)) startAgent(agent)
-                              }}
-                              className="w-full text-left p-2.5 rounded-lg bg-bg-primary hover:bg-bg-hover
-                                border border-border transition-colors cursor-pointer"
-                            >
-                              <div className="flex items-center gap-2">
-                                <span className="text-sm font-medium text-text-primary">{agent.name}</span>
-                                <span className="text-[10px] text-text-muted uppercase ml-auto">
-                                  {agent.type === 'coding' ? 'dev' : 'res'}
-                                </span>
-                              </div>
-                              <p className="text-[11px] text-text-muted mt-1">{agent.department}</p>
-                              {agentReports[agent.id] && agentReports[agent.id].length > 0 && (
-                                <div className="mt-2 pt-2 border-t border-border space-y-1">
-                                  {agentReports[agent.id].slice(0, 4).map((item, i) => (
-                                    <div key={i} className="flex items-start gap-1.5 text-[11px]">
-                                      <span className={item.done ? 'text-status-working' : 'text-text-muted'}>
-                                        {item.done ? '\u2713' : '\u25CB'}
-                                      </span>
-                                      <span className={item.done ? 'text-text-muted line-through' : 'text-text-secondary'}>
-                                        {item.text}
-                                      </span>
-                                    </div>
-                                  ))}
-                                  {agentReports[agent.id].length > 4 && (
-                                    <p className="text-[10px] text-text-muted">+{agentReports[agent.id].length - 4} more</p>
-                                  )}
+                  {/* Agent Kanban */}
+                  <div className="grid grid-cols-3 gap-3">
+                    {(['working', 'waiting', 'done'] as const).map((status) => {
+                      const statusLabel = { working: 'Working', waiting: 'Waiting', done: 'Idle' }
+                      const statusColor = { working: 'bg-status-working', waiting: 'bg-status-waiting', done: 'bg-status-done' }
+                      const columnAgents = projectAgents.filter((a) => a.status === status)
+                      return (
+                        <div key={status} className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
+                          <div className="px-4 py-3 border-b border-border flex items-center gap-2.5">
+                            <span className={`w-2.5 h-2.5 rounded-full ${statusColor[status]}`} />
+                            <span className="text-sm font-heading font-bold text-text-primary">{statusLabel[status]}</span>
+                            <span className="text-lg font-heading font-bold text-text-primary ml-auto">{columnAgents.length}</span>
+                          </div>
+                          <div className="p-2 space-y-1.5 min-h-[80px]">
+                            {columnAgents.length === 0 && (
+                              <p className="text-[11px] text-text-muted text-center py-4">No agents</p>
+                            )}
+                            {columnAgents.map((agent) => (
+                              <button
+                                key={agent.id}
+                                onClick={() => {
+                                  setSelectedAgentId(agent.id)
+                                  if (!activeTerminals.has(agent.id)) startAgent(agent)
+                                }}
+                                className="w-full text-left p-2.5 rounded-lg bg-bg-primary hover:bg-bg-hover
+                                  border border-border transition-colors cursor-pointer"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <AvatarPreview config={agent.avatar} size={20} />
+                                  <span className="text-sm font-medium text-text-primary">{agent.name}</span>
+                                  <span className="text-[10px] text-text-muted uppercase ml-auto">
+                                    {agent.type === 'coding' ? 'dev' : 'res'}
+                                  </span>
                                 </div>
-                              )}
-                            </button>
-                          ))}
+                                {agentReports[agent.id] && agentReports[agent.id].length > 0 && (
+                                  <div className="mt-2 pt-2 border-t border-border space-y-1">
+                                    {agentReports[agent.id].slice(0, 3).map((item, i) => (
+                                      <div key={i} className="flex items-start gap-1.5 text-[11px]">
+                                        <span className={item.done ? 'text-status-working' : 'text-text-muted'}>
+                                          {item.done ? '\u2713' : '\u25CB'}
+                                        </span>
+                                        <span className={item.done ? 'text-text-muted line-through' : 'text-text-secondary'}>
+                                          {item.text}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </button>
+                            ))}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Zones */}
-              <div>
-                <h3 className="text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-3">
-                  Work Zones
-                </h3>
-                <div className="space-y-2">
-                  {selectedProject.zones.map((zone: Zone) => {
-                    const zoneAgents = projectAgents.filter((a) => a.zoneId === zone.id)
-                    return (
-                      <div key={zone.id} className="flex items-center gap-3 p-3 rounded-xl bg-bg-secondary border border-border">
-                        <span className={`w-2.5 h-2.5 rounded-full ${zone.type === 'rnd' ? 'bg-accent' : 'bg-status-waiting'}`} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-text-primary">{zone.name}</p>
-                          <p className="text-[11px] text-text-muted font-mono truncate">{zone.path}</p>
+              {/* Settings Tab */}
+              {projectTab === 'settings' && (
+                <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                  {/* Project Name */}
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+                      Project Name
+                    </label>
+                    <input
+                      type="text"
+                      value={selectedProject.name}
+                      onChange={(e) => setProjects((prev) => prev.map((p) =>
+                        p.id === selectedProject.id ? { ...p, name: e.target.value } : p
+                      ))}
+                      className="w-full px-3 py-2 rounded-lg bg-bg-secondary border border-border
+                        text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
+                    />
+                  </div>
+
+                  {/* R&D Folders */}
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+                      R&D Folders
+                    </label>
+                    <div className="space-y-1.5">
+                      {selectedProject.zones.filter((z: Zone) => z.type === 'rnd').map((zone: Zone) => (
+                        <div key={zone.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border text-sm">
+                          <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
+                          <span className="font-medium text-text-primary truncate">{zone.name}</span>
+                          <span className="text-[11px] text-text-muted truncate ml-auto max-w-[200px] font-mono">{zone.path}</span>
+                          <button
+                            onClick={() => setProjects((prev) => prev.map((p) =>
+                              p.id === selectedProject.id ? { ...p, zones: p.zones.filter((z) => z.id !== zone.id) } : p
+                            ))}
+                            className="text-text-muted hover:text-red-400 cursor-pointer flex-shrink-0"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                          </button>
                         </div>
-                        <span className="text-[10px] text-text-muted uppercase">{zone.type === 'rnd' ? 'R&D' : 'Docs'}</span>
-                        <span className="text-[11px] text-text-muted">{zoneAgents.length} agent{zoneAgents.length !== 1 ? 's' : ''}</span>
-                      </div>
-                    )
-                  })}
+                      ))}
+                      <button
+                        onClick={async () => {
+                          const path = await window.api.dialog.selectFolder('Add R&D Folder')
+                          if (!path) return
+                          const hasGit = await window.api.fs.hasGit(path)
+                          setProjects((prev) => prev.map((p) =>
+                            p.id === selectedProject.id ? {
+                              ...p,
+                              zones: [...p.zones, { id: `zone-${Date.now()}`, name: path.split('/').pop() || '', path, type: 'rnd' as const, hasGit }]
+                            } : p
+                          ))
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-border border-dashed text-sm
+                          text-accent hover:bg-accent-subtle transition-colors cursor-pointer
+                          flex items-center justify-center gap-1.5"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        Add R&D Folder
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Non-R&D Folders */}
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+                      Non-R&D Folders
+                    </label>
+                    <div className="space-y-1.5">
+                      {selectedProject.zones.filter((z: Zone) => z.type === 'non-rnd').map((zone: Zone) => (
+                        <div key={zone.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border text-sm">
+                          <span className="w-2 h-2 rounded-full bg-status-waiting flex-shrink-0" />
+                          <span className="font-medium text-text-primary truncate">{zone.name}</span>
+                          <span className="text-[11px] text-text-muted truncate ml-auto max-w-[200px] font-mono">{zone.path}</span>
+                          <button
+                            onClick={() => setProjects((prev) => prev.map((p) =>
+                              p.id === selectedProject.id ? { ...p, zones: p.zones.filter((z) => z.id !== zone.id) } : p
+                            ))}
+                            className="text-text-muted hover:text-red-400 cursor-pointer flex-shrink-0"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={async () => {
+                          const path = await window.api.dialog.selectFolder('Add Non-R&D Folder')
+                          if (!path) return
+                          setProjects((prev) => prev.map((p) =>
+                            p.id === selectedProject.id ? {
+                              ...p,
+                              zones: [...p.zones, { id: `zone-${Date.now()}`, name: path.split('/').pop() || '', path, type: 'non-rnd' as const, hasGit: false }]
+                            } : p
+                          ))
+                        }}
+                        className="w-full px-3 py-2 rounded-lg border border-border border-dashed text-sm
+                          text-status-waiting hover:bg-bg-hover transition-colors cursor-pointer
+                          flex items-center justify-center gap-1.5"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                        Add Non-R&D Folder
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Danger Zone */}
+                  <div className="pt-4 border-t border-border">
+                    <button
+                      onClick={() => {
+                        if (confirm('Delete this project and all its agents?')) {
+                          setAgents((prev) => prev.filter((a) => a.projectId !== selectedProject.id))
+                          setProjects((prev) => prev.filter((p) => p.id !== selectedProject.id))
+                          setSelectedProjectId(null)
+                          setSelectedAgentId(null)
+                        }
+                      }}
+                      className="px-4 py-2 rounded-lg text-sm text-red-400 hover:bg-red-400/10
+                        transition-colors cursor-pointer"
+                    >
+                      Delete Project
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
@@ -682,6 +805,7 @@ export default function App() {
               >
                 <Terminal
                   id={agentId}
+                  agentId={agentId}
                   cwd={getAgentCwd(agent)}
                   visible={isVisible}
                   autoRunClaude={appPrefs.autoRunClaude}
@@ -704,14 +828,26 @@ export default function App() {
                     <div className="w-12 h-12 rounded-xl bg-bg-primary border border-border flex items-center justify-center overflow-hidden">
                       <AvatarPreview config={selectedAgent.avatar} size={40} />
                     </div>
-                    <input
-                      type="text"
-                      value={selectedAgent.name}
-                      onChange={(e) => updateAgent(selectedAgent.id, { name: e.target.value })}
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-bg-primary border border-border
-                        text-text-primary text-sm font-semibold
-                        focus:outline-none focus:border-accent transition-colors"
-                    />
+                    <div className="flex-1 space-y-1">
+                      <input
+                        type="text"
+                        value={selectedAgent.name}
+                        onChange={(e) => updateAgent(selectedAgent.id, { name: e.target.value })}
+                        className="w-full px-3 py-1 rounded-lg bg-bg-primary border border-border
+                          text-text-primary text-sm font-semibold
+                          focus:outline-none focus:border-accent transition-colors"
+                        placeholder="Name"
+                      />
+                      <input
+                        type="text"
+                        value={selectedAgent.role || ''}
+                        onChange={(e) => updateAgent(selectedAgent.id, { role: e.target.value })}
+                        className="w-full px-3 py-1 rounded-lg bg-bg-primary border border-border
+                          text-text-muted text-xs
+                          focus:outline-none focus:border-accent transition-colors"
+                        placeholder="Role (e.g. Frontend Dev)"
+                      />
+                    </div>
                     <StatusDot status={selectedAgent.status} />
                   </div>
                   <div className="flex gap-2">
@@ -767,7 +903,10 @@ export default function App() {
                 </label>
                 <textarea
                   value={selectedAgent.soul}
-                  onChange={(e) => updateAgent(selectedAgent.id, { soul: e.target.value })}
+                  onChange={(e) => {
+                    updateAgent(selectedAgent.id, { soul: e.target.value })
+                    window.api.agent.writeSoul(selectedAgent.id, e.target.value)
+                  }}
                   className="w-full h-56 px-4 py-3 rounded-xl bg-bg-secondary border border-border
                     text-text-primary text-sm font-mono leading-relaxed resize-y
                     focus:outline-none focus:border-accent transition-colors"
