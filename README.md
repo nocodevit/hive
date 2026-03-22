@@ -1,5 +1,7 @@
 <div align="center">
 
+<img src="resources/icon.png" width="128" alt="Hive icon" />
+
 # Hive
 
 **Your AI agents deserve an office.**
