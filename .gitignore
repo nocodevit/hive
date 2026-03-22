@@ -1,0 +1,7 @@
+node_modules/
+out/
+dist/
+*.dmg
+.DS_Store
+theme-preview.html
+resources/icon.iconset/
