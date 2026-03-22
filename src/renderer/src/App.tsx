@@ -51,9 +51,14 @@ export default function App() {
   const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true })
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
   const [agentLogs, setAgentLogs] = useState<{ time: string; type: string; message: string }[]>([])
+  const [projectScans, setProjectScans] = useState<Record<string, {
+    projectStage: string
+    todos: { zone: string; type: string; category: string; text: string; done: boolean }[]
+  }>>({})
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || null
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) || null
+  const projectScan = selectedProjectId ? projectScans[selectedProjectId] || null : null
   const projectAgents = agents.filter((a) => a.projectId === selectedProjectId)
   const departments = [...new Set(projectAgents.map((a) => a.department))]
 
@@ -86,6 +91,14 @@ export default function App() {
   const handleCreateAgent = (agent: Agent) => {
     setAgents((prev) => [...prev, agent])
   }
+
+  // Scan all projects on load and when selected
+  useEffect(() => {
+    projects.forEach((p) => {
+      window.api.project.scan(p.zones.map((z: Zone) => ({ path: z.path, type: z.type })))
+        .then((scan) => setProjectScans((prev) => ({ ...prev, [p.id]: scan })))
+    })
+  }, [projects.length])
 
   // Load logs when switching to logs view
   useEffect(() => {
@@ -182,11 +195,13 @@ export default function App() {
                   : 'text-text-secondary hover:bg-bg-hover'
               }`}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
-                stroke={selectedProjectId === project.id ? 'var(--accent)' : 'currentColor'}
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-              </svg>
+              {(() => {
+                const scan = projectScans[project.id]
+                const stageColor = !scan ? 'bg-status-done' :
+                  scan.projectStage === 'active-online' || scan.projectStage === 'active' ? 'bg-status-working' :
+                  scan.projectStage === 'incubating' ? 'bg-status-waiting' : 'bg-status-done'
+                return <span className={`w-2 h-2 rounded-full flex-shrink-0 ${stageColor}`} />
+              })()}
               <span className="truncate">{project.name}</span>
             </button>
           ))}
@@ -422,10 +437,106 @@ export default function App() {
           {/* Project Dashboard */}
           {!selectedAgent && selectedProject && (
             <div className="absolute inset-0 overflow-y-auto p-6 space-y-6">
-              {/* Header */}
-              <div>
-                <h1 className="text-xl font-heading font-bold text-text-primary">{selectedProject.name}</h1>
-                <p className="text-sm text-text-muted mt-1 font-mono">{selectedProject.officePath}</p>
+              {/* Project Status Card */}
+              <div className="p-5 rounded-xl bg-bg-secondary border border-border">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h1 className="text-xl font-heading font-bold text-text-primary">{selectedProject.name}</h1>
+                    <p className="text-xs text-text-muted mt-0.5 font-mono">{selectedProject.officePath}</p>
+                  </div>
+                  {projectScan && (
+                    <span className={`px-3 py-1 rounded-full text-xs font-heading font-bold uppercase tracking-wider ${
+                      projectScan.projectStage === 'active-online' ? 'bg-status-working/20 text-status-working' :
+                      projectScan.projectStage === 'active' ? 'bg-status-working/20 text-status-working' :
+                      projectScan.projectStage === 'incubating' ? 'bg-status-waiting/20 text-status-waiting' :
+                      'bg-bg-hover text-text-muted'
+                    }`}>
+                      {projectScan.projectStage.replace('-', ' ')}
+                    </span>
+                  )}
+                </div>
+
+                {/* Todo Summary */}
+                {projectScan && projectScan.todos.length > 0 && (
+                  <div className="grid grid-cols-2 gap-4 mt-3">
+                    {/* R&D Todos */}
+                    <div>
+                      {(() => {
+                        const rdTodos = projectScan.todos
+                          .filter((t) => t.category === 'rd' || (t.type === 'rnd' && t.category === 'other'))
+                          .sort((a, b) => Number(a.done) - Number(b.done))
+                        const openCount = rdTodos.filter((t) => !t.done).length
+                        const doneCount = rdTodos.filter((t) => t.done).length
+                        return <>
+                          <h4 className="text-[11px] font-heading font-semibold text-accent uppercase tracking-wider mb-2">
+                            R&D ({openCount} open{doneCount > 0 ? ` · ${doneCount} done` : ''})
+                          </h4>
+                          <div className="space-y-1">
+                            {rdTodos.filter((t) => !t.done).slice(0, 8).map((t, i) => (
+                              <div key={i} className="flex items-start gap-2 text-[12px]">
+                                <span className="text-text-muted">{'\u25CB'}</span>
+                                <span className="text-text-primary">{t.text}</span>
+                              </div>
+                            ))}
+                            {doneCount > 0 && (
+                              <p className="text-[11px] text-text-muted mt-1">{doneCount} completed</p>
+                            )}
+                          </div>
+                        </>
+                      })()}
+                    </div>
+
+                    {/* Admin Todos */}
+                    <div>
+                      {(() => {
+                        const adminTodos = projectScan.todos
+                          .filter((t) => t.type === 'non-rnd')
+                          .sort((a, b) => Number(a.done) - Number(b.done))
+                        const openCount = adminTodos.filter((t) => !t.done).length
+                        const doneCount = adminTodos.filter((t) => t.done).length
+                        const hasNonRndZone = selectedProject.zones.some((z: Zone) => z.type === 'non-rnd')
+                        return <>
+                          <h4 className="text-[11px] font-heading font-semibold text-status-waiting uppercase tracking-wider mb-2">
+                            Admin {adminTodos.length > 0 ? `(${openCount} open${doneCount > 0 ? ` · ${doneCount} done` : ''})` : ''}
+                          </h4>
+                          {adminTodos.length === 0 ? (
+                            <div className="text-center py-3">
+                              <p className="text-xs text-text-muted mb-2">
+                                {hasNonRndZone ? 'No todos found in docs folder.' : 'No Non-R&D zone configured.'}
+                              </p>
+                              <button
+                                onClick={() => {
+                                  setShowCreateAgent(true)
+                                }}
+                                className="px-3 py-1.5 rounded-lg bg-accent text-text-on-purple text-xs font-medium
+                                  hover:bg-accent-hover transition-colors cursor-pointer"
+                              >
+                                Create Business Manager
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="space-y-1">
+                              {adminTodos.filter((t) => !t.done).slice(0, 8).map((t, i) => (
+                                <div key={i} className="flex items-start gap-2 text-[12px]">
+                                  <span className="text-text-muted">{'\u25CB'}</span>
+                                  <span className="text-text-primary">{t.text}</span>
+                                  <span className="text-[10px] text-text-muted ml-auto flex-shrink-0">{t.category}</span>
+                                </div>
+                              ))}
+                              {doneCount > 0 && (
+                                <p className="text-[11px] text-text-muted mt-1">{doneCount} completed</p>
+                              )}
+                            </div>
+                          )}
+                        </>
+                      })()}
+                    </div>
+                  </div>
+                )}
+
+                {projectScan && projectScan.todos.length === 0 && (
+                  <p className="text-xs text-text-muted mt-2">No todos found in project markdown files.</p>
+                )}
               </div>
 
               {/* Agent Kanban */}

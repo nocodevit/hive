@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import Modal from './Modal'
 import type { Agent, Project, Zone } from '../types'
-import { defaultAvatar, defaultSoul, defaultPreferences } from '../types'
+import { defaultAvatar, defaultSoul, defaultPreferences, agentPresets } from '../types'
 
 interface Props {
   open: boolean
@@ -17,6 +17,23 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
   const [type, setType] = useState<'coding' | 'non-coding'>('coding')
   const [department, setDepartment] = useState('Engineering')
   const [zoneId, setZoneId] = useState(project.zones[0]?.id || '')
+  const [soul, setSoul] = useState(defaultSoul)
+  const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
+
+  const applyPreset = (presetName: string) => {
+    const preset = agentPresets.find((p) => p.name === presetName)
+    if (!preset) return
+    setSelectedPreset(presetName)
+    setName(preset.name)
+    setType(preset.type)
+    setDepartment(preset.department)
+    setSoul(preset.soul)
+    // Auto-select matching zone
+    const matchZone = project.zones.find((z: Zone) =>
+      preset.type === 'coding' ? z.type === 'rnd' : z.type === 'non-rnd'
+    )
+    if (matchZone) setZoneId(matchZone.id)
+  }
 
   const handleCreate = () => {
     if (!name.trim() || !zoneId) return
@@ -28,7 +45,7 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
       type,
       department,
       status: 'done',
-      soul: defaultSoul,
+      soul,
       avatar: { ...defaultAvatar },
       enabledSkills: [],
       preferences: { ...defaultPreferences }
@@ -36,6 +53,8 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
     setName('')
     setType('coding')
     setDepartment('Engineering')
+    setSoul(defaultSoul)
+    setSelectedPreset(null)
     onClose()
   }
 
@@ -46,6 +65,33 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
   return (
     <Modal open={open} onClose={onClose} title="New Agent">
       <div className="space-y-5">
+        {/* Presets */}
+        <div>
+          <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+            Quick Start — Choose a Role
+          </label>
+          <div className="grid grid-cols-2 gap-1.5">
+            {agentPresets.map((preset) => (
+              <button
+                key={preset.name}
+                onClick={() => applyPreset(preset.name)}
+                className={`text-left px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
+                  selectedPreset === preset.name
+                    ? 'bg-accent-subtle border border-accent/30 text-accent'
+                    : 'bg-bg-primary border border-border text-text-secondary hover:bg-bg-hover'
+                }`}
+              >
+                <span className="font-medium">{preset.name}</span>
+                <span className="text-text-muted ml-1">
+                  {preset.type === 'coding' ? 'dev' : 'res'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="border-t border-border" />
+
         {/* Name */}
         <div>
           <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
