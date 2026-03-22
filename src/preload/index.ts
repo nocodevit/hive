@@ -28,6 +28,9 @@ const api = {
   fs: {
     hasGit: (path: string) => ipcRenderer.invoke('fs:hasGit', { path })
   },
+  project: {
+    scan: (zones: { path: string; type: string }[]) => ipcRenderer.invoke('project:scan', { zones })
+  },
   skills: {
     scan: () => ipcRenderer.invoke('skills:scan'),
     link: (cwd: string, skillPaths: string[]) => ipcRenderer.invoke('skills:link', { cwd, skillPaths })

@@ -248,6 +248,83 @@ ipcMain.handle('fs:hasGit', (_event, { path }) => {
   return existsSync(join(path, '.git'))
 })
 
+// Scan project zones for todos and status
+ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type: string }[] }) => {
+  const todos: { zone: string; type: string; category: string; text: string; done: boolean }[] = []
+  let projectStage = 'early-stage'
+
+  for (const zone of zones) {
+    if (!existsSync(zone.path)) continue
+
+    // Check git activity for project stage
+    if (zone.type === 'rnd') {
+      try {
+        const { execSync } = require('child_process')
+        const log = execSync(`git -C "${zone.path}" log --oneline -20 --since="30 days ago" 2>/dev/null`, { encoding: 'utf-8' })
+        const commitCount = log.trim().split('\n').filter(Boolean).length
+        if (commitCount > 10) projectStage = 'active'
+        else if (commitCount > 0) projectStage = 'incubating'
+
+        // Check if has deployment/CI
+        const hasCI = existsSync(join(zone.path, '.github/workflows')) ||
+          existsSync(join(zone.path, '.gitlab-ci.yml')) ||
+          existsSync(join(zone.path, 'vercel.json')) ||
+          existsSync(join(zone.path, 'netlify.toml'))
+        if (hasCI && commitCount > 10) projectStage = 'active-online'
+      } catch {}
+    }
+
+    // Scan markdown files for todos
+    try {
+      const scanDir = (dir: string, depth: number) => {
+        if (depth > 3) return
+        const entries = readdirSync(dir, { withFileTypes: true })
+        for (const entry of entries) {
+          if (entry.name.startsWith('.') || entry.name === 'node_modules' || entry.name === 'vendor' || entry.name === 'dist' || entry.name === 'build' || entry.name === 'out') continue
+          const fullPath = join(dir, entry.name)
+          if (entry.isDirectory() && depth < 3) {
+            scanDir(fullPath, depth + 1)
+          } else if (entry.isFile() && /\.(md|txt)$/i.test(entry.name)) {
+            try {
+              const content = readFileSync(fullPath, 'utf-8')
+              const lines = content.split('\n')
+              for (const line of lines) {
+                const todoMatch = line.match(/^[\s]*[-*]\s*\[([ xX])\]\s+(.+)/)
+                if (todoMatch) {
+                  const done = todoMatch[1].toLowerCase() === 'x'
+                  const text = todoMatch[2].trim()
+                  // Categorize
+                  let category = 'other'
+                  const lower = text.toLowerCase()
+                  if (lower.includes('market') || lower.includes('seo') || lower.includes('social') || lower.includes('content') || lower.includes('campaign')) {
+                    category = 'marketing'
+                  } else if (lower.includes('monetiz') || lower.includes('pricing') || lower.includes('revenue') || lower.includes('payment') || lower.includes('subscri')) {
+                    category = 'monetizing'
+                  } else if (lower.includes('bug') || lower.includes('fix') || lower.includes('test') || lower.includes('refactor') || lower.includes('feature') || lower.includes('implement')) {
+                    category = 'rd'
+                  } else if (lower.includes('doc') || lower.includes('readme') || lower.includes('deploy') || lower.includes('ci') || lower.includes('setup')) {
+                    category = 'ops'
+                  }
+                  todos.push({
+                    zone: zone.path.split('/').pop() || '',
+                    type: zone.type,
+                    category,
+                    text,
+                    done
+                  })
+                }
+              }
+            } catch {}
+          }
+        }
+      }
+      scanDir(zone.path, 0)
+    } catch {}
+  }
+
+  return { projectStage, todos }
+})
+
 // Load agent work logs
 ipcMain.handle('agent:loadLogs', (_event, { agentId }) => {
   return loadLogs(agentId)
