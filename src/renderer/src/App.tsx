@@ -55,6 +55,7 @@ export default function App() {
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
   const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100 })
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
+  const [agentTasks, setAgentTasks] = useState<Record<string, { title?: string; summary?: string; active: boolean }>>({})
   const [agentLogs, setAgentLogs] = useState<{ time: string; type: string; message: string }[]>([])
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
   const [skillContent, setSkillContent] = useState<string | null>(null)
@@ -127,7 +128,12 @@ export default function App() {
         )
       }
     })
-    const removeReport = window.api.agent.onReport(({ agentId, items }) => {
+    const removeReport = window.api.agent.onReport(({ agentId, type, title, summary, items }: any) => {
+      if (type === 'task_start') {
+        setAgentTasks((prev) => ({ ...prev, [agentId]: { title, active: true } }))
+      } else if (type === 'task_done') {
+        setAgentTasks((prev) => ({ ...prev, [agentId]: { ...prev[agentId], summary, active: false } }))
+      }
       if (agentId && items) {
         setAgentReports((prev) => ({ ...prev, [agentId]: items }))
       }
@@ -405,9 +411,21 @@ export default function App() {
               {selectedAgent ? selectedAgent.name : (selectedProject ? 'Dashboard' : 'Select an agent')}
             </h2>
             {selectedAgent && (
-              <span className="text-[10px] text-text-muted font-mono px-2 py-0.5 rounded-md bg-bg-hover truncate max-w-[300px]">
-                {getAgentZonePath(selectedAgent)}
-              </span>
+              <>
+                <span className="text-[10px] text-text-muted font-mono px-2 py-0.5 rounded-md bg-bg-hover truncate max-w-[200px]">
+                  {getAgentZonePath(selectedAgent)}
+                </span>
+                {agentTasks[selectedAgent.id]?.active && agentTasks[selectedAgent.id]?.title && (
+                  <span className="text-[10px] text-accent font-medium px-2 py-0.5 rounded-md bg-accent/10 truncate max-w-[250px]">
+                    {agentTasks[selectedAgent.id].title}
+                  </span>
+                )}
+                {!agentTasks[selectedAgent.id]?.active && agentTasks[selectedAgent.id]?.summary && (
+                  <span className="text-[10px] text-status-working font-medium px-2 py-0.5 rounded-md bg-status-working/10 truncate max-w-[250px]">
+                    {agentTasks[selectedAgent.id].summary}
+                  </span>
+                )}
+              </>
             )}
           </div>
           {selectedAgent && (
@@ -643,18 +661,14 @@ export default function App() {
                                     {agent.role || agent.department}
                                   </span>
                                 </div>
-                                {agentReports[agent.id] && agentReports[agent.id].length > 0 && (
-                                  <div className="mt-2 pt-2 border-t border-border space-y-1">
-                                    {agentReports[agent.id].slice(0, 3).map((item, i) => (
-                                      <div key={i} className="flex items-start gap-1.5 text-[11px]">
-                                        <span className={item.done ? 'text-status-working' : 'text-text-muted'}>
-                                          {item.done ? '\u2713' : '\u25CB'}
-                                        </span>
-                                        <span className={item.done ? 'text-text-muted line-through' : 'text-text-secondary'}>
-                                          {item.text}
-                                        </span>
-                                      </div>
-                                    ))}
+                                {agentTasks[agent.id] && (
+                                  <div className="mt-1.5">
+                                    {agentTasks[agent.id].active && agentTasks[agent.id].title && (
+                                      <p className="text-[11px] text-accent truncate">{agentTasks[agent.id].title}</p>
+                                    )}
+                                    {!agentTasks[agent.id].active && agentTasks[agent.id].summary && (
+                                      <p className="text-[11px] text-status-working truncate">{agentTasks[agent.id].summary}</p>
+                                    )}
                                   </div>
                                 )}
                               </button>
@@ -1082,57 +1096,96 @@ export default function App() {
               </div>
               {agentLogs.length === 0 ? (
                 <p className="text-sm text-text-muted text-center py-12">No logs yet. Start the agent to begin recording.</p>
-              ) : (
-                <div className="space-y-1">
-                  {[...agentLogs].reverse().map((log, i) => {
-                    const time = new Date(log.time)
-                    const timeStr = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
-                    const dateStr = time.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-                    const statusColors: Record<string, string> = {
-                      working: 'text-status-working',
-                      waiting: 'text-status-waiting',
-                      done: 'text-status-done'
-                    }
-                    return (
-                      <div key={i} className="flex items-start gap-3 px-3 py-2 rounded-lg hover:bg-bg-secondary transition-colors">
-                        <div className="text-[11px] text-text-muted font-mono w-24 flex-shrink-0">
-                          <span>{dateStr}</span>{' '}
-                          <span>{timeStr}</span>
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          {log.type === 'status' ? (
-                            <span className={`text-sm font-medium ${statusColors[log.message] || 'text-text-primary'}`}>
-                              {log.message === 'working' ? 'Working' :
-                               log.message === 'waiting' ? 'Idle' :
-                               log.message === 'done' ? 'Done' : log.message}
-                            </span>
-                          ) : log.type === 'task_start' ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent font-semibold uppercase">Start</span>
-                              <span className="text-sm text-text-primary">{log.message}</span>
-                            </div>
-                          ) : log.type === 'task_done' ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-working/20 text-status-working font-semibold uppercase">Done</span>
-                              <span className="text-sm text-text-primary">{log.message}</span>
-                            </div>
-                          ) : log.type === 'notification' ? (
-                            <div className="flex items-center gap-2">
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-waiting/20 text-status-waiting font-semibold uppercase">Note</span>
-                              <span className="text-sm text-text-primary">{log.message}</span>
-                            </div>
+              ) : (() => {
+                // Group logs into task blocks
+                const reversed = [...agentLogs].reverse()
+                const taskBlocks: { title?: string; summary?: string; startTime?: string; endTime?: string; statusChanges: number; logs: typeof reversed }[] = []
+                let currentBlock: typeof taskBlocks[0] = { statusChanges: 0, logs: [] }
+
+                for (const log of reversed) {
+                  if (log.type === 'task_start' && currentBlock.logs.length > 0) {
+                    // New task starts — push current block
+                    taskBlocks.push(currentBlock)
+                    currentBlock = { title: log.message, startTime: log.time, statusChanges: 0, logs: [log] }
+                  } else if (log.type === 'task_start') {
+                    currentBlock.title = log.message
+                    currentBlock.startTime = log.time
+                    currentBlock.logs.push(log)
+                  } else if (log.type === 'task_done') {
+                    currentBlock.summary = log.message
+                    currentBlock.endTime = log.time
+                    currentBlock.logs.push(log)
+                    taskBlocks.push(currentBlock)
+                    currentBlock = { statusChanges: 0, logs: [] }
+                  } else {
+                    if (log.type === 'status') currentBlock.statusChanges++
+                    currentBlock.logs.push(log)
+                  }
+                }
+                if (currentBlock.logs.length > 0) taskBlocks.push(currentBlock)
+
+                return (
+                  <div className="space-y-3">
+                    {taskBlocks.map((block, bi) => (
+                      <div key={bi} className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
+                        {/* Task header */}
+                        <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
+                          {block.title ? (
+                            <>
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent font-semibold uppercase">Task</span>
+                              <span className="text-sm font-medium text-text-primary">{block.title}</span>
+                            </>
                           ) : (
-                            <div>
-                              <span className="text-sm font-medium text-text-primary">Report</span>
-                              <pre className="text-[11px] text-text-muted mt-1 whitespace-pre-wrap">{log.message}</pre>
-                            </div>
+                            <span className="text-sm text-text-muted">Activity</span>
+                          )}
+                          {block.startTime && (
+                            <span className="text-[10px] text-text-muted ml-auto font-mono">
+                              {new Date(block.startTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
+                            </span>
+                          )}
+                        </div>
+                        {/* Summary if done */}
+                        {block.summary && (
+                          <div className="px-4 py-2 border-b border-border flex items-center gap-2 bg-status-working/5">
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-working/20 text-status-working font-semibold uppercase">Done</span>
+                            <span className="text-sm text-text-primary">{block.summary}</span>
+                          </div>
+                        )}
+                        {/* Log entries */}
+                        <div className="px-4 py-2 space-y-1">
+                          {block.logs
+                            .filter((l) => l.type !== 'task_start' && l.type !== 'task_done')
+                            .filter((l) => l.type !== 'status' || block.logs.filter((x) => x.type !== 'status').length === 0)
+                            .slice(0, 10)
+                            .map((log, li) => {
+                              const time = new Date(log.time)
+                              const timeStr = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+                              return (
+                                <div key={li} className="flex items-center gap-2 text-[11px]">
+                                  <span className="text-text-muted font-mono w-16">{timeStr}</span>
+                                  {log.type === 'status' && (
+                                    <span className={log.message === 'working' ? 'text-status-working' : 'text-status-waiting'}>
+                                      {log.message === 'working' ? 'Working' : 'Idle'}
+                                    </span>
+                                  )}
+                                  {log.type === 'notification' && (
+                                    <span className="text-status-waiting">{log.message}</span>
+                                  )}
+                                  {log.type === 'report' && (
+                                    <span className="text-text-muted truncate">{log.message}</span>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          {block.statusChanges > 3 && (
+                            <p className="text-[10px] text-text-muted">{block.statusChanges} status changes</p>
                           )}
                         </div>
                       </div>
-                    )
-                  })}
-                </div>
-              )}
+                    ))}
+                  </div>
+                )
+              })()}
             </div>
           )}
 

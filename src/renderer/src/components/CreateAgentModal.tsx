@@ -53,7 +53,19 @@ ${traitStr}
 ## Boundaries
 - Stay within your role's scope
 - Ask before making large or cross-domain changes
-- Report progress regularly
+
+## Task Reporting (IMPORTANT)
+When you start a new task, IMMEDIATELY run:
+\`\`\`bash
+.claude/hive-report.sh start "Brief task title"
+\`\`\`
+
+When you finish a task, IMMEDIATELY run:
+\`\`\`bash
+.claude/hive-report.sh done "Brief summary of what was done"
+\`\`\`
+
+This reports your progress to the Hive dashboard. Always do this for every task.
 `
 }
 
