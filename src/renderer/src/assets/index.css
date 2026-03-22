@@ -1,0 +1,117 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Purple primary palette */
+    --purple-50: #faf5ff;
+    --purple-100: #f3e8ff;
+    --purple-200: #e9d5ff;
+    --purple-300: #d8b4fe;
+    --purple-400: #c084fc;
+    --purple-500: #a855f7;
+    --purple-600: #9333ea;
+    --purple-700: #7c3aed;
+    --purple-800: #6d28d9;
+    --purple-900: #581c87;
+
+    /* Light theme */
+    --bg-primary: #faf5ff;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f3e8ff;
+    --bg-hover: #ede9fe;
+    --bg-active: #e9d5ff;
+    --bg-terminal: #1e1b4b;
+
+    --border-default: #e9d5ff;
+    --border-subtle: #f3e8ff;
+
+    --text-primary: #1e1b4b;
+    --text-secondary: #4c1d95;
+    --text-muted: #7c6f9b;
+    --text-on-purple: #ffffff;
+
+    --accent: #7c3aed;
+    --accent-hover: #6d28d9;
+    --accent-subtle: #ede9fe;
+    --accent-muted: #a78bfa;
+
+    --status-working: #22c55e;
+    --status-waiting: #f59e0b;
+    --status-done: #94a3b8;
+
+    --sidebar-bg: #f5f0ff;
+    --sidebar-active: #ede9fe;
+  }
+
+  [data-theme='dark'] {
+    --bg-primary: #0f0a1a;
+    --bg-secondary: #1a1128;
+    --bg-tertiary: #231838;
+    --bg-hover: #2d1f48;
+    --bg-active: #3b2a5e;
+    --bg-terminal: #0a0a0a;
+
+    --border-default: #2d1f48;
+    --border-subtle: #231838;
+
+    --text-primary: #f0ecf9;
+    --text-secondary: #c4b5fd;
+    --text-muted: #7c6f9b;
+    --text-on-purple: #ffffff;
+
+    --accent: #a78bfa;
+    --accent-hover: #c4b5fd;
+    --accent-subtle: #2d1f48;
+    --accent-muted: #7c3aed;
+
+    --status-working: #4ade80;
+    --status-waiting: #fbbf24;
+    --status-done: #64748b;
+
+    --sidebar-bg: #150e24;
+    --sidebar-active: #2d1f48;
+  }
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--accent-muted);
+}
