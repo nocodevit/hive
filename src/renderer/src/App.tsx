@@ -165,9 +165,6 @@ export default function App() {
     await window.api.agent.setupHooks(cwd, agent.id)
 
     setActiveTerminals((prev) => new Set(prev).add(agent.id))
-    setAgents((prev) =>
-      prev.map((a) => (a.id === agent.id ? { ...a, status: 'working' as const } : a))
-    )
     setSelectedAgentId(agent.id)
     setMainView('terminal')
   }
