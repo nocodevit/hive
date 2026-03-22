@@ -188,11 +188,18 @@ Restart Hive — skills appear in Agent Editor.
 - [x] Agent memory isolation
 - [x] Project dashboard with kanban
 - [x] Light/dark theme
-- [ ] Pixel avatar editor
-- [ ] Git worktree auto-management
-- [ ] Project status analysis (scan todos from R&D/docs)
-- [ ] Agent-to-agent communication
-- [ ] Office visualization (agents at desks)
+- [x] Pixel avatar editor
+- [x] Git worktree auto-management
+- [x] Project status analysis (scan todos from R&D/docs)
+- [x] Soul auto-generation from role + personality traits
+- [x] Task reporting (title/summary via hooks)
+- [x] Agent role system (R&D / Non-R&D departments)
+- [ ] MCP Server — auto-reporting without soul instructions
+- [ ] Resizable sidebar panels (draggable width)
+- [ ] GNU Screen session persistence
+- [ ] Notification integrations (Slack, Telegram, WhatsApp, macOS)
+- [ ] Agent-to-agent communication (via MCP)
+- [ ] Office visualization with PixiJS
 - [ ] Agency-Agents role templates
 - [ ] claude-mem / memsearch integration
 
