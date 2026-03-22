@@ -19,6 +19,14 @@ declare global {
       fs: {
         hasGit: (path: string) => Promise<boolean>
       }
+      git: {
+        worktreeAdd: (repoPath: string, agentId: string, agentName: string) =>
+          Promise<{ ok: boolean; path?: string; branch?: string; error?: string }>
+        worktreeRemove: (repoPath: string, worktreePath: string) =>
+          Promise<{ ok: boolean; error?: string }>
+        worktreeList: (repoPath: string) =>
+          Promise<{ path: string; branch: string }[]>
+      }
       skills: {
         scan: () => Promise<{ name: string; pack: string; path: string; description: string }[]>
         link: (cwd: string, skillPaths: string[]) => Promise<{ ok: boolean; error?: string }>

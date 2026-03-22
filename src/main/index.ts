@@ -38,8 +38,13 @@ function appendLog(agentId: string, entry: { time: string; type: string; message
     if (existsSync(logFile)) logs = JSON.parse(readFileSync(logFile, 'utf-8'))
   } catch {}
   logs.push(entry)
-  // Keep last 500 entries
-  if (logs.length > 500) logs = logs.slice(-500)
+  // Keep last N entries (read from data.json appPrefs, default 100)
+  let maxLogs = 100
+  try {
+    const d = loadData()
+    if ((d.appPrefs as any)?.maxLogs) maxLogs = (d.appPrefs as any).maxLogs
+  } catch {}
+  if (logs.length > maxLogs) logs = logs.slice(-maxLogs)
   writeFileSync(logFile, JSON.stringify(logs, null, 2))
 }
 
@@ -50,6 +55,9 @@ function loadLogs(agentId: string): any[] {
   } catch {}
   return []
 }
+
+// Track last status per agent to avoid duplicate logs
+const lastAgentStatus: Map<string, string> = new Map()
 
 // Status + report webhook server — receives hook calls from Claude Code
 const statusServer = createServer((req, res) => {
@@ -68,7 +76,12 @@ const statusServer = createServer((req, res) => {
       const now = new Date().toISOString()
 
       if (req.url === '/status') {
-        appendLog(data.agentId, { time: now, type: 'status', message: data.status })
+        // Only log + notify on status change
+        const prev = lastAgentStatus.get(data.agentId)
+        if (prev !== data.status) {
+          lastAgentStatus.set(data.agentId, data.status)
+          appendLog(data.agentId, { time: now, type: 'status', message: data.status })
+        }
         if (win && !win.isDestroyed()) win.webContents.send('agent:status', data)
       } else if (req.url === '/report') {
         appendLog(data.agentId, { time: now, type: 'report', message: JSON.stringify(data.items) })
@@ -248,6 +261,54 @@ ipcMain.handle('fs:hasGit', (_event, { path }) => {
   return existsSync(join(path, '.git'))
 })
 
+// Git worktree management
+ipcMain.handle('git:worktreeAdd', (_event, { repoPath, agentId, agentName }) => {
+  try {
+    const { execSync } = require('child_process')
+    const safeName = agentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+    const branchName = `hive/${safeName}-${agentId.slice(-6)}`
+    const worktreePath = join(repoPath, '..', `${repoPath.split('/').pop()}-${safeName}`)
+
+    // Create branch from current HEAD if it doesn't exist
+    try {
+      execSync(`git -C "${repoPath}" branch "${branchName}"`, { encoding: 'utf-8', stdio: 'pipe' })
+    } catch {} // Branch may already exist
+
+    // Add worktree
+    execSync(`git -C "${repoPath}" worktree add "${worktreePath}" "${branchName}"`, { encoding: 'utf-8', stdio: 'pipe' })
+
+    return { ok: true, path: worktreePath, branch: branchName }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('git:worktreeRemove', (_event, { repoPath, worktreePath }) => {
+  try {
+    const { execSync } = require('child_process')
+    execSync(`git -C "${repoPath}" worktree remove "${worktreePath}" --force`, { encoding: 'utf-8', stdio: 'pipe' })
+    return { ok: true }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+})
+
+ipcMain.handle('git:worktreeList', (_event, { repoPath }) => {
+  try {
+    const { execSync } = require('child_process')
+    const output = execSync(`git -C "${repoPath}" worktree list --porcelain`, { encoding: 'utf-8' })
+    const worktrees = output.split('\n\n').filter(Boolean).map((block) => {
+      const lines = block.split('\n')
+      const path = lines.find((l) => l.startsWith('worktree '))?.slice(9) || ''
+      const branch = lines.find((l) => l.startsWith('branch '))?.slice(7) || ''
+      return { path, branch }
+    })
+    return worktrees
+  } catch {
+    return []
+  }
+})
+
 // Scan project zones for todos and status
 ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type: string }[] }) => {
   const todos: { zone: string; type: string; category: string; text: string; done: boolean }[] = []
@@ -328,6 +389,13 @@ ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type
 // Load agent work logs
 ipcMain.handle('agent:loadLogs', (_event, { agentId }) => {
   return loadLogs(agentId)
+})
+
+// Clear agent work logs
+ipcMain.handle('agent:clearLogs', (_event, { agentId }) => {
+  const logFile = join(LOGS_DIR, `${agentId}.json`)
+  try { writeFileSync(logFile, '[]') } catch {}
+  return true
 })
 
 // Write Claude Code hooks for agent status reporting

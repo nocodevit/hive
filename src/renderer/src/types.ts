@@ -30,6 +30,8 @@ export interface Agent {
   avatar: AvatarConfig
   enabledSkills: string[]
   preferences: AgentPreferences
+  worktreePath?: string   // git worktree path (coding agents only)
+  worktreeBranch?: string // git branch name
 }
 
 export const defaultPreferences: AgentPreferences = {

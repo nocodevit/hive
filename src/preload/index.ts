@@ -28,6 +28,14 @@ const api = {
   fs: {
     hasGit: (path: string) => ipcRenderer.invoke('fs:hasGit', { path })
   },
+  git: {
+    worktreeAdd: (repoPath: string, agentId: string, agentName: string) =>
+      ipcRenderer.invoke('git:worktreeAdd', { repoPath, agentId, agentName }),
+    worktreeRemove: (repoPath: string, worktreePath: string) =>
+      ipcRenderer.invoke('git:worktreeRemove', { repoPath, worktreePath }),
+    worktreeList: (repoPath: string) =>
+      ipcRenderer.invoke('git:worktreeList', { repoPath })
+  },
   project: {
     scan: (zones: { path: string; type: string }[]) => ipcRenderer.invoke('project:scan', { zones })
   },
@@ -38,6 +46,7 @@ const api = {
   agent: {
     setupHooks: (cwd: string, agentId: string) => ipcRenderer.invoke('agent:setupHooks', { cwd, agentId }),
     loadLogs: (agentId: string) => ipcRenderer.invoke('agent:loadLogs', { agentId }),
+    clearLogs: (agentId: string) => ipcRenderer.invoke('agent:clearLogs', { agentId }),
     onStatus: (cb: (data: { agentId: string; status: string }) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { agentId: string; status: string }) => cb(data)
       ipcRenderer.on('agent:status', handler)
