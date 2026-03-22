@@ -412,7 +412,7 @@ export default function App() {
             </h2>
             {selectedAgent && (
               <>
-                <span className="text-[10px] text-text-muted font-mono px-2 py-0.5 rounded-md bg-bg-hover truncate max-w-[200px]">
+                <span className="text-[10px] text-text-muted font-mono px-2 py-0.5 rounded-md bg-bg-hover">
                   {getAgentZonePath(selectedAgent)}
                 </span>
                 {agentTasks[selectedAgent.id]?.active && agentTasks[selectedAgent.id]?.title && (
