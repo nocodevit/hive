@@ -51,6 +51,7 @@ export default function App() {
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [projectTab, setProjectTab] = useState<'dashboard' | 'settings'>('dashboard')
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
+  const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
   const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100 })
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
@@ -817,246 +818,198 @@ export default function App() {
 
           {/* Editor view */}
           {mainView === 'editor' && selectedAgent && (
-            <div className="absolute inset-0 overflow-y-auto p-6 space-y-6">
-              {/* Identity */}
-              <div>
-                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
-                  Identity
-                </label>
-                <div className="p-4 rounded-xl bg-bg-secondary border border-border space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-bg-primary border border-border flex items-center justify-center overflow-hidden">
-                      <AvatarPreview config={selectedAgent.avatar} size={40} />
+            <div className="absolute inset-0 flex flex-col">
+              {/* Editor sub-tabs */}
+              <div className="px-6 pt-2 pb-3 border-b border-border flex gap-1">
+                {([['basic', 'Basic'], ['skills', 'Skills'], ['settings', 'Settings']] as const).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setEditorTab(key)}
+                    className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                      editorTab === key ? 'bg-accent text-text-on-purple' : 'text-text-muted hover:bg-bg-hover'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Basic tab */}
+              {editorTab === 'basic' && (
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {/* Identity */}
+                  <div className="p-4 rounded-xl bg-bg-secondary border border-border space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-xl bg-bg-primary border border-border flex items-center justify-center overflow-hidden">
+                        <AvatarPreview config={selectedAgent.avatar} size={40} />
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <input
+                          type="text"
+                          value={selectedAgent.name}
+                          onChange={(e) => updateAgent(selectedAgent.id, { name: e.target.value })}
+                          className="w-full px-3 py-1 rounded-lg bg-bg-primary border border-border text-text-primary text-sm font-semibold focus:outline-none focus:border-accent transition-colors"
+                          placeholder="Name"
+                        />
+                        <input
+                          type="text"
+                          value={selectedAgent.role || ''}
+                          onChange={(e) => updateAgent(selectedAgent.id, { role: e.target.value })}
+                          className="w-full px-3 py-1 rounded-lg bg-bg-primary border border-border text-text-muted text-xs focus:outline-none focus:border-accent transition-colors"
+                          placeholder="Role (e.g. Frontend Dev)"
+                        />
+                      </div>
+                      <StatusDot status={selectedAgent.status} />
                     </div>
-                    <div className="flex-1 space-y-1">
-                      <input
-                        type="text"
-                        value={selectedAgent.name}
-                        onChange={(e) => updateAgent(selectedAgent.id, { name: e.target.value })}
-                        className="w-full px-3 py-1 rounded-lg bg-bg-primary border border-border
-                          text-text-primary text-sm font-semibold
-                          focus:outline-none focus:border-accent transition-colors"
-                        placeholder="Name"
-                      />
-                      <input
-                        type="text"
-                        value={selectedAgent.role || ''}
-                        onChange={(e) => updateAgent(selectedAgent.id, { role: e.target.value })}
-                        className="w-full px-3 py-1 rounded-lg bg-bg-primary border border-border
-                          text-text-muted text-xs
-                          focus:outline-none focus:border-accent transition-colors"
-                        placeholder="Role (e.g. Frontend Dev)"
-                      />
-                    </div>
-                    <StatusDot status={selectedAgent.status} />
-                  </div>
-                  <div className="flex gap-2">
-                    <select
-                      value={selectedAgent.department}
-                      onChange={(e) => updateAgent(selectedAgent.id, { department: e.target.value })}
-                      className="flex-1 px-3 py-1.5 rounded-lg bg-bg-primary border border-border
-                        text-text-primary text-sm cursor-pointer
-                        focus:outline-none focus:border-accent transition-colors"
-                    >
-                      {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <div className="flex gap-1">
-                      <button
-                        onClick={() => updateAgent(selectedAgent.id, { type: 'coding' })}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                          selectedAgent.type === 'coding'
-                            ? 'bg-accent text-text-on-purple'
-                            : 'bg-bg-primary border border-border text-text-muted'
-                        }`}
-                      >Coding</button>
-                      <button
-                        onClick={() => updateAgent(selectedAgent.id, { type: 'non-coding' })}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
-                          selectedAgent.type === 'non-coding'
-                            ? 'bg-accent text-text-on-purple'
-                            : 'bg-bg-primary border border-border text-text-muted'
-                        }`}
-                      >Research</button>
+                    <div className="flex gap-2">
+                      <select
+                        value={selectedAgent.department}
+                        onChange={(e) => updateAgent(selectedAgent.id, { department: e.target.value })}
+                        className="flex-1 px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm cursor-pointer focus:outline-none focus:border-accent transition-colors"
+                      >
+                        {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <div className="flex gap-1">
+                        <button onClick={() => updateAgent(selectedAgent.id, { type: 'coding' })} className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${selectedAgent.type === 'coding' ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}>Coding</button>
+                        <button onClick={() => updateAgent(selectedAgent.id, { type: 'non-coding' })} className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${selectedAgent.type === 'non-coding' ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}>Research</button>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Avatar */}
+                  <div className="p-4 rounded-xl bg-bg-secondary border border-border">
+                    <AvatarEditor config={selectedAgent.avatar} onChange={(avatar) => updateAgent(selectedAgent.id, { avatar })} size={128} />
+                  </div>
+
+                  {/* Soul */}
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Soul</label>
+                    <textarea
+                      value={selectedAgent.soul}
+                      onChange={(e) => { updateAgent(selectedAgent.id, { soul: e.target.value }); window.api.agent.writeSoul(selectedAgent.id, e.target.value) }}
+                      className="w-full h-56 px-4 py-3 rounded-xl bg-bg-secondary border border-border text-text-primary text-sm font-mono leading-relaxed resize-y focus:outline-none focus:border-accent transition-colors"
+                      placeholder="Define this agent's role, personality, and boundaries..."
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Avatar */}
-              <div>
-                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
-                  Avatar
-                </label>
-                <div className="p-4 rounded-xl bg-bg-secondary border border-border">
-                  <AvatarEditor
-                    config={selectedAgent.avatar}
-                    onChange={(avatar) => updateAgent(selectedAgent.id, { avatar })}
-                    size={128}
-                  />
-                </div>
-              </div>
-
-              {/* Soul */}
-              <div>
-                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
-                  Soul (soul.md)
-                </label>
-                <textarea
-                  value={selectedAgent.soul}
-                  onChange={(e) => {
-                    updateAgent(selectedAgent.id, { soul: e.target.value })
-                    window.api.agent.writeSoul(selectedAgent.id, e.target.value)
-                  }}
-                  className="w-full h-56 px-4 py-3 rounded-xl bg-bg-secondary border border-border
-                    text-text-primary text-sm font-mono leading-relaxed resize-y
-                    focus:outline-none focus:border-accent transition-colors"
-                  placeholder="Define this agent's role, personality, and boundaries..."
-                />
-              </div>
-
-              {/* Skills */}
-              <div>
-                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
-                  Skills
-                </label>
-                <div className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
-                  {availableSkills.length === 0 ? (
-                    <div className="p-4 text-sm text-text-muted">
-                      No skills installed. Install GStack or other skills to ~/.claude/skills/
-                    </div>
-                  ) : (
-                    (() => {
-                      const packs = [...new Set(availableSkills.map((s) => s.pack))]
-                      return packs.map((pack) => {
-                        const packSkills = availableSkills.filter((s) => s.pack === pack)
-                        const enabledCount = packSkills.filter(
-                          (s) => selectedAgent.enabledSkills?.includes(s.name)
-                        ).length
-                        return (
-                          <div key={pack}>
-                            <div className="flex items-center justify-between px-4 py-2.5 bg-bg-tertiary border-b border-border">
-                              <div className="flex items-center gap-2">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                                </svg>
-                                <span className="text-xs font-heading font-semibold text-text-primary uppercase">{pack}</span>
-                                <span className="text-[10px] text-text-muted">{enabledCount}/{packSkills.length}</span>
-                              </div>
-                              <button
-                                onClick={() => {
-                                  const current = selectedAgent.enabledSkills || []
-                                  const allEnabled = packSkills.every((s) => current.includes(s.name))
-                                  const next = allEnabled
-                                    ? current.filter((s) => !packSkills.some((ps) => ps.name === s))
-                                    : [...new Set([...current, ...packSkills.map((s) => s.name)])]
-                                  updateAgent(selectedAgent.id, { enabledSkills: next })
-                                }}
-                                className="text-[10px] text-accent hover:text-accent-hover cursor-pointer font-medium"
-                              >
-                                {packSkills.every((s) => (selectedAgent.enabledSkills || []).includes(s.name))
-                                  ? 'Disable all' : 'Enable all'}
-                              </button>
-                            </div>
-                            {packSkills.map((skill) => {
-                              const enabled = selectedAgent.enabledSkills?.includes(skill.name) ?? false
-                              return (
-                                <div
-                                  key={skill.name}
-                                  className="flex items-center justify-between px-4 py-2.5 border-b border-border last:border-0 hover:bg-bg-hover transition-colors"
-                                >
-                                  <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-sm font-medium text-text-primary">/{skill.name}</span>
-                                    </div>
-                                    {skill.description && (
-                                      <p className="text-[11px] text-text-muted mt-0.5 truncate">{skill.description}</p>
-                                    )}
-                                  </div>
-                                  <button
-                                    onClick={() => {
-                                      const current = selectedAgent.enabledSkills || []
-                                      const next = enabled
-                                        ? current.filter((s) => s !== skill.name)
-                                        : [...current, skill.name]
-                                      updateAgent(selectedAgent.id, { enabledSkills: next })
-                                    }}
-                                    className={`ml-3 w-9 h-5 rounded-full cursor-pointer transition-colors relative flex-shrink-0 ${
-                                      enabled ? 'bg-accent' : 'bg-bg-hover'
-                                    }`}
-                                  >
-                                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${
-                                      enabled ? 'left-[18px]' : 'left-0.5'
-                                    }`} />
-                                  </button>
+              {/* Skills tab */}
+              {editorTab === 'skills' && (
+                <div className="flex-1 overflow-y-auto p-6">
+                  <div className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
+                    {availableSkills.length === 0 ? (
+                      <div className="p-6 text-sm text-text-muted text-center">
+                        <p>No skills installed.</p>
+                        <p className="text-xs mt-1 font-mono">Install GStack: git clone garrytan/gstack ~/.claude/skills/gstack</p>
+                      </div>
+                    ) : (
+                      (() => {
+                        const packs = [...new Set(availableSkills.map((s) => s.pack))]
+                        return packs.map((pack) => {
+                          const packSkills = availableSkills.filter((s) => s.pack === pack)
+                          const enabledCount = packSkills.filter((s) => selectedAgent.enabledSkills?.includes(s.name)).length
+                          return (
+                            <div key={pack}>
+                              <div className="flex items-center justify-between px-4 py-2.5 bg-bg-tertiary border-b border-border">
+                                <div className="flex items-center gap-2">
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                                  </svg>
+                                  <span className="text-xs font-heading font-semibold text-text-primary uppercase">{pack}</span>
+                                  <span className="text-[10px] text-text-muted">{enabledCount}/{packSkills.length}</span>
                                 </div>
-                              )
-                            })}
-                          </div>
-                        )
-                      })
-                    })()
-                  )}
+                                <button
+                                  onClick={() => {
+                                    const current = selectedAgent.enabledSkills || []
+                                    const allEnabled = packSkills.every((s) => current.includes(s.name))
+                                    const next = allEnabled ? current.filter((s) => !packSkills.some((ps) => ps.name === s)) : [...new Set([...current, ...packSkills.map((s) => s.name)])]
+                                    updateAgent(selectedAgent.id, { enabledSkills: next })
+                                  }}
+                                  className="text-[10px] text-accent hover:text-accent-hover cursor-pointer font-medium"
+                                >
+                                  {packSkills.every((s) => (selectedAgent.enabledSkills || []).includes(s.name)) ? 'Disable all' : 'Enable all'}
+                                </button>
+                              </div>
+                              {packSkills.map((skill) => {
+                                const enabled = selectedAgent.enabledSkills?.includes(skill.name) ?? false
+                                return (
+                                  <div key={skill.name} className="flex items-center justify-between px-4 py-2.5 border-b border-border last:border-0 hover:bg-bg-hover transition-colors">
+                                    <div className="flex-1 min-w-0">
+                                      <span className="text-sm font-medium text-text-primary">/{skill.name}</span>
+                                      {skill.description && <p className="text-[11px] text-text-muted mt-0.5">{skill.description}</p>}
+                                    </div>
+                                    <button
+                                      onClick={() => {
+                                        const current = selectedAgent.enabledSkills || []
+                                        const next = enabled ? current.filter((s) => s !== skill.name) : [...current, skill.name]
+                                        updateAgent(selectedAgent.id, { enabledSkills: next })
+                                      }}
+                                      className={`ml-3 w-9 h-5 rounded-full cursor-pointer transition-colors relative flex-shrink-0 ${enabled ? 'bg-accent' : 'bg-bg-hover'}`}
+                                    >
+                                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${enabled ? 'left-[18px]' : 'left-0.5'}`} />
+                                    </button>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          )
+                        })
+                      })()
+                    )}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              {/* Agent Startup */}
-              <div>
-                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
-                  Startup Command
-                </label>
-                <div className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
-                  <div className="px-4 py-3">
+              {/* Settings tab */}
+              {editorTab === 'settings' && (
+                <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                  {/* Startup Command */}
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Startup Command</label>
                     <input
                       type="text"
                       value={selectedAgent.preferences?.startupCommand || ''}
                       onChange={(e) => {
                         const prefs = selectedAgent.preferences || { autoRunClaude: false, startupCommand: '' }
-                        updateAgent(selectedAgent.id, {
-                          preferences: { ...prefs, startupCommand: e.target.value }
-                        })
+                        updateAgent(selectedAgent.id, { preferences: { ...prefs, startupCommand: e.target.value } })
                       }}
                       placeholder="Override default (e.g. claude --model sonnet)"
-                      className="w-full px-3 py-1.5 rounded-lg bg-bg-primary border border-border
-                        text-text-primary text-sm font-mono
-                        focus:outline-none focus:border-accent transition-colors"
+                      className="w-full px-3 py-2 rounded-lg bg-bg-secondary border border-border text-text-primary text-sm font-mono focus:outline-none focus:border-accent transition-colors"
                     />
-                    <p className="text-[11px] text-text-muted mt-1.5">Leave empty to use app default (auto-run claude)</p>
+                    <p className="text-[11px] text-text-muted mt-1.5">Leave empty to use app default</p>
+                  </div>
+
+                  {/* Work Zone */}
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Work Zone</label>
+                    <div className="p-3 rounded-xl bg-bg-secondary border border-border text-sm space-y-2">
+                      {(() => {
+                        const zone = selectedProject?.zones.find((z: Zone) => z.id === selectedAgent.zoneId)
+                        return zone ? (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block w-2 h-2 rounded-full ${zone.type === 'rnd' ? 'bg-accent' : 'bg-status-waiting'}`} />
+                              <span className="font-medium">{zone.name}</span>
+                              <span className="text-text-muted text-xs font-mono">{zone.path}</span>
+                            </div>
+                            {selectedAgent.worktreePath && (
+                              <div className="flex items-center gap-2 pt-1 border-t border-border">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                  <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
+                                  <path d="M18 9a9 9 0 0 1-9 9" />
+                                </svg>
+                                <span className="text-xs text-accent font-mono">{selectedAgent.worktreeBranch}</span>
+                                <span className="text-[11px] text-text-muted font-mono truncate">{selectedAgent.worktreePath}</span>
+                              </div>
+                            )}
+                          </>
+                        ) : <span className="text-text-muted">No zone assigned</span>
+                      })()}
+                    </div>
                   </div>
                 </div>
-              </div>
-
-              {/* Work Zone */}
-              <div>
-                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
-                  Work Zone
-                </label>
-                <div className="p-3 rounded-xl bg-bg-secondary border border-border text-sm space-y-2">
-                  {(() => {
-                    const zone = selectedProject?.zones.find((z: Zone) => z.id === selectedAgent.zoneId)
-                    return zone ? (
-                      <>
-                        <div className="flex items-center gap-2">
-                          <span className={`inline-block w-2 h-2 rounded-full ${
-                            zone.type === 'rnd' ? 'bg-accent' : 'bg-status-waiting'
-                          }`} />
-                          <span className="font-medium">{zone.name}</span>
-                          <span className="text-text-muted text-xs font-mono">{zone.path}</span>
-                        </div>
-                        {selectedAgent.worktreePath && (
-                          <div className="flex items-center gap-2 pt-1 border-t border-border">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
-                              <path d="M18 9a9 9 0 0 1-9 9" />
-                            </svg>
-                            <span className="text-xs text-accent font-mono">{selectedAgent.worktreeBranch}</span>
-                            <span className="text-[11px] text-text-muted font-mono truncate">{selectedAgent.worktreePath}</span>
-                          </div>
-                        )}
-                      </>
-                    ) : <span className="text-text-muted">No zone assigned</span>
-                  })()}
-                </div>
-              </div>
+              )}
             </div>
           )}
           {/* Logs view */}
@@ -1105,10 +1058,25 @@ export default function App() {
                         <div className="flex-1 min-w-0">
                           {log.type === 'status' ? (
                             <span className={`text-sm font-medium ${statusColors[log.message] || 'text-text-primary'}`}>
-                              {log.message === 'working' ? 'Started working' :
-                               log.message === 'waiting' ? 'Waiting for input' :
-                               log.message === 'done' ? 'Task completed' : log.message}
+                              {log.message === 'working' ? 'Working' :
+                               log.message === 'waiting' ? 'Idle' :
+                               log.message === 'done' ? 'Done' : log.message}
                             </span>
+                          ) : log.type === 'task_start' ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent font-semibold uppercase">Start</span>
+                              <span className="text-sm text-text-primary">{log.message}</span>
+                            </div>
+                          ) : log.type === 'task_done' ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-working/20 text-status-working font-semibold uppercase">Done</span>
+                              <span className="text-sm text-text-primary">{log.message}</span>
+                            </div>
+                          ) : log.type === 'notification' ? (
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-waiting/20 text-status-waiting font-semibold uppercase">Note</span>
+                              <span className="text-sm text-text-primary">{log.message}</span>
+                            </div>
                           ) : (
                             <div>
                               <span className="text-sm font-medium text-text-primary">Report</span>

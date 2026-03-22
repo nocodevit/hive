@@ -76,7 +76,6 @@ const statusServer = createServer((req, res) => {
       const now = new Date().toISOString()
 
       if (req.url === '/status') {
-        // Only log + notify on status change
         const prev = lastAgentStatus.get(data.agentId)
         if (prev !== data.status) {
           lastAgentStatus.set(data.agentId, data.status)
@@ -84,7 +83,20 @@ const statusServer = createServer((req, res) => {
         }
         if (win && !win.isDestroyed()) win.webContents.send('agent:status', data)
       } else if (req.url === '/report') {
-        appendLog(data.agentId, { time: now, type: 'report', message: JSON.stringify(data.items) })
+        if (data.type === 'task_start') {
+          appendLog(data.agentId, { time: now, type: 'task_start', message: data.title || 'Task started' })
+        } else if (data.type === 'task_done') {
+          appendLog(data.agentId, { time: now, type: 'task_done', message: data.summary || 'Task completed' })
+        } else if (data.type === 'notification') {
+          appendLog(data.agentId, { time: now, type: 'notification', message: data.message || '' })
+          // TODO: Future notification integrations
+          // - macOS notification (osascript)
+          // - Slack webhook
+          // - Telegram bot
+          // - WhatsApp Business API
+        } else {
+          appendLog(data.agentId, { time: now, type: 'report', message: JSON.stringify(data.items || data) })
+        }
         if (win && !win.isDestroyed()) win.webContents.send('agent:report', data)
       }
 
@@ -103,21 +115,36 @@ function writeAgentHooks(cwd: string, agentId: string) {
   mkdirSync(claudeDir, { recursive: true })
   const settingsPath = join(claudeDir, 'settings.local.json')
 
-  const statusCmd = (status: string) =>
-    `curl -s -X POST http://127.0.0.1:${HIVE_PORT}/status -H "Content-Type: application/json" -d '{"agentId":"${agentId}","status":"${status}"}' > /dev/null 2>&1`
+  const curlPost = (endpoint: string, jsonBody: string) =>
+    `curl -s -X POST http://127.0.0.1:${HIVE_PORT}${endpoint} -H "Content-Type: application/json" -d '${jsonBody}' > /dev/null 2>&1`
 
   const settings = {
     hooks: {
       Stop: [
         {
           matcher: '',
-          hooks: [{ type: 'command', command: statusCmd('waiting') }]
+          hooks: [{
+            type: 'command',
+            command: curlPost('/status', `{"agentId":"${agentId}","status":"waiting","event":"stop"}`)
+          }]
         }
       ],
       PreToolUse: [
         {
           matcher: '',
-          hooks: [{ type: 'command', command: statusCmd('working') }]
+          hooks: [{
+            type: 'command',
+            command: curlPost('/status', `{"agentId":"${agentId}","status":"working","event":"tool_use"}`)
+          }]
+        }
+      ],
+      Notification: [
+        {
+          matcher: '',
+          hooks: [{
+            type: 'command',
+            command: curlPost('/report', `{"agentId":"${agentId}","type":"notification","message":"Agent needs attention"}`)
+          }]
         }
       ]
     }
@@ -139,13 +166,34 @@ function writeAgentHooks(cwd: string, agentId: string) {
     symlinkSync(memoryDir, cwdMemory)
   }
 
-  // Also write a helper script for the agent to report todos/summaries
+  // Helper scripts for agent to report to Hive
   const reportScript = join(claudeDir, 'hive-report.sh')
   writeFileSync(reportScript, `#!/bin/bash
-# Usage: .claude/hive-report.sh '{"type":"todo","items":[{"text":"Fix bug","done":false}]}'
-curl -s -X POST http://127.0.0.1:${HIVE_PORT}/report \\
-  -H "Content-Type: application/json" \\
-  -d "{\\"agentId\\":\\"${agentId}\\",$(echo $1 | sed 's/^{//' )}" > /dev/null 2>&1
+# Report task progress to Hive
+# Usage:
+#   .claude/hive-report.sh start "Fixing login bug"
+#   .claude/hive-report.sh done "Fixed login bug, added validation"
+#   .claude/hive-report.sh todo '{"items":[{"text":"Fix bug","done":false}]}'
+
+ACTION="$1"
+MSG="$2"
+AGENT="${agentId}"
+PORT=${HIVE_PORT}
+
+case "$ACTION" in
+  start)
+    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_start\\",\\"title\\":\\"$MSG\\"}" > /dev/null 2>&1
+    ;;
+  done)
+    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_done\\",\\"summary\\":\\"$MSG\\"}" > /dev/null 2>&1
+    ;;
+  todo)
+    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"todo\\",$(echo $MSG | sed 's/^{//')}" > /dev/null 2>&1
+    ;;
+esac
 `, { mode: 0o755 })
 }
 
