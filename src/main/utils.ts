@@ -138,13 +138,14 @@ export function scanSkills(skillsDir: string): { name: string; pack: string; pat
 
 // Generate hook settings JSON
 export function generateHookSettings(agentId: string, port: number): Record<string, unknown> {
-  const statusCmd = (status: string) =>
-    `curl -s -X POST http://127.0.0.1:${port}/status -H "Content-Type: application/json" -d '{"agentId":"${agentId}","status":"${status}"}' > /dev/null 2>&1`
+  const curlPost = (endpoint: string, jsonBody: string) =>
+    `curl -s -X POST http://127.0.0.1:${port}${endpoint} -H "Content-Type: application/json" -d '${jsonBody}' > /dev/null 2>&1`
 
   return {
     hooks: {
-      Stop: [{ matcher: '', hooks: [{ type: 'command', command: statusCmd('waiting') }] }],
-      PreToolUse: [{ matcher: '', hooks: [{ type: 'command', command: statusCmd('working') }] }]
+      Stop: [{ matcher: '', hooks: [{ type: 'command', command: curlPost('/status', `{"agentId":"${agentId}","status":"waiting","event":"stop"}`) }] }],
+      PreToolUse: [{ matcher: '', hooks: [{ type: 'command', command: curlPost('/status', `{"agentId":"${agentId}","status":"working","event":"tool_use"}`) }] }],
+      Notification: [{ matcher: '', hooks: [{ type: 'command', command: curlPost('/report', `{"agentId":"${agentId}","type":"notification","message":"Agent needs attention"}`) }] }]
     }
   }
 }
@@ -152,9 +153,41 @@ export function generateHookSettings(agentId: string, port: number): Record<stri
 // Generate report script content
 export function generateReportScript(agentId: string, port: number): string {
   return `#!/bin/bash
-# Usage: .claude/hive-report.sh '{"type":"todo","items":[{"text":"Fix bug","done":false}]}'
-curl -s -X POST http://127.0.0.1:${port}/report \\
-  -H "Content-Type: application/json" \\
-  -d "{\\"agentId\\":\\"${agentId}\\",$(echo $1 | sed 's/^{//' )}" > /dev/null 2>&1
+# Report task progress to Hive
+# Usage:
+#   .claude/hive-report.sh start "Fixing login bug"
+#   .claude/hive-report.sh done "Fixed login bug, added validation"
+#   .claude/hive-report.sh todo '{"items":[{"text":"Fix bug","done":false}]}'
+
+ACTION="$1"
+MSG="$2"
+AGENT="${agentId}"
+PORT=${port}
+
+case "$ACTION" in
+  start)
+    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_start\\",\\"title\\":\\"$MSG\\"}" > /dev/null 2>&1
+    ;;
+  done)
+    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_done\\",\\"summary\\":\\"$MSG\\"}" > /dev/null 2>&1
+    ;;
+  todo)
+    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"todo\\",$(echo $MSG | sed 's/^{//')}" > /dev/null 2>&1
+    ;;
+esac
 `
+}
+
+// Soul file management
+export function writeSoulFile(soulsDir: string, agentId: string, content: string) {
+  if (!existsSync(soulsDir)) mkdirSync(soulsDir, { recursive: true })
+  writeFileSync(join(soulsDir, `${agentId}.md`), content)
+}
+
+export function deleteSoulFile(soulsDir: string, agentId: string) {
+  const file = join(soulsDir, `${agentId}.md`)
+  try { if (existsSync(file)) require('fs').unlinkSync(file) } catch {}
 }
