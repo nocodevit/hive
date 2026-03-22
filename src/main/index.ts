@@ -434,6 +434,15 @@ ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type
   return { projectStage, todos }
 })
 
+// Read skill file content
+ipcMain.handle('skills:readContent', (_event, { path: skillPath }) => {
+  const skillMd = join(skillPath, 'SKILL.md')
+  try {
+    if (existsSync(skillMd)) return readFileSync(skillMd, 'utf-8')
+  } catch {}
+  return null
+})
+
 // Soul file management
 const SOULS_DIR = join(app.getPath('home'), '.hive', 'souls')
 
