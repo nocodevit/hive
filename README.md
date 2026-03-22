@@ -13,8 +13,8 @@ A macOS desktop app to manage multiple [Claude Code](https://claude.ai/claude-co
 [![Beta](https://img.shields.io/badge/status-beta-orange.svg)]()
 [![macOS](https://img.shields.io/badge/platform-macOS-blue.svg)]()
 
-<!-- Replace with actual screenshot -->
-![Hive Dashboard](docs/screenshot-dashboard.png)
+![Hive — Full app view with soul-injected agent terminal](docs/screenshot-full.png)
+*Three-column layout: Projects, Agents by department, and Terminal with soul-injected Claude Code session*
 
 [Download](#getting-started) · [Features](#features) · [Roadmap](#roadmap) · [Contributing](#contributing)
 
@@ -34,65 +34,67 @@ Running multiple Claude Code instances means juggling terminal tabs, losing cont
 | Skills scattered everywhere | Visual skill browser, toggle per agent |
 | Restart = context lost | Persistent memory per agent |
 
-## Demo
+## Screenshots
 
-<!-- Replace with actual GIF/video -->
-![Hive Demo](docs/demo.gif)
+### Project Dashboard
+![Dashboard with R&D todos, agent kanban, and project status](docs/screenshot-dashboard.png)
+*Glassmorphism R&D and Admin cards scan your project's markdown files for todos. Agent kanban shows real-time status with pixel avatars. Project stage (Active/Incubating/Early Stage) auto-detected from git activity.*
+
+### Agent Board
+![Agent kanban showing working, waiting, and idle agents with task titles](docs/screenshot-agents.png)
+*Agents grouped by status. Each card shows avatar, role, department, and current task title. Task summaries auto-reported by Claude via hooks.*
+
+### Agent Editor
+![Agent editor with pixel avatar, department/role selector, and soul config](docs/screenshot-editor.png)
+*Configure identity (name, department, role), customize pixel avatar (skin, hair, clothes, accessories), and write soul.md to define personality and boundaries. Tabbed interface: Basic, Skills, Settings.*
+
+### Work Logs
+![Work logs grouped by task with start/done badges and status timeline](docs/screenshot-worklog.png)
+*Activity grouped by task blocks. Each task shows title (START badge), summary (DONE badge), and status timeline. Persistent across sessions.*
+
+### Soul in Action
+![Claude Code responding as Daisy, the UI/UX specialist, with injected personality](docs/screenshot-full.png)
+*Soul injection via `--append-system-prompt-file`. Claude responds in character — "I'm Daisy, your UI/UX specialist" — with role-specific knowledge and personality.*
 
 ## Features
 
-### Multiple Agent Terminals
-
-Run N Claude Code sessions side by side. Click to switch. Each terminal persists — switch between agents without losing state.
-
 ### Soul System
+Every agent gets an auto-generated `soul.md` based on name, role, and personality traits. Injected into Claude's system prompt via `--append-system-prompt-file`. Claude stays in character throughout the session.
 
-Every agent gets a `soul.md` — define their role, personality, and boundaries. A frontend specialist thinks differently from a QA lead.
+### Multiple Agent Terminals
+Run N Claude Code sessions side by side. Click to switch. Each terminal persists — switch between agents without losing state. Auto-run Claude on terminal open.
 
-```markdown
-# Soul
+### Agent Roles & Departments
+- **R&D**: Engineering, Product, QA, Design
+- **Non-R&D**: Admin, HR, Marketing, BA, Operations, GM
+- 12 personality traits: Detail-oriented, Creative, Analytical, Security-first, etc.
 
-## Role
-You are a senior frontend developer specializing in React and TypeScript.
-
-## Personality
-- Opinionated about code quality
-- Prefers functional components
-- Always suggests tests
-
-## Boundaries
-- Never modify backend code
-- Ask before large refactors
-```
+### Pixel Avatar Editor
+Customize each agent's appearance: skin tone, hair style/color, top/bottom style/color, hat, and accessories (glasses, headset, backpack). Randomize button for quick setup.
 
 ### GStack Skills Integration
-
-Browse and toggle [GStack](https://github.com/garrytan/gstack) skills per agent. Visual skill browser with enable/disable switches.
-
-<!-- Replace with actual screenshot -->
-![Skills Browser](docs/screenshot-skills.png)
+Browse and toggle [GStack](https://github.com/garrytan/gstack) skills per agent. Expand any skill to read the full SKILL.md content. Skills auto-linked to agent's working directory.
 
 ### Project Dashboard
+- **Glassmorphism todo cards** — R&D and Admin todos scanned from project markdown files
+- **Agent kanban** — Working / Waiting / Idle columns with avatars and task titles
+- **Project status** — Auto-detected: Active Online, Active, Incubating, Early Stage
+- **Project Settings** — Add/remove R&D and Non-R&D folders inline
 
-Kanban board showing all agents grouped by status. See who's working, who's waiting, who's idle — at a glance.
+### Task Reporting
+Claude auto-reports task start (title) and completion (summary) via `.claude/hive-report.sh`. Displayed in agent title bar, kanban cards, and grouped work logs.
 
 ### Status Hooks
+Claude Code hooks report agent status to Hive via localhost webhook (port 17710). `PreToolUse` → working, `Stop` → idle. Deduped — only status changes are logged.
 
-Claude Code hooks automatically report agent status to Hive via localhost webhook. No polling, no guessing.
-
-```
-Agent starts tool use → status: working
-Agent stops → status: waiting
-Terminal exits → status: done
-```
+### Git Worktree Isolation
+Each coding agent automatically gets its own git worktree and branch. Agents work in parallel without conflicts. Worktree auto-removed when agent is deleted.
 
 ### Agent Memory
-
-Each agent has isolated persistent memory at `~/.hive/memory/{agentId}/`. Survives restarts, survives renames. Keyed by ID, not name.
+Each agent has isolated persistent memory at `~/.hive/memory/{agentId}/`. Symlinked to working directory. Keyed by ID, survives renames.
 
 ### Work Logs
-
-Permanent activity log per agent. Every status change, every report — timestamped and stored in `~/.hive/logs/`.
+Permanent activity log per agent. Tasks grouped with START/DONE badges. Status timeline. Refresh and Clear All controls.
 
 ## Architecture
 
@@ -103,11 +105,11 @@ Permanent activity log per agent. Every status change, every report — timestam
 │  ┌──────────┬─────────────┬──────────────────────────┐ │
 │  │ Projects │   Agents    │  Terminal / Editor / Logs │ │
 │  │          │             │                          │ │
-│  │ PSLE App │ Engineering │  $ claude                │ │
-│  │ Hive     │  FE Dev  ●  │  > Building component... │ │
-│  │          │  BE Dev  ●  │                          │ │
-│  │          │ Research    │  [soul.md loaded]        │ │
-│  │          │  Analyst ○  │  [gstack skills active]  │ │
+│  │ Alex  ●  │ R&D         │  $ claude --append-      │ │
+│  │          │  David  ENG │    system-prompt-file     │ │
+│  │          │  Daisy  DES │    ~/.hive/souls/agent.md │ │
+│  │          │  Drake  QA  │                          │ │
+│  │  [+ Add] │    [+ New]  │  [soul.md injected]      │ │
 │  └──────────┴─────────────┴──────────────────────────┘ │
 │                                                        │
 │  Electron · React · xterm.js · node-pty                │
@@ -116,9 +118,11 @@ Permanent activity log per agent. Every status change, every report — timestam
         ▼                              ▼
   ~/.hive/                    localhost:17710
   ├── data.json               (status webhook server)
-  ├── memory/{agentId}/              ▲
-  └── logs/{agentId}.json            │
-                              Claude Code hooks
+  ├── souls/{agentId}.md             ▲
+  ├── memory/{agentId}/              │
+  └── logs/{agentId}.json     Claude Code hooks
+                              (PreToolUse → working)
+                              (Stop → idle)
 ```
 
 ## Tech Stack
@@ -157,22 +161,22 @@ git clone https://github.com/garrytan/gstack.git ~/.claude/skills/gstack
 cd ~/.claude/skills/gstack && ./setup
 ```
 
-Restart Hive — skills appear in Agent Editor.
+Restart Hive — skills appear in Agent Editor under the Skills tab.
 
 ## How It Works
 
-1. **Create a Project** — Point to your working folders (R&D + docs)
-2. **Add Agents** — Name them, assign a department, pick a zone
-3. **Configure Soul** — Write `soul.md` to define personality
-4. **Enable Skills** — Toggle GStack or custom skills
-5. **Start Working** — Click an agent, Claude Code launches in their zone
-6. **Monitor** — Dashboard shows real-time status, logs track everything
+1. **Create a Project** — Point to your R&D and Non-R&D folders
+2. **Add Agents** — Pick a department, role, personality traits
+3. **Soul auto-generates** — Based on name + role + traits
+4. **Start working** — Click an agent, Claude launches with soul injected
+5. **Monitor** — Dashboard shows status, kanban, todos. Logs track everything.
 
 ## Data Storage
 
 | Data | Location |
 |------|----------|
 | Projects & Agents | `~/.hive/data.json` |
+| Agent Souls | `~/.hive/souls/{agentId}.md` |
 | Agent Memory | `~/.hive/memory/{agentId}/` |
 | Work Logs | `~/.hive/logs/{agentId}.json` |
 | Skills | `~/.claude/skills/` |
@@ -181,27 +185,28 @@ Restart Hive — skills appear in Agent Editor.
 ## Roadmap
 
 - [x] Multi-agent terminal management
-- [x] Soul.md editor
-- [x] GStack skills integration
-- [x] Status hooks (working/waiting/idle)
-- [x] Work logs
-- [x] Agent memory isolation
-- [x] Project dashboard with kanban
-- [x] Light/dark theme
-- [x] Pixel avatar editor
-- [x] Git worktree auto-management
-- [x] Project status analysis (scan todos from R&D/docs)
 - [x] Soul auto-generation from role + personality traits
-- [x] Task reporting (title/summary via hooks)
-- [x] Agent role system (R&D / Non-R&D departments)
-- [ ] MCP Server — auto-reporting without soul instructions
-- [ ] Resizable sidebar panels (draggable width)
-- [ ] GNU Screen session persistence
-- [ ] Notification integrations (Slack, Telegram, WhatsApp, macOS)
-- [ ] Agent-to-agent communication (via MCP)
-- [ ] Office visualization with PixiJS
+- [x] Soul injection via `--append-system-prompt-file`
+- [x] GStack skills integration with detail view
+- [x] Status hooks (working/waiting/idle via PreToolUse/Stop)
+- [x] Task reporting (title/summary via hive-report.sh)
+- [x] Work logs grouped by task with START/DONE badges
+- [x] Agent memory isolation per agentId
+- [x] Project dashboard with glassmorphism todo cards
+- [x] Agent kanban with pixel avatars
+- [x] Pixel avatar editor (skin, hair, clothes, accessories)
+- [x] Git worktree auto-management
+- [x] Project status auto-detection (Active/Incubating/Early Stage)
+- [x] Agent roles: R&D (Engineering/Product/QA/Design) + Non-R&D (Admin/HR/Marketing/BA/Operations/GM)
+- [x] Light/dark theme (follows system)
+- [x] Project Settings tab (add/remove folders inline)
+- [ ] **MCP Server** — Auto-reporting without soul instructions, agent-to-agent communication
+- [ ] **Resizable sidebar panels** — Draggable column widths
+- [ ] **GNU Screen session persistence** — Terminal sessions survive app restart
+- [ ] **Notification integrations** — Slack, Telegram, WhatsApp, macOS
+- [ ] **Office visualization** — PixiJS-powered virtual office with agents at desks
 - [ ] Agency-Agents role templates
-- [ ] claude-mem / memsearch integration
+- [ ] claude-mem / memsearch for enhanced memory
 
 ## Contributing
 
@@ -213,6 +218,9 @@ npm run dev
 
 # Build
 npm run build
+
+# Test
+npm test
 ```
 
 ## License
