@@ -71,11 +71,14 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  // Load data on mount
+  // Load data on mount — reset all agents to idle (terminals disconnected on restart)
   useEffect(() => {
     window.api.data.load().then((data) => {
       if (data.projects) setProjects(data.projects as Project[])
-      if (data.agents) setAgents(data.agents as Agent[])
+      if (data.agents) {
+        const resetAgents = (data.agents as Agent[]).map((a) => ({ ...a, status: 'done' as const }))
+        setAgents(resetAgents)
+      }
       if (data.appPrefs) setAppPrefs(data.appPrefs as typeof appPrefs)
     })
     window.api.skills.scan().then(setAvailableSkills)
@@ -188,7 +191,9 @@ export default function App() {
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)))
   }
 
-  const DEPARTMENTS = ['Engineering', 'Design', 'Research', 'QA', 'Operations']
+  const RND_ROLES = ['Engineering', 'Product', 'QA', 'Design']
+  const NON_RND_ROLES = ['Admin', 'HR', 'Marketing', 'BA', 'Operations', 'GM']
+  const ALL_DEPARTMENTS = ['R&D', 'Non-R&D']
 
   return (
     <div className="flex h-screen bg-bg-primary text-text-primary">
@@ -359,7 +364,7 @@ export default function App() {
                             </button>
                           </div>
                           <span className="text-[10px] text-text-muted uppercase group-hover:hidden">
-                            {agent.type === 'coding' ? 'dev' : 'res'}
+                            {agent.role || agent.department}
                           </span>
                         </div>
                       ))}
@@ -636,7 +641,7 @@ export default function App() {
                                   <AvatarPreview config={agent.avatar} size={20} />
                                   <span className="text-sm font-medium text-text-primary">{agent.name}</span>
                                   <span className="text-[10px] text-text-muted uppercase ml-auto">
-                                    {agent.type === 'coding' ? 'dev' : 'res'}
+                                    {agent.role || agent.department}
                                   </span>
                                 </div>
                                 {agentReports[agent.id] && agentReports[agent.id].length > 0 && (
@@ -851,28 +856,41 @@ export default function App() {
                           className="w-full px-3 py-1 rounded-lg bg-bg-primary border border-border text-text-primary text-sm font-semibold focus:outline-none focus:border-accent transition-colors"
                           placeholder="Name"
                         />
-                        <input
-                          type="text"
-                          value={selectedAgent.role || ''}
-                          onChange={(e) => updateAgent(selectedAgent.id, { role: e.target.value })}
-                          className="w-full px-3 py-1 rounded-lg bg-bg-primary border border-border text-text-muted text-xs focus:outline-none focus:border-accent transition-colors"
-                          placeholder="Role (e.g. Frontend Dev)"
-                        />
+                        <span className="px-3 py-1 text-xs text-text-muted">{selectedAgent.role || selectedAgent.department}</span>
                       </div>
                       <StatusDot status={selectedAgent.status} />
                     </div>
                     <div className="flex gap-2">
+                      <div className="flex gap-1">
+                        {ALL_DEPARTMENTS.map((dept) => (
+                          <button
+                            key={dept}
+                            onClick={() => {
+                              const newType = dept === 'R&D' ? 'coding' as const : 'non-coding' as const
+                              const newRoles = dept === 'R&D' ? RND_ROLES : NON_RND_ROLES
+                              updateAgent(selectedAgent.id, {
+                                department: dept,
+                                type: newType,
+                                role: newRoles.includes(selectedAgent.role) ? selectedAgent.role : newRoles[0]
+                              })
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                              selectedAgent.department === dept
+                                ? 'bg-accent text-text-on-purple'
+                                : 'bg-bg-primary border border-border text-text-muted'
+                            }`}
+                          >{dept}</button>
+                        ))}
+                      </div>
                       <select
-                        value={selectedAgent.department}
-                        onChange={(e) => updateAgent(selectedAgent.id, { department: e.target.value })}
+                        value={selectedAgent.role || ''}
+                        onChange={(e) => updateAgent(selectedAgent.id, { role: e.target.value })}
                         className="flex-1 px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm cursor-pointer focus:outline-none focus:border-accent transition-colors"
                       >
-                        {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                        {(selectedAgent.department === 'R&D' || selectedAgent.type === 'coding' ? RND_ROLES : NON_RND_ROLES).map((r) => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
                       </select>
-                      <div className="flex gap-1">
-                        <button onClick={() => updateAgent(selectedAgent.id, { type: 'coding' })} className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${selectedAgent.type === 'coding' ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}>Coding</button>
-                        <button onClick={() => updateAgent(selectedAgent.id, { type: 'non-coding' })} className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${selectedAgent.type === 'non-coding' ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}>Research</button>
-                      </div>
                     </div>
                   </div>
 
