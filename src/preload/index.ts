@@ -45,6 +45,8 @@ const api = {
   },
   agent: {
     setupHooks: (cwd: string, agentId: string) => ipcRenderer.invoke('agent:setupHooks', { cwd, agentId }),
+    writeSoul: (agentId: string, content: string) => ipcRenderer.invoke('agent:writeSoul', { agentId, content }),
+    deleteSoul: (agentId: string) => ipcRenderer.invoke('agent:deleteSoul', { agentId }),
     loadLogs: (agentId: string) => ipcRenderer.invoke('agent:loadLogs', { agentId }),
     clearLogs: (agentId: string) => ipcRenderer.invoke('agent:clearLogs', { agentId }),
     onStatus: (cb: (data: { agentId: string; status: string }) => void) => {

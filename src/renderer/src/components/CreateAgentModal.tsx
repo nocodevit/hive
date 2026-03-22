@@ -14,17 +14,18 @@ const DEPARTMENTS = ['Engineering', 'Design', 'Research', 'QA', 'Operations']
 
 export default function CreateAgentModal({ open, onClose, project, onCreate }: Props) {
   const [name, setName] = useState('')
+  const [role, setRole] = useState('')
   const [type, setType] = useState<'coding' | 'non-coding'>('coding')
   const [department, setDepartment] = useState('Engineering')
   const [zoneId, setZoneId] = useState(project.zones[0]?.id || '')
   const [soul, setSoul] = useState(defaultSoul)
   const [selectedPreset, setSelectedPreset] = useState<string | null>(null)
 
-  const applyPreset = (presetName: string) => {
-    const preset = agentPresets.find((p) => p.name === presetName)
+  const applyPreset = (presetRole: string) => {
+    const preset = agentPresets.find((p) => p.role === presetRole)
     if (!preset) return
-    setSelectedPreset(presetName)
-    setName(preset.name)
+    setSelectedPreset(presetRole)
+    setRole(preset.role)
     setType(preset.type)
     setDepartment(preset.department)
     setSoul(preset.soul)
@@ -42,6 +43,7 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
       projectId: project.id,
       zoneId,
       name: name.trim(),
+      role: role.trim() || name.trim(),
       type,
       department,
       status: 'done',
@@ -51,6 +53,7 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
       preferences: { ...defaultPreferences }
     })
     setName('')
+    setRole('')
     setType('coding')
     setDepartment('Engineering')
     setSoul(defaultSoul)
@@ -73,15 +76,15 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
           <div className="grid grid-cols-2 gap-1.5">
             {agentPresets.map((preset) => (
               <button
-                key={preset.name}
-                onClick={() => applyPreset(preset.name)}
+                key={preset.role}
+                onClick={() => applyPreset(preset.role)}
                 className={`text-left px-3 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
-                  selectedPreset === preset.name
+                  selectedPreset === preset.role
                     ? 'bg-accent-subtle border border-accent/30 text-accent'
                     : 'bg-bg-primary border border-border text-text-secondary hover:bg-bg-hover'
                 }`}
               >
-                <span className="font-medium">{preset.name}</span>
+                <span className="font-medium">{preset.role}</span>
                 <span className="text-text-muted ml-1">
                   {preset.type === 'coding' ? 'dev' : 'res'}
                 </span>
@@ -92,20 +95,36 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
 
         <div className="border-t border-border" />
 
-        {/* Name */}
-        <div>
-          <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
-            Agent Name
-          </label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="e.g. Frontend Dev"
-            className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-border
-              text-text-primary text-sm placeholder:text-text-muted/50
-              focus:outline-none focus:border-accent transition-colors"
-          />
+        {/* Name + Role */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+              Name
+            </label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Alex"
+              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-border
+                text-text-primary text-sm placeholder:text-text-muted/50
+                focus:outline-none focus:border-accent transition-colors"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+              Role
+            </label>
+            <input
+              type="text"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              placeholder="e.g. Frontend Dev"
+              className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-border
+                text-text-primary text-sm placeholder:text-text-muted/50
+                focus:outline-none focus:border-accent transition-colors"
+            />
+          </div>
         </div>
 
         {/* Type */}

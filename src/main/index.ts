@@ -386,6 +386,21 @@ ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type
   return { projectStage, todos }
 })
 
+// Soul file management
+const SOULS_DIR = join(app.getPath('home'), '.hive', 'souls')
+
+ipcMain.handle('agent:writeSoul', (_event, { agentId, content }) => {
+  mkdirSync(SOULS_DIR, { recursive: true })
+  writeFileSync(join(SOULS_DIR, `${agentId}.md`), content)
+  return true
+})
+
+ipcMain.handle('agent:deleteSoul', (_event, { agentId }) => {
+  const file = join(SOULS_DIR, `${agentId}.md`)
+  try { if (existsSync(file)) unlinkSync(file) } catch {}
+  return true
+})
+
 // Load agent work logs
 ipcMain.handle('agent:loadLogs', (_event, { agentId }) => {
   return loadLogs(agentId)
