@@ -56,6 +56,8 @@ export default function App() {
   const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100 })
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
   const [agentLogs, setAgentLogs] = useState<{ time: string; type: string; message: string }[]>([])
+  const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
+  const [skillContent, setSkillContent] = useState<string | null>(null)
   const [projectScans, setProjectScans] = useState<Record<string, {
     projectStage: string
     todos: { zone: string; type: string; category: string; text: string; done: boolean }[]
@@ -948,22 +950,49 @@ export default function App() {
                               </div>
                               {packSkills.map((skill) => {
                                 const enabled = selectedAgent.enabledSkills?.includes(skill.name) ?? false
+                                const isExpanded = expandedSkill === skill.name
                                 return (
-                                  <div key={skill.name} className="flex items-center justify-between px-4 py-2.5 border-b border-border last:border-0 hover:bg-bg-hover transition-colors">
-                                    <div className="flex-1 min-w-0">
-                                      <span className="text-sm font-medium text-text-primary">/{skill.name}</span>
-                                      {skill.description && <p className="text-[11px] text-text-muted mt-0.5">{skill.description}</p>}
+                                  <div key={skill.name} className="border-b border-border last:border-0">
+                                    <div className="flex items-center justify-between px-4 py-2.5 hover:bg-bg-hover transition-colors">
+                                      <button
+                                        onClick={async () => {
+                                          if (isExpanded) {
+                                            setExpandedSkill(null)
+                                            setSkillContent(null)
+                                          } else {
+                                            setExpandedSkill(skill.name)
+                                            const content = await window.api.skills.readContent(skill.path)
+                                            setSkillContent(content)
+                                          }
+                                        }}
+                                        className="flex-1 min-w-0 text-left cursor-pointer flex items-center gap-1.5"
+                                      >
+                                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"
+                                          className={`transition-transform flex-shrink-0 ${isExpanded ? 'rotate-90' : ''}`}>
+                                          <polyline points="9 18 15 12 9 6" />
+                                        </svg>
+                                        <span className="text-sm font-medium text-text-primary">/{skill.name}</span>
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          const current = selectedAgent.enabledSkills || []
+                                          const next = enabled ? current.filter((s) => s !== skill.name) : [...current, skill.name]
+                                          updateAgent(selectedAgent.id, { enabledSkills: next })
+                                        }}
+                                        className={`ml-3 w-9 h-5 rounded-full cursor-pointer transition-colors relative flex-shrink-0 ${enabled ? 'bg-accent' : 'bg-bg-hover'}`}
+                                      >
+                                        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${enabled ? 'left-[18px]' : 'left-0.5'}`} />
+                                      </button>
                                     </div>
-                                    <button
-                                      onClick={() => {
-                                        const current = selectedAgent.enabledSkills || []
-                                        const next = enabled ? current.filter((s) => s !== skill.name) : [...current, skill.name]
-                                        updateAgent(selectedAgent.id, { enabledSkills: next })
-                                      }}
-                                      className={`ml-3 w-9 h-5 rounded-full cursor-pointer transition-colors relative flex-shrink-0 ${enabled ? 'bg-accent' : 'bg-bg-hover'}`}
-                                    >
-                                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${enabled ? 'left-[18px]' : 'left-0.5'}`} />
-                                    </button>
+                                    {!isExpanded && skill.description && (
+                                      <p className="text-[11px] text-text-muted px-4 pb-2 pl-9">{skill.description}</p>
+                                    )}
+                                    {isExpanded && skillContent && (
+                                      <pre className="px-4 py-3 mx-4 mb-3 rounded-lg bg-bg-primary border border-border
+                                        text-[11px] text-text-muted font-mono leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap">
+                                        {skillContent}
+                                      </pre>
+                                    )}
                                   </div>
                                 )
                               })}

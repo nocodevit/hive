@@ -41,7 +41,8 @@ const api = {
   },
   skills: {
     scan: () => ipcRenderer.invoke('skills:scan'),
-    link: (cwd: string, skillPaths: string[]) => ipcRenderer.invoke('skills:link', { cwd, skillPaths })
+    link: (cwd: string, skillPaths: string[]) => ipcRenderer.invoke('skills:link', { cwd, skillPaths }),
+    readContent: (path: string) => ipcRenderer.invoke('skills:readContent', { path })
   },
   agent: {
     setupHooks: (cwd: string, agentId: string) => ipcRenderer.invoke('agent:setupHooks', { cwd, agentId }),
