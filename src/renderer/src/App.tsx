@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Terminal from './components/Terminal'
+import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import CreateProjectModal from './components/CreateProjectModal'
 import CreateAgentModal from './components/CreateAgentModal'
 import type { Project, Agent, Zone, SkillInfo } from './types'
@@ -48,7 +49,7 @@ export default function App() {
   const [showCreateAgent, setShowCreateAgent] = useState(false)
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
-  const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true })
+  const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100 })
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
   const [agentLogs, setAgentLogs] = useState<{ time: string; type: string; message: string }[]>([])
   const [projectScans, setProjectScans] = useState<Record<string, {
@@ -129,18 +130,31 @@ export default function App() {
     const zone = project?.zones.find((z: Zone) => z.id === agent.zoneId)
     if (!zone) return
 
+    let cwd = zone.path
+
+    // Create worktree for coding agents with git
+    if (agent.type === 'coding' && zone.hasGit && !agent.worktreePath) {
+      const result = await window.api.git.worktreeAdd(zone.path, agent.id, agent.name)
+      if (result.ok && result.path) {
+        cwd = result.path
+        updateAgent(agent.id, { worktreePath: result.path, worktreeBranch: result.branch })
+      }
+    } else if (agent.worktreePath) {
+      cwd = agent.worktreePath
+    }
+
     // Link enabled skills to working directory
     if (agent.enabledSkills?.length) {
       const skillPaths = agent.enabledSkills
         .map((name) => availableSkills.find((s) => s.name === name)?.path)
         .filter(Boolean) as string[]
       if (skillPaths.length) {
-        await window.api.skills.link(zone.path, skillPaths)
+        await window.api.skills.link(cwd, skillPaths)
       }
     }
 
     // Setup Claude Code hooks for status reporting
-    await window.api.agent.setupHooks(zone.path, agent.id)
+    await window.api.agent.setupHooks(cwd, agent.id)
 
     setActiveTerminals((prev) => new Set(prev).add(agent.id))
     setAgents((prev) =>
@@ -151,6 +165,7 @@ export default function App() {
   }
 
   const getAgentCwd = (agent: Agent): string => {
+    if (agent.worktreePath) return agent.worktreePath
     const project = projects.find((p) => p.id === agent.projectId)
     const zone = project?.zones.find((z: Zone) => z.id === agent.zoneId)
     return zone?.path || '/'
@@ -223,6 +238,18 @@ export default function App() {
               }`} />
             </button>
           </div>
+          <div className="flex items-center justify-between px-3 py-1.5">
+            <span className="text-[11px] text-text-muted">Max logs</span>
+            <select
+              value={appPrefs.maxLogs}
+              onChange={(e) => setAppPrefs((p) => ({ ...p, maxLogs: Number(e.target.value) }))}
+              className="text-[11px] bg-bg-hover text-text-primary rounded px-1.5 py-0.5 cursor-pointer border-none"
+            >
+              {[50, 100, 200, 500].map((n) => (
+                <option key={n} value={n}>{n}</option>
+              ))}
+            </select>
+          </div>
           <button
             onClick={() => setShowCreateProject(true)}
             className="w-full px-3 py-2 rounded-lg text-sm text-text-muted
@@ -272,7 +299,13 @@ export default function App() {
                             if (!activeTerminals.has(agent.id)) startAgent(agent)
                           }}
                         >
-                          <StatusDot status={agent.status} />
+                          <div className="w-6 h-6 flex-shrink-0 relative">
+                            <AvatarPreview config={agent.avatar} size={24} />
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-bg-secondary ${
+                              agent.status === 'working' ? 'bg-status-working' :
+                              agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
+                            }`} />
+                          </div>
                           <span className="truncate">{agent.name}</span>
                           <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                             <button
@@ -291,7 +324,7 @@ export default function App() {
                               </svg>
                             </button>
                             <button
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation()
                                 if (activeTerminals.has(agent.id)) {
                                   window.api.pty.kill(agent.id)
@@ -300,6 +333,11 @@ export default function App() {
                                     next.delete(agent.id)
                                     return next
                                   })
+                                }
+                                // Clean up worktree
+                                if (agent.worktreePath) {
+                                  const zone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
+                                  if (zone) await window.api.git.worktreeRemove(zone.path, agent.worktreePath)
                                 }
                                 setAgents((prev) => prev.filter((a) => a.id !== agent.id))
                                 if (selectedAgentId === agent.id) setSelectedAgentId(null)
@@ -663,11 +701,8 @@ export default function App() {
                 </label>
                 <div className="p-4 rounded-xl bg-bg-secondary border border-border space-y-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-accent-subtle flex items-center justify-center">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                        <circle cx="12" cy="7" r="4" />
-                      </svg>
+                    <div className="w-12 h-12 rounded-xl bg-bg-primary border border-border flex items-center justify-center overflow-hidden">
+                      <AvatarPreview config={selectedAgent.avatar} size={40} />
                     </div>
                     <input
                       type="text"
@@ -708,6 +743,20 @@ export default function App() {
                       >Research</button>
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Avatar */}
+              <div>
+                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
+                  Avatar
+                </label>
+                <div className="p-4 rounded-xl bg-bg-secondary border border-border">
+                  <AvatarEditor
+                    config={selectedAgent.avatar}
+                    onChange={(avatar) => updateAgent(selectedAgent.id, { avatar })}
+                    size={128}
+                  />
                 </div>
               </div>
 
@@ -842,17 +891,29 @@ export default function App() {
                 <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
                   Work Zone
                 </label>
-                <div className="p-3 rounded-xl bg-bg-secondary border border-border text-sm">
+                <div className="p-3 rounded-xl bg-bg-secondary border border-border text-sm space-y-2">
                   {(() => {
                     const zone = selectedProject?.zones.find((z: Zone) => z.id === selectedAgent.zoneId)
                     return zone ? (
-                      <div className="flex items-center gap-2">
-                        <span className={`inline-block w-2 h-2 rounded-full ${
-                          zone.type === 'rnd' ? 'bg-accent' : 'bg-status-waiting'
-                        }`} />
-                        <span className="font-medium">{zone.name}</span>
-                        <span className="text-text-muted text-xs font-mono">{zone.path}</span>
-                      </div>
+                      <>
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-block w-2 h-2 rounded-full ${
+                            zone.type === 'rnd' ? 'bg-accent' : 'bg-status-waiting'
+                          }`} />
+                          <span className="font-medium">{zone.name}</span>
+                          <span className="text-text-muted text-xs font-mono">{zone.path}</span>
+                        </div>
+                        {selectedAgent.worktreePath && (
+                          <div className="flex items-center gap-2 pt-1 border-t border-border">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
+                              <path d="M18 9a9 9 0 0 1-9 9" />
+                            </svg>
+                            <span className="text-xs text-accent font-mono">{selectedAgent.worktreeBranch}</span>
+                            <span className="text-[11px] text-text-muted font-mono truncate">{selectedAgent.worktreePath}</span>
+                          </div>
+                        )}
+                      </>
                     ) : <span className="text-text-muted">No zone assigned</span>
                   })()}
                 </div>
@@ -866,12 +927,22 @@ export default function App() {
                 <h3 className="text-sm font-heading font-semibold text-text-primary">
                   Work Logs — {selectedAgent.name}
                 </h3>
-                <button
-                  onClick={() => window.api.agent.loadLogs(selectedAgent.id).then(setAgentLogs)}
-                  className="text-[11px] text-accent hover:text-accent-hover cursor-pointer"
-                >
-                  Refresh
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => window.api.agent.loadLogs(selectedAgent.id).then(setAgentLogs)}
+                    className="text-[11px] text-accent hover:text-accent-hover cursor-pointer"
+                  >
+                    Refresh
+                  </button>
+                  <button
+                    onClick={() => {
+                      window.api.agent.clearLogs(selectedAgent.id).then(() => setAgentLogs([]))
+                    }}
+                    className="text-[11px] text-red-400 hover:text-red-300 cursor-pointer"
+                  >
+                    Clear All
+                  </button>
+                </div>
               </div>
               {agentLogs.length === 0 ? (
                 <p className="text-sm text-text-muted text-center py-12">No logs yet. Start the agent to begin recording.</p>
