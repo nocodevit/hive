@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hive Office — Preview</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pixi.js/7.3.2/pixi.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0f0a1a; overflow: hidden; font-family: 'DM Sans', sans-serif; }
+  canvas { display: block; }
+  #info {
+    position: fixed; bottom: 20px; left: 20px;
+    background: rgba(30, 15, 50, 0.9); border: 1px solid rgba(124,58,237,0.3);
+    border-radius: 12px; padding: 12px 16px; color: #c4b5fd; font-size: 13px;
+    backdrop-filter: blur(10px); min-width: 200px;
+  }
+  #info .name { font-weight: 700; color: #f0ecf9; font-size: 15px; }
+  #info .role { color: #7c6f9b; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; margin-top: 2px; }
+  #info .status { margin-top: 6px; font-size: 12px; }
+  #info .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+</style>
+</head>
+<body>
+<div id="info" style="display:none">
+  <div class="name" id="info-name"></div>
+  <div class="role" id="info-role"></div>
+  <div class="status"><span class="dot" id="info-dot"></span><span id="info-status"></span></div>
+</div>
+
+<script>
+const TILE = 16;
+const SCALE = 3;
+const S = TILE * SCALE;
+
+// Sample agents
+const agents = [
+  { name: 'David', role: 'Engineering', dept: 'R&D', status: 'working', colors: { skin: '#f5d0a9', hair: '#2c1810', top: '#3b82f6', bottom: '#1e293b' } },
+  { name: 'Daisy', role: 'Design', dept: 'R&D', status: 'idle', colors: { skin: '#f5d0a9', hair: '#c4a35a', top: '#ec4899', bottom: '#7c3aed' } },
+  { name: 'Drake', role: 'QA', dept: 'R&D', status: 'working', colors: { skin: '#dba97a', hair: '#2c1810', top: '#10b981', bottom: '#1e293b' } },
+  { name: 'Alex', role: 'Engineering', dept: 'R&D', status: 'waiting', colors: { skin: '#c68642', hair: '#2c1810', top: '#f59e0b', bottom: '#1e293b' } },
+  { name: 'Tracy', role: 'Marketing', dept: 'Non-R&D', status: 'working', colors: { skin: '#fde0c4', hair: '#8b6914', top: '#ef4444', bottom: '#3b82f6' } },
+];
+
+// Desk positions (grid layout)
+const deskPositions = [
+  { x: 3, y: 3 }, { x: 8, y: 3 }, { x: 13, y: 3 },
+  { x: 3, y: 8 }, { x: 8, y: 8 },
+];
+
+const app = new PIXI.Application({
+  width: window.innerWidth,
+  height: window.innerHeight,
+  backgroundColor: 0x0f0a1a,
+  antialias: false,
+  resolution: 1,
+});
+document.body.appendChild(app.view);
+
+// Office container
+const office = new PIXI.Container();
+office.x = window.innerWidth / 2 - (18 * S) / 2;
+office.y = window.innerHeight / 2 - (12 * S) / 2;
+app.stage.addChild(office);
+
+// Draw pixel rect helper
+function drawRect(g, x, y, w, h, color) {
+  g.beginFill(color);
+  g.drawRect(x * S, y * S, w * S, h * S);
+  g.endFill();
+}
+
+// Floor
+const floor = new PIXI.Graphics();
+drawRect(floor, 0, 0, 18, 12, 0x150e24);
+// Floor grid lines
+floor.lineStyle(1, 0x1a1128, 0.5);
+for (let i = 0; i <= 18; i++) { floor.moveTo(i * S, 0); floor.lineTo(i * S, 12 * S); }
+for (let i = 0; i <= 12; i++) { floor.moveTo(0, i * S); floor.lineTo(18 * S, i * S); }
+office.addChild(floor);
+
+// Walls
+const walls = new PIXI.Graphics();
+walls.lineStyle(3, 0x7c3aed, 0.4);
+walls.drawRect(0, 0, 18 * S, 12 * S);
+// Door
+drawRect(walls, 16, 10, 2, 2, 0x231838);
+walls.lineStyle(2, 0xa78bfa, 0.3);
+walls.drawRect(16 * S, 10 * S, 2 * S, 2 * S);
+office.addChild(walls);
+
+// Plants
+function drawPlant(x, y) {
+  const g = new PIXI.Graphics();
+  drawRect(g, x, y, 1, 1, 0x5c3317); // pot
+  drawRect(g, x - 0.2, y - 1, 1.4, 1, 0x22c55e); // leaves
+  drawRect(g, x + 0.2, y - 1.5, 0.6, 0.5, 0x16a34a);
+  office.addChild(g);
+}
+drawPlant(1, 11);
+drawPlant(17, 1);
+drawPlant(1, 1);
+
+// Water cooler
+const cooler = new PIXI.Graphics();
+drawRect(cooler, 16, 1, 1, 2, 0x818cf8);
+drawRect(cooler, 16.2, 0.5, 0.6, 0.5, 0x60a5fa);
+office.addChild(cooler);
+
+// Draw desk
+function drawDesk(x, y) {
+  const g = new PIXI.Graphics();
+  // Desk surface
+  drawRect(g, x, y, 3, 2, 0x2d1f48);
+  drawRect(g, x + 0.1, y + 0.1, 2.8, 1.8, 0x3b2a5e);
+  // Monitor
+  drawRect(g, x + 0.8, y + 0.2, 1.4, 0.9, 0x0a0a0a);
+  drawRect(g, x + 0.9, y + 0.3, 1.2, 0.7, 0x1e1b4b);
+  // Monitor stand
+  drawRect(g, x + 1.3, y + 1.1, 0.4, 0.2, 0x4b5563);
+  // Keyboard
+  drawRect(g, x + 0.6, y + 1.4, 1.8, 0.4, 0x374151);
+  office.addChild(g);
+  return g;
+}
+
+// Draw agent character
+function drawAgent(agentData, deskPos) {
+  const container = new PIXI.Container();
+  const x = deskPos.x;
+  const y = deskPos.y + 2.2; // sit in front of desk
+  const c = agentData.colors;
+
+  // Chair
+  const chair = new PIXI.Graphics();
+  drawRect(chair, x + 0.8, y + 0.5, 1.4, 1, 0x2d1f48);
+  drawRect(chair, x + 0.6, y - 0.5, 0.2, 2, 0x2d1f48); // back left
+  drawRect(chair, x + 2.0, y - 0.5, 0.2, 2, 0x2d1f48); // back right
+  drawRect(chair, x + 0.6, y - 0.5, 1.6, 0.3, 0x3b2a5e); // back rest
+  container.addChild(chair);
+
+  const agent = new PIXI.Graphics();
+
+  // Body/top
+  drawRect(agent, x + 0.9, y - 0.8, 1.2, 1.2, parseInt(c.top.slice(1), 16));
+  // Arms
+  drawRect(agent, x + 0.6, y - 0.5, 0.3, 0.8, parseInt(c.skin.slice(1), 16));
+  drawRect(agent, x + 2.1, y - 0.5, 0.3, 0.8, parseInt(c.skin.slice(1), 16));
+  // Head
+  drawRect(agent, x + 0.8, y - 2, 1.4, 1.2, parseInt(c.skin.slice(1), 16));
+  // Hair
+  drawRect(agent, x + 0.7, y - 2.3, 1.6, 0.6, parseInt(c.hair.slice(1), 16));
+  // Eyes
+  drawRect(agent, x + 1.0, y - 1.3, 0.25, 0.25, 0x1e1b4b);
+  drawRect(agent, x + 1.6, y - 1.3, 0.25, 0.25, 0x1e1b4b);
+
+  container.addChild(agent);
+
+  // Status indicator
+  const statusColors = { working: 0x4ade80, waiting: 0xfbbf24, idle: 0x64748b };
+  const statusGlow = new PIXI.Graphics();
+  statusGlow.beginFill(statusColors[agentData.status] || 0x64748b);
+  statusGlow.drawCircle((x + 1.5) * S, (y - 2.8) * S, 4);
+  statusGlow.endFill();
+  container.addChild(statusGlow);
+
+  // Name label
+  const nameText = new PIXI.Text(agentData.name, {
+    fontFamily: 'monospace',
+    fontSize: 11,
+    fill: 0xc4b5fd,
+    align: 'center',
+  });
+  nameText.anchor.set(0.5, 0);
+  nameText.x = (x + 1.5) * S;
+  nameText.y = (y - 3.2) * S;
+  container.addChild(nameText);
+
+  // Click interaction
+  container.interactive = true;
+  container.cursor = 'pointer';
+  container.hitArea = new PIXI.Rectangle(x * S, (y - 2.5) * S, 3 * S, 3.5 * S);
+  container.on('pointerdown', () => showInfo(agentData));
+
+  // Typing animation for working agents
+  if (agentData.status === 'working') {
+    let tick = 0;
+    const typingDots = new PIXI.Text('', { fontFamily: 'monospace', fontSize: 8, fill: 0x4ade80 });
+    typingDots.x = (x + 0.8) * S;
+    typingDots.y = (y - 0.2) * S;
+    container.addChild(typingDots);
+
+    app.ticker.add(() => {
+      tick++;
+      if (tick % 20 === 0) {
+        const dots = '.'.repeat((Math.floor(tick / 20) % 3) + 1);
+        typingDots.text = dots;
+      }
+      // Subtle arm movement
+      agent.children = [];
+      const armOffset = Math.sin(tick * 0.1) * 0.05;
+      drawRect(agent, x + 0.9, y - 0.8, 1.2, 1.2, parseInt(c.top.slice(1), 16));
+      drawRect(agent, x + 0.6, y - 0.5 + armOffset, 0.3, 0.8, parseInt(c.skin.slice(1), 16));
+      drawRect(agent, x + 2.1, y - 0.5 - armOffset, 0.3, 0.8, parseInt(c.skin.slice(1), 16));
+      drawRect(agent, x + 0.8, y - 2, 1.4, 1.2, parseInt(c.skin.slice(1), 16));
+      drawRect(agent, x + 0.7, y - 2.3, 1.6, 0.6, parseInt(c.hair.slice(1), 16));
+      drawRect(agent, x + 1.0, y - 1.3, 0.25, 0.25, 0x1e1b4b);
+      drawRect(agent, x + 1.6, y - 1.3, 0.25, 0.25, 0x1e1b4b);
+    });
+  }
+
+  // Idle breathing animation
+  if (agentData.status === 'idle') {
+    let tick = 0;
+    app.ticker.add(() => {
+      tick++;
+      const breathe = Math.sin(tick * 0.03) * 0.03;
+      agent.y = breathe * S;
+    });
+  }
+
+  // Waiting — look around
+  if (agentData.status === 'waiting') {
+    let tick = 0;
+    const lookIndicator = new PIXI.Text('?', { fontFamily: 'monospace', fontSize: 12, fill: 0xfbbf24 });
+    lookIndicator.x = (x + 2.3) * S;
+    lookIndicator.y = (y - 2.5) * S;
+    lookIndicator.alpha = 0;
+    container.addChild(lookIndicator);
+
+    app.ticker.add(() => {
+      tick++;
+      lookIndicator.alpha = Math.sin(tick * 0.05) > 0.5 ? 0.8 : 0;
+    });
+  }
+
+  office.addChild(container);
+  return container;
+}
+
+// Info panel
+function showInfo(agent) {
+  const info = document.getElementById('info');
+  info.style.display = 'block';
+  document.getElementById('info-name').textContent = agent.name;
+  document.getElementById('info-role').textContent = `${agent.dept} · ${agent.role}`;
+  document.getElementById('info-status').textContent = agent.status;
+  const dot = document.getElementById('info-dot');
+  dot.style.background = agent.status === 'working' ? '#4ade80' : agent.status === 'waiting' ? '#fbbf24' : '#64748b';
+}
+
+// Build office
+agents.forEach((agent, i) => {
+  if (i < deskPositions.length) {
+    drawDesk(deskPositions[i].x, deskPositions[i].y);
+    drawAgent(agent, deskPositions[i]);
+  }
+});
+
+// Title
+const title = new PIXI.Text('HIVE OFFICE', {
+  fontFamily: 'monospace',
+  fontSize: 14,
+  fill: 0x7c3aed,
+  letterSpacing: 4,
+});
+title.x = 10;
+title.y = 10;
+app.stage.addChild(title);
+
+// Resize
+window.addEventListener('resize', () => {
+  app.renderer.resize(window.innerWidth, window.innerHeight);
+  office.x = window.innerWidth / 2 - (18 * S) / 2;
+  office.y = window.innerHeight / 2 - (12 * S) / 2;
+});
+</script>
+</body>
+</html>
