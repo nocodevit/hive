@@ -10,9 +10,10 @@ interface TerminalProps {
   visible: boolean
   autoRunClaude?: boolean
   startupCommand?: string
+  jobPickupPrompt?: string | null
 }
 
-export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, startupCommand }: TerminalProps) {
+export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, startupCommand, jobPickupPrompt }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -63,6 +64,7 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
 
             window.api.pty.onData(id, (data) => {
               term.write(data)
+              term.scrollToBottom()
             })
 
             window.api.pty.onExit(id, () => {
@@ -87,7 +89,12 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
               setTimeout(() => window.api.pty.write(id, startupCommand + '\r'), 500)
             } else if (autoRunClaude) {
               const soulPath = `~/.hive/souls/${agentId}.md`
-              const cmd = `claude --append-system-prompt-file ${soulPath}`
+              let cmd = `claude --append-system-prompt-file ${soulPath}`
+              if (jobPickupPrompt) {
+                // Escape single quotes in prompt
+                const escaped = jobPickupPrompt.replace(/'/g, "'\\''")
+                cmd += ` --prompt '${escaped}'`
+              }
               setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
             }
           })

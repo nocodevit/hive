@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync } from 'fs'
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync } from 'fs'
 import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
@@ -434,6 +434,43 @@ ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type
   return { projectStage, todos }
 })
 
+// Scan files in directory, flattened, sorted by mtime
+ipcMain.handle('fs:scanFiles', (_event, { dirPath, limit = 100 }) => {
+  const SKIP = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'out', '.cache', '.hive', '__pycache__', '.DS_Store'])
+  const files: { path: string; mtime: number; size: number }[] = []
+
+  function walk(dir: string, depth: number) {
+    if (depth > 5 || files.length > limit * 2) return
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (entry.name.startsWith('.') && entry.name !== '.claude') continue
+        if (SKIP.has(entry.name)) continue
+        const full = join(dir, entry.name)
+        try {
+          const st = lstatSync(full)
+          if (st.isSymbolicLink()) continue
+          if (st.isDirectory()) {
+            walk(full, depth + 1)
+          } else if (st.isFile()) {
+            const rel = full.slice(dirPath.length + 1)
+            files.push({ path: rel, mtime: st.mtimeMs, size: st.size })
+          }
+        } catch {}
+      }
+    } catch {}
+  }
+
+  if (existsSync(dirPath)) walk(dirPath, 0)
+  files.sort((a, b) => b.mtime - a.mtime)
+  return files.slice(0, limit)
+})
+
+// Open file in Finder
+ipcMain.handle('fs:revealInFinder', (_event, { filePath }) => {
+  shell.showItemInFolder(filePath)
+})
+
 // Read skill file content
 ipcMain.handle('skills:readContent', (_event, { path: skillPath }) => {
   const skillMd = join(skillPath, 'SKILL.md')
@@ -461,6 +498,53 @@ ipcMain.handle('agent:deleteSoul', (_event, { agentId }) => {
 // Load agent work logs
 ipcMain.handle('agent:loadLogs', (_event, { agentId }) => {
   return loadLogs(agentId)
+})
+
+// Generate job-pickup prompt from recent logs
+ipcMain.handle('agent:jobPickup', (_event, { agentId, agentName, agentRole }) => {
+  const logs = loadLogs(agentId)
+  if (logs.length === 0) return null
+
+  // Get last 20 entries
+  const recent = logs.slice(-20)
+  const tasks: string[] = []
+  let lastTask = ''
+  let lastDone = ''
+  let lastStatus = ''
+
+  for (const log of recent) {
+    if (log.type === 'task_start') lastTask = log.message
+    if (log.type === 'task_done') { lastDone = log.message; lastTask = '' }
+    if (log.type === 'status') lastStatus = log.message
+  }
+
+  // Build pickup prompt
+  let prompt = `You are ${agentName} (${agentRole}). Here is your recent work history:\n\n`
+
+  for (const log of recent.slice(-10)) {
+    const time = new Date(log.time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
+    if (log.type === 'task_start') prompt += `[${time}] STARTED: ${log.message}\n`
+    else if (log.type === 'task_done') prompt += `[${time}] COMPLETED: ${log.message}\n`
+    else if (log.type === 'status' && log.message === 'waiting') prompt += `[${time}] Paused\n`
+  }
+
+  if (lastTask) {
+    prompt += `\nYou were working on: "${lastTask}" but did NOT finish.\nPlease continue this task from where you left off.`
+  } else if (lastDone) {
+    prompt += `\nYour last completed task: "${lastDone}"\nCheck if there are follow-up tasks or ask what to do next.`
+  } else {
+    prompt += `\nReview your history above and ask what to work on next.`
+  }
+
+  prompt += `\n\n## Hive Resources
+- Your work logs: ~/.hive/logs/${agentId}.json
+- Your soul: ~/.hive/souls/${agentId}.md
+- Your memory: ~/.hive/memory/${agentId}/
+- Report task start: .claude/hive-report.sh start "task title"
+- Report task done: .claude/hive-report.sh done "summary"
+- Project dashboard todos: read TODO.md or any markdown with checkboxes in your work zone`
+
+  return prompt
 })
 
 // Clear agent work logs
