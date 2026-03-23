@@ -106,7 +106,7 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
     }, 200)
 
     const observer = new ResizeObserver(() => {
-      try { fit.fit() } catch {}
+      try { fit.fit(); term.scrollToBottom() } catch {}
     })
     observer.observe(el)
 
@@ -117,9 +117,9 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
 
   // Re-fit on visibility change
   useEffect(() => {
-    if (visible && fitRef.current) {
+    if (visible && fitRef.current && termRef.current) {
       setTimeout(() => {
-        try { fitRef.current?.fit() } catch {}
+        try { fitRef.current?.fit(); termRef.current?.scrollToBottom() } catch {}
       }, 100)
     }
   }, [visible])
@@ -133,9 +133,17 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
     }
   }, [id])
 
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    const path = e.dataTransfer.getData('text/plain')
+    if (path) window.api.pty.write(id, path)
+  }
+
   return (
     <div
       ref={containerRef}
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={handleDrop}
       style={{
         width: '100%',
         height: '100%',

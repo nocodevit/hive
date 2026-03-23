@@ -119,9 +119,14 @@ export default function FilesPanel({ project, agentCwd, width }: Props) {
         {files.filter((f) => !search || f.path.toLowerCase().includes(search.toLowerCase())).map((file) => (
           <button
             key={file.path}
+            draggable
+            onDragStart={(e) => {
+              e.dataTransfer.setData('text/plain', `${agentCwd}/${file.path}`)
+              e.dataTransfer.effectAllowed = 'copy'
+            }}
             onClick={() => {
               window.api.fs.revealInFinder(`${agentCwd}/${file.path}`)
-            }}
+            }
             className="w-full text-left px-2 py-1.5 rounded-md text-[11px]
               hover:bg-bg-hover transition-colors cursor-pointer
               flex items-center gap-1.5 group"

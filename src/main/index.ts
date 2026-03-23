@@ -436,7 +436,7 @@ ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type
 
 // Scan files in directory, flattened, sorted by mtime
 ipcMain.handle('fs:scanFiles', (_event, { dirPath, limit = 100 }) => {
-  const SKIP = new Set(['node_modules', '.git', '.next', 'dist', 'build', 'out', '.cache', '.hive', '__pycache__', '.DS_Store'])
+  const SKIP = new Set(['node_modules', '.git', '.next', '.cache', '.hive', '__pycache__', '.DS_Store', '.Trash', '.Spotlight-V100', 'dist', 'build', 'out'])
   const files: { path: string; mtime: number; size: number }[] = []
 
   function walk(dir: string, depth: number) {
@@ -444,7 +444,6 @@ ipcMain.handle('fs:scanFiles', (_event, { dirPath, limit = 100 }) => {
     try {
       const entries = readdirSync(dir, { withFileTypes: true })
       for (const entry of entries) {
-        if (entry.name.startsWith('.') && entry.name !== '.claude') continue
         if (SKIP.has(entry.name)) continue
         const full = join(dir, entry.name)
         try {

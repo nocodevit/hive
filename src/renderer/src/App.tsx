@@ -6,6 +6,7 @@ import CreateAgentModal from './components/CreateAgentModal'
 import ProjectSettingsModal from './components/ProjectSettingsModal'
 import ResizeHandle from './components/ResizeHandle'
 import FilesPanel from './components/FilesPanel'
+import OfficeView from './components/OfficeView'
 import type { Project, Agent, Zone, SkillInfo } from './types'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
@@ -51,7 +52,7 @@ export default function App() {
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [showCreateAgent, setShowCreateAgent] = useState(false)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
-  const [projectTab, setProjectTab] = useState<'dashboard' | 'settings'>('dashboard')
+  const [projectTab, setProjectTab] = useState<'office' | 'project' | 'settings'>('office')
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
@@ -554,7 +555,7 @@ export default function App() {
               {/* Project Header + Tabs in title bar area */}
               <div className="px-6 pt-2 pb-3 border-b border-border flex items-center gap-4">
                 <div className="flex gap-1">
-                  {([['dashboard', 'Project'], ['settings', 'Settings']] as const).map(([key, label]) => (
+                  {([['office', 'Office'], ['project', 'Project'], ['settings', 'Settings']] as const).map(([key, label]) => (
                     <button
                       key={key}
                       onClick={() => setProjectTab(key)}
@@ -584,95 +585,19 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Dashboard Tab */}
-              {projectTab === 'dashboard' && (
+              {/* Office Tab */}
+              {projectTab === 'office' && (
                 <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                  {/* Glass Todo Cards */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* R&D Card */}
-                    <div className="glass-card p-5">
-                      <div className="flex items-center gap-2 mb-3">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
-                        </svg>
-                        <h3 className="text-sm font-heading font-bold text-text-primary">R&D</h3>
-                        {projectScan && (() => {
-                          const rdTodos = projectScan.todos.filter((t) => t.category === 'rd' || (t.type === 'rnd' && t.category === 'other'))
-                          const open = rdTodos.filter((t) => !t.done).length
-                          const done = rdTodos.filter((t) => t.done).length
-                          return (
-                            <span className="text-[11px] text-text-muted ml-auto">
-                              {open} open{done > 0 ? ` · ${done} done` : ''}
-                            </span>
-                          )
-                        })()}
-                      </div>
-                      {projectScan && (() => {
-                        const rdTodos = projectScan.todos
-                          .filter((t) => t.category === 'rd' || (t.type === 'rnd' && t.category === 'other'))
-                          .filter((t) => !t.done)
-                        return rdTodos.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {rdTodos.slice(0, 8).map((t, i) => (
-                              <div key={i} className="flex items-start gap-2 text-[12px]">
-                                <span className="text-accent mt-0.5">{'\u25CB'}</span>
-                                <span className="text-text-primary">{t.text}</span>
-                              </div>
-                            ))}
-                            {rdTodos.length > 8 && <p className="text-[11px] text-text-muted">+{rdTodos.length - 8} more</p>}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-text-muted py-2">No open R&D todos</p>
-                        )
-                      })()}
-                    </div>
-
-                    {/* Admin Card */}
-                    <div className="glass-card-warm p-5">
-                      <div className="flex items-center gap-2 mb-3">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--status-waiting)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-                        </svg>
-                        <h3 className="text-sm font-heading font-bold text-text-primary">Admin</h3>
-                        {projectScan && (() => {
-                          const adminTodos = projectScan.todos.filter((t) => t.type === 'non-rnd')
-                          const open = adminTodos.filter((t) => !t.done).length
-                          const done = adminTodos.filter((t) => t.done).length
-                          return (
-                            <span className="text-[11px] text-text-muted ml-auto">
-                              {open} open{done > 0 ? ` · ${done} done` : ''}
-                            </span>
-                          )
-                        })()}
-                      </div>
-                      {projectScan && (() => {
-                        const adminTodos = projectScan.todos.filter((t) => t.type === 'non-rnd').filter((t) => !t.done)
-                        const hasNonRnd = selectedProject.zones.some((z: Zone) => z.type === 'non-rnd')
-                        return adminTodos.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {adminTodos.slice(0, 8).map((t, i) => (
-                              <div key={i} className="flex items-start gap-2 text-[12px]">
-                                <span className="text-status-waiting mt-0.5">{'\u25CB'}</span>
-                                <span className="text-text-primary flex-1">{t.text}</span>
-                                <span className="text-[10px] text-text-muted flex-shrink-0">{t.category}</span>
-                              </div>
-                            ))}
-                            {adminTodos.length > 8 && <p className="text-[11px] text-text-muted">+{adminTodos.length - 8} more</p>}
-                          </div>
-                        ) : (
-                          <div className="text-center py-2">
-                            <p className="text-xs text-text-muted mb-2">{hasNonRnd ? 'No open admin todos' : 'No Non-R&D zone'}</p>
-                            <button
-                              onClick={() => setShowCreateAgent(true)}
-                              className="px-3 py-1.5 rounded-lg bg-accent text-text-on-purple text-xs font-medium
-                                hover:bg-accent-hover transition-colors cursor-pointer"
-                            >
-                              Create Business Manager
-                            </button>
-                          </div>
-                        )
-                      })()}
-                    </div>
+                  {/* Office View — fill width */}
+                  <div className="w-full">
+                    <OfficeView
+                      agents={projectAgents}
+                      onAgentClick={(id) => {
+                        setSelectedAgentId(id)
+                        const agent = agents.find((a) => a.id === id)
+                        if (agent && !activeTerminals.has(id)) startAgent(agent)
+                      }}
+                    />
                   </div>
 
                   {/* Agent Kanban */}
@@ -725,6 +650,104 @@ export default function App() {
                         </div>
                       )
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* Project Tab */}
+              {projectTab === 'project' && (
+                <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                  {/* Glass Todo Cards */}
+                  <div className="grid grid-cols-2 gap-4">
+                    {/* R&D Card */}
+                    <div className="glass-card p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+                        </svg>
+                        <h3 className="text-sm font-heading font-bold text-text-primary">R&D</h3>
+                        {projectScan && (() => {
+                          const rdTodos = projectScan.todos.filter((t) => t.category === 'rd' || (t.type === 'rnd' && t.category === 'other'))
+                          const open = rdTodos.filter((t) => !t.done).length
+                          const done = rdTodos.filter((t) => t.done).length
+                          return <span className="text-[11px] text-text-muted ml-auto">{open} open{done > 0 ? ` · ${done} done` : ''}</span>
+                        })()}
+                      </div>
+                      {projectScan && (() => {
+                        const rdTodos = projectScan.todos.filter((t) => t.category === 'rd' || (t.type === 'rnd' && t.category === 'other')).filter((t) => !t.done)
+                        return rdTodos.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {rdTodos.slice(0, 8).map((t, i) => (
+                              <div key={i} className="flex items-start gap-2 text-[12px]">
+                                <span className="text-accent mt-0.5">{'\u25CB'}</span>
+                                <span className="text-text-primary">{t.text}</span>
+                              </div>
+                            ))}
+                            {rdTodos.length > 8 && <p className="text-[11px] text-text-muted">+{rdTodos.length - 8} more</p>}
+                          </div>
+                        ) : <p className="text-xs text-text-muted py-2">No open R&D todos</p>
+                      })()}
+                    </div>
+
+                    {/* Admin Card */}
+                    <div className="glass-card-warm p-5">
+                      <div className="flex items-center gap-2 mb-3">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--status-working)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
+                        </svg>
+                        <h3 className="text-sm font-heading font-bold text-text-primary">Admin</h3>
+                        {projectScan && (() => {
+                          const adminTodos = projectScan.todos.filter((t) => t.type === 'non-rnd')
+                          const open = adminTodos.filter((t) => !t.done).length
+                          const done = adminTodos.filter((t) => t.done).length
+                          return <span className="text-[11px] text-text-muted ml-auto">{open} open{done > 0 ? ` · ${done} done` : ''}</span>
+                        })()}
+                      </div>
+                      {projectScan && (() => {
+                        const adminTodos = projectScan.todos.filter((t) => t.type === 'non-rnd').filter((t) => !t.done)
+                        const hasNonRnd = selectedProject.zones.some((z: Zone) => z.type === 'non-rnd')
+                        return adminTodos.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {adminTodos.slice(0, 8).map((t, i) => (
+                              <div key={i} className="flex items-start gap-2 text-[12px]">
+                                <span className="text-status-working mt-0.5">{'\u25CB'}</span>
+                                <span className="text-text-primary flex-1">{t.text}</span>
+                                <span className="text-[10px] text-text-muted flex-shrink-0">{t.category}</span>
+                              </div>
+                            ))}
+                            {adminTodos.length > 8 && <p className="text-[11px] text-text-muted">+{adminTodos.length - 8} more</p>}
+                          </div>
+                        ) : (
+                          <div className="text-center py-2">
+                            <p className="text-xs text-text-muted mb-2">{hasNonRnd ? 'No open admin todos' : 'No Non-R&D zone'}</p>
+                            <button onClick={() => setShowCreateAgent(true)} className="px-3 py-1.5 rounded-lg bg-accent text-text-on-purple text-xs font-medium hover:bg-accent-hover transition-colors cursor-pointer">
+                              Create Business Manager
+                            </button>
+                          </div>
+                        )
+                      })()}
+                    </div>
+                  </div>
+
+                  {/* Work Zones */}
+                  <div>
+                    <h3 className="text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-3">Work Zones</h3>
+                    <div className="space-y-2">
+                      {selectedProject.zones.map((zone: Zone) => {
+                        const zoneAgents = projectAgents.filter((a) => a.zoneId === zone.id)
+                        return (
+                          <div key={zone.id} className="flex items-center gap-3 p-3 rounded-xl bg-bg-secondary border border-border">
+                            <span className={`w-2.5 h-2.5 rounded-full ${zone.type === 'rnd' ? 'bg-accent' : 'bg-status-working'}`} />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-text-primary">{zone.name}</p>
+                              <p className="text-[11px] text-text-muted font-mono truncate">{zone.path}</p>
+                            </div>
+                            <span className="text-[10px] text-text-muted uppercase">{zone.type === 'rnd' ? 'R&D' : 'Docs'}</span>
+                            <span className="text-[11px] text-text-muted">{zoneAgents.length} agent{zoneAgents.length !== 1 ? 's' : ''}</span>
+                          </div>
+                        )
+                      })}
+                    </div>
                   </div>
                 </div>
               )}
@@ -1090,30 +1113,36 @@ export default function App() {
                   {/* Work Zone */}
                   <div>
                     <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Work Zone</label>
-                    <div className="p-3 rounded-xl bg-bg-secondary border border-border text-sm space-y-2">
-                      {(() => {
-                        const zone = selectedProject?.zones.find((z: Zone) => z.id === selectedAgent.zoneId)
-                        return zone ? (
-                          <>
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-block w-2 h-2 rounded-full ${zone.type === 'rnd' ? 'bg-accent' : 'bg-status-waiting'}`} />
-                              <span className="font-medium">{zone.name}</span>
-                              <span className="text-text-muted text-xs font-mono">{zone.path}</span>
-                            </div>
-                            {selectedAgent.worktreePath && (
-                              <div className="flex items-center gap-2 pt-1 border-t border-border">
-                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                  <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
-                                  <path d="M18 9a9 9 0 0 1-9 9" />
-                                </svg>
-                                <span className="text-xs text-accent font-mono">{selectedAgent.worktreeBranch}</span>
-                                <span className="text-[11px] text-text-muted font-mono truncate">{selectedAgent.worktreePath}</span>
-                              </div>
-                            )}
-                          </>
-                        ) : <span className="text-text-muted">No zone assigned</span>
-                      })()}
+                    <div className="space-y-1.5">
+                      {selectedProject?.zones
+                        .filter((z: Zone) => selectedAgent.type === 'coding' ? z.type === 'rnd' : true)
+                        .map((zone: Zone) => (
+                          <button
+                            key={zone.id}
+                            onClick={() => updateAgent(selectedAgent.id, { zoneId: zone.id, worktreePath: undefined, worktreeBranch: undefined })}
+                            className={`w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors flex items-center gap-2 ${
+                              selectedAgent.zoneId === zone.id
+                                ? 'bg-accent-subtle border border-accent/30 text-accent'
+                                : 'bg-bg-secondary border border-border text-text-secondary hover:bg-bg-hover'
+                            }`}
+                          >
+                            <span className={`inline-block w-2 h-2 rounded-full ${zone.type === 'rnd' ? 'bg-accent' : 'bg-status-working'}`} />
+                            <span className="font-medium">{zone.name}</span>
+                            <span className="text-[10px] text-text-muted uppercase ml-auto">{zone.type === 'rnd' ? 'R&D' : 'Docs'}</span>
+                          </button>
+                        ))}
                     </div>
+                    {selectedAgent.worktreePath && (
+                      <div className="flex items-center gap-2 mt-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="6" y1="3" x2="6" y2="15" /><circle cx="18" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
+                          <path d="M18 9a9 9 0 0 1-9 9" />
+                        </svg>
+                        <span className="text-xs text-accent font-mono">{selectedAgent.worktreeBranch}</span>
+                        <span className="text-[11px] text-text-muted font-mono truncate">{selectedAgent.worktreePath}</span>
+                        <p className="text-[10px] text-text-muted ml-auto">Changing zone will reset worktree</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
