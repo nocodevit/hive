@@ -144,7 +144,21 @@ Permanent activity log per agent. Tasks grouped with START/DONE badges. Status t
 - Node.js 20+
 - [Claude Code](https://claude.ai/claude-code) CLI installed
 
-### Install & Run
+### Download (macOS)
+
+| Version | Description | Download |
+|---------|-------------|----------|
+| v0.2.0-beta | Soul injection, task reporting, avatar editor, worktree | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.2.0-beta) |
+| v0.1.0-beta | Initial release | [Release](https://github.com/nocodevit/hive/releases/tag/v0.1.0-beta) |
+
+Or via Homebrew:
+```bash
+brew install --cask nocodevit/tap/hive
+```
+
+> First launch: Right-click → Open, or run `xattr -cr /Applications/Hive.app`
+
+### Build from Source
 
 ```bash
 git clone https://github.com/nocodevit/hive.git
