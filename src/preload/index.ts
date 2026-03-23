@@ -26,7 +26,9 @@ const api = {
     save: (data: Record<string, unknown>) => ipcRenderer.invoke('data:save', data)
   },
   fs: {
-    hasGit: (path: string) => ipcRenderer.invoke('fs:hasGit', { path })
+    hasGit: (path: string) => ipcRenderer.invoke('fs:hasGit', { path }),
+    scanFiles: (dirPath: string, limit?: number) => ipcRenderer.invoke('fs:scanFiles', { dirPath, limit }),
+    revealInFinder: (filePath: string) => ipcRenderer.invoke('fs:revealInFinder', { filePath })
   },
   git: {
     worktreeAdd: (repoPath: string, agentId: string, agentName: string) =>
@@ -50,6 +52,7 @@ const api = {
     deleteSoul: (agentId: string) => ipcRenderer.invoke('agent:deleteSoul', { agentId }),
     loadLogs: (agentId: string) => ipcRenderer.invoke('agent:loadLogs', { agentId }),
     clearLogs: (agentId: string) => ipcRenderer.invoke('agent:clearLogs', { agentId }),
+    jobPickup: (agentId: string, agentName: string, agentRole: string) => ipcRenderer.invoke('agent:jobPickup', { agentId, agentName, agentRole }),
     onStatus: (cb: (data: { agentId: string; status: string }) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { agentId: string; status: string }) => cb(data)
       ipcRenderer.on('agent:status', handler)

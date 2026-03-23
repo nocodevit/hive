@@ -1,9 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Terminal from './components/Terminal'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import CreateProjectModal from './components/CreateProjectModal'
 import CreateAgentModal from './components/CreateAgentModal'
 import ProjectSettingsModal from './components/ProjectSettingsModal'
+import ResizeHandle from './components/ResizeHandle'
+import FilesPanel from './components/FilesPanel'
 import type { Project, Agent, Zone, SkillInfo } from './types'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
@@ -53,12 +55,15 @@ export default function App() {
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
-  const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100 })
+  const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100, jobPickup: true })
+  const [panelWidths, setPanelWidths] = useState({ projects: 200, agents: 240, files: 220 })
+  const [showFiles, setShowFiles] = useState(true)
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
   const [agentTasks, setAgentTasks] = useState<Record<string, { title?: string; summary?: string; active: boolean }>>({})
   const [agentLogs, setAgentLogs] = useState<{ time: string; type: string; message: string }[]>([])
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
   const [skillContent, setSkillContent] = useState<string | null>(null)
+  const [agentPickups, setAgentPickups] = useState<Record<string, string | null>>({})
   const [projectScans, setProjectScans] = useState<Record<string, {
     projectStage: string
     todos: { zone: string; type: string; category: string; text: string; done: boolean }[]
@@ -172,6 +177,12 @@ export default function App() {
     // Setup Claude Code hooks for status reporting
     await window.api.agent.setupHooks(cwd, agent.id)
 
+    // Generate job-pickup prompt if enabled
+    if (appPrefs.jobPickup) {
+      const pickup = await window.api.agent.jobPickup(agent.id, agent.name, agent.role)
+      setAgentPickups((prev) => ({ ...prev, [agent.id]: pickup }))
+    }
+
     setActiveTerminals((prev) => new Set(prev).add(agent.id))
     setSelectedAgentId(agent.id)
     setMainView('terminal')
@@ -196,6 +207,13 @@ export default function App() {
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)))
   }
 
+  const resizePanel = useCallback((panel: 'projects' | 'agents' | 'files', delta: number) => {
+    setPanelWidths((prev) => ({
+      ...prev,
+      [panel]: Math.max(150, Math.min(400, prev[panel] + delta))
+    }))
+  }, [])
+
   const RND_ROLES = ['Engineering', 'Product', 'QA', 'Design']
   const NON_RND_ROLES = ['Admin', 'HR', 'Marketing', 'BA', 'Operations', 'GM']
   const ALL_DEPARTMENTS = ['R&D', 'Non-R&D']
@@ -203,7 +221,7 @@ export default function App() {
   return (
     <div className="flex h-screen bg-bg-primary text-text-primary">
       {/* Left: Projects */}
-      <div className="w-52 bg-sidebar-bg border-r border-border flex flex-col">
+      <div className="bg-sidebar-bg flex flex-col flex-shrink-0" style={{ width: panelWidths.projects }}>
         <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
           <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
             Projects
@@ -254,6 +272,32 @@ export default function App() {
             </button>
           </div>
           <div className="flex items-center justify-between px-3 py-1.5">
+            <span className="text-[11px] text-text-muted">Job pickup</span>
+            <button
+              onClick={() => setAppPrefs((p) => ({ ...p, jobPickup: !p.jobPickup }))}
+              className={`w-8 h-[18px] rounded-full cursor-pointer transition-colors relative ${
+                appPrefs.jobPickup ? 'bg-accent' : 'bg-bg-hover'
+              }`}
+            >
+              <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
+                appPrefs.jobPickup ? 'left-[14px]' : 'left-[2px]'
+              }`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between px-3 py-1.5">
+            <span className="text-[11px] text-text-muted">Files panel</span>
+            <button
+              onClick={() => setShowFiles((p) => !p)}
+              className={`w-8 h-[18px] rounded-full cursor-pointer transition-colors relative ${
+                showFiles ? 'bg-accent' : 'bg-bg-hover'
+              }`}
+            >
+              <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
+                showFiles ? 'left-[14px]' : 'left-[2px]'
+              }`} />
+            </button>
+          </div>
+          <div className="flex items-center justify-between px-3 py-1.5">
             <span className="text-[11px] text-text-muted">Max logs</span>
             <select
               value={appPrefs.maxLogs}
@@ -279,8 +323,10 @@ export default function App() {
         </div>
       </div>
 
+      <ResizeHandle onResize={(d) => resizePanel('projects', d)} />
+
       {/* Middle: Agents */}
-      <div className="w-60 bg-bg-secondary border-r border-border flex flex-col">
+      <div className="bg-bg-secondary flex flex-col flex-shrink-0" style={{ width: panelWidths.agents }}>
         <div className="drag-region h-16 flex items-end px-4 pb-2">
           <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
             {selectedProject ? selectedProject.name : 'Agents'}
@@ -403,8 +449,10 @@ export default function App() {
         )}
       </div>
 
+      <ResizeHandle onResize={(d) => resizePanel('agents', d)} />
+
       {/* Right: Main Panel */}
-      <div className="flex-1 flex flex-col bg-bg-primary">
+      <div className="flex-1 flex flex-col bg-bg-primary min-w-0">
         <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
           <div className="no-drag flex items-center gap-2">
             <h2 className="text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
@@ -829,6 +877,7 @@ export default function App() {
                   visible={isVisible}
                   autoRunClaude={appPrefs.autoRunClaude}
                   startupCommand={agent.preferences?.startupCommand}
+                  jobPickupPrompt={agentPickups[agentId]}
                 />
               </div>
             )
@@ -1191,6 +1240,27 @@ export default function App() {
 
         </div>
       </div>
+
+      {/* Files Panel — shows agent's worktree/zone files */}
+      {showFiles && selectedProject && selectedAgent && (() => {
+        // Read worktreePath directly from latest agents state
+        const latestAgent = agents.find((a) => a.id === selectedAgent.id)
+        const cwd = latestAgent?.worktreePath || (() => {
+          const p = projects.find((p) => p.id === (latestAgent || selectedAgent).projectId)
+          const z = p?.zones.find((z: Zone) => z.id === (latestAgent || selectedAgent).zoneId)
+          return z?.path || '/'
+        })()
+        return (
+          <>
+            <ResizeHandle onResize={(d) => resizePanel('files', d)} />
+            <FilesPanel
+              project={selectedProject}
+              agentCwd={cwd}
+              width={panelWidths.files}
+            />
+          </>
+        )
+      })()}
 
       {/* Modals */}
       <CreateProjectModal
