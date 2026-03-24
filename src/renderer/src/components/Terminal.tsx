@@ -89,10 +89,12 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
               setTimeout(() => window.api.pty.write(id, startupCommand + '\r'), 500)
             } else if (autoRunClaude) {
               const soulPath = `~/.hive/souls/${agentId}.md`
-              let cmd = `claude --append-system-prompt-file ${soulPath}`
+              let cmd: string
               if (jobPickupPrompt) {
-                const escaped = jobPickupPrompt.replace(/'/g, "'\\''")
-                cmd += ` --prompt '${escaped}'`
+                const escaped = jobPickupPrompt.replace(/'/g, "'\\''").replace(/\n/g, '\\n')
+                cmd = `claude --append-system-prompt-file ${soulPath} $'${escaped}'`
+              } else {
+                cmd = `claude --append-system-prompt-file ${soulPath}`
               }
               setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
             }
