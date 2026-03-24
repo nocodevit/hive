@@ -41,6 +41,11 @@ const api = {
   project: {
     scan: (zones: { path: string; type: string }[]) => ipcRenderer.invoke('project:scan', { zones })
   },
+  templates: {
+    list: () => ipcRenderer.invoke('templates:list'),
+    save: (template: any) => ipcRenderer.invoke('templates:save', { template }),
+    delete: (id: string) => ipcRenderer.invoke('templates:delete', { id }),
+  },
   skills: {
     scan: () => ipcRenderer.invoke('skills:scan'),
     readContent: (path: string) => ipcRenderer.invoke('skills:readContent', { path })

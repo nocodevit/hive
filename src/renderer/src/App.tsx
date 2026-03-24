@@ -1330,6 +1330,7 @@ export default function App() {
           open={showCreateAgent}
           onClose={() => setShowCreateAgent(false)}
           project={selectedProject}
+          availableSkills={availableSkills}
           onCreate={handleCreateAgent}
         />
       )}
