@@ -212,14 +212,20 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [x] Git worktree auto-management
 - [x] Project status auto-detection (Active/Incubating/Early Stage)
 - [x] Agent roles: R&D (Engineering/Product/QA/Design) + Non-R&D (Admin/HR/Marketing/BA/Operations/GM)
-- [x] Light/dark theme (follows system)
+- [x] Light/dark theme
+- [x] Office visualization (Canvas 2D animated pixel office)
+- [x] Files panel (right sidebar, search, drag-to-terminal)
+- [x] Resizable sidebar panels
+- [x] Job pickup (auto-resume from work logs)
+- [x] Agent groups within departments (drag-to-reorder)
+- [x] Terminal scroll-to-bottom button (follows system)
 - [x] Project Settings tab (add/remove folders inline)
 - [ ] **Multi-agent communication** — Message relay via webhook, then MCP Server ([plan](docs/multi-agent-comms-plan.md))
 - [ ] **MCP Server** — Auto-reporting without soul instructions
-- [ ] **Resizable sidebar panels** — Draggable column widths
+- [ ] **Agent drag-to-reorder across groups**
 - [ ] **GNU Screen session persistence** — Terminal sessions survive app restart
 - [ ] **Notification integrations** — Slack, Telegram, WhatsApp, macOS
-- [ ] **Office visualization** — PixiJS-powered virtual office with agents at desks
+- [ ] **Office visualization upgrade** — Phaser 3 + real sprite assets (currently Canvas 2D)
 - [ ] Agency-Agents role templates
 - [ ] claude-mem / memsearch for enhanced memory
 
