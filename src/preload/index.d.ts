@@ -18,6 +18,8 @@ declare global {
       }
       fs: {
         hasGit: (path: string) => Promise<boolean>
+        scanFiles: (dirPath: string, limit?: number) => Promise<{ path: string; mtime: number; size: number }[]>
+        revealInFinder: (filePath: string) => Promise<void>
       }
       git: {
         worktreeAdd: (repoPath: string, agentId: string, agentName: string) =>
@@ -27,13 +29,23 @@ declare global {
         worktreeList: (repoPath: string) =>
           Promise<{ path: string; branch: string }[]>
       }
+      project: {
+        scan: (zones: { path: string; type: string }[]) => Promise<{ projectStage: string; todos: any[] }>
+      }
       skills: {
         scan: () => Promise<{ name: string; pack: string; path: string; description: string }[]>
-        link: (cwd: string, skillPaths: string[]) => Promise<{ ok: boolean; error?: string }>
+        readContent: (path: string) => Promise<string | null>
       }
       agent: {
-        setupHooks: (cwd: string, agentId: string) => Promise<{ ok: boolean; error?: string }>
-        onStatus: (cb: (data: { agentId: string; status: string; message?: string }) => void) => () => void
+        writeDefinition: (cwd: string, config: {
+          agentId: string; name: string; role: string; department: string;
+          soul: string; skills: string[]; model: string; effort: string;
+        }) => Promise<{ ok: boolean; agentName?: string; error?: string }>
+        deleteDefinition: (cwd: string, agentId: string) => Promise<boolean>
+        loadLogs: (agentId: string) => Promise<any[]>
+        clearLogs: (agentId: string) => Promise<boolean>
+        onStatus: (cb: (data: { agentId: string; status: string }) => void) => () => void
+        onReport: (cb: (data: any) => void) => () => void
       }
     }
   }

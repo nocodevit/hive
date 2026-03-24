@@ -56,16 +56,16 @@ export default function App() {
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
-  const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100, jobPickup: true })
+  const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100, continueSession: true })
   const [panelWidths, setPanelWidths] = useState({ projects: 200, agents: 240, files: 220 })
   const [showFiles, setShowFiles] = useState(true)
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
   const [agentTasks, setAgentTasks] = useState<Record<string, { title?: string; summary?: string; active: boolean }>>({})
   const [agentLogs, setAgentLogs] = useState<{ time: string; type: string; message: string }[]>([])
   const [dragAgentId, setDragAgentId] = useState<string | null>(null)
+  const [agentNames, setAgentNames] = useState<Record<string, string>>({})
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
   const [skillContent, setSkillContent] = useState<string | null>(null)
-  const [agentPickups, setAgentPickups] = useState<Record<string, string | null>>({})
   const [projectScans, setProjectScans] = useState<Record<string, {
     projectStage: string
     todos: { zone: string; type: string; category: string; text: string; done: boolean }[]
@@ -108,7 +108,6 @@ export default function App() {
 
   const handleCreateAgent = (agent: Agent) => {
     setAgents((prev) => [...prev, agent])
-    window.api.agent.writeSoul(agent.id, agent.soul)
   }
 
   // Scan all projects on load and when selected
@@ -166,28 +165,20 @@ export default function App() {
       cwd = agent.worktreePath
     }
 
-    // Link enabled skills to working directory
-    if (agent.enabledSkills?.length) {
-      const skillPaths = agent.enabledSkills
-        .map((name) => availableSkills.find((s) => s.name === name)?.path)
-        .filter(Boolean) as string[]
-      if (skillPaths.length) {
-        await window.api.skills.link(cwd, skillPaths)
-      }
+    // Write Claude Code native agent definition file
+    const result = await window.api.agent.writeDefinition(cwd, {
+      agentId: agent.id,
+      name: agent.name,
+      role: agent.role,
+      department: agent.department,
+      soul: agent.soul,
+      skills: agent.enabledSkills || [],
+      model: agent.model || 'inherit',
+      effort: agent.effort || 'high',
+    })
+    if (result.agentName) {
+      setAgentNames((prev) => ({ ...prev, [agent.id]: result.agentName! }))
     }
-
-    // Setup Claude Code hooks for status reporting
-    await window.api.agent.setupHooks(cwd, agent.id)
-
-    // Generate job-pickup prompt if enabled — must complete before terminal mounts
-    let pickup: string | null = null
-    if (appPrefs.jobPickup) {
-      pickup = await window.api.agent.jobPickup(agent.id, agent.name, agent.role)
-    }
-    setAgentPickups((prev) => ({ ...prev, [agent.id]: pickup }))
-
-    // Small delay to ensure state is set before terminal reads it
-    await new Promise((r) => setTimeout(r, 50))
 
     setActiveTerminals((prev) => new Set(prev).add(agent.id))
     setSelectedAgentId(agent.id)
@@ -278,15 +269,15 @@ export default function App() {
             </button>
           </div>
           <div className="flex items-center justify-between px-3 py-1.5">
-            <span className="text-[11px] text-text-muted">Job pickup</span>
+            <span className="text-[11px] text-text-muted">Resume session</span>
             <button
-              onClick={() => setAppPrefs((p) => ({ ...p, jobPickup: !p.jobPickup }))}
+              onClick={() => setAppPrefs((p) => ({ ...p, continueSession: !p.continueSession }))}
               className={`w-8 h-[18px] rounded-full cursor-pointer transition-colors relative ${
-                appPrefs.jobPickup ? 'bg-accent' : 'bg-bg-hover'
+                appPrefs.continueSession ? 'bg-accent' : 'bg-bg-hover'
               }`}
             >
               <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
-                appPrefs.jobPickup ? 'left-[14px]' : 'left-[2px]'
+                appPrefs.continueSession ? 'left-[14px]' : 'left-[2px]'
               }`} />
             </button>
           </div>
@@ -428,7 +419,8 @@ export default function App() {
                                       const zone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
                                       if (zone) await window.api.git.worktreeRemove(zone.path, agent.worktreePath)
                                     }
-                                    window.api.agent.deleteSoul(agent.id)
+                                    const delZone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
+                                    if (delZone) window.api.agent.deleteDefinition(agent.worktreePath || delZone.path, agent.id)
                                     setAgents((prev) => prev.filter((a) => a.id !== agent.id))
                                     if (selectedAgentId === agent.id) setSelectedAgentId(null)
                                   }}
@@ -924,11 +916,12 @@ export default function App() {
                 <Terminal
                   id={agentId}
                   agentId={agentId}
+                  agentName={agent.name}
                   cwd={getAgentCwd(agent)}
                   visible={isVisible}
                   autoRunClaude={appPrefs.autoRunClaude}
+                  continueSession={appPrefs.continueSession}
                   startupCommand={agent.preferences?.startupCommand}
-                  jobPickupPrompt={agentPickups[agentId]}
                 />
               </div>
             )
@@ -1024,7 +1017,7 @@ export default function App() {
                     <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Soul</label>
                     <textarea
                       value={selectedAgent.soul}
-                      onChange={(e) => { updateAgent(selectedAgent.id, { soul: e.target.value }); window.api.agent.writeSoul(selectedAgent.id, e.target.value) }}
+                      onChange={(e) => updateAgent(selectedAgent.id, { soul: e.target.value })}
                       className="w-full h-56 px-4 py-3 rounded-xl bg-bg-secondary border border-border text-text-primary text-sm font-mono leading-relaxed resize-y focus:outline-none focus:border-accent transition-colors"
                       placeholder="Define this agent's role, personality, and boundaries..."
                     />

@@ -6,14 +6,15 @@ import '@xterm/xterm/css/xterm.css'
 interface TerminalProps {
   id: string
   agentId: string
+  agentName: string  // for claude --agent hive-{agentId}
   cwd?: string
   visible: boolean
   autoRunClaude?: boolean
+  continueSession?: boolean
   startupCommand?: string
-  jobPickupPrompt?: string | null
 }
 
-export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, startupCommand, jobPickupPrompt }: TerminalProps) {
+export default function Terminal({ id, agentId, agentName, cwd, visible, autoRunClaude, continueSession, startupCommand }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
@@ -52,7 +53,6 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
       setShowScrollDown(!atBottom)
     })
 
-    // Delay fit + PTY creation
     setTimeout(() => {
       try { fit.fit() } catch {}
 
@@ -60,10 +60,9 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
         ptyReady.current = true
 
         window.api.pty.create(id, cwd)
-          .then((result) => {
+          .then(() => {
             window.api.pty.onData(id, (data) => {
               term.write(data)
-              // Only auto-scroll if user is already at bottom
               if (isAtBottom.current) term.scrollToBottom()
             })
 
@@ -84,18 +83,14 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
               window.api.pty.resize(id, dims.cols, dims.rows)
             }
 
-            // Auto-run command after shell is ready
+            // Auto-run claude with native --agent flag
             if (startupCommand) {
               setTimeout(() => window.api.pty.write(id, startupCommand + '\r'), 500)
             } else if (autoRunClaude) {
-              const soulPath = `~/.hive/souls/${agentId}.md`
-              let cmd: string
-              if (jobPickupPrompt) {
-                const escaped = jobPickupPrompt.replace(/'/g, "'\\''").replace(/\n/g, '\\n')
-                cmd = `claude --append-system-prompt-file ${soulPath} $'${escaped}'`
-              } else {
-                cmd = `claude --append-system-prompt-file ${soulPath}`
-              }
+              const agent = `hive-${agentId}`
+              let cmd = `claude --agent ${agent}`
+              if (continueSession) cmd += ' -c'
+              cmd += ` -n "${agentName}"`
               setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
             }
           })
@@ -115,7 +110,6 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
     }
   }, [id, cwd])
 
-  // Re-fit on visibility change
   useEffect(() => {
     if (visible && fitRef.current) {
       setTimeout(() => {
@@ -124,7 +118,6 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
     }
   }, [visible])
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       termRef.current?.dispose()
@@ -146,18 +139,13 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
   }
 
   return (
-    <div
-      ref={wrapperRef}
-      style={{ width: '100%', height: '100%', position: 'relative' }}
-    >
+    <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
       <div
         ref={containerRef}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         style={{
-          width: '100%',
-          height: '100%',
-          minHeight: '200px',
+          width: '100%', height: '100%', minHeight: '200px',
           visibility: visible ? 'visible' : 'hidden',
           position: visible ? 'relative' : 'absolute',
           pointerEvents: visible ? 'auto' : 'none'
