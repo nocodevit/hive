@@ -26,6 +26,8 @@ export interface Agent {
   role: string       // e.g. "Frontend Dev", "Marketing Manager"
   type: 'coding' | 'non-coding'
   department: string
+  group: string      // team group within department, e.g. "Frontend Team"
+  order: number      // sort order within group
   status: 'working' | 'waiting' | 'done'
   soul: string       // soul.md content
   avatar: AvatarConfig

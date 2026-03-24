@@ -62,6 +62,7 @@ export default function App() {
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
   const [agentTasks, setAgentTasks] = useState<Record<string, { title?: string; summary?: string; active: boolean }>>({})
   const [agentLogs, setAgentLogs] = useState<{ time: string; type: string; message: string }[]>([])
+  const [dragAgentId, setDragAgentId] = useState<string | null>(null)
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
   const [skillContent, setSkillContent] = useState<string | null>(null)
   const [agentPickups, setAgentPickups] = useState<Record<string, string | null>>({})
@@ -73,7 +74,7 @@ export default function App() {
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || null
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) || null
   const projectScan = selectedProjectId ? projectScans[selectedProjectId] || null : null
-  const projectAgents = agents.filter((a) => a.projectId === selectedProjectId)
+  const projectAgents = agents.filter((a) => a.projectId === selectedProjectId).sort((a, b) => (a.order || 0) - (b.order || 0))
   const departments = [...new Set(projectAgents.map((a) => a.department))]
 
   useEffect(() => {
@@ -335,94 +336,117 @@ export default function App() {
         </div>
         {selectedProject ? (
           <>
-            <div className="flex-1 overflow-y-auto p-2 space-y-4">
-              {departments.map((dept) => (
-                <div key={dept}>
-                  <div className="px-3 py-1.5 text-[11px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                    </svg>
-                    {dept}
-                  </div>
-                  <div className="space-y-0.5">
-                    {projectAgents
-                      .filter((a) => a.department === dept)
-                      .map((agent) => (
-                        <div
-                          key={agent.id}
-                          className={`group w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5
-                            transition-colors cursor-pointer ${
-                            selectedAgentId === agent.id
-                              ? 'bg-accent-subtle text-accent font-medium'
-                              : 'text-text-secondary hover:bg-bg-hover'
-                          }`}
-                          onClick={() => {
-                            setSelectedAgentId(agent.id)
-                            if (!activeTerminals.has(agent.id)) startAgent(agent)
-                          }}
-                        >
-                          <div className="w-6 h-6 flex-shrink-0 relative">
-                            <AvatarPreview config={agent.avatar} size={24} />
-                            <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-bg-secondary ${
-                              agent.status === 'working' ? 'bg-status-working' :
-                              agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
-                            }`} />
-                          </div>
-                          <span className="truncate">{agent.name}</span>
-                          <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedAgentId(agent.id)
-                                setMainView('editor')
-                              }}
-                              className="w-5 h-5 rounded flex items-center justify-center
-                                text-text-muted hover:text-accent hover:bg-bg-active transition-colors cursor-pointer"
-                              title="Edit"
-                            >
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={async (e) => {
-                                e.stopPropagation()
-                                if (activeTerminals.has(agent.id)) {
-                                  window.api.pty.kill(agent.id)
-                                  setActiveTerminals((prev) => {
-                                    const next = new Set(prev)
-                                    next.delete(agent.id)
-                                    return next
+            <div className="flex-1 overflow-y-auto p-2 space-y-3">
+              {departments.map((dept) => {
+                const deptAgents = projectAgents.filter((a) => a.department === dept)
+                const groups = [...new Set(deptAgents.map((a) => a.group || ''))]
+
+                return (
+                  <div key={dept}>
+                    <div className="px-3 py-1.5 text-[11px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                      </svg>
+                      {dept}
+                    </div>
+                    {groups.map((grp) => {
+                      const grpAgents = deptAgents.filter((a) => (a.group || '') === grp)
+                      return (
+                        <div key={grp || '_ungrouped'} className="space-y-0.5">
+                          {grp && (
+                            <div className="px-5 py-1 text-[10px] font-heading font-medium text-text-muted/70 uppercase tracking-wider">
+                              {grp}
+                            </div>
+                          )}
+                          {grpAgents.map((agent) => (
+                            <div
+                              key={agent.id}
+                              draggable
+                              onDragStart={() => setDragAgentId(agent.id)}
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={() => {
+                                if (dragAgentId && dragAgentId !== agent.id) {
+                                  setAgents((prev) => {
+                                    const dragged = prev.find((a) => a.id === dragAgentId)
+                                    const target = prev.find((a) => a.id === agent.id)
+                                    if (!dragged || !target) return prev
+                                    // Swap order values
+                                    return prev.map((a) => {
+                                      if (a.id === dragAgentId) return { ...a, order: target.order || 0, group: target.group || '' }
+                                      if (a.id === agent.id) return { ...a, order: dragged.order || 0 }
+                                      return a
+                                    })
                                   })
+                                  setDragAgentId(null)
                                 }
-                                // Clean up worktree
-                                if (agent.worktreePath) {
-                                  const zone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
-                                  if (zone) await window.api.git.worktreeRemove(zone.path, agent.worktreePath)
-                                }
-                                window.api.agent.deleteSoul(agent.id)
-                                setAgents((prev) => prev.filter((a) => a.id !== agent.id))
-                                if (selectedAgentId === agent.id) setSelectedAgentId(null)
                               }}
-                              className="w-5 h-5 rounded flex items-center justify-center
-                                text-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer"
-                              title="Delete"
+                              onDragEnd={() => setDragAgentId(null)}
+                              className={`group w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5
+                                transition-colors cursor-grab active:cursor-grabbing ${
+                                dragAgentId === agent.id ? 'opacity-50' : ''
+                              } ${
+                                selectedAgentId === agent.id
+                                  ? 'bg-accent-subtle text-accent font-medium'
+                                  : 'text-text-secondary hover:bg-bg-hover'
+                              }`}
+                              onClick={() => {
+                                setSelectedAgentId(agent.id)
+                                if (!activeTerminals.has(agent.id)) startAgent(agent)
+                              }}
                             >
-                              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                <polyline points="3 6 5 6 21 6" />
-                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                              </svg>
-                            </button>
-                          </div>
-                          <span className="text-[10px] text-text-muted uppercase group-hover:hidden">
-                            {agent.role || agent.department}
-                          </span>
+                              <div className="w-6 h-6 flex-shrink-0 relative">
+                                <AvatarPreview config={agent.avatar} size={24} />
+                                <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-bg-secondary ${
+                                  agent.status === 'working' ? 'bg-status-working' :
+                                  agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
+                                }`} />
+                              </div>
+                              <span className="truncate">{agent.name}</span>
+                              <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setSelectedAgentId(agent.id); setMainView('editor') }}
+                                  className="w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-accent hover:bg-bg-active transition-colors cursor-pointer"
+                                  title="Edit"
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    if (activeTerminals.has(agent.id)) {
+                                      window.api.pty.kill(agent.id)
+                                      setActiveTerminals((prev) => { const next = new Set(prev); next.delete(agent.id); return next })
+                                    }
+                                    if (agent.worktreePath) {
+                                      const zone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
+                                      if (zone) await window.api.git.worktreeRemove(zone.path, agent.worktreePath)
+                                    }
+                                    window.api.agent.deleteSoul(agent.id)
+                                    setAgents((prev) => prev.filter((a) => a.id !== agent.id))
+                                    if (selectedAgentId === agent.id) setSelectedAgentId(null)
+                                  }}
+                                  className="w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer"
+                                  title="Delete"
+                                >
+                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                    <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                  </svg>
+                                </button>
+                              </div>
+                              <span className="text-[10px] text-text-muted uppercase group-hover:hidden">
+                                {agent.role || agent.department}
+                              </span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      )
+                    })}
                   </div>
-                </div>
-              ))}
+                )
+              })}
               {projectAgents.length === 0 && (
                 <p className="text-xs text-text-muted text-center py-6">
                   No agents yet. Click + to create one.
@@ -977,6 +1001,13 @@ export default function App() {
                         ))}
                       </select>
                     </div>
+                    <input
+                      type="text"
+                      value={selectedAgent.group || ''}
+                      onChange={(e) => updateAgent(selectedAgent.id, { group: e.target.value })}
+                      className="w-full px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-muted text-xs focus:outline-none focus:border-accent transition-colors mt-2"
+                      placeholder="Team group (e.g. Frontend Team)"
+                    />
                   </div>
 
                   {/* Avatar */}
