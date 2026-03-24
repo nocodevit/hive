@@ -25,7 +25,7 @@ function saveData(data: Record<string, unknown>) {
 }
 
 const terminals: Map<string, pty.IPty> = new Map()
-const HIVE_PORT = 17710
+const HIVE_PORT = parseInt(process.env.HIVE_PORT || '17710', 10)
 
 // Work logs persistence
 const LOGS_DIR = join(app.getPath('home'), '.hive', 'logs')
