@@ -58,8 +58,8 @@ Running multiple Claude Code instances means juggling terminal tabs, losing cont
 
 ## Features
 
-### Soul System
-Every agent gets an auto-generated `soul.md` based on name, role, and personality traits. Injected into Claude's system prompt via `--append-system-prompt-file`. Claude stays in character throughout the session.
+### Native Claude Code Agent Integration
+Each agent is a native Claude Code `--agent` definition (`.claude/agents/hive-{id}.md`). Includes personality, tools, model, effort level, skills, and status hooks — all in one file. Session resume via `claude -c`. No custom workarounds.
 
 ### Multiple Agent Terminals
 Run N Claude Code sessions side by side. Click to switch. Each terminal persists — switch between agents without losing state. Auto-run Claude on terminal open.
@@ -99,30 +99,28 @@ Permanent activity log per agent. Tasks grouped with START/DONE badges. Status t
 ## Architecture
 
 ```
-┌────────────────────────────────────────────────────────┐
-│                      Hive App                          │
-│                                                        │
-│  ┌──────────┬─────────────┬──────────────────────────┐ │
-│  │ Projects │   Agents    │  Terminal / Editor / Logs │ │
-│  │          │             │                          │ │
-│  │ Alex  ●  │ R&D         │  $ claude --append-      │ │
-│  │          │  David  ENG │    system-prompt-file     │ │
-│  │          │  Daisy  DES │    ~/.hive/souls/agent.md │ │
-│  │          │  Drake  QA  │                          │ │
-│  │  [+ Add] │    [+ New]  │  [soul.md injected]      │ │
-│  └──────────┴─────────────┴──────────────────────────┘ │
-│                                                        │
-│  Electron · React · xterm.js · node-pty                │
-└────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│                          Hive App                              │
+│                                                                │
+│  ┌──────────┬─────────────┬────────────────────┬─────────────┐ │
+│  │ Projects │   Agents    │  Terminal / Editor  │   Files     │ │
+│  │          │             │                    │             │ │
+│  │ Alex  ●  │ R&D         │  $ claude          │  app.tsx    │ │
+│  │          │  David  ENG │    --agent hive-xxx │  style.css  │ │
+│  │          │  Daisy  DES │    -c -n "david"   │  .env.local │ │
+│  │          │  Drake  QA  │                    │             │ │
+│  │  [+ Add] │    [+ New]  │  [native agent]    │  [search]   │ │
+│  └──────────┴─────────────┴────────────────────┴─────────────┘ │
+│                                                                │
+│  Electron · React · xterm.js · node-pty                        │
+└────────────────────────────────────────────────────────────────┘
         │                              │
         ▼                              ▼
-  ~/.hive/                    localhost:17710
-  ├── data.json               (status webhook server)
-  ├── souls/{agentId}.md             ▲
-  ├── memory/{agentId}/              │
-  └── logs/{agentId}.json     Claude Code hooks
-                              (PreToolUse → working)
-                              (Stop → idle)
+  ~/.hive/                    .claude/agents/hive-{id}.md
+  ├── data.json               (native agent definition with
+  ├── memory/{agentId}/        hooks, skills, model, effort)
+  └── logs/{agentId}.json            │
+                              localhost:17710 (webhook)
 ```
 
 ## Tech Stack
@@ -182,25 +180,27 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 1. **Create a Project** — Point to your R&D and Non-R&D folders
 2. **Add Agents** — Pick a department, role, personality traits
 3. **Soul auto-generates** — Based on name + role + traits
-4. **Start working** — Click an agent, Claude launches with soul injected
-5. **Monitor** — Dashboard shows status, kanban, todos. Logs track everything.
+4. **Start working** — Click an agent, Claude launches with native `--agent` flag
+5. **Resume anytime** — `claude -c` restores full conversation context
+6. **Monitor** — Dashboard shows status, kanban, todos. Logs track everything.
 
 ## Data Storage
 
 | Data | Location |
 |------|----------|
 | Projects & Agents | `~/.hive/data.json` |
-| Agent Souls | `~/.hive/souls/{agentId}.md` |
+| Agent Definitions | `{project}/.claude/agents/hive-{agentId}.md` |
 | Agent Memory | `~/.hive/memory/{agentId}/` |
 | Work Logs | `~/.hive/logs/{agentId}.json` |
 | Skills | `~/.claude/skills/` |
-| Hook Config | `{project}/.claude/settings.local.json` |
+| Status Hooks | Embedded in agent definition file |
 
 ## Roadmap
 
 - [x] Multi-agent terminal management
 - [x] Soul auto-generation from role + personality traits
-- [x] Soul injection via `--append-system-prompt-file`
+- [x] Native Claude Code `--agent` integration (replaces soul injection)
+- [x] Session resume via `claude -c` (replaces job pickup)
 - [x] GStack skills integration with detail view
 - [x] Status hooks (working/waiting/idle via PreToolUse/Stop)
 - [x] Task reporting (title/summary via hive-report.sh)
