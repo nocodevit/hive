@@ -45,13 +45,19 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
     termRef.current = term
     fitRef.current = fit
 
-    // Track scroll position
-    term.onScroll(() => {
+    // Track scroll position via viewport DOM element
+    const checkScroll = () => {
       const buffer = term.buffer.active
       const atBottom = buffer.viewportY >= buffer.baseY
       isAtBottom.current = atBottom
       setShowScrollDown(!atBottom)
-    })
+    }
+    term.onScroll(checkScroll)
+    // Also listen for mouse wheel on the xterm viewport element
+    const viewport = el.querySelector('.xterm-viewport')
+    if (viewport) {
+      viewport.addEventListener('scroll', checkScroll)
+    }
 
     setTimeout(() => {
       try { fit.fit() } catch {}
@@ -154,14 +160,15 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
       {showScrollDown && visible && (
         <button
           onClick={scrollToBottom}
-          className="absolute bottom-4 right-4 w-8 h-8 rounded-full bg-accent text-text-on-purple
-            flex items-center justify-center shadow-lg cursor-pointer
-            hover:bg-accent-hover transition-colors z-10"
-          title="Scroll to bottom"
+          className="absolute bottom-4 right-6 px-3 py-1.5 rounded-full bg-accent text-text-on-purple
+            flex items-center gap-1.5 shadow-lg cursor-pointer
+            hover:bg-accent-hover transition-colors"
+          style={{ zIndex: 9999 }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="6 9 12 15 18 9" />
           </svg>
+          <span className="text-[11px] font-medium">Bottom</span>
         </button>
       )}
     </div>
