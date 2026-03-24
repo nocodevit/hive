@@ -56,7 +56,11 @@ export default function App() {
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
-  const [appPrefs, setAppPrefs] = useState({ autoRunClaude: true, maxLogs: 100, continueSession: true })
+  const [appPrefs, setAppPrefs] = useState({
+    autoRunClaude: true, maxLogs: 100, continueSession: true,
+    defaultSkillsRnD: ['review', 'qa', 'ship'] as string[],
+    defaultSkillsNonRnD: ['browse'] as string[],
+  })
   const [panelWidths, setPanelWidths] = useState({ projects: 200, agents: 240, files: 220 })
   const [showFiles, setShowFiles] = useState(true)
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
@@ -876,6 +880,49 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Default Skills */}
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
+                      Default Skills for New Agents
+                    </label>
+                    <div className="space-y-3">
+                      <div className="p-3 rounded-xl bg-bg-secondary border border-border">
+                        <p className="text-[11px] text-accent font-semibold uppercase mb-2">R&D Agents</p>
+                        <div className="flex flex-wrap gap-1">
+                          {availableSkills.map((s) => (
+                            <button key={`rnd-${s.name}`}
+                              onClick={() => setAppPrefs((p) => {
+                                const cur = p.defaultSkillsRnD || []
+                                const next = cur.includes(s.name) ? cur.filter((x) => x !== s.name) : [...cur, s.name]
+                                return { ...p, defaultSkillsRnD: next }
+                              })}
+                              className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${
+                                (appPrefs.defaultSkillsRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'
+                              }`}
+                            >/{s.name}</button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="p-3 rounded-xl bg-bg-secondary border border-border">
+                        <p className="text-[11px] text-status-working font-semibold uppercase mb-2">Non-R&D Agents</p>
+                        <div className="flex flex-wrap gap-1">
+                          {availableSkills.map((s) => (
+                            <button key={`non-${s.name}`}
+                              onClick={() => setAppPrefs((p) => {
+                                const cur = p.defaultSkillsNonRnD || []
+                                const next = cur.includes(s.name) ? cur.filter((x) => x !== s.name) : [...cur, s.name]
+                                return { ...p, defaultSkillsNonRnD: next }
+                              })}
+                              className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${
+                                (appPrefs.defaultSkillsNonRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'
+                              }`}
+                            >/{s.name}</button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Danger Zone */}
                   <div className="pt-4 border-t border-border">
                     <button
@@ -1331,6 +1378,8 @@ export default function App() {
           onClose={() => setShowCreateAgent(false)}
           project={selectedProject}
           availableSkills={availableSkills}
+          defaultSkillsRnD={appPrefs.defaultSkillsRnD || []}
+          defaultSkillsNonRnD={appPrefs.defaultSkillsNonRnD || []}
           onCreate={handleCreateAgent}
         />
       )}

@@ -8,13 +8,15 @@ interface Props {
   onClose: () => void
   project: Project
   availableSkills: SkillInfo[]
+  defaultSkillsRnD: string[]
+  defaultSkillsNonRnD: string[]
   onCreate: (agent: Agent) => void
 }
 
 const RND_ROLES = ['Engineering', 'Product', 'QA', 'Design']
 const NON_RND_ROLES = ['Admin', 'HR', 'Marketing', 'BA', 'Operations', 'GM']
 
-export default function CreateAgentModal({ open, onClose, project, availableSkills, onCreate }: Props) {
+export default function CreateAgentModal({ open, onClose, project, availableSkills, defaultSkillsRnD, defaultSkillsNonRnD, onCreate }: Props) {
   const [step, setStep] = useState(0)
   const [customTemplates, setCustomTemplates] = useState<AgentTemplate[]>([])
 
@@ -54,7 +56,8 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
     setDepartment(t.department)
     setRole(t.role)
     setSections(t.sections.map(s => ({ ...s })))
-    setEnabledSkills(t.suggestedSkills)
+    const globalDefaults = t.department === 'R&D' ? defaultSkillsRnD : defaultSkillsNonRnD
+    setEnabledSkills([...new Set([...t.suggestedSkills, ...globalDefaults])])
     setModel(t.suggestedModel)
     setEffort(t.suggestedEffort)
     const matchZone = project.zones.find((z: Zone) => t.department === 'R&D' ? z.type === 'rnd' : z.type === 'non-rnd')
@@ -148,11 +151,26 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
             {customTemplates.length > 0 && (
               <>
                 <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mt-3">Custom Templates</label>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="space-y-1">
                   {customTemplates.map(t => (
-                    <button key={t.id} onClick={() => applyTemplate(t)}
-                      className="px-2 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors bg-bg-primary border border-border text-accent hover:bg-accent-subtle"
-                    >{t.name}</button>
+                    <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-primary border border-border group">
+                      <button onClick={() => applyTemplate(t)}
+                        className="flex-1 text-left text-xs font-medium text-accent cursor-pointer hover:text-accent-hover"
+                      >{t.name}
+                        <span className="text-text-muted ml-1">{t.role} · {t.suggestedSkills.length} skills</span>
+                      </button>
+                      <button onClick={() => { applyTemplate(t); setStep(1) }}
+                        className="text-[10px] text-text-muted hover:text-accent cursor-pointer opacity-0 group-hover:opacity-100"
+                        title="Edit template"
+                      >Edit</button>
+                      <button onClick={() => {
+                        window.api.templates.delete(t.id)
+                        setCustomTemplates(prev => prev.filter(x => x.id !== t.id))
+                      }}
+                        className="text-[10px] text-text-muted hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100"
+                        title="Delete template"
+                      >Del</button>
+                    </div>
                   ))}
                 </div>
               </>
