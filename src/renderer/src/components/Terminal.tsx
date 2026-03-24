@@ -45,7 +45,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
     termRef.current = term
     fitRef.current = fit
 
-    // Track scroll position via viewport DOM element
+    // Track scroll position
     const checkScroll = () => {
       const buffer = term.buffer.active
       const atBottom = buffer.viewportY >= buffer.baseY
@@ -53,13 +53,16 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
       setShowScrollDown(!atBottom)
     }
     term.onScroll(checkScroll)
-    // Also listen for mouse wheel on the xterm viewport element
-    const viewport = el.querySelector('.xterm-viewport')
-    if (viewport) {
-      viewport.addEventListener('scroll', checkScroll)
-    }
 
     setTimeout(() => {
+      // Attach viewport scroll listener after xterm fully renders
+      const viewport = el.querySelector('.xterm-viewport')
+      if (viewport) {
+        viewport.addEventListener('scroll', checkScroll)
+        console.log('[Terminal] viewport scroll listener attached')
+      } else {
+        console.warn('[Terminal] .xterm-viewport not found')
+      }
       try { fit.fit() } catch {}
 
       if (!ptyReady.current) {
@@ -145,7 +148,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   }
 
   return (
-    <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'visible' }}>
       <div
         ref={containerRef}
         onDragOver={(e) => e.preventDefault()}
