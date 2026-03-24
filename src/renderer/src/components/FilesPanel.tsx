@@ -126,7 +126,7 @@ export default function FilesPanel({ project, agentCwd, width }: Props) {
             }}
             onClick={() => {
               window.api.fs.revealInFinder(`${agentCwd}/${file.path}`)
-            }
+            }}
             className="w-full text-left px-2 py-1.5 rounded-md text-[11px]
               hover:bg-bg-hover transition-colors cursor-pointer
               flex items-center gap-1.5 group"
