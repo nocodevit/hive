@@ -89,7 +89,7 @@ export default function App() {
         const resetAgents = (data.agents as Agent[]).map((a) => ({ ...a, status: 'done' as const }))
         setAgents(resetAgents)
       }
-      if (data.appPrefs) setAppPrefs(data.appPrefs as typeof appPrefs)
+      if (data.appPrefs) setAppPrefs((prev) => ({ ...prev, ...(data.appPrefs as Record<string, unknown>) }))
     })
     window.api.skills.scan().then(setAvailableSkills)
   }, [])
@@ -179,11 +179,15 @@ export default function App() {
     // Setup Claude Code hooks for status reporting
     await window.api.agent.setupHooks(cwd, agent.id)
 
-    // Generate job-pickup prompt if enabled
+    // Generate job-pickup prompt if enabled — must complete before terminal mounts
+    let pickup: string | null = null
     if (appPrefs.jobPickup) {
-      const pickup = await window.api.agent.jobPickup(agent.id, agent.name, agent.role)
-      setAgentPickups((prev) => ({ ...prev, [agent.id]: pickup }))
+      pickup = await window.api.agent.jobPickup(agent.id, agent.name, agent.role)
     }
+    setAgentPickups((prev) => ({ ...prev, [agent.id]: pickup }))
+
+    // Small delay to ensure state is set before terminal reads it
+    await new Promise((r) => setTimeout(r, 50))
 
     setActiveTerminals((prev) => new Set(prev).add(agent.id))
     setSelectedAgentId(agent.id)
