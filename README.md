@@ -54,12 +54,21 @@ Running multiple Claude Code instances means juggling terminal tabs, losing cont
 
 ### Soul in Action
 ![Claude Code responding as Daisy, the UI/UX specialist, with injected personality](docs/screenshot-full.png)
-*Soul injection via `--append-system-prompt-file`. Claude responds in character — "I'm Daisy, your UI/UX specialist" — with role-specific knowledge and personality.*
+*Native `--agent` integration. Claude responds in character — "I'm Daisy, your UI/UX specialist" — with role-specific knowledge, skills, and personality.*
 
 ## Features
 
 ### Native Claude Code Agent Integration
 Each agent is a native Claude Code `--agent` definition (`.claude/agents/hive-{id}.md`). Includes personality, tools, model, effort level, skills, and status hooks — all in one file. Session resume via `claude -c`. No custom workarounds.
+
+### Agent Template System
+8 built-in role templates (Full-Stack Engineer, Product, QA, Design, Admin, Marketing, BA, Operations) with structured sections: Role, Workflow, Boundaries, Custom. Create from template, customize, or import .md files. Save custom templates for reuse. Project CLAUDE.md auto-loads into Custom section.
+
+### Split Soul Editor
+Left-right split: write markdown on the left, see rendered preview on the right. Real-time updates as you type.
+
+### Default Skills per Department
+Configure global default skills for R&D and Non-R&D agents in Project Settings. New agents auto-inherit defaults. Override per agent during creation.
 
 ### Multiple Agent Terminals
 Run N Claude Code sessions side by side. Click to switch. Each terminal persists — switch between agents without losing state. Auto-run Claude on terminal open.
@@ -146,8 +155,9 @@ Permanent activity log per agent. Tasks grouped with START/DONE badges. Status t
 
 | Version | Description | Download |
 |---------|-------------|----------|
-| v0.2.0-beta | Soul injection, task reporting, avatar editor, worktree | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.2.0-beta) |
-| v0.1.0-beta | Initial release | [Release](https://github.com/nocodevit/hive/releases/tag/v0.1.0-beta) |
+| v0.4.0-beta | Native --agent, templates, split editor, session resume | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.4.0-beta) |
+| v0.3.0-beta | Office viz, files panel, resizable, job pickup | [Release](https://github.com/nocodevit/hive/releases/tag/v0.3.0-beta) |
+| v0.2.0-beta | Soul injection, task reporting, avatar editor, worktree | [Release](https://github.com/nocodevit/hive/releases/tag/v0.2.0-beta) |
 
 Or via Homebrew:
 ```bash
@@ -201,6 +211,9 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [x] Soul auto-generation from role + personality traits
 - [x] Native Claude Code `--agent` integration (replaces soul injection)
 - [x] Session resume via `claude -c` (replaces job pickup)
+- [x] Agent template system (8 built-in + custom + import .md)
+- [x] Split soul editor (markdown + live preview)
+- [x] Default skills per department (global config)
 - [x] GStack skills integration with detail view
 - [x] Status hooks (working/waiting/idle via PreToolUse/Stop)
 - [x] Task reporting (title/summary via hive-report.sh)
