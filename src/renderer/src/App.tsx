@@ -5,10 +5,12 @@ import CreateProjectModal from './components/CreateProjectModal'
 import CreateAgentModal from './components/CreateAgentModal'
 import ProjectSettingsModal from './components/ProjectSettingsModal'
 import ResizeHandle from './components/ResizeHandle'
+import EditTemplateModal from './components/EditTemplateModal'
 import FilesPanel from './components/FilesPanel'
 import OfficeView from './components/OfficeView'
 import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo } from './types'
+import { BUILTIN_TEMPLATES } from './types'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
@@ -52,6 +54,8 @@ export default function App() {
   const [activeTerminals, setActiveTerminals] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [showCreateAgent, setShowCreateAgent] = useState(false)
+  const [editingTemplate, setEditingTemplate] = useState<any>(null)
+  const [customTemplates, setCustomTemplates] = useState<any[]>([])
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [projectTab, setProjectTab] = useState<'office' | 'project' | 'settings'>('office')
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
@@ -97,6 +101,7 @@ export default function App() {
       if (data.appPrefs) setAppPrefs((prev) => ({ ...prev, ...(data.appPrefs as Record<string, unknown>) }))
     })
     window.api.skills.scan().then(setAvailableSkills)
+    window.api.templates.list().then(setCustomTemplates)
   }, [])
 
   // Save data on change
@@ -881,6 +886,24 @@ export default function App() {
                     </div>
                   </div>
 
+                  {/* Agent Templates */}
+                  <div>
+                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
+                      Agent Templates
+                    </label>
+                    <div className="space-y-1">
+                      {[...BUILTIN_TEMPLATES, ...customTemplates].map((t: any) => (
+                        <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-secondary border border-border">
+                          <span className="text-xs text-text-primary flex-1">{t.name}
+                            <span className="text-text-muted ml-1 text-[10px]">{t.role} · {t.category}</span>
+                          </span>
+                          <button onClick={() => setEditingTemplate(t)}
+                            className="text-[10px] text-accent hover:text-accent-hover cursor-pointer">Edit</button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
                   {/* Default Skills */}
                   <div>
                     <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
@@ -1418,6 +1441,40 @@ export default function App() {
           onCreate={handleCreateAgent}
         />
       )}
+
+      <EditTemplateModal
+        open={!!editingTemplate}
+        template={editingTemplate}
+        agents={agents}
+        availableSkills={availableSkills}
+        onClose={() => setEditingTemplate(null)}
+        onSave={(updated, syncAgents) => {
+          // Save template
+          window.api.templates.save(updated)
+          // Sync agents if requested
+          if (syncAgents) {
+            const buildSoul = (name: string, secs: any[], traits: string[]) => {
+              let s = `# Identity\nYou are ${name}.\n\n`
+              for (const sec of secs) { if (sec.content.trim()) s += `## ${sec.title}\n${sec.content}\n\n` }
+              if (traits.length > 0) s += `## Personality\n${traits.map((t: string) => `- ${t}`).join('\n')}\n\n`
+              s += `## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
+              return s
+            }
+            setAgents(prev => prev.map(a => {
+              if (a.role === updated.role && a.department === updated.department) {
+                return {
+                  ...a,
+                  soul: buildSoul(a.name, updated.sections, []),
+                  enabledSkills: [...new Set([...a.enabledSkills, ...updated.suggestedSkills])],
+                  model: updated.suggestedModel,
+                  effort: updated.suggestedEffort,
+                }
+              }
+              return a
+            }))
+          }
+        }}
+      />
     </div>
   )
 }
