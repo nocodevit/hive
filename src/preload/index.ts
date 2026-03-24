@@ -39,7 +39,8 @@ const api = {
       ipcRenderer.invoke('git:worktreeList', { repoPath })
   },
   project: {
-    scan: (zones: { path: string; type: string }[]) => ipcRenderer.invoke('project:scan', { zones })
+    scan: (zones: { path: string; type: string }[]) => ipcRenderer.invoke('project:scan', { zones }),
+    readClaudeMd: (projectPath: string) => ipcRenderer.invoke('project:readClaudeMd', { projectPath })
   },
   templates: {
     list: () => ipcRenderer.invoke('templates:list'),
