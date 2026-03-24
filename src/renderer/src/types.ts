@@ -29,10 +29,12 @@ export interface Agent {
   group: string      // team group within department, e.g. "Frontend Team"
   order: number      // sort order within group
   status: 'working' | 'waiting' | 'done'
-  soul: string       // soul.md content
+  soul: string       // agent personality/instructions (markdown body of agent definition)
   avatar: AvatarConfig
   enabledSkills: string[]
   preferences: AgentPreferences
+  model: string      // claude model: 'inherit', 'sonnet', 'opus', 'haiku'
+  effort: string     // 'low', 'medium', 'high', 'max'
   worktreePath?: string   // git worktree path (coding agents only)
   worktreeBranch?: string // git branch name
 }

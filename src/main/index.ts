@@ -109,92 +109,62 @@ const statusServer = createServer((req, res) => {
   })
 })
 
-// Write Claude Code hooks config for an agent
-function writeAgentHooks(cwd: string, agentId: string) {
-  const claudeDir = join(cwd, '.claude')
-  mkdirSync(claudeDir, { recursive: true })
-  const settingsPath = join(claudeDir, 'settings.local.json')
+// Write Claude Code native agent definition file
+function writeAgentDefinition(cwd: string, config: {
+  agentId: string; name: string; role: string; department: string;
+  soul: string; skills: string[]; model: string; effort: string;
+}) {
+  const agentsDir = join(cwd, '.claude', 'agents')
+  mkdirSync(agentsDir, { recursive: true })
 
+  const agentName = `hive-${config.agentId}`
   const curlPost = (endpoint: string, jsonBody: string) =>
     `curl -s -X POST http://127.0.0.1:${HIVE_PORT}${endpoint} -H "Content-Type: application/json" -d '${jsonBody}' > /dev/null 2>&1`
 
-  const settings = {
-    hooks: {
-      Stop: [
-        {
-          matcher: '',
-          hooks: [{
-            type: 'command',
-            command: curlPost('/status', `{"agentId":"${agentId}","status":"waiting","event":"stop"}`)
-          }]
-        }
-      ],
-      PreToolUse: [
-        {
-          matcher: '',
-          hooks: [{
-            type: 'command',
-            command: curlPost('/status', `{"agentId":"${agentId}","status":"working","event":"tool_use"}`)
-          }]
-        }
-      ],
-      Notification: [
-        {
-          matcher: '',
-          hooks: [{
-            type: 'command',
-            command: curlPost('/report', `{"agentId":"${agentId}","type":"notification","message":"Agent needs attention"}`)
-          }]
-        }
-      ]
-    }
+  // Build YAML frontmatter
+  let yaml = `---\n`
+  yaml += `name: ${agentName}\n`
+  yaml += `description: "${config.name} - ${config.role} specialist"\n`
+  yaml += `model: ${config.model || 'inherit'}\n`
+  yaml += `effort: ${config.effort || 'high'}\n`
+  if (config.skills.length > 0) {
+    yaml += `skills:\n${config.skills.map(s => `  - ${s}`).join('\n')}\n`
   }
+  yaml += `hooks:\n`
+  yaml += `  PreToolUse:\n    - matcher: ""\n      hooks:\n        - type: command\n          command: "${curlPost('/status', `{"agentId":"${config.agentId}","status":"working"}`)}"\n`
+  yaml += `  Stop:\n    - matcher: ""\n      hooks:\n        - type: command\n          command: "${curlPost('/status', `{"agentId":"${config.agentId}","status":"waiting"}`)}"\n`
+  yaml += `---\n\n`
 
-  writeFileSync(settingsPath, JSON.stringify(settings, null, 2))
+  // Markdown body = soul content
+  yaml += config.soul
+
+  yaml += `\n\n## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
+
+  writeFileSync(join(agentsDir, `${agentName}.md`), yaml)
 
   // Setup agent-specific memory directory
-  const memoryDir = join(app.getPath('home'), '.hive', 'memory', agentId)
+  const memoryDir = join(app.getPath('home'), '.hive', 'memory', config.agentId)
   mkdirSync(memoryDir, { recursive: true })
-  const cwdMemory = join(claudeDir, 'memory')
-  // Remove existing memory dir/link if present
+  const cwdMemory = join(cwd, '.claude', 'memory')
   try {
-    const stat = require('fs').lstatSync(cwdMemory)
-    if (stat.isSymbolicLink()) unlinkSync(cwdMemory)
+    const s = lstatSync(cwdMemory)
+    if (s.isSymbolicLink()) unlinkSync(cwdMemory)
   } catch {}
-  // Symlink agent memory
   if (!existsSync(cwdMemory)) {
     symlinkSync(memoryDir, cwdMemory)
   }
 
-  // Helper scripts for agent to report to Hive
-  const reportScript = join(claudeDir, 'hive-report.sh')
+  // hive-report.sh helper script
+  const reportScript = join(cwd, '.claude', 'hive-report.sh')
   writeFileSync(reportScript, `#!/bin/bash
-# Report task progress to Hive
-# Usage:
-#   .claude/hive-report.sh start "Fixing login bug"
-#   .claude/hive-report.sh done "Fixed login bug, added validation"
-#   .claude/hive-report.sh todo '{"items":[{"text":"Fix bug","done":false}]}'
-
-ACTION="$1"
-MSG="$2"
-AGENT="${agentId}"
-PORT=${HIVE_PORT}
-
+ACTION="$1"; MSG="$2"; AGENT="${config.agentId}"; PORT=${HIVE_PORT}
 case "$ACTION" in
-  start)
-    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_start\\",\\"title\\":\\"$MSG\\"}" > /dev/null 2>&1
-    ;;
-  done)
-    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_done\\",\\"summary\\":\\"$MSG\\"}" > /dev/null 2>&1
-    ;;
-  todo)
-    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"todo\\",$(echo $MSG | sed 's/^{//')}" > /dev/null 2>&1
-    ;;
+  start) curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_start\\",\\"title\\":\\"$MSG\\"}" > /dev/null 2>&1 ;;
+  done) curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_done\\",\\"summary\\":\\"$MSG\\"}" > /dev/null 2>&1 ;;
 esac
 `, { mode: 0o755 })
+
+  return agentName
 }
 
 function createWindow(): void {
@@ -479,18 +449,19 @@ ipcMain.handle('skills:readContent', (_event, { path: skillPath }) => {
   return null
 })
 
-// Soul file management
-const SOULS_DIR = join(app.getPath('home'), '.hive', 'souls')
-
-ipcMain.handle('agent:writeSoul', (_event, { agentId, content }) => {
-  mkdirSync(SOULS_DIR, { recursive: true })
-  writeFileSync(join(SOULS_DIR, `${agentId}.md`), content)
-  return true
+// Agent definition management (Claude Code native --agent)
+ipcMain.handle('agent:writeDefinition', (_event, { cwd, config }) => {
+  try {
+    const agentName = writeAgentDefinition(cwd, config)
+    return { ok: true, agentName }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
 })
 
-ipcMain.handle('agent:deleteSoul', (_event, { agentId }) => {
-  const file = join(SOULS_DIR, `${agentId}.md`)
-  try { if (existsSync(file)) unlinkSync(file) } catch {}
+ipcMain.handle('agent:deleteDefinition', (_event, { cwd, agentId }) => {
+  const agentFile = join(cwd, '.claude', 'agents', `hive-${agentId}.md`)
+  try { if (existsSync(agentFile)) unlinkSync(agentFile) } catch {}
   return true
 })
 
@@ -499,100 +470,11 @@ ipcMain.handle('agent:loadLogs', (_event, { agentId }) => {
   return loadLogs(agentId)
 })
 
-// Generate job-pickup prompt from recent logs
-ipcMain.handle('agent:jobPickup', (_event, { agentId, agentName, agentRole }) => {
-  const logs = loadLogs(agentId)
-  if (logs.length === 0) return null
-
-  // Get last 20 entries
-  const recent = logs.slice(-20)
-  const tasks: string[] = []
-  let lastTask = ''
-  let lastDone = ''
-  let lastStatus = ''
-
-  for (const log of recent) {
-    if (log.type === 'task_start') lastTask = log.message
-    if (log.type === 'task_done') { lastDone = log.message; lastTask = '' }
-    if (log.type === 'status') lastStatus = log.message
-  }
-
-  // Build pickup prompt
-  let prompt = `You are ${agentName} (${agentRole}). Here is your recent work history:\n\n`
-
-  for (const log of recent.slice(-10)) {
-    const time = new Date(log.time).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
-    if (log.type === 'task_start') prompt += `[${time}] STARTED: ${log.message}\n`
-    else if (log.type === 'task_done') prompt += `[${time}] COMPLETED: ${log.message}\n`
-    else if (log.type === 'status' && log.message === 'waiting') prompt += `[${time}] Paused\n`
-  }
-
-  if (lastTask) {
-    prompt += `\nYou were working on: "${lastTask}" but did NOT finish.\nPlease continue this task from where you left off.`
-  } else if (lastDone) {
-    prompt += `\nYour last completed task: "${lastDone}"\nCheck if there are follow-up tasks or ask what to do next.`
-  } else {
-    prompt += `\nReview your history above and ask what to work on next.`
-  }
-
-  prompt += `\n\n## Hive Resources
-- Your work logs: ~/.hive/logs/${agentId}.json
-- Your soul: ~/.hive/souls/${agentId}.md
-- Your memory: ~/.hive/memory/${agentId}/
-- Report task start: .claude/hive-report.sh start "task title"
-- Report task done: .claude/hive-report.sh done "summary"
-- Project dashboard todos: read TODO.md or any markdown with checkboxes in your work zone`
-
-  return prompt
-})
-
 // Clear agent work logs
 ipcMain.handle('agent:clearLogs', (_event, { agentId }) => {
   const logFile = join(LOGS_DIR, `${agentId}.json`)
   try { writeFileSync(logFile, '[]') } catch {}
   return true
-})
-
-// Write Claude Code hooks for agent status reporting
-ipcMain.handle('agent:setupHooks', (_event, { cwd, agentId }) => {
-  try {
-    writeAgentHooks(cwd, agentId)
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, error: String(err) }
-  }
-})
-
-// Link enabled skills to agent's working directory
-ipcMain.handle('skills:link', (_event, { cwd, skillPaths }: { cwd: string; skillPaths: string[] }) => {
-  try {
-    const targetDir = join(cwd, '.claude', 'skills')
-    mkdirSync(targetDir, { recursive: true })
-
-    // Clean existing symlinks in target
-    if (existsSync(targetDir)) {
-      const existing = readdirSync(targetDir, { withFileTypes: true })
-      for (const entry of existing) {
-        const fullPath = join(targetDir, entry.name)
-        if (entry.isSymbolicLink()) {
-          unlinkSync(fullPath)
-        }
-      }
-    }
-
-    // Create new symlinks
-    for (const skillPath of skillPaths) {
-      const skillName = skillPath.split('/').pop()!
-      const linkPath = join(targetDir, skillName)
-      if (!existsSync(linkPath)) {
-        symlinkSync(skillPath, linkPath)
-      }
-    }
-    return { ok: true }
-  } catch (err) {
-    console.error('skills:link error:', err)
-    return { ok: false, error: String(err) }
-  }
 })
 
 // Skills scanning — recursively find all SKILL.md files

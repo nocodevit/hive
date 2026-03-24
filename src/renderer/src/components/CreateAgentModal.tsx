@@ -117,6 +117,8 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
       soul,
       avatar: { ...defaultAvatar },
       enabledSkills: [],
+      model: 'inherit',
+      effort: 'high',
       preferences: { ...defaultPreferences }
     })
     setName('')

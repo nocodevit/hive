@@ -1,21 +1,21 @@
 import { describe, it, expect } from 'vitest'
 
 describe('appPrefs loading', () => {
-  const defaults = { autoRunClaude: true, maxLogs: 100, jobPickup: true }
+  const defaults = { autoRunClaude: true, maxLogs: 100, continueSession: true }
 
   it('preserves defaults when loaded data has missing fields', () => {
     const loaded = { autoRunClaude: true }
     const merged = { ...defaults, ...loaded }
-    expect(merged.jobPickup).toBe(true)
+    expect(merged.continueSession).toBe(true)
     expect(merged.maxLogs).toBe(100)
   })
 
   it('overrides defaults with loaded values', () => {
-    const loaded = { autoRunClaude: false, maxLogs: 50, jobPickup: false }
+    const loaded = { autoRunClaude: false, maxLogs: 50, continueSession: false }
     const merged = { ...defaults, ...loaded }
     expect(merged.autoRunClaude).toBe(false)
     expect(merged.maxLogs).toBe(50)
-    expect(merged.jobPickup).toBe(false)
+    expect(merged.continueSession).toBe(false)
   })
 
   it('handles empty loaded data', () => {
@@ -24,15 +24,15 @@ describe('appPrefs loading', () => {
     expect(merged).toEqual(defaults)
   })
 
-  it('does NOT lose jobPickup when old data lacks it', () => {
+  it('does NOT lose continueSession when old data lacks it', () => {
     // This was the actual bug: old data.json had { autoRunClaude: true }
-    // without jobPickup, and setAppPrefs(loaded) overwrote the default
+    // without continueSession, and setAppPrefs(loaded) overwrote the default
     const loaded = { autoRunClaude: true }
     // Wrong way (the bug):
     const wrong = loaded as typeof defaults
-    expect(wrong.jobPickup).toBeUndefined()
+    expect(wrong.continueSession).toBeUndefined()
     // Right way (the fix):
     const right = { ...defaults, ...loaded }
-    expect(right.jobPickup).toBe(true)
+    expect(right.continueSession).toBe(true)
   })
 })

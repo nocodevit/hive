@@ -41,7 +41,7 @@ test.describe('App Launch', () => {
 
   test('left sidebar has app settings', async () => {
     await expect(page.locator('text=Auto-run Claude')).toBeVisible()
-    await expect(page.locator('text=Job pickup')).toBeVisible()
+    await expect(page.locator('text=Resume session')).toBeVisible()
     await expect(page.locator('text=Files panel')).toBeVisible()
     await expect(page.locator('text=Max logs')).toBeVisible()
   })

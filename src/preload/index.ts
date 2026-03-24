@@ -43,22 +43,23 @@ const api = {
   },
   skills: {
     scan: () => ipcRenderer.invoke('skills:scan'),
-    link: (cwd: string, skillPaths: string[]) => ipcRenderer.invoke('skills:link', { cwd, skillPaths }),
     readContent: (path: string) => ipcRenderer.invoke('skills:readContent', { path })
   },
   agent: {
-    setupHooks: (cwd: string, agentId: string) => ipcRenderer.invoke('agent:setupHooks', { cwd, agentId }),
-    writeSoul: (agentId: string, content: string) => ipcRenderer.invoke('agent:writeSoul', { agentId, content }),
-    deleteSoul: (agentId: string) => ipcRenderer.invoke('agent:deleteSoul', { agentId }),
+    writeDefinition: (cwd: string, config: {
+      agentId: string; name: string; role: string; department: string;
+      soul: string; skills: string[]; model: string; effort: string;
+    }) => ipcRenderer.invoke('agent:writeDefinition', { cwd, config }),
+    deleteDefinition: (cwd: string, agentId: string) =>
+      ipcRenderer.invoke('agent:deleteDefinition', { cwd, agentId }),
     loadLogs: (agentId: string) => ipcRenderer.invoke('agent:loadLogs', { agentId }),
     clearLogs: (agentId: string) => ipcRenderer.invoke('agent:clearLogs', { agentId }),
-    jobPickup: (agentId: string, agentName: string, agentRole: string) => ipcRenderer.invoke('agent:jobPickup', { agentId, agentName, agentRole }),
     onStatus: (cb: (data: { agentId: string; status: string }) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { agentId: string; status: string }) => cb(data)
       ipcRenderer.on('agent:status', handler)
       return () => ipcRenderer.removeListener('agent:status', handler)
     },
-    onReport: (cb: (data: { agentId: string; type: string; items: { text: string; done: boolean }[] }) => void) => {
+    onReport: (cb: (data: any) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: any) => cb(data)
       ipcRenderer.on('agent:report', handler)
       return () => ipcRenderer.removeListener('agent:report', handler)
