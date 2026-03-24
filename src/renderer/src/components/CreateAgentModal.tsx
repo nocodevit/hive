@@ -73,6 +73,7 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
   const [name, setName] = useState('')
   const [department, setDepartment] = useState<'R&D' | 'Non-R&D'>('R&D')
   const [role, setRole] = useState('Engineering')
+  const [group, setGroup] = useState('')
   const [traits, setTraits] = useState<string[]>([])
   const [zoneId, setZoneId] = useState(project.zones[0]?.id || '')
 
@@ -110,6 +111,8 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
       role,
       type,
       department,
+      group: group.trim() || '',
+      order: Date.now(),
       status: 'done',
       soul,
       avatar: { ...defaultAvatar },
@@ -117,6 +120,7 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
       preferences: { ...defaultPreferences }
     })
     setName('')
+    setGroup('')
     setDepartment('R&D')
     setRole('Engineering')
     setTraits([])
@@ -171,6 +175,22 @@ export default function CreateAgentModal({ open, onClose, project, onCreate }: P
               {roles.map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
           </div>
+        </div>
+
+        {/* Group */}
+        <div>
+          <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+            Team Group <span className="normal-case tracking-normal font-normal">(optional)</span>
+          </label>
+          <input
+            type="text"
+            value={group}
+            onChange={(e) => setGroup(e.target.value)}
+            placeholder="e.g. Frontend Team, Growth Team"
+            className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-border
+              text-text-primary text-sm placeholder:text-text-muted/50
+              focus:outline-none focus:border-accent transition-colors"
+          />
         </div>
 
         {/* Personality Traits */}

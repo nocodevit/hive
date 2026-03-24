@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -15,15 +15,16 @@ interface TerminalProps {
 
 export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, startupCommand, jobPickupPrompt }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const wrapperRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const ptyReady = useRef(false)
+  const isAtBottom = useRef(true)
+  const [showScrollDown, setShowScrollDown] = useState(false)
 
   useEffect(() => {
     const el = containerRef.current
     if (!el || termRef.current) return
-
-    console.log('[Terminal] Mounting terminal:', id, 'cwd:', cwd)
 
     const term = new XTerm({
       cursorBlink: true,
@@ -43,28 +44,27 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
     termRef.current = term
     fitRef.current = fit
 
-    console.log('[Terminal] xterm opened, container size:', el.clientWidth, 'x', el.clientHeight)
+    // Track scroll position
+    term.onScroll(() => {
+      const buffer = term.buffer.active
+      const atBottom = buffer.viewportY >= buffer.baseY
+      isAtBottom.current = atBottom
+      setShowScrollDown(!atBottom)
+    })
 
-    // Delay fit + PTY creation to next frame so container has dimensions
+    // Delay fit + PTY creation
     setTimeout(() => {
-      try {
-        fit.fit()
-        console.log('[Terminal] fit done')
-      } catch (e) {
-        console.error('[Terminal] fit error:', e)
-      }
+      try { fit.fit() } catch {}
 
       if (!ptyReady.current) {
         ptyReady.current = true
-        console.log('[Terminal] Creating PTY...')
 
         window.api.pty.create(id, cwd)
           .then((result) => {
-            console.log('[Terminal] PTY created:', result)
-
             window.api.pty.onData(id, (data) => {
               term.write(data)
-              term.scrollToBottom()
+              // Only auto-scroll if user is already at bottom
+              if (isAtBottom.current) term.scrollToBottom()
             })
 
             window.api.pty.onExit(id, () => {
@@ -91,7 +91,6 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
               const soulPath = `~/.hive/souls/${agentId}.md`
               let cmd = `claude --append-system-prompt-file ${soulPath}`
               if (jobPickupPrompt) {
-                // Escape single quotes in prompt
                 const escaped = jobPickupPrompt.replace(/'/g, "'\\''")
                 cmd += ` --prompt '${escaped}'`
               }
@@ -99,14 +98,13 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
             }
           })
           .catch((err) => {
-            console.error('[Terminal] PTY create failed:', err)
             term.write(`\r\nError: ${err}\r\n`)
           })
       }
     }, 200)
 
     const observer = new ResizeObserver(() => {
-      try { fit.fit(); term.scrollToBottom() } catch {}
+      try { fit.fit() } catch {}
     })
     observer.observe(el)
 
@@ -117,9 +115,9 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
 
   // Re-fit on visibility change
   useEffect(() => {
-    if (visible && fitRef.current && termRef.current) {
+    if (visible && fitRef.current) {
       setTimeout(() => {
-        try { fitRef.current?.fit(); termRef.current?.scrollToBottom() } catch {}
+        try { fitRef.current?.fit() } catch {}
       }, 100)
     }
   }, [visible])
@@ -133,6 +131,12 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
     }
   }, [id])
 
+  const scrollToBottom = () => {
+    termRef.current?.scrollToBottom()
+    isAtBottom.current = true
+    setShowScrollDown(false)
+  }
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const path = e.dataTransfer.getData('text/plain')
@@ -141,17 +145,35 @@ export default function Terminal({ id, agentId, cwd, visible, autoRunClaude, sta
 
   return (
     <div
-      ref={containerRef}
-      onDragOver={(e) => e.preventDefault()}
-      onDrop={handleDrop}
-      style={{
-        width: '100%',
-        height: '100%',
-        minHeight: '200px',
-        visibility: visible ? 'visible' : 'hidden',
-        position: visible ? 'relative' : 'absolute',
-        pointerEvents: visible ? 'auto' : 'none'
-      }}
-    />
+      ref={wrapperRef}
+      style={{ width: '100%', height: '100%', position: 'relative' }}
+    >
+      <div
+        ref={containerRef}
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleDrop}
+        style={{
+          width: '100%',
+          height: '100%',
+          minHeight: '200px',
+          visibility: visible ? 'visible' : 'hidden',
+          position: visible ? 'relative' : 'absolute',
+          pointerEvents: visible ? 'auto' : 'none'
+        }}
+      />
+      {showScrollDown && visible && (
+        <button
+          onClick={scrollToBottom}
+          className="absolute bottom-4 right-4 w-8 h-8 rounded-full bg-accent text-text-on-purple
+            flex items-center justify-center shadow-lg cursor-pointer
+            hover:bg-accent-hover transition-colors z-10"
+          title="Scroll to bottom"
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+      )}
+    </div>
   )
 }
