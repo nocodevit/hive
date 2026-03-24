@@ -85,20 +85,101 @@ export default function OfficeView({ agents, onAgentClick }: Props) {
 
     function drawDesk(x: number, y: number) {
       const dx = x * S, dy = y * S
-      px(dx, dy, 3 * S, 1.8 * S, C.desk)
-      px(dx + 2, dy + 2, 3 * S - 4, 1.8 * S - 4, C.deskTop)
-      px(dx + 0.7 * S, dy + 0.15 * S, 1.6 * S, S, C.monitor)
-      px(dx + 0.8 * S, dy + 0.25 * S, 1.4 * S, 0.8 * S, C.monitorScreen)
-      px(dx + 1.3 * S, dy + 1.15 * S, 0.4 * S, 0.15 * S, '#4b5563')
-      px(dx + 0.5 * S, dy + 1.4 * S, 2 * S, 0.35 * S, C.keyboard)
+      // Desk surface
+      px(dx, dy, 3.5 * S, 1.8 * S, C.desk)
+      px(dx + 2, dy + 2, 3.5 * S - 4, 1.8 * S - 4, C.deskTop)
+      // Dual monitors
+      px(dx + 0.2 * S, dy + 0.1 * S, 1.3 * S, 0.9 * S, C.monitor)
+      px(dx + 0.3 * S, dy + 0.2 * S, 1.1 * S, 0.7 * S, C.monitorScreen)
+      px(dx + 1.7 * S, dy + 0.1 * S, 1.3 * S, 0.9 * S, C.monitor)
+      px(dx + 1.8 * S, dy + 0.2 * S, 1.1 * S, 0.7 * S, C.monitorScreen)
+      // Monitor stands
+      px(dx + 0.7 * S, dy + 1.0 * S, 0.3 * S, 0.15 * S, '#4b5563')
+      px(dx + 2.2 * S, dy + 1.0 * S, 0.3 * S, 0.15 * S, '#4b5563')
+      // Keyboard
+      px(dx + 0.6 * S, dy + 1.3 * S, 1.5 * S, 0.3 * S, C.keyboard)
+      // Mouse
+      px(dx + 2.3 * S, dy + 1.35 * S, 0.4 * S, 0.25 * S, '#4b5563')
+      // Coffee cup on desk
+      px(dx + 3.0 * S, dy + 0.4 * S, 0.3 * S, 0.35 * S, '#f8fafc')
+      px(dx + 3.0 * S, dy + 0.35 * S, 0.3 * S, 0.1 * S, '#94a3b8')
     }
 
-    function drawChair(x: number, y: number) {
-      const cx = (x + 1) * S, cy = (y + 2.2) * S
-      px(cx - 0.3 * S, cy + 0.3 * S, 1.6 * S, 0.8 * S, C.chair)
-      px(cx - 0.2 * S, cy - 0.4 * S, 1.4 * S, 0.25 * S, C.chairBack)
-      px(cx - 0.3 * S, cy - 0.4 * S, 0.15 * S, 1.5 * S, C.chair)
-      px(cx + 1.15 * S, cy - 0.4 * S, 0.15 * S, 1.5 * S, C.chair)
+    function drawGamingChair(x: number, y: number) {
+      const cx = (x + 1.2) * S, cy = (y + 2.2) * S
+      // Wheels base
+      px(cx - 0.1 * S, cy + 1.0 * S, 1.2 * S, 0.15 * S, '#1e1b4b')
+      px(cx + 0.1 * S, cy + 1.15 * S, 0.2 * S, 0.1 * S, '#374151')
+      px(cx + 0.7 * S, cy + 1.15 * S, 0.2 * S, 0.1 * S, '#374151')
+      // Seat
+      px(cx - 0.2 * S, cy + 0.3 * S, 1.4 * S, 0.7 * S, '#1e1b4b')
+      px(cx, cy + 0.4 * S, 1.0 * S, 0.5 * S, '#7c3aed')
+      // Back rest (tall)
+      px(cx - 0.3 * S, cy - 0.8 * S, 1.6 * S, 1.1 * S, '#1e1b4b')
+      px(cx - 0.1 * S, cy - 0.6 * S, 1.2 * S, 0.8 * S, '#7c3aed')
+      // Head rest
+      px(cx + 0.1 * S, cy - 1.0 * S, 0.8 * S, 0.3 * S, '#1e1b4b')
+      // Purple racing stripes
+      px(cx + 0.35 * S, cy - 0.5 * S, 0.3 * S, 0.6 * S, '#a78bfa')
+      // Arm rests
+      px(cx - 0.4 * S, cy + 0.1 * S, 0.2 * S, 0.5 * S, '#374151')
+      px(cx + 1.2 * S, cy + 0.1 * S, 0.2 * S, 0.5 * S, '#374151')
+    }
+
+    function drawCoffeeMachine(x: number, y: number) {
+      // Counter
+      pxT(x, y, 2, 1.5, '#4b5563')
+      pxT(x + 0.1, y + 0.1, 1.8, 1.3, '#6b7280')
+      // Machine body
+      pxT(x + 0.3, y - 1.2, 1.4, 1.2, '#374151')
+      pxT(x + 0.4, y - 1.0, 1.2, 0.8, '#1e293b')
+      // Red light
+      pxT(x + 0.5, y - 0.3, 0.2, 0.2, '#ef4444')
+      // Green light
+      pxT(x + 0.8, y - 0.3, 0.2, 0.2, '#22c55e')
+      // Drip area
+      pxT(x + 0.6, y + 0.2, 0.8, 0.3, '#1e293b')
+      // Cup
+      pxT(x + 0.8, y + 0.3, 0.4, 0.5, '#f8fafc')
+      // Steam (animated via tick)
+      ctx.fillStyle = 'rgba(200,200,200,0.3)'
+      const steamY = y - 1.3 - Math.sin(tick * 0.08) * 0.2
+      pxT(x + 0.7, steamY, 0.15, 0.3, 'rgba(200,200,200,0.2)')
+      pxT(x + 1.0, steamY - 0.1, 0.15, 0.3, 'rgba(200,200,200,0.15)')
+      // Label
+      ctx.font = '7px sans-serif'
+      ctx.fillStyle = '#94a3b8'
+      ctx.textAlign = 'center'
+      ctx.fillText('COFFEE', (x + 1) * S, (y + 1.8) * S)
+    }
+
+    function drawGymArea(x: number, y: number) {
+      // Gym mat
+      pxT(x, y, 3, 2, '#1e3a2f')
+      pxT(x + 0.1, y + 0.1, 2.8, 1.8, '#22543d')
+      // Treadmill
+      pxT(x + 0.3, y + 0.3, 1.0, 1.4, '#374151')
+      pxT(x + 0.4, y + 0.4, 0.8, 0.6, '#1e293b')
+      // Treadmill screen
+      pxT(x + 0.5, y + 0.45, 0.6, 0.35, '#0a0a0a')
+      pxT(x + 0.55, y + 0.5, 0.5, 0.25, '#22c55e')
+      // Dumbbell rack
+      pxT(x + 1.6, y + 0.3, 1.2, 0.6, '#4b5563')
+      // Dumbbells
+      pxT(x + 1.7, y + 0.4, 0.3, 0.15, '#94a3b8')
+      pxT(x + 2.1, y + 0.4, 0.3, 0.15, '#94a3b8')
+      pxT(x + 1.7, y + 0.65, 0.3, 0.15, '#78716c')
+      pxT(x + 2.1, y + 0.65, 0.3, 0.15, '#78716c')
+      // Yoga ball
+      ctx.beginPath()
+      ctx.arc((x + 2.2) * S, (y + 1.5) * S, S * 0.35, 0, Math.PI * 2)
+      ctx.fillStyle = '#a78bfa'
+      ctx.fill()
+      // Label
+      ctx.font = '7px sans-serif'
+      ctx.fillStyle = '#4ade80'
+      ctx.textAlign = 'center'
+      ctx.fillText('GYM', (x + 1.5) * S, (y + 2.3) * S)
     }
 
     function drawAgent(agent: Agent, desk: { x: number; y: number }) {
@@ -189,10 +270,11 @@ export default function OfficeView({ agents, onAgentClick }: Props) {
         ws.timer--
         if (ws.timer <= 0 && ws.tx === null) {
           const targets = [
-            [(19 + Math.random()) * S, (2 + Math.random() * 2) * S],
-            [(desk.x + 1 + Math.random() * 2) * S, (desk.y + 3 + Math.random() * 2) * S],
-            [(18 + Math.random() * 2) * S, (9 + Math.random() * 2) * S],
-            [(7 + Math.random() * 6) * S, (1.8 + Math.random()) * S],
+            [(19.5 + Math.random()) * S, (3 + Math.random()) * S],       // coffee machine
+            [(desk.x + 1 + Math.random() * 2) * S, (desk.y + 3 + Math.random() * 2) * S], // near desk
+            [(18.5 + Math.random()) * S, (9.5 + Math.random()) * S],     // sofa/lounge
+            [(7 + Math.random() * 4) * S, (2 + Math.random()) * S],      // whiteboard
+            [(19 + Math.random() * 2) * S, (6 + Math.random()) * S],     // gym area
           ]
           const t = targets[Math.floor(Math.random() * targets.length)]
           ws.tx = t[0]; ws.ty = t[1]
@@ -221,18 +303,37 @@ export default function OfficeView({ agents, onAgentClick }: Props) {
       drawWalls()
 
       // Furniture
+      // Whiteboard
       pxT(7, 1.5, 3, 2, C.whiteboardFrame); pxT(7.1, 1.6, 2.8, 1.8, C.whiteboard)
-      pxT(19, 2, 2, 1.2, C.coffee); pxT(19.1, 2.1, 1.8, 1, C.coffeeTop)
+      ctx.font = '6px monospace'; ctx.fillStyle = '#7c3aed'; ctx.textAlign = 'left'
+      ctx.fillText('Sprint Board', 7.3 * S, 1.9 * S)
+      for (let i = 0; i < 3; i++) px(7.3 * S, (2.1 + i * 0.3) * S, (1 + Math.random() * 1.5) * S, 2, '#a78bfa44')
+
+      // Coffee machine
+      drawCoffeeMachine(19, 2.5)
+
+      // Sofa
       pxT(18, 9, 3, 1.2, '#4c1d95'); pxT(18.15, 9.15, 2.7, 0.9, '#6d28d9')
+      pxT(18.3, 9.3, 1.1, 0.6, '#7c3aed'); pxT(19.6, 9.3, 1.1, 0.6, '#7c3aed')
+      ctx.font = '6px sans-serif'; ctx.fillStyle = '#64748b'; ctx.textAlign = 'center'
+      ctx.fillText('LOUNGE', 19.5 * S, 10.5 * S)
+
+      // Gym area
+      drawGymArea(18, 5.5)
 
       // Plants
-      const drawPlant = (x: number, y: number) => { pxT(x, y, 0.8, 0.6, C.pot); pxT(x - 0.1, y - 0.7, 1, 0.7, C.plant) }
-      drawPlant(1, 12); drawPlant(20, 12); drawPlant(17, 6)
+      const drawPlant = (x: number, y: number) => {
+        pxT(x, y, 0.6, 0.5, C.pot)
+        pxT(x - 0.15, y - 0.6, 0.9, 0.6, C.plant)
+        pxT(x + 0.05, y - 0.9, 0.5, 0.4, C.plantDark)
+      }
+      drawPlant(1, 12); drawPlant(20.5, 12); drawPlant(17, 4.5)
+      drawPlant(1, 1.8); drawPlant(0.8, 7)
 
-      // Desks
+      // Desks + Gaming chairs
       agents.forEach((a) => {
         const desk = agentDesks.get(a.id)
-        if (desk) { drawDesk(desk.x, desk.y); if (a.status === 'working') drawChair(desk.x, desk.y) }
+        if (desk) { drawDesk(desk.x, desk.y); if (a.status === 'working') drawGamingChair(desk.x, desk.y) }
       })
 
       updateWanderers()
