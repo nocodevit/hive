@@ -31,6 +31,7 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
   const [traits, setTraits] = useState<string[]>([])
   const [sections, setSections] = useState<TemplateSection[]>([])
   const [importedMd, setImportedMd] = useState('')
+  const [projectContext, setProjectContext] = useState<string | null>(null)
 
   // Step 3: Skills
   const [enabledSkills, setEnabledSkills] = useState<string[]>([])
@@ -47,6 +48,13 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
   useEffect(() => {
     if (open) {
       window.api.templates.list().then(setCustomTemplates)
+      // Load project CLAUDE.md for context
+      const rndZone = project.zones.find((z: Zone) => z.type === 'rnd')
+      if (rndZone) {
+        window.api.project.readClaudeMd(rndZone.path).then((md: string | null) => {
+          setProjectContext(md)
+        })
+      }
       setStep(0)
     }
   }, [open])
@@ -55,7 +63,12 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
     setSelectedTemplate(t)
     setDepartment(t.department)
     setRole(t.role)
-    setSections(t.sections.map(s => ({ ...s })))
+    setSections(t.sections.map(s => {
+      if (s.title === 'Custom' && !s.content && projectContext) {
+        return { ...s, content: `Project context (from CLAUDE.md):\n${projectContext.slice(0, 500)}` }
+      }
+      return { ...s }
+    }))
     const globalDefaults = t.department === 'R&D' ? defaultSkillsRnD : defaultSkillsNonRnD
     setEnabledSkills([...new Set([...t.suggestedSkills, ...globalDefaults])])
     setModel(t.suggestedModel)
@@ -174,6 +187,15 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
                   ))}
                 </div>
               </>
+            )}
+
+            {projectContext && (
+              <div className="mt-3">
+                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1">Project Context (CLAUDE.md)</label>
+                <pre className="px-3 py-2 rounded-lg bg-bg-primary border border-border text-[10px] text-text-muted font-mono max-h-24 overflow-y-auto whitespace-pre-wrap">
+                  {projectContext.slice(0, 300)}{projectContext.length > 300 ? '...' : ''}
+                </pre>
+              </div>
             )}
 
             <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mt-3">Or Start Blank</label>

@@ -116,13 +116,13 @@ export const TRAIT_OPTIONS = [
 
 export const BUILTIN_TEMPLATES: AgentTemplate[] = [
   {
-    id: 'engineering', name: 'Engineering', category: 'builtin', department: 'R&D', role: 'Engineering',
+    id: 'engineering', name: 'Full-Stack Engineer', category: 'builtin', department: 'R&D', role: 'Engineering',
     suggestedSkills: ['review', 'ship', 'investigate'], suggestedModel: 'inherit', suggestedEffort: 'high',
     sections: [
-      { title: 'Role', hint: 'What does this engineer do?', content: 'Senior software engineer. Write clean, maintainable, well-tested code. Expert in the project\'s tech stack.' },
-      { title: 'Workflow', hint: 'Step-by-step working process', content: '1. Read existing code and understand context before changes\n2. Write code with tests\n3. Run tests and fix failures\n4. Commit with descriptive message\n5. Report task completion' },
-      { title: 'Boundaries', hint: 'What should this agent NOT do?', content: '- Stay within assigned codebase area\n- Ask before large refactors\n- Don\'t modify shared configs without confirmation' },
-      { title: 'Custom', hint: 'Any additional instructions', content: '' },
+      { title: 'Role', hint: 'What does this engineer do?', content: 'Senior software engineer. Write clean, maintainable, well-tested code. Expert in the project\'s tech stack. Read existing code before making changes.' },
+      { title: 'Workflow', hint: 'Dev loop — strict order, never skip steps', content: '1. Plan — concise bullet list of implementation steps. Stop and wait for approval.\n2. Implement — one small, focused change at a time.\n3. Build — run build. Fix until it passes.\n4. Test — write tests, run all. Fix until green.\n5. Commit — stage and commit with short descriptive message.\n6. Summary — 2-3 sentences: what changed, tests added, issues found.\n\nRepeat 2-5 for each change. Never skip or reorder steps. Never proceed past a failing build or test. One logical change per cycle.' },
+      { title: 'Boundaries', hint: 'Constraints and rules', content: '- Stay within assigned codebase area\n- Ask before large refactors or shared config changes\n- Never kill processes on occupied ports — use a different port\n- Line endings: always LF, never CRLF\n- Frontend UI: re-read docs/design.md before any UI change\n- Output: terse, no filler, no preamble. Code: no decorative comments.' },
+      { title: 'Custom', hint: 'Project-specific: tech stack, conventions, notification hooks', content: '' },
     ]
   },
   {

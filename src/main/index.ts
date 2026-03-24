@@ -464,9 +464,21 @@ ipcMain.handle('templates:delete', (_event, { id }) => {
   return true
 })
 
-// Import .md file content
+// Read any file content
 ipcMain.handle('fs:readFile', (_event, { filePath }) => {
   try { return readFileSync(filePath, 'utf-8') } catch { return null }
+})
+
+// Read project CLAUDE.md (check multiple locations)
+ipcMain.handle('project:readClaudeMd', (_event, { projectPath }) => {
+  const paths = [
+    join(projectPath, 'CLAUDE.md'),
+    join(projectPath, '.claude', 'CLAUDE.md'),
+  ]
+  for (const p of paths) {
+    try { if (existsSync(p)) return readFileSync(p, 'utf-8') } catch {}
+  }
+  return null
 })
 
 // Read skill file content
