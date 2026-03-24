@@ -7,6 +7,7 @@ import ProjectSettingsModal from './components/ProjectSettingsModal'
 import ResizeHandle from './components/ResizeHandle'
 import FilesPanel from './components/FilesPanel'
 import OfficeView from './components/OfficeView'
+import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo } from './types'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
@@ -1059,15 +1060,26 @@ export default function App() {
                     <AvatarEditor config={selectedAgent.avatar} onChange={(avatar) => updateAgent(selectedAgent.id, { avatar })} size={128} />
                   </div>
 
-                  {/* Soul */}
+                  {/* Soul — split editor + preview */}
                   <div>
                     <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Soul</label>
-                    <textarea
-                      value={selectedAgent.soul}
-                      onChange={(e) => updateAgent(selectedAgent.id, { soul: e.target.value })}
-                      className="w-full h-56 px-4 py-3 rounded-xl bg-bg-secondary border border-border text-text-primary text-sm font-mono leading-relaxed resize-y focus:outline-none focus:border-accent transition-colors"
-                      placeholder="Define this agent's role, personality, and boundaries..."
-                    />
+                    <div className="grid grid-cols-2 gap-2" style={{ height: '280px' }}>
+                      <textarea
+                        value={selectedAgent.soul}
+                        onChange={(e) => updateAgent(selectedAgent.id, { soul: e.target.value })}
+                        className="w-full h-full px-3 py-2 rounded-xl bg-bg-secondary border border-border text-text-primary text-xs font-mono leading-relaxed resize-none focus:outline-none focus:border-accent transition-colors"
+                        placeholder="Write markdown..."
+                      />
+                      <div className="h-full px-3 py-2 rounded-xl bg-bg-secondary border border-border overflow-y-auto prose prose-sm prose-invert max-w-none
+                        [&_h1]:text-sm [&_h1]:font-heading [&_h1]:font-bold [&_h1]:text-text-primary [&_h1]:mt-2 [&_h1]:mb-1
+                        [&_h2]:text-xs [&_h2]:font-heading [&_h2]:font-semibold [&_h2]:text-accent [&_h2]:mt-3 [&_h2]:mb-1
+                        [&_p]:text-xs [&_p]:text-text-secondary [&_p]:my-1
+                        [&_li]:text-xs [&_li]:text-text-secondary
+                        [&_ul]:my-1 [&_ol]:my-1
+                        [&_code]:text-[10px] [&_code]:bg-bg-primary [&_code]:px-1 [&_code]:rounded">
+                        <Markdown>{selectedAgent.soul || '*No content*'}</Markdown>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
