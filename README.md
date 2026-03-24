@@ -214,7 +214,8 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [x] Agent roles: R&D (Engineering/Product/QA/Design) + Non-R&D (Admin/HR/Marketing/BA/Operations/GM)
 - [x] Light/dark theme (follows system)
 - [x] Project Settings tab (add/remove folders inline)
-- [ ] **MCP Server** — Auto-reporting without soul instructions, agent-to-agent communication
+- [ ] **Multi-agent communication** — Message relay via webhook, then MCP Server ([plan](docs/multi-agent-comms-plan.md))
+- [ ] **MCP Server** — Auto-reporting without soul instructions
 - [ ] **Resizable sidebar panels** — Draggable column widths
 - [ ] **GNU Screen session persistence** — Terminal sessions survive app restart
 - [ ] **Notification integrations** — Slack, Telegram, WhatsApp, macOS
