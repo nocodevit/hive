@@ -1062,7 +1062,30 @@ export default function App() {
 
                   {/* Soul — split editor + preview */}
                   <div>
-                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Soul</label>
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs font-heading font-semibold text-text-muted uppercase tracking-wider">Soul</label>
+                      <button
+                        onClick={() => {
+                          const t = {
+                            id: `custom-${Date.now()}`,
+                            name: `${selectedAgent.name} Template`,
+                            category: 'custom' as const,
+                            department: selectedAgent.department as 'R&D' | 'Non-R&D',
+                            role: selectedAgent.role,
+                            sections: [
+                              { title: 'Full Soul', hint: 'Complete agent definition', content: selectedAgent.soul }
+                            ],
+                            suggestedSkills: selectedAgent.enabledSkills || [],
+                            suggestedModel: selectedAgent.model || 'inherit',
+                            suggestedEffort: selectedAgent.effort || 'high',
+                          }
+                          window.api.templates.save(t)
+                        }}
+                        className="text-[10px] text-accent hover:text-accent-hover cursor-pointer font-medium"
+                      >
+                        Save as Template
+                      </button>
+                    </div>
                     <div className="grid grid-cols-2 gap-2" style={{ height: '280px' }}>
                       <textarea
                         value={selectedAgent.soul}
