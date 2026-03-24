@@ -226,6 +226,7 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [ ] **GNU Screen session persistence** — Terminal sessions survive app restart
 - [ ] **Notification integrations** — Slack, Telegram, WhatsApp, macOS
 - [ ] **Office visualization upgrade** — Phaser 3 + real sprite assets (currently Canvas 2D)
+- [ ] **Offline log buffer** — hive-report.sh saves to local file when Hive is offline, syncs on reconnect
 - [ ] Agency-Agents role templates
 - [ ] claude-mem / memsearch for enhanced memory
 
