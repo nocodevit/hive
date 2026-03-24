@@ -440,6 +440,35 @@ ipcMain.handle('fs:revealInFinder', (_event, { filePath }) => {
   shell.showItemInFolder(filePath)
 })
 
+// Template management
+const TEMPLATES_DIR = join(app.getPath('home'), '.hive', 'templates')
+
+ipcMain.handle('templates:list', () => {
+  mkdirSync(TEMPLATES_DIR, { recursive: true })
+  try {
+    return readdirSync(TEMPLATES_DIR).filter(f => f.endsWith('.json')).map(f => {
+      try { return JSON.parse(readFileSync(join(TEMPLATES_DIR, f), 'utf-8')) } catch { return null }
+    }).filter(Boolean)
+  } catch { return [] }
+})
+
+ipcMain.handle('templates:save', (_event, { template }) => {
+  mkdirSync(TEMPLATES_DIR, { recursive: true })
+  writeFileSync(join(TEMPLATES_DIR, `${template.id}.json`), JSON.stringify(template, null, 2))
+  return true
+})
+
+ipcMain.handle('templates:delete', (_event, { id }) => {
+  const f = join(TEMPLATES_DIR, `${id}.json`)
+  try { if (existsSync(f)) unlinkSync(f) } catch {}
+  return true
+})
+
+// Import .md file content
+ipcMain.handle('fs:readFile', (_event, { filePath }) => {
+  try { return readFileSync(filePath, 'utf-8') } catch { return null }
+})
+
 // Read skill file content
 ipcMain.handle('skills:readContent', (_event, { path: skillPath }) => {
   const skillMd = join(skillPath, 'SKILL.md')
