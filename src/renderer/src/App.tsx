@@ -231,7 +231,7 @@ export default function App() {
       <div className="bg-sidebar-bg flex flex-col flex-shrink-0" style={{ width: panelWidths.projects }}>
         <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
           <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
-            Projects
+            Hive v0.4.0
           </h2>
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
         </div>
