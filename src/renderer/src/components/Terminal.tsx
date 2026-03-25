@@ -12,9 +12,10 @@ interface TerminalProps {
   autoRunClaude?: boolean
   continueSession?: boolean
   startupCommand?: string
+  rebaseOnStart?: boolean
 }
 
-export default function Terminal({ id, agentId, agentName, cwd, visible, autoRunClaude, continueSession, startupCommand }: TerminalProps) {
+export default function Terminal({ id, agentId, agentName, cwd, visible, autoRunClaude, continueSession, startupCommand, rebaseOnStart }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
@@ -98,10 +99,16 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
               setTimeout(() => window.api.pty.write(id, startupCommand + '\r'), 500)
             } else if (autoRunClaude) {
               const agent = `hive-${agentId}`
-              const cmd = continueSession
+              const claudeCmd = continueSession
                 ? `claude --agent ${agent} -c -n "${agentName}"`
                 : `claude --agent ${agent} -n "${agentName}"`
-              setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
+              if (rebaseOnStart) {
+                // Rebase from main before starting agent
+                const rebaseCmd = `BASE=$(git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}') && [ -n "$BASE" ] && echo "⏳ Rebasing from origin/$BASE..." && git fetch origin && git rebase origin/$BASE && echo "✅ Rebase done" || echo "⏭️ Rebase skipped (no remote HEAD)"`
+                setTimeout(() => window.api.pty.write(id, `${rebaseCmd} && ${claudeCmd}\r`), 500)
+              } else {
+                setTimeout(() => window.api.pty.write(id, claudeCmd + '\r'), 500)
+              }
             }
           })
           .catch((err) => {
