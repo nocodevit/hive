@@ -28,7 +28,9 @@ const api = {
   fs: {
     hasGit: (path: string) => ipcRenderer.invoke('fs:hasGit', { path }),
     scanFiles: (dirPath: string, limit?: number) => ipcRenderer.invoke('fs:scanFiles', { dirPath, limit }),
-    revealInFinder: (filePath: string) => ipcRenderer.invoke('fs:revealInFinder', { filePath })
+    revealInFinder: (filePath: string) => ipcRenderer.invoke('fs:revealInFinder', { filePath }),
+    readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', { filePath }) as Promise<string | null>,
+    writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:writeFile', { filePath, content }) as Promise<boolean>
   },
   git: {
     worktreeAdd: (repoPath: string, agentId: string, agentName: string) =>
@@ -36,7 +38,9 @@ const api = {
     worktreeRemove: (repoPath: string, worktreePath: string) =>
       ipcRenderer.invoke('git:worktreeRemove', { repoPath, worktreePath }),
     worktreeList: (repoPath: string) =>
-      ipcRenderer.invoke('git:worktreeList', { repoPath })
+      ipcRenderer.invoke('git:worktreeList', { repoPath }),
+    clone: (url: string, destPath: string, token?: string, provider?: string) =>
+      ipcRenderer.invoke('git:clone', { url, destPath, token, provider }) as Promise<{ ok: boolean; path?: string; name?: string; error?: string }>
   },
   project: {
     scan: (zones: { path: string; type: string }[]) => ipcRenderer.invoke('project:scan', { zones }),

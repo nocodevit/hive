@@ -39,11 +39,12 @@ test.describe('App Launch', () => {
     await expect(addProject).toBeVisible()
   })
 
-  test('left sidebar has app settings', async () => {
+  test('app settings modal opens', async () => {
+    const settingsBtn = page.locator('button[title="App Settings"]')
+    await expect(settingsBtn).toBeVisible()
+    await settingsBtn.click()
     await expect(page.locator('text=Auto-run Claude')).toBeVisible()
     await expect(page.locator('text=Resume session')).toBeVisible()
-    await expect(page.locator('text=Files panel')).toBeVisible()
-    await expect(page.locator('text=Max logs')).toBeVisible()
   })
 })
 
