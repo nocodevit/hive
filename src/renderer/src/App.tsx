@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import Terminal from './components/Terminal'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
+import Modal from './components/Modal'
 import CreateProjectModal from './components/CreateProjectModal'
 import CreateAgentModal from './components/CreateAgentModal'
 import ProjectSettingsModal from './components/ProjectSettingsModal'
@@ -56,6 +57,7 @@ export default function App() {
   const [showCreateAgent, setShowCreateAgent] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<any>(null)
   const [customTemplates, setCustomTemplates] = useState<any[]>([])
+  const [showAppSettings, setShowAppSettings] = useState(false)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [projectTab, setProjectTab] = useState<'office' | 'project' | 'settings'>('office')
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
@@ -265,68 +267,28 @@ export default function App() {
           )}
         </div>
         <div className="p-2 border-t border-border space-y-1">
-          <div className="flex items-center justify-between px-3 py-1.5">
-            <span className="text-[11px] text-text-muted">Auto-run Claude</span>
+          <div className="flex gap-1">
             <button
-              onClick={() => setAppPrefs((p) => ({ ...p, autoRunClaude: !p.autoRunClaude }))}
-              className={`w-8 h-[18px] rounded-full cursor-pointer transition-colors relative ${
-                appPrefs.autoRunClaude ? 'bg-accent' : 'bg-bg-hover'
-              }`}
+              onClick={() => setShowCreateProject(true)}
+              className="flex-1 px-3 py-2 rounded-lg text-sm text-text-muted
+                hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer
+                flex items-center gap-2"
             >
-              <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
-                appPrefs.autoRunClaude ? 'left-[14px]' : 'left-[2px]'
-              }`} />
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
+              </svg>
+              Add Project
+            </button>
+            <button
+              onClick={() => setShowAppSettings(true)}
+              className="px-2 py-2 rounded-lg text-text-muted hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer"
+              title="App Settings"
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+              </svg>
             </button>
           </div>
-          <div className="flex items-center justify-between px-3 py-1.5">
-            <span className="text-[11px] text-text-muted">Resume session</span>
-            <button
-              onClick={() => setAppPrefs((p) => ({ ...p, continueSession: !p.continueSession }))}
-              className={`w-8 h-[18px] rounded-full cursor-pointer transition-colors relative ${
-                appPrefs.continueSession ? 'bg-accent' : 'bg-bg-hover'
-              }`}
-            >
-              <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
-                appPrefs.continueSession ? 'left-[14px]' : 'left-[2px]'
-              }`} />
-            </button>
-          </div>
-          <div className="flex items-center justify-between px-3 py-1.5">
-            <span className="text-[11px] text-text-muted">Files panel</span>
-            <button
-              onClick={() => setShowFiles((p) => !p)}
-              className={`w-8 h-[18px] rounded-full cursor-pointer transition-colors relative ${
-                showFiles ? 'bg-accent' : 'bg-bg-hover'
-              }`}
-            >
-              <span className={`absolute top-[2px] w-[14px] h-[14px] rounded-full bg-white transition-transform ${
-                showFiles ? 'left-[14px]' : 'left-[2px]'
-              }`} />
-            </button>
-          </div>
-          <div className="flex items-center justify-between px-3 py-1.5">
-            <span className="text-[11px] text-text-muted">Max logs</span>
-            <select
-              value={appPrefs.maxLogs}
-              onChange={(e) => setAppPrefs((p) => ({ ...p, maxLogs: Number(e.target.value) }))}
-              className="text-[11px] bg-bg-hover text-text-primary rounded px-1.5 py-0.5 cursor-pointer border-none"
-            >
-              {[50, 100, 200, 500].map((n) => (
-                <option key={n} value={n}>{n}</option>
-              ))}
-            </select>
-          </div>
-          <button
-            onClick={() => setShowCreateProject(true)}
-            className="w-full px-3 py-2 rounded-lg text-sm text-text-muted
-              hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer
-              flex items-center gap-2"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-            </svg>
-            Add Project
-          </button>
         </div>
       </div>
 
@@ -886,67 +848,6 @@ export default function App() {
                     </div>
                   </div>
 
-                  {/* Agent Templates */}
-                  <div>
-                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
-                      Agent Templates
-                    </label>
-                    <div className="space-y-1">
-                      {[...BUILTIN_TEMPLATES, ...customTemplates].map((t: any) => (
-                        <div key={t.id} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-secondary border border-border">
-                          <span className="text-xs text-text-primary flex-1">{t.name}
-                            <span className="text-text-muted ml-1 text-[10px]">{t.role} · {t.category}</span>
-                          </span>
-                          <button onClick={() => setEditingTemplate(t)}
-                            className="text-[10px] text-accent hover:text-accent-hover cursor-pointer">Edit</button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Default Skills */}
-                  <div>
-                    <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">
-                      Default Skills for New Agents
-                    </label>
-                    <div className="space-y-3">
-                      <div className="p-3 rounded-xl bg-bg-secondary border border-border">
-                        <p className="text-[11px] text-accent font-semibold uppercase mb-2">R&D Agents</p>
-                        <div className="flex flex-wrap gap-1">
-                          {availableSkills.map((s) => (
-                            <button key={`rnd-${s.name}`}
-                              onClick={() => setAppPrefs((p) => {
-                                const cur = p.defaultSkillsRnD || []
-                                const next = cur.includes(s.name) ? cur.filter((x) => x !== s.name) : [...cur, s.name]
-                                return { ...p, defaultSkillsRnD: next }
-                              })}
-                              className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${
-                                (appPrefs.defaultSkillsRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'
-                              }`}
-                            >/{s.name}</button>
-                          ))}
-                        </div>
-                      </div>
-                      <div className="p-3 rounded-xl bg-bg-secondary border border-border">
-                        <p className="text-[11px] text-status-working font-semibold uppercase mb-2">Non-R&D Agents</p>
-                        <div className="flex flex-wrap gap-1">
-                          {availableSkills.map((s) => (
-                            <button key={`non-${s.name}`}
-                              onClick={() => setAppPrefs((p) => {
-                                const cur = p.defaultSkillsNonRnD || []
-                                const next = cur.includes(s.name) ? cur.filter((x) => x !== s.name) : [...cur, s.name]
-                                return { ...p, defaultSkillsNonRnD: next }
-                              })}
-                              className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${
-                                (appPrefs.defaultSkillsNonRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'
-                              }`}
-                            >/{s.name}</button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Danger Zone */}
                   <div className="pt-4 border-t border-border">
                     <button
@@ -1440,6 +1341,97 @@ export default function App() {
           defaultSkillsNonRnD={appPrefs.defaultSkillsNonRnD || []}
           onCreate={handleCreateAgent}
         />
+      )}
+
+      {/* App Settings Modal */}
+      {showAppSettings && (
+        <Modal open={showAppSettings} onClose={() => setShowAppSettings(false)} title="App Settings">
+          <div className="space-y-5 max-h-[70vh] overflow-y-auto">
+            {/* Toggles */}
+            <div>
+              <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">General</label>
+              <div className="space-y-2 rounded-xl bg-bg-secondary border border-border overflow-hidden">
+                {[
+                  { label: 'Auto-run Claude', key: 'autoRunClaude' as const, value: appPrefs.autoRunClaude },
+                  { label: 'Resume session (-c)', key: 'continueSession' as const, value: appPrefs.continueSession },
+                ].map(({ label, key, value }) => (
+                  <div key={key} className="flex items-center justify-between px-4 py-2.5 border-b border-border last:border-0">
+                    <span className="text-sm text-text-primary">{label}</span>
+                    <button onClick={() => setAppPrefs((p) => ({ ...p, [key]: !value }))}
+                      className={`w-9 h-5 rounded-full cursor-pointer transition-colors relative ${value ? 'bg-accent' : 'bg-bg-hover'}`}>
+                      <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${value ? 'left-[18px]' : 'left-0.5'}`} />
+                    </button>
+                  </div>
+                ))}
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
+                  <span className="text-sm text-text-primary">Files panel</span>
+                  <button onClick={() => setShowFiles((p) => !p)}
+                    className={`w-9 h-5 rounded-full cursor-pointer transition-colors relative ${showFiles ? 'bg-accent' : 'bg-bg-hover'}`}>
+                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${showFiles ? 'left-[18px]' : 'left-0.5'}`} />
+                  </button>
+                </div>
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-sm text-text-primary">Max logs</span>
+                  <select value={appPrefs.maxLogs} onChange={(e) => setAppPrefs((p) => ({ ...p, maxLogs: Number(e.target.value) }))}
+                    className="text-sm bg-bg-hover text-text-primary rounded px-2 py-1 cursor-pointer border-none">
+                    {[50, 100, 200, 500].map((n) => <option key={n} value={n}>{n}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Default Skills */}
+            <div>
+              <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Default Skills</label>
+              <div className="space-y-3">
+                <div className="p-3 rounded-xl bg-bg-secondary border border-border">
+                  <p className="text-[11px] text-accent font-semibold uppercase mb-2">R&D Agents</p>
+                  <div className="flex flex-wrap gap-1">
+                    {availableSkills.map((s) => (
+                      <button key={`rnd-${s.name}`}
+                        onClick={() => setAppPrefs((p) => {
+                          const cur = p.defaultSkillsRnD || []
+                          return { ...p, defaultSkillsRnD: cur.includes(s.name) ? cur.filter((x) => x !== s.name) : [...cur, s.name] }
+                        })}
+                        className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${(appPrefs.defaultSkillsRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
+                      >/{s.name}</button>
+                    ))}
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-bg-secondary border border-border">
+                  <p className="text-[11px] text-status-working font-semibold uppercase mb-2">Non-R&D Agents</p>
+                  <div className="flex flex-wrap gap-1">
+                    {availableSkills.map((s) => (
+                      <button key={`non-${s.name}`}
+                        onClick={() => setAppPrefs((p) => {
+                          const cur = p.defaultSkillsNonRnD || []
+                          return { ...p, defaultSkillsNonRnD: cur.includes(s.name) ? cur.filter((x) => x !== s.name) : [...cur, s.name] }
+                        })}
+                        className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${(appPrefs.defaultSkillsNonRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
+                      >/{s.name}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Templates */}
+            <div>
+              <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Agent Templates</label>
+              <div className="space-y-1">
+                {[...BUILTIN_TEMPLATES, ...customTemplates].map((t: any) => (
+                  <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border">
+                    <span className="text-sm text-text-primary flex-1">{t.name}
+                      <span className="text-text-muted ml-1 text-[10px]">{t.role} · {t.category}</span>
+                    </span>
+                    <button onClick={() => { setShowAppSettings(false); setEditingTemplate(t) }}
+                      className="text-[11px] text-accent hover:text-accent-hover cursor-pointer">Edit</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </Modal>
       )}
 
       <EditTemplateModal
