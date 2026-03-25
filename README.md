@@ -70,6 +70,9 @@ Left-right split: write markdown on the left, see rendered preview on the right.
 ### Default Skills per Department
 Configure global default skills for R&D and Non-R&D agents in Project Settings. New agents auto-inherit defaults. Override per agent during creation.
 
+### Template Editor
+Edit any template (built-in or custom) from Project Settings. Modify sections, skills, model, effort with live preview. "Save + Sync Agents" updates all agents using that role.
+
 ### Multiple Agent Terminals
 Run N Claude Code sessions side by side. Click to switch. Each terminal persists — switch between agents without losing state. Auto-run Claude on terminal open.
 
