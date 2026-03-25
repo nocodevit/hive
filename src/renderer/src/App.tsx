@@ -54,6 +54,8 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [activeTerminals, setActiveTerminals] = useState<Set<string>>(new Set())
+  const launchedOnceRef = useRef<Set<string>>(new Set())
+  const [restartingAgents, setRestartingAgents] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [showCreateAgent, setShowCreateAgent] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<any>(null)
@@ -61,6 +63,9 @@ export default function App() {
   const [showAppSettings, setShowAppSettings] = useState(false)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [previewFilePath, setPreviewFilePath] = useState<string | null>(null)
+  const [teamPrompt, setTeamPrompt] = useState<{ dept: string } | null>(null)
+  const [teamNameInput, setTeamNameInput] = useState('')
+  const [teamSelectedAgents, setTeamSelectedAgents] = useState<Set<string>>(new Set())
   const [projectTab, setProjectTab] = useState<'office' | 'project' | 'settings'>('office')
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
@@ -194,6 +199,10 @@ export default function App() {
       setAgentNames((prev) => ({ ...prev, [agent.id]: result.agentName! }))
     }
 
+    if (launchedOnceRef.current.has(agent.id)) {
+      setRestartingAgents((prev) => new Set(prev).add(agent.id))
+    }
+    launchedOnceRef.current.add(agent.id)
     setActiveTerminals((prev) => new Set(prev).add(agent.id))
     setSelectedAgentId(agent.id)
     setMainView('terminal')
@@ -237,7 +246,7 @@ export default function App() {
       <div className="bg-sidebar-bg flex flex-col flex-shrink-0" style={{ width: panelWidths.projects }}>
         <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
           <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
-            Hive v0.5.0
+            Hive v0.5.1
           </h2>
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
         </div>
@@ -266,6 +275,10 @@ export default function App() {
                 return <span className="w-4 text-center text-[11px] flex-shrink-0" title="Agents offline">💤</span>
               })()}
               <span className="truncate">{project.name}</span>
+              {(() => {
+                const count = agents.filter((a) => a.projectId === project.id).length
+                return count > 0 ? <span className="ml-auto text-[10px] text-text-muted/50 flex-shrink-0">{count}</span> : null
+              })()}
             </button>
           ))}
           {projects.length === 0 && (
@@ -311,24 +324,80 @@ export default function App() {
           <>
             <div className="flex-1 overflow-y-auto p-2 space-y-3">
               {departments.map((dept) => {
-                const deptAgents = projectAgents.filter((a) => a.department === dept)
-                const groups = [...new Set(deptAgents.map((a) => a.group || ''))]
+                const deptAgents = projectAgents.filter((a) => a.department === dept).sort((a, b) => (a.order || 0) - (b.order || 0))
+                const groups = [...new Set(deptAgents.map((a) => a.group || ''))].sort()
+
+                const handleDrop = (targetId: string, targetGroup: string) => {
+                  if (!dragAgentId || dragAgentId === targetId) return
+                  setAgents((prev) => {
+                    const dragged = prev.find((a) => a.id === dragAgentId)
+                    if (!dragged || dragged.department !== dept) return prev
+                    // Build ordered list for this dept, move dragged to before target
+                    const deptList = prev
+                      .filter((a) => a.projectId === dragged.projectId && a.department === dept)
+                      .sort((a, b) => (a.order || 0) - (b.order || 0))
+                    const without = deptList.filter((a) => a.id !== dragAgentId)
+                    const targetIdx = without.findIndex((a) => a.id === targetId)
+                    const updated = { ...dragged, group: targetGroup }
+                    const reordered = targetIdx >= 0
+                      ? [...without.slice(0, targetIdx), updated, ...without.slice(targetIdx)]
+                      : [...without, updated]
+                    // Assign clean sequential order
+                    const orderMap = new Map(reordered.map((a, i) => [a.id, i]))
+                    return prev.map((a) => {
+                      if (!orderMap.has(a.id)) return a
+                      const newOrder = orderMap.get(a.id)!
+                      if (a.id === dragAgentId) return { ...a, group: targetGroup, order: newOrder }
+                      return { ...a, order: newOrder }
+                    })
+                  })
+                  setDragAgentId(null)
+                }
 
                 return (
-                  <div key={dept}>
-                    <div className="px-3 py-1.5 text-[11px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
+                  <div key={dept} className="rounded-xl bg-bg-primary/50 border border-border/50 shadow-sm p-1.5">
+                    <div className="px-2.5 py-1.5 text-[11px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                       </svg>
                       {dept}
+                      <button
+                        onClick={() => { setTeamPrompt({ dept }); setTeamNameInput(''); setTeamSelectedAgents(new Set()) }}
+                        className="ml-auto text-[10px] text-accent hover:text-accent-hover cursor-pointer"
+                        title="Add team"
+                      >+ Team</button>
                     </div>
                     {groups.map((grp) => {
-                      const grpAgents = deptAgents.filter((a) => (a.group || '') === grp)
+                      const grpAgents = deptAgents.filter((a) => (a.group || '') === grp).sort((a, b) => (a.order || 0) - (b.order || 0))
                       return (
-                        <div key={grp || '_ungrouped'} className="space-y-0.5">
+                        <div
+                          key={grp || '_ungrouped'}
+                          className="space-y-0.5"
+                          onDragOver={(e) => e.preventDefault()}
+                          onDrop={() => {
+                            // Drop on empty group area
+                            if (dragAgentId) {
+                              const dragged = agents.find((a) => a.id === dragAgentId)
+                              if (dragged && dragged.department === dept) {
+                                setAgents((prev) => prev.map((a) => a.id === dragAgentId ? { ...a, group: grp, order: grpAgents.length } : a))
+                                setDragAgentId(null)
+                              }
+                            }
+                          }}
+                        >
                           {grp && (
-                            <div className="px-5 py-1 text-[10px] font-heading font-medium text-text-muted/70 uppercase tracking-wider">
+                            <div className="px-5 py-1 text-[10px] font-heading font-medium text-text-muted/70 uppercase tracking-wider flex items-center">
                               {grp}
+                              <button
+                                onClick={() => {
+                                  // Remove team — move all agents to ungrouped
+                                  setAgents((prev) => prev.map((a) => a.group === grp && a.department === dept ? { ...a, group: '' } : a))
+                                }}
+                                className="ml-auto text-text-muted/40 hover:text-red-400 cursor-pointer"
+                                title="Remove team"
+                              >
+                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                              </button>
                             </div>
                           )}
                           {grpAgents.map((agent) => (
@@ -336,26 +405,13 @@ export default function App() {
                               key={agent.id}
                               draggable
                               onDragStart={() => setDragAgentId(agent.id)}
-                              onDragOver={(e) => e.preventDefault()}
-                              onDrop={() => {
-                                if (dragAgentId && dragAgentId !== agent.id) {
-                                  setAgents((prev) => {
-                                    const dragged = prev.find((a) => a.id === dragAgentId)
-                                    const target = prev.find((a) => a.id === agent.id)
-                                    if (!dragged || !target) return prev
-                                    // Swap order values
-                                    return prev.map((a) => {
-                                      if (a.id === dragAgentId) return { ...a, order: target.order || 0, group: target.group || '' }
-                                      if (a.id === agent.id) return { ...a, order: dragged.order || 0 }
-                                      return a
-                                    })
-                                  })
-                                  setDragAgentId(null)
-                                }
-                              }}
+                              onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
+                              onDrop={(e) => { e.stopPropagation(); handleDrop(agent.id, grp) }}
                               onDragEnd={() => setDragAgentId(null)}
                               className={`group w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5
                                 transition-colors cursor-grab active:cursor-grabbing ${
+                                grp ? 'ml-2' : ''
+                              } ${
                                 dragAgentId === agent.id ? 'opacity-50' : ''
                               } ${
                                 selectedAgentId === agent.id
@@ -418,6 +474,22 @@ export default function App() {
                         </div>
                       )
                     })}
+                    {/* Drop zone to remove from team (ungrouped) */}
+                    <div
+                      className={`mx-1 mt-1 rounded-lg border border-dashed border-transparent text-center text-[10px] text-text-muted/40 transition-colors py-1 ${dragAgentId ? 'border-border !text-text-muted/70' : 'hidden'}`}
+                      onDragOver={(e) => e.preventDefault()}
+                      onDrop={() => {
+                        if (dragAgentId) {
+                          const dragged = agents.find((a) => a.id === dragAgentId)
+                          if (dragged && dragged.department === dept) {
+                            setAgents((prev) => prev.map((a) => a.id === dragAgentId ? { ...a, group: '' } : a))
+                            setDragAgentId(null)
+                          }
+                        }
+                      }}
+                    >
+                      Drop here to ungroup
+                    </div>
                   </div>
                 )
               })}
@@ -906,6 +978,7 @@ export default function App() {
                   autoRunClaude={appPrefs.autoRunClaude}
                   continueSession={appPrefs.continueSession}
                   startupCommand={agent.preferences?.startupCommand}
+                  rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath && restartingAgents.has(agent.id)}
                 />
               </div>
             )
@@ -1378,6 +1451,7 @@ export default function App() {
                 {[
                   { label: 'Auto-run Claude', key: 'autoRunClaude' as const, value: appPrefs.autoRunClaude },
                   { label: 'Resume session (-c)', key: 'continueSession' as const, value: appPrefs.continueSession },
+                  { label: 'Rebase on restart', key: 'rebaseOnRestart' as const, value: appPrefs.rebaseOnRestart !== false },
                 ].map(({ label, key, value }) => (
                   <div key={key} className="flex items-center justify-between px-4 py-2.5 border-b border-border last:border-0">
                     <span className="text-sm text-text-primary">{label}</span>
@@ -1544,6 +1618,69 @@ export default function App() {
           }
         }}
       />
+
+      {/* Team name prompt */}
+      {teamPrompt && (() => {
+        const ungroupedAgents = agents.filter((a) => a.department === teamPrompt.dept && !a.group && a.projectId === selectedProject?.id)
+        const canCreate = teamNameInput.trim() && teamSelectedAgents.size > 0
+        const handleCreateTeam = () => {
+          if (!canCreate) return
+          setAgents((prev) => prev.map((a) => teamSelectedAgents.has(a.id) ? { ...a, group: teamNameInput.trim() } : a))
+          setTeamPrompt(null)
+        }
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center">
+            <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setTeamPrompt(null)} />
+            <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-2xl w-[360px] p-5">
+              <h3 className="text-sm font-heading font-semibold text-text-primary mb-3">New Team in {teamPrompt.dept}</h3>
+              <input
+                autoFocus
+                type="text"
+                value={teamNameInput}
+                onChange={(e) => setTeamNameInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleCreateTeam() }}
+                placeholder="Team name..."
+                className="w-full px-3 py-2 rounded-lg bg-bg-primary border border-border text-text-primary text-sm placeholder:text-text-muted/50 focus:outline-none focus:border-accent mb-3"
+              />
+              {ungroupedAgents.length > 0 ? (
+                <>
+                  <label className="block text-[10px] text-text-muted uppercase tracking-wider font-semibold mb-2">Select agents to add</label>
+                  <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                    {ungroupedAgents.map((a) => (
+                      <label key={a.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-bg-hover cursor-pointer transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={teamSelectedAgents.has(a.id)}
+                          onChange={() => setTeamSelectedAgents((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(a.id)) next.delete(a.id)
+                            else next.add(a.id)
+                            return next
+                          })}
+                          className="accent-[var(--accent)]"
+                        />
+                        <div className="w-5 h-5 flex-shrink-0"><AvatarPreview config={a.avatar} size={20} /></div>
+                        <span className="text-sm text-text-primary">{a.name}</span>
+                        <span className="text-[10px] text-text-muted ml-auto">{a.role}</span>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="text-[11px] text-text-muted italic py-2">No ungrouped agents in {teamPrompt.dept}.</p>
+              )}
+              <div className="flex justify-end gap-2 mt-3">
+                <button onClick={() => setTeamPrompt(null)} className="px-3 py-1.5 rounded-lg text-[11px] text-text-muted hover:bg-bg-hover cursor-pointer">Cancel</button>
+                <button
+                  onClick={handleCreateTeam}
+                  disabled={!canCreate}
+                  className="px-3 py-1.5 rounded-lg text-[11px] bg-accent text-text-on-purple font-medium hover:bg-accent-hover cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                >Create Team ({teamSelectedAgents.size})</button>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       <MarkdownPreviewModal filePath={previewFilePath} onClose={() => setPreviewFilePath(null)} />
     </div>
