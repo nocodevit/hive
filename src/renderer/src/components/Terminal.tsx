@@ -97,10 +97,11 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
               setTimeout(() => window.api.pty.write(id, startupCommand + '\r'), 500)
             } else if (autoRunClaude) {
               const agent = `hive-${agentId}`
-              let cmd = `claude --agent ${agent}`
-              if (continueSession) cmd += ' -c'
-              cmd += ` -n "${agentName}"`
-              setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
+              // Use -c only if there's a previous session (avoid "No conversation found" error)
+              const tryCmd = continueSession
+                ? `claude --agent ${agent} -c -n "${agentName}" 2>/dev/null || claude --agent ${agent} -n "${agentName}"`
+                : `claude --agent ${agent} -n "${agentName}"`
+              setTimeout(() => window.api.pty.write(id, tryCmd + '\r'), 500)
             }
           })
           .catch((err) => {
