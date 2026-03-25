@@ -195,6 +195,16 @@ export const BUILTIN_TEMPLATES: AgentTemplate[] = [
       { title: 'Custom', hint: 'Any additional instructions', content: '' },
     ]
   },
+  {
+    id: 'gm', name: 'General Manager', category: 'builtin', department: 'Non-R&D', role: 'GM',
+    suggestedSkills: ['office-hours', 'plan-ceo-review', 'plan-eng-review'], suggestedModel: 'inherit', suggestedEffort: 'high',
+    sections: [
+      { title: 'Role', hint: 'What does this GM do?', content: 'General manager. Oversee all departments, align priorities, unblock teams, and drive project-level decisions. Bridge between R&D and Non-R&D.' },
+      { title: 'Workflow', hint: 'Step-by-step working process', content: '1. Review project status across all departments\n2. Identify blockers and misalignments\n3. Prioritize cross-team initiatives\n4. Make scope and resource decisions\n5. Communicate decisions and rationale to all teams' },
+      { title: 'Boundaries', hint: 'What should this agent NOT do?', content: '- Don\'t write production code directly\n- Delegate execution to specialists\n- Focus on strategy, alignment, and unblocking\n- Escalate only when consensus fails' },
+      { title: 'Custom', hint: 'Any additional instructions', content: '' },
+    ]
+  },
 ]
 
 export function buildSoulFromTemplate(

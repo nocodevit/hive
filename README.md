@@ -100,7 +100,12 @@ Claude auto-reports task start (title) and completion (summary) via `.claude/hiv
 Claude Code hooks report agent status to Hive via localhost webhook (port 17710). `PreToolUse` → working, `Stop` → idle. Deduped — only status changes are logged.
 
 ### Git Worktree Isolation
-Each coding agent automatically gets its own git worktree and branch. Agents work in parallel without conflicts. Worktree auto-removed when agent is deleted.
+When creating a project, you can **git clone** a repo directly into an R&D folder (supports GitHub and GitLab with token auth for private repos). When a coding agent is assigned to a git-enabled R&D folder and launched:
+
+1. Hive creates a **sibling worktree** directory: `{repo}-{agent-name}/`
+2. A dedicated branch `hive/{agent-name}-{id}` is created from HEAD
+3. The agent works entirely within its own worktree — no merge conflicts between agents
+4. Worktree and branch are auto-removed when the agent is deleted
 
 ### Agent Memory
 Each agent has isolated persistent memory at `~/.hive/memory/{agentId}/`. Symlinked to working directory. Keyed by ID, survives renames.
@@ -158,6 +163,7 @@ Permanent activity log per agent. Tasks grouped with START/DONE badges. Status t
 
 | Version | Description | Download |
 |---------|-------------|----------|
+| v0.5.0-beta | File explorer tree, git clone, GitHub/GitLab tokens, scroll fix | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.5.0-beta) |
 | v0.4.0-beta | Native --agent, templates, split editor, session resume | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.4.0-beta) |
 | v0.3.0-beta | Office viz, files panel, resizable, job pickup | [Release](https://github.com/nocodevit/hive/releases/tag/v0.3.0-beta) |
 | v0.2.0-beta | Soul injection, task reporting, avatar editor, worktree | [Release](https://github.com/nocodevit/hive/releases/tag/v0.2.0-beta) |
@@ -245,6 +251,7 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [ ] **Offline log buffer** — hive-report.sh saves to local file when Hive is offline, syncs on reconnect
 - [ ] Agency-Agents role templates
 - [ ] claude-mem / memsearch for enhanced memory
+- [ ] **Voice input** — Mic button in terminal input for push-to-talk dictation. Options: macOS native SFSpeechRecognizer (free, offline, via native module), OpenAI Whisper API ($0.006/min), or local whisper.cpp. Ref: Warp uses Wispr Flow cloud service
 
 ## Contributing
 

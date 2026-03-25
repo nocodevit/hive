@@ -8,6 +8,7 @@ import ProjectSettingsModal from './components/ProjectSettingsModal'
 import ResizeHandle from './components/ResizeHandle'
 import EditTemplateModal from './components/EditTemplateModal'
 import FilesPanel from './components/FilesPanel'
+import MarkdownPreviewModal from './components/MarkdownPreviewModal'
 import OfficeView from './components/OfficeView'
 import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo } from './types'
@@ -59,6 +60,7 @@ export default function App() {
   const [customTemplates, setCustomTemplates] = useState<any[]>([])
   const [showAppSettings, setShowAppSettings] = useState(false)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
+  const [previewFilePath, setPreviewFilePath] = useState<string | null>(null)
   const [projectTab, setProjectTab] = useState<'office' | 'project' | 'settings'>('office')
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
@@ -205,9 +207,11 @@ export default function App() {
   }
 
   const getAgentZonePath = (agent: Agent): string => {
-    const project = projects.find((p) => p.id === agent.projectId)
-    const zone = project?.zones.find((z: Zone) => z.id === agent.zoneId)
-    const path = zone?.path || ''
+    const path = agent.worktreePath || (() => {
+      const project = projects.find((p) => p.id === agent.projectId)
+      const zone = project?.zones.find((z: Zone) => z.id === agent.zoneId)
+      return zone?.path || ''
+    })()
     const home = '/Users/' + path.split('/Users/')[1]?.split('/')[0]
     return path.replace(home ? `/Users/${path.split('/Users/')[1]?.split('/')[0]}` : '', '~')
   }
@@ -233,7 +237,7 @@ export default function App() {
       <div className="bg-sidebar-bg flex flex-col flex-shrink-0" style={{ width: panelWidths.projects }}>
         <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
           <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
-            Hive v0.4.0
+            Hive v0.5.0
           </h2>
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
         </div>
@@ -253,11 +257,13 @@ export default function App() {
               }`}
             >
               {(() => {
-                const scan = projectScans[project.id]
-                const stageColor = !scan ? 'bg-status-done' :
-                  scan.projectStage === 'active-online' || scan.projectStage === 'active' ? 'bg-status-working' :
-                  scan.projectStage === 'incubating' ? 'bg-status-waiting' : 'bg-status-done'
-                return <span className={`w-2 h-2 rounded-full flex-shrink-0 ${stageColor}`} />
+                const projectAgents = agents.filter((a) => a.projectId === project.id)
+                const hasWorking = projectAgents.some((a) => a.status === 'working')
+                const hasWaiting = projectAgents.some((a) => a.status === 'waiting')
+                if (projectAgents.length === 0) return <span className="w-4 text-center text-[11px] flex-shrink-0" title="No agents">🕳️</span>
+                if (hasWorking) return <span className="w-4 text-center text-[11px] flex-shrink-0" title="Agents working">🏃</span>
+                if (hasWaiting) return <span className="w-4 text-center text-[11px] flex-shrink-0" title="Agents idle">☕</span>
+                return <span className="w-4 text-center text-[11px] flex-shrink-0" title="Agents offline">💤</span>
               })()}
               <span className="truncate">{project.name}</span>
             </button>
@@ -503,9 +509,15 @@ export default function App() {
               </button>
               {mainView === 'terminal' && activeTerminals.has(selectedAgent!.id) && (
                 <button
-                  onClick={() => {
+                  onClick={async () => {
+                    // Reload data.json first
+                    const data = await window.api.data.load()
+                    if (data.agents) setAgents(data.agents as Agent[])
+                    if (data.projects) setProjects(data.projects as Project[])
+                    if (data.appPrefs) setAppPrefs((prev) => ({ ...prev, ...(data.appPrefs as Record<string, unknown>) }))
+
                     const agentId = selectedAgent!.id
-                    const agent = agents.find((a) => a.id === agentId)
+                    const agent = (data.agents as Agent[] || agents).find((a: Agent) => a.id === agentId)
                     window.api.pty.kill(agentId)
                     setActiveTerminals((prev) => {
                       const next = new Set(prev)
@@ -518,7 +530,7 @@ export default function App() {
                     }, 200)
                   }}
                   className="px-1.5 py-1 rounded-md text-text-muted hover:bg-bg-hover transition-colors cursor-pointer"
-                  title="Restart terminal"
+                  title="Restart terminal (reloads data)"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="23 4 23 10 17 10" />
@@ -1320,6 +1332,7 @@ export default function App() {
               project={selectedProject}
               agentCwd={cwd}
               width={panelWidths.files}
+              onOpenFile={setPreviewFilePath}
             />
           </>
         )
@@ -1330,6 +1343,7 @@ export default function App() {
         open={showCreateProject}
         onClose={() => setShowCreateProject(false)}
         onCreate={handleCreateProject}
+        gitTokens={{ github: appPrefs.githubToken, gitlab: appPrefs.gitlabToken }}
       />
       {selectedProject && (
         <CreateAgentModal
@@ -1386,6 +1400,39 @@ export default function App() {
                     className="text-sm bg-bg-hover text-text-primary rounded px-2 py-1 cursor-pointer border-none">
                     {[50, 100, 200, 500].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
+                </div>
+              </div>
+            </div>
+
+            {/* Git Tokens */}
+            <div>
+              <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Git Tokens</label>
+              <div className="space-y-2 rounded-xl bg-bg-secondary border border-border overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm text-text-primary">GitHub</span>
+                    <span className="text-[10px] text-text-muted">{appPrefs.githubToken ? 'configured' : 'not set'}</span>
+                  </div>
+                  <input
+                    type="password"
+                    value={appPrefs.githubToken || ''}
+                    onChange={(e) => setAppPrefs((p) => ({ ...p, githubToken: e.target.value }))}
+                    placeholder="ghp_..."
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[12px] font-mono placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
+                  />
+                </div>
+                <div className="px-4 py-2.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm text-text-primary">GitLab</span>
+                    <span className="text-[10px] text-text-muted">{appPrefs.gitlabToken ? 'configured' : 'not set'}</span>
+                  </div>
+                  <input
+                    type="password"
+                    value={appPrefs.gitlabToken || ''}
+                    onChange={(e) => setAppPrefs((p) => ({ ...p, gitlabToken: e.target.value }))}
+                    placeholder="glpat-..."
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[12px] font-mono placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
+                  />
                 </div>
               </div>
             </div>
@@ -1461,7 +1508,7 @@ export default function App() {
               </div>
             </div>
           </div>
-        </div></div>
+        </div></div></div>
       )}
 
       <EditTemplateModal
@@ -1497,6 +1544,8 @@ export default function App() {
           }
         }}
       />
+
+      <MarkdownPreviewModal filePath={previewFilePath} onClose={() => setPreviewFilePath(null)} />
     </div>
   )
 }

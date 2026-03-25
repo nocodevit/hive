@@ -21,6 +21,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   const fitRef = useRef<FitAddon | null>(null)
   const ptyReady = useRef(false)
   const isAtBottom = useRef(true)
+  const visibleRef = useRef(visible)
   const [showScrollDown, setShowScrollDown] = useState(false)
 
   useEffect(() => {
@@ -72,7 +73,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
           .then(() => {
             window.api.pty.onData(id, (data) => {
               term.write(data)
-              if (isAtBottom.current) term.scrollToBottom()
+              if (visibleRef.current && isAtBottom.current) term.scrollToBottom()
             })
 
             window.api.pty.onExit(id, () => {
@@ -97,11 +98,10 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
               setTimeout(() => window.api.pty.write(id, startupCommand + '\r'), 500)
             } else if (autoRunClaude) {
               const agent = `hive-${agentId}`
-              // Use -c only if there's a previous session (avoid "No conversation found" error)
-              const tryCmd = continueSession
-                ? `claude --agent ${agent} -c -n "${agentName}" 2>/dev/null || claude --agent ${agent} -n "${agentName}"`
+              const cmd = continueSession
+                ? `claude --agent ${agent} -c -n "${agentName}"`
                 : `claude --agent ${agent} -n "${agentName}"`
-              setTimeout(() => window.api.pty.write(id, tryCmd + '\r'), 500)
+              setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
             }
           })
           .catch((err) => {
@@ -121,6 +121,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   }, [id, cwd])
 
   useEffect(() => {
+    visibleRef.current = visible
     if (visible && fitRef.current) {
       setTimeout(() => {
         try { fitRef.current?.fit() } catch {}
@@ -144,6 +145,15 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
+    // Files dragged from Finder
+    if (e.dataTransfer.files.length > 0) {
+      const paths = Array.from(e.dataTransfer.files).map((f) => f.path).filter(Boolean)
+      if (paths.length > 0) {
+        window.api.pty.write(id, paths.map((p) => p.includes(' ') ? `"${p}"` : p).join(' '))
+        return
+      }
+    }
+    // Files dragged from FilesPanel
     const path = e.dataTransfer.getData('text/plain')
     if (path) window.api.pty.write(id, path)
   }

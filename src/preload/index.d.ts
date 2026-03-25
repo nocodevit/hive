@@ -20,6 +20,8 @@ declare global {
         hasGit: (path: string) => Promise<boolean>
         scanFiles: (dirPath: string, limit?: number) => Promise<{ path: string; mtime: number; size: number }[]>
         revealInFinder: (filePath: string) => Promise<void>
+        readFile: (filePath: string) => Promise<string | null>
+        writeFile: (filePath: string, content: string) => Promise<boolean>
       }
       git: {
         worktreeAdd: (repoPath: string, agentId: string, agentName: string) =>
@@ -28,6 +30,8 @@ declare global {
           Promise<{ ok: boolean; error?: string }>
         worktreeList: (repoPath: string) =>
           Promise<{ path: string; branch: string }[]>
+        clone: (url: string, destPath: string, token?: string, provider?: string) =>
+          Promise<{ ok: boolean; path?: string; name?: string; error?: string }>
       }
       project: {
         scan: (zones: { path: string; type: string }[]) => Promise<{ projectStage: string; todos: any[] }>

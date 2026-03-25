@@ -118,8 +118,11 @@ function writeAgentDefinition(cwd: string, config: {
   mkdirSync(agentsDir, { recursive: true })
 
   const agentName = `hive-${config.agentId}`
-  const curlPost = (endpoint: string, jsonBody: string) =>
+  const curlCmd = (endpoint: string, jsonBody: string) =>
     `curl -s -X POST http://127.0.0.1:${HIVE_PORT}${endpoint} -H "Content-Type: application/json" -d '${jsonBody}' > /dev/null 2>&1`
+
+  const yamlHookBlock = (event: string, cmd: string) =>
+    `  ${event}:\n    - matcher: ""\n      hooks:\n        - type: command\n          command: >-\n            ${cmd}\n`
 
   // Build YAML frontmatter
   let yaml = `---\n`
@@ -131,8 +134,8 @@ function writeAgentDefinition(cwd: string, config: {
     yaml += `skills:\n${config.skills.map(s => `  - ${s}`).join('\n')}\n`
   }
   yaml += `hooks:\n`
-  yaml += `  PreToolUse:\n    - matcher: ""\n      hooks:\n        - type: command\n          command: "${curlPost('/status', `{"agentId":"${config.agentId}","status":"working"}`)}"\n`
-  yaml += `  Stop:\n    - matcher: ""\n      hooks:\n        - type: command\n          command: "${curlPost('/status', `{"agentId":"${config.agentId}","status":"waiting"}`)}"\n`
+  yaml += yamlHookBlock('PreToolUse', curlCmd('/status', `{"agentId":"${config.agentId}","status":"working"}`))
+  yaml += yamlHookBlock('Stop', curlCmd('/status', `{"agentId":"${config.agentId}","status":"waiting"}`))
   yaml += `---\n\n`
 
   // Markdown body = soul content
@@ -141,6 +144,11 @@ function writeAgentDefinition(cwd: string, config: {
   yaml += `\n\n## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
 
   writeFileSync(join(agentsDir, `${agentName}.md`), yaml)
+
+  // Write soul file to ~/.hive/souls/ for --append-system-prompt-file fallback
+  const soulsDir = join(app.getPath('home'), '.hive', 'souls')
+  if (!existsSync(soulsDir)) mkdirSync(soulsDir, { recursive: true })
+  writeFileSync(join(soulsDir, `${config.agentId}.md`), config.soul)
 
   // Setup agent-specific memory directory
   const memoryDir = join(app.getPath('home'), '.hive', 'memory', config.agentId)
@@ -327,6 +335,28 @@ ipcMain.handle('git:worktreeList', (_event, { repoPath }) => {
   }
 })
 
+// Git clone
+ipcMain.handle('git:clone', async (_event, { url, destPath, token, provider }: { url: string; destPath: string; token?: string; provider?: string }) => {
+  try {
+    const { execSync } = require('child_process')
+    let cloneUrl = url
+    // Inject token for authenticated clone
+    if (token && url.startsWith('https://')) {
+      const urlObj = new URL(url)
+      if (provider === 'gitlab') {
+        cloneUrl = `https://oauth2:${token}@${urlObj.host}${urlObj.pathname}`
+      } else {
+        cloneUrl = `https://${token}@${urlObj.host}${urlObj.pathname}`
+      }
+    }
+    execSync(`git clone "${cloneUrl}" "${destPath}"`, { encoding: 'utf-8', stdio: 'pipe', timeout: 120000 })
+    const folderName = destPath.split('/').pop() || ''
+    return { ok: true, path: destPath, name: folderName }
+  } catch (err) {
+    return { ok: false, error: String(err) }
+  }
+})
+
 // Scan project zones for todos and status
 ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type: string }[] }) => {
   const todos: { zone: string; type: string; category: string; text: string; done: boolean }[] = []
@@ -406,7 +436,7 @@ ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type
 
 // Scan files in directory, flattened, sorted by mtime
 ipcMain.handle('fs:scanFiles', (_event, { dirPath, limit = 100 }) => {
-  const SKIP = new Set(['node_modules', '.git', '.next', '.cache', '.hive', '__pycache__', '.DS_Store', '.Trash', '.Spotlight-V100', 'dist', 'build', 'out'])
+  const SKIP = new Set(['node_modules', '.git', '.next', '.cache', '.hive', '.claude', '__pycache__', '.DS_Store', '.Trash', '.Spotlight-V100', 'dist', 'build', 'out'])
   const files: { path: string; mtime: number; size: number }[] = []
 
   function walk(dir: string, depth: number) {
@@ -438,6 +468,11 @@ ipcMain.handle('fs:scanFiles', (_event, { dirPath, limit = 100 }) => {
 // Open file in Finder
 ipcMain.handle('fs:revealInFinder', (_event, { filePath }) => {
   shell.showItemInFolder(filePath)
+})
+
+// Write file
+ipcMain.handle('fs:writeFile', (_event, { filePath, content }) => {
+  try { writeFileSync(filePath, content); return true } catch { return false }
 })
 
 // Template management
