@@ -1345,7 +1345,17 @@ export default function App() {
 
       {/* App Settings Modal */}
       {showAppSettings && (
-        <Modal open={showAppSettings} onClose={() => setShowAppSettings(false)} title="App Settings">
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAppSettings(false)} />
+          <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-2xl w-[680px] max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <h2 className="font-heading font-semibold text-base text-text-primary">App Settings</h2>
+              <button onClick={() => setShowAppSettings(false)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:bg-bg-hover transition-colors cursor-pointer">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-5 max-h-[70vh] overflow-y-auto">
             {/* Toggles */}
             <div>
@@ -1418,20 +1428,40 @@ export default function App() {
             {/* Templates */}
             <div>
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Agent Templates</label>
-              <div className="space-y-1">
-                {[...BUILTIN_TEMPLATES, ...customTemplates].map((t: any) => (
-                  <div key={t.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border">
-                    <span className="text-sm text-text-primary flex-1">{t.name}
-                      <span className="text-text-muted ml-1 text-[10px]">{t.role} · {t.category}</span>
-                    </span>
-                    <button onClick={() => { setShowAppSettings(false); setEditingTemplate(t) }}
-                      className="text-[11px] text-accent hover:text-accent-hover cursor-pointer">Edit</button>
-                  </div>
-                ))}
+              <div className="space-y-1.5">
+                {[...BUILTIN_TEMPLATES, ...customTemplates].map((t: any) => {
+                  const inheritCount = agents.filter(a => a.role === t.role && a.department === t.department).length
+                  const inheritNames = agents.filter(a => a.role === t.role && a.department === t.department).map(a => a.name)
+                  return (
+                    <div key={t.id} className="px-4 py-3 rounded-xl bg-bg-primary border border-border">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-text-primary">{t.name}</span>
+                        <span className="text-[10px] text-text-muted">{t.role} · {t.category}</span>
+                        {inheritCount > 0 && (
+                          <span className="ml-auto px-2 py-0.5 rounded-full bg-accent/15 text-accent text-[10px] font-semibold">
+                            {inheritCount} agent{inheritCount > 1 ? 's' : ''}
+                          </span>
+                        )}
+                        {inheritCount === 0 && (
+                          <span className="ml-auto text-[10px] text-text-muted">No agents</span>
+                        )}
+                        <button onClick={() => { setShowAppSettings(false); setEditingTemplate(t) }}
+                          className="text-[11px] text-accent hover:text-accent-hover cursor-pointer font-medium">Edit</button>
+                      </div>
+                      {inheritCount > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {inheritNames.map(name => (
+                            <span key={name} className="px-2 py-0.5 rounded-md bg-bg-secondary text-[10px] text-text-muted">{name}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>
-        </Modal>
+        </div></div>
       )}
 
       <EditTemplateModal
