@@ -107,6 +107,15 @@ When creating a project, you can **git clone** a repo directly into an R&D folde
 3. The agent works entirely within its own worktree — no merge conflicts between agents
 4. Worktree and branch are auto-removed when the agent is deleted
 
+### File Explorer
+Tree-view file browser in right sidebar. Collapsible directories, VSCode-style icons (colored letters for code, emoji for media/docs). Click `.md` files to open split editor + live preview (GFM tables, task lists, code blocks). Drag files to terminal to insert path. Supports Finder drag-drop.
+
+### Team Management
+Organize agents into teams within departments. `+ Team` button opens modal to name a team and select ungrouped agents. Drag agents between teams or drop to ungroup. Reorder agents via drag-and-drop. Agents cannot move across departments.
+
+### Auto Rebase on Restart
+R&D agents with worktrees automatically `git fetch && rebase` when restarted (not on first launch). Detects base branch: prefers `develop` > `main` > `master`. Toggle in App Settings.
+
 ### Agent Memory
 Each agent has isolated persistent memory at `~/.hive/memory/{agentId}/`. Symlinked to working directory. Keyed by ID, survives renames.
 
@@ -163,6 +172,7 @@ Permanent activity log per agent. Tasks grouped with START/DONE badges. Status t
 
 | Version | Description | Download |
 |---------|-------------|----------|
+| v0.6.0-beta | Team management, drag-drop, auto rebase, markdown preview, GM template | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.6.0-beta) |
 | v0.5.0-beta | File explorer tree, git clone, GitHub/GitLab tokens, scroll fix | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.5.0-beta) |
 | v0.4.0-beta | Native --agent, templates, split editor, session resume | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.4.0-beta) |
 | v0.3.0-beta | Office viz, files panel, resizable, job pickup | [Release](https://github.com/nocodevit/hive/releases/tag/v0.3.0-beta) |
