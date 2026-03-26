@@ -103,8 +103,8 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
                 ? `claude --agent ${agent} -c -n "${agentName}"`
                 : `claude --agent ${agent} -n "${agentName}"`
               if (rebaseOnStart) {
-                // Rebase from main before starting agent
-                const rebaseCmd = `BASE=$(git remote show origin 2>/dev/null | grep 'HEAD branch' | awk '{print $NF}') && [ -n "$BASE" ] && echo "⏳ Rebasing from origin/$BASE..." && git fetch origin && git rebase origin/$BASE && echo "✅ Rebase done" || echo "⏭️ Rebase skipped (no remote HEAD)"`
+                // Detect base branch: prefer develop > main > master, only if remote tracking exists
+                const rebaseCmd = `git fetch origin 2>/dev/null && BASE=$(for b in develop main master; do git rev-parse --verify origin/$b >/dev/null 2>&1 && echo $b && break; done) && [ -n "$BASE" ] && echo "⏳ Rebasing from origin/$BASE..." && git rebase origin/$BASE && echo "✅ Rebase done" || echo "⏭️ Rebase skipped"`
                 setTimeout(() => window.api.pty.write(id, `${rebaseCmd} && ${claudeCmd}\r`), 500)
               } else {
                 setTimeout(() => window.api.pty.write(id, claudeCmd + '\r'), 500)
