@@ -54,8 +54,6 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [activeTerminals, setActiveTerminals] = useState<Set<string>>(new Set())
-  const launchedOnceRef = useRef<Set<string>>(new Set())
-  const [restartingAgents, setRestartingAgents] = useState<Set<string>>(new Set())
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [showCreateAgent, setShowCreateAgent] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<any>(null)
@@ -199,10 +197,6 @@ export default function App() {
       setAgentNames((prev) => ({ ...prev, [agent.id]: result.agentName! }))
     }
 
-    if (launchedOnceRef.current.has(agent.id)) {
-      setRestartingAgents((prev) => new Set(prev).add(agent.id))
-    }
-    launchedOnceRef.current.add(agent.id)
     setActiveTerminals((prev) => new Set(prev).add(agent.id))
     setSelectedAgentId(agent.id)
     setMainView('terminal')
@@ -246,7 +240,7 @@ export default function App() {
       <div className="bg-sidebar-bg flex flex-col flex-shrink-0" style={{ width: panelWidths.projects }}>
         <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
           <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
-            Hive v0.5.1
+            Hive v0.6.0
           </h2>
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
         </div>
@@ -978,7 +972,7 @@ export default function App() {
                   autoRunClaude={appPrefs.autoRunClaude}
                   continueSession={appPrefs.continueSession}
                   startupCommand={agent.preferences?.startupCommand}
-                  rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath && restartingAgents.has(agent.id)}
+                  rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath}
                 />
               </div>
             )
