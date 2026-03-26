@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, type ComponentPropsWithoutRef } from 'react'
 import Markdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 const mdComponents = {
   h1: (props: ComponentPropsWithoutRef<'h1'>) => <h1 style={{ fontSize: '1.8em', fontWeight: 700, borderBottom: '1px solid var(--border)', paddingBottom: 8, marginTop: 24, marginBottom: 12 }} {...props} />,
@@ -14,13 +15,14 @@ const mdComponents = {
   strong: (props: ComponentPropsWithoutRef<'strong'>) => <strong style={{ fontWeight: 600 }} {...props} />,
   blockquote: (props: ComponentPropsWithoutRef<'blockquote'>) => <blockquote style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 16, margin: '12px 0', opacity: 0.8, fontStyle: 'italic' }} {...props} />,
   code: ({ children, className, ...props }: ComponentPropsWithoutRef<'code'> & { className?: string }) => {
-    const isBlock = className?.startsWith('language-')
-    if (isBlock) {
-      return <code style={{ display: 'block', background: '#1a1a1a', padding: 16, borderRadius: 8, fontSize: '0.85em', overflowX: 'auto', border: '1px solid var(--border)' }} className={className} {...props}>{children}</code>
+    // Inside <pre> = code block (handled by pre styling). Standalone = inline code.
+    const isInline = !className && typeof children === 'string' && !children.includes('\n')
+    if (isInline) {
+      return <code style={{ background: 'var(--bg-hover)', color: '#7c3aed', padding: '2px 6px', borderRadius: 4, fontSize: '0.88em', fontWeight: 500 }} {...props}>{children}</code>
     }
-    return <code style={{ background: 'var(--bg-hover)', padding: '2px 6px', borderRadius: 4, fontSize: '0.88em' }} {...props}>{children}</code>
+    return <code className={className} style={{ color: '#c4b5fd', fontSize: '0.85em' }} {...props}>{children}</code>
   },
-  pre: (props: ComponentPropsWithoutRef<'pre'>) => <pre style={{ marginBottom: 12, overflow: 'auto' }} {...props} />,
+  pre: (props: ComponentPropsWithoutRef<'pre'>) => <pre style={{ background: '#1a1a1a', padding: 16, borderRadius: 8, overflowX: 'auto', border: '1px solid var(--border)', marginBottom: 12 }} {...props} />,
   hr: (props: ComponentPropsWithoutRef<'hr'>) => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '20px 0' }} {...props} />,
   table: (props: ComponentPropsWithoutRef<'table'>) => <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12, fontSize: '0.9em' }} {...props} />,
   th: (props: ComponentPropsWithoutRef<'th'>) => <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '2px solid var(--border)', fontWeight: 600 }} {...props} />,
@@ -119,7 +121,7 @@ export default function MarkdownPreviewModal({ filePath, onClose }: Props) {
               <span className="text-[10px] text-text-muted uppercase tracking-wider font-semibold">Preview</span>
             </div>
             <div className="flex-1 overflow-y-auto p-5 text-text-secondary text-[13px]">
-              <Markdown components={mdComponents}>{content}</Markdown>
+              <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>{content}</Markdown>
             </div>
           </div>
         </div>
