@@ -33,6 +33,11 @@ declare global {
         clone: (url: string, destPath: string, token?: string, provider?: string) =>
           Promise<{ ok: boolean; path?: string; name?: string; error?: string }>
       }
+      speech: {
+        start: () => Promise<{ ok: boolean; error?: string }>
+        stop: () => Promise<{ ok: boolean }>
+        onTranscript: (cb: (line: string) => void) => () => void
+      }
       project: {
         scan: (zones: { path: string; type: string }[]) => Promise<{ projectStage: string; todos: any[] }>
       }

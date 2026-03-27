@@ -265,6 +265,39 @@ ipcMain.handle('pty:kill', (_event, { id }) => {
   }
 })
 
+// Speech recognition (macOS native SFSpeechRecognizer)
+let speechProcess: any = null
+
+ipcMain.handle('speech:start', () => {
+  if (speechProcess) return { ok: false, error: 'already running' }
+  const { spawn } = require('child_process')
+  // Dev: scripts/hive-speech relative to project root. Packaged: extraResources/scripts/hive-speech
+  const devPath = join(__dirname, '..', '..', 'scripts', 'hive-speech')
+  const prodPath = join(process.resourcesPath, 'scripts', 'hive-speech')
+  const resolvedPath = existsSync(devPath) ? devPath : prodPath
+  if (!existsSync(resolvedPath)) return { ok: false, error: 'hive-speech binary not found' }
+  speechProcess = spawn(resolvedPath, [], { stdio: ['ignore', 'pipe', 'pipe'] })
+  speechProcess.stdout?.on('data', (data: Buffer) => {
+    const lines = data.toString().split('\n').filter(Boolean)
+    for (const line of lines) {
+      const win = BrowserWindow.getAllWindows()[0]
+      if (win && !win.isDestroyed()) {
+        win.webContents.send('speech:transcript', line)
+      }
+    }
+  })
+  speechProcess.on('exit', () => { speechProcess = null })
+  return { ok: true }
+})
+
+ipcMain.handle('speech:stop', () => {
+  if (speechProcess) {
+    speechProcess.kill('SIGTERM')
+    speechProcess = null
+  }
+  return { ok: true }
+})
+
 // Dialog: select folder
 ipcMain.handle('dialog:selectFolder', async (_event, { title }) => {
   const result = await dialog.showOpenDialog({

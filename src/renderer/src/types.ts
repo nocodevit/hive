@@ -37,6 +37,7 @@ export interface Agent {
   effort: string     // 'low', 'medium', 'high', 'max'
   worktreePath?: string   // git worktree path (coding agents only)
   worktreeBranch?: string // git branch name
+  tagColor?: string       // name tag color (hex), shown in sidebar
 }
 
 export const defaultPreferences: AgentPreferences = {

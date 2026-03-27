@@ -8,8 +8,13 @@
     "appId": "com.hive.app",
     "productName": "Hive",
     "mac": {
-      "icon": "resources/icon.icns"
-    }
+      "icon": "resources/icon.icns",
+      "entitlements": "entitlements.mac.plist",
+      "entitlementsInherit": "entitlements.mac.plist"
+    },
+    "extraResources": [
+      { "from": "scripts/hive-speech", "to": "scripts/hive-speech" }
+    ]
   },
   "scripts": {
     "dev": "electron-vite dev",
