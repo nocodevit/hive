@@ -47,6 +47,26 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
     termRef.current = term
     fitRef.current = fit
 
+    // Intercept drag/drop on xterm's internal elements to prevent default behavior
+    const xtermScreen = el.querySelector('.xterm-screen')
+    if (xtermScreen) {
+      xtermScreen.addEventListener('dragover', (ev) => { (ev as DragEvent).preventDefault() })
+      xtermScreen.addEventListener('drop', (ev) => {
+        const e = ev as DragEvent
+        e.preventDefault()
+        e.stopPropagation()
+        if (e.dataTransfer?.files.length) {
+          const paths = Array.from(e.dataTransfer.files).map((f: any) => f.path).filter(Boolean)
+          if (paths.length > 0) {
+            window.api.pty.write(id, paths.map((p: string) => p.includes(' ') ? `"${p}"` : p).join(' '))
+            return
+          }
+        }
+        const text = e.dataTransfer?.getData('text/plain')
+        if (text) window.api.pty.write(id, text)
+      })
+    }
+
     // Track scroll position
     const checkScroll = () => {
       const buffer = term.buffer.active
