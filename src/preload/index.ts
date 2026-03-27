@@ -42,6 +42,15 @@ const api = {
     clone: (url: string, destPath: string, token?: string, provider?: string) =>
       ipcRenderer.invoke('git:clone', { url, destPath, token, provider }) as Promise<{ ok: boolean; path?: string; name?: string; error?: string }>
   },
+  speech: {
+    start: () => ipcRenderer.invoke('speech:start') as Promise<{ ok: boolean; error?: string }>,
+    stop: () => ipcRenderer.invoke('speech:stop') as Promise<{ ok: boolean }>,
+    onTranscript: (cb: (line: string) => void) => {
+      const handler = (_: any, line: string) => cb(line)
+      ipcRenderer.on('speech:transcript', handler)
+      return () => ipcRenderer.removeListener('speech:transcript', handler)
+    }
+  },
   project: {
     scan: (zones: { path: string; type: string }[]) => ipcRenderer.invoke('project:scan', { zones }),
     readClaudeMd: (projectPath: string) => ipcRenderer.invoke('project:readClaudeMd', { projectPath })

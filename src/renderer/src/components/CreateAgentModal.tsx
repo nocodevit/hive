@@ -25,7 +25,9 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
 
   // Step 2: Identity + Sections
   const [name, setName] = useState('')
-  const [department, setDepartment] = useState<'R&D' | 'Non-R&D'>('R&D')
+  const hasRndZones = project.zones.some((z: Zone) => z.type === 'rnd')
+  const hasNonRndZones = project.zones.some((z: Zone) => z.type === 'non-rnd')
+  const [department, setDepartment] = useState<'R&D' | 'Non-R&D'>(hasRndZones ? 'R&D' : 'Non-R&D')
   const [role, setRole] = useState('Engineering')
   const [group, setGroup] = useState('')
   const [traits, setTraits] = useState<string[]>([])
@@ -61,8 +63,9 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
 
   const applyTemplate = (t: AgentTemplate) => {
     setSelectedTemplate(t)
-    setDepartment(t.department)
-    setRole(t.role)
+    const deptHasZones = project.zones.some((z: Zone) => t.department === 'R&D' ? z.type === 'rnd' : z.type === 'non-rnd')
+    setDepartment(deptHasZones ? t.department : (hasRndZones ? 'R&D' : 'Non-R&D'))
+    setRole(deptHasZones ? t.role : (hasRndZones ? 'Engineering' : 'Admin'))
     setSections(t.sections.map(s => {
       if (s.title === 'Custom' && !s.content && projectContext) {
         return { ...s, content: `Project context (from CLAUDE.md):\n${projectContext.slice(0, 500)}` }
@@ -152,14 +155,30 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
         {/* Step 0: Choose Template */}
         {step === 0 && (
           <>
-            <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider">Built-in Templates</label>
-            <div className="grid grid-cols-4 gap-1.5">
-              {BUILTIN_TEMPLATES.map(t => (
-                <button key={t.id} onClick={() => applyTemplate(t)}
-                  className="px-2 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors bg-bg-primary border border-border text-text-secondary hover:bg-accent-subtle hover:text-accent hover:border-accent/30 text-center"
-                >{t.name}</button>
-              ))}
-            </div>
+            {hasRndZones && (
+              <>
+                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider">R&D Templates</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {BUILTIN_TEMPLATES.filter(t => t.department === 'R&D').map(t => (
+                    <button key={t.id} onClick={() => applyTemplate(t)}
+                      className="px-2 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors bg-bg-primary border border-border text-text-secondary hover:bg-accent-subtle hover:text-accent hover:border-accent/30 text-center"
+                    >{t.name}</button>
+                  ))}
+                </div>
+              </>
+            )}
+            {hasNonRndZones && (
+              <>
+                <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mt-2">Non-R&D Templates</label>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {BUILTIN_TEMPLATES.filter(t => t.department === 'Non-R&D').map(t => (
+                    <button key={t.id} onClick={() => applyTemplate(t)}
+                      className="px-2 py-2 rounded-lg text-xs font-medium cursor-pointer transition-colors bg-bg-primary border border-border text-text-secondary hover:bg-accent-subtle hover:text-accent hover:border-accent/30 text-center"
+                    >{t.name}</button>
+                  ))}
+                </div>
+              </>
+            )}
 
             {customTemplates.length > 0 && (
               <>
@@ -236,11 +255,17 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
 
             <div className="flex gap-2">
               <div className="flex gap-1">
-                {(['R&D', 'Non-R&D'] as const).map(d => (
-                  <button key={d} onClick={() => { setDepartment(d); setRole((d === 'R&D' ? RND_ROLES : NON_RND_ROLES)[0]) }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer ${department === d ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
-                  >{d}</button>
-                ))}
+                {(['R&D', 'Non-R&D'] as const).map(d => {
+                  const hasZones = project.zones.some((z: Zone) => d === 'R&D' ? z.type === 'rnd' : z.type === 'non-rnd')
+                  return (
+                    <button key={d}
+                      onClick={() => { if (hasZones) { setDepartment(d); setRole((d === 'R&D' ? RND_ROLES : NON_RND_ROLES)[0]) } }}
+                      disabled={!hasZones}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium ${!hasZones ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer'} ${department === d ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
+                      title={!hasZones ? `No ${d} folders in this project` : ''}
+                    >{d}</button>
+                  )
+                })}
               </div>
               <select value={role} onChange={e => setRole(e.target.value)}
                 className="flex-1 px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm cursor-pointer focus:outline-none focus:border-accent">

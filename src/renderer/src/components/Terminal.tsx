@@ -99,9 +99,8 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
               setTimeout(() => window.api.pty.write(id, startupCommand + '\r'), 500)
             } else if (autoRunClaude) {
               const agent = `hive-${agentId}`
-              const claudeCmd = continueSession
-                ? `claude --agent ${agent} -c -n "${agentName}"`
-                : `claude --agent ${agent} -n "${agentName}"`
+              const base = `claude --agent ${agent} -n "${agentName}"`
+              const claudeCmd = continueSession ? `${base} -c` : base
               if (rebaseOnStart) {
                 // Detect base branch: prefer develop > main > master, only if remote tracking exists
                 const rebaseCmd = `git fetch origin 2>/dev/null && BASE=$(for b in develop main master; do git rev-parse --verify origin/$b >/dev/null 2>&1 && echo $b && break; done) && [ -n "$BASE" ] && echo "⏳ Rebasing from origin/$BASE..." && git rebase origin/$BASE && echo "✅ Rebase done" || echo "⏭️ Rebase skipped"`

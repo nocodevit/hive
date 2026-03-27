@@ -64,6 +64,8 @@ export default function App() {
   const [teamPrompt, setTeamPrompt] = useState<{ dept: string } | null>(null)
   const [teamNameInput, setTeamNameInput] = useState('')
   const [teamSelectedAgents, setTeamSelectedAgents] = useState<Set<string>>(new Set())
+  const [isListening, setIsListening] = useState(false)
+  const [speechPartial, setSpeechPartial] = useState('')
   const [projectTab, setProjectTab] = useState<'office' | 'project' | 'settings'>('office')
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
@@ -123,7 +125,9 @@ export default function App() {
     setSelectedProjectId(project.id)
   }
 
+  const [newAgentIds] = useState<Set<string>>(() => new Set())
   const handleCreateAgent = (agent: Agent) => {
+    newAgentIds.add(agent.id)
     setAgents((prev) => [...prev, agent])
   }
 
@@ -171,8 +175,16 @@ export default function App() {
 
     let cwd = zone.path
 
-    // Create worktree for coding agents with git
-    if (agent.type === 'coding' && zone.hasGit && !agent.worktreePath) {
+    // Create worktree for coding agents with git (re-check hasGit live)
+    const hasGit = await window.api.fs.hasGit(zone.path)
+    if (hasGit && !zone.hasGit) {
+      // Update zone hasGit for future use
+      setProjects((prev) => prev.map((p) => p.id === agent.projectId
+        ? { ...p, zones: p.zones.map((z: Zone) => z.id === zone.id ? { ...z, hasGit: true } : z) }
+        : p
+      ))
+    }
+    if (agent.type === 'coding' && hasGit && !agent.worktreePath) {
       const result = await window.api.git.worktreeAdd(zone.path, agent.id, agent.name)
       if (result.ok && result.path) {
         cwd = result.path
@@ -424,7 +436,15 @@ export default function App() {
                                   agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
                                 }`} />
                               </div>
-                              <span className="truncate">{agent.name}</span>
+                              <div className="flex flex-col min-w-0 flex-1">
+                                <span className="truncate flex items-center gap-1.5">
+                                  {agent.tagColor && (
+                                    <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
+                                  )}
+                                  {agent.name}
+                                </span>
+                                <span className="text-[9px] text-text-muted/60 truncate group-hover:hidden">{agent.role}</span>
+                              </div>
                               <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setSelectedAgentId(agent.id); setMainView('editor') }}
@@ -460,9 +480,6 @@ export default function App() {
                                   </svg>
                                 </button>
                               </div>
-                              <span className="text-[10px] text-text-muted uppercase group-hover:hidden">
-                                {agent.role || agent.department}
-                              </span>
                             </div>
                           ))}
                         </div>
@@ -604,9 +621,53 @@ export default function App() {
                   </svg>
                 </button>
               )}
+              {mainView === 'terminal' && activeTerminals.has(selectedAgent!.id) && (
+                <button
+                  onClick={async () => {
+                    if (isListening) {
+                      await window.api.speech.stop()
+                      setIsListening(false)
+                      setSpeechPartial('')
+                    } else {
+                      const agentId = selectedAgent!.id
+                      const cleanup = window.api.speech.onTranscript((line) => {
+                        if (line.startsWith('final:')) {
+                          const text = line.slice(6)
+                          window.api.pty.write(agentId, text)
+                          setSpeechPartial('')
+                        } else if (line.startsWith('partial:')) {
+                          setSpeechPartial(line.slice(8))
+                        }
+                      })
+                      const result = await window.api.speech.start()
+                      if (!result.ok) {
+                        cleanup()
+                        return
+                      }
+                      setIsListening(true)
+                    }
+                  }}
+                  className={`px-1.5 py-1 rounded-md transition-colors cursor-pointer ${
+                    isListening ? 'bg-red-500/20 text-red-400' : 'text-text-muted hover:bg-bg-hover'
+                  }`}
+                  title={isListening ? 'Stop listening' : 'Voice input'}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                    <line x1="12" y1="19" x2="12" y2="23" />
+                    <line x1="8" y1="23" x2="16" y2="23" />
+                  </svg>
+                </button>
+              )}
             </div>
           )}
         </div>
+        {isListening && speechPartial && (
+          <div className="px-4 py-1.5 bg-red-500/10 border-b border-red-500/20 text-[11px] text-red-300 font-mono truncate">
+            🎙 {speechPartial}
+          </div>
+        )}
         <div className="flex-1 relative">
           {!selectedAgent && !selectedProject && (
             <div className="flex flex-col items-center justify-center h-full text-text-muted gap-3">
@@ -970,9 +1031,9 @@ export default function App() {
                   cwd={getAgentCwd(agent)}
                   visible={isVisible}
                   autoRunClaude={appPrefs.autoRunClaude}
-                  continueSession={appPrefs.continueSession}
+                  continueSession={appPrefs.continueSession && !!agent.worktreePath && !newAgentIds.has(agent.id)}
                   startupCommand={agent.preferences?.startupCommand}
-                  rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath}
+                  rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath && !newAgentIds.has(agent.id)}
                 />
               </div>
             )
@@ -1013,7 +1074,18 @@ export default function App() {
                           className="w-full px-3 py-1 rounded-lg bg-bg-primary border border-border text-text-primary text-sm font-semibold focus:outline-none focus:border-accent transition-colors"
                           placeholder="Name"
                         />
-                        <span className="px-3 py-1 text-xs text-text-muted">{selectedAgent.role || selectedAgent.department}</span>
+                        <div className="flex items-center gap-1.5 px-3">
+                          <span className="text-[10px] text-text-muted">Tag:</span>
+                          {['', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280'].map((c) => (
+                            <button
+                              key={c || 'none'}
+                              onClick={() => updateAgent(selectedAgent.id, { tagColor: c || undefined })}
+                              className={`w-4 h-4 rounded-full cursor-pointer border-2 transition-transform ${selectedAgent.tagColor === c || (!selectedAgent.tagColor && !c) ? 'border-text-primary scale-125' : 'border-transparent'}`}
+                              style={{ background: c || 'var(--bg-hover)' }}
+                              title={c || 'No tag'}
+                            />
+                          ))}
+                        </div>
                       </div>
                       <StatusDot status={selectedAgent.status} />
                     </div>
