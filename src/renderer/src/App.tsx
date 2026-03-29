@@ -252,7 +252,7 @@ export default function App() {
       <div className="bg-sidebar-bg flex flex-col flex-shrink-0" style={{ width: panelWidths.projects }}>
         <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
           <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
-            Hive v0.6.0
+            Hive v0.7.0
           </h2>
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
         </div>
@@ -414,7 +414,7 @@ export default function App() {
                               onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
                               onDrop={(e) => { e.stopPropagation(); handleDrop(agent.id, grp) }}
                               onDragEnd={() => setDragAgentId(null)}
-                              className={`group w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5
+                              className={`group w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5 relative
                                 transition-colors cursor-grab active:cursor-grabbing ${
                                 grp ? 'ml-2' : ''
                               } ${
@@ -437,15 +437,15 @@ export default function App() {
                                 }`} />
                               </div>
                               <div className="flex flex-col min-w-0 flex-1">
-                                <span className="truncate flex items-center gap-1.5">
+                                <span className="truncate flex items-center gap-1.5 text-[12px]">
                                   {agent.tagColor && (
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
                                   {agent.name}
                                 </span>
-                                <span className="text-[9px] text-text-muted/60 truncate group-hover:hidden">{agent.role}</span>
+                                <span className="text-[9px] text-text-muted/60 truncate group-hover:invisible">{agent.role}</span>
                               </div>
-                              <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2">
                                 <button
                                   onClick={(e) => { e.stopPropagation(); setSelectedAgentId(agent.id); setMainView('editor') }}
                                   className="w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-accent hover:bg-bg-active transition-colors cursor-pointer"
