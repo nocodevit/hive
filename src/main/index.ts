@@ -6,6 +6,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
 import { execSync } from 'child_process'
 import { createTask, readTask, updateTask, listTasks } from './tasks'
+import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
 
 // Data persistence
@@ -85,6 +86,29 @@ function notifyHuman(title: string, message: string) {
   } catch {}
 }
 
+// Lookup helpers for task group context
+function findTaskGroupForAgent(agentId: string): { taskGroup: any; projectId: string } | null {
+  const d = loadData()
+  const tgs = (d.taskGroups || []) as any[]
+  for (const tg of tgs) {
+    if (tg.managerId === agentId || tg.qaId === agentId || tg.criticId === agentId || tg.workerIds?.includes(agentId)) {
+      return { taskGroup: tg, projectId: tg.projectId }
+    }
+  }
+  return null
+}
+
+function findAgentWorktree(agentId: string): string | null {
+  const d = loadData()
+  const agent = ((d.agents || []) as any[]).find(a => a.id === agentId)
+  if (!agent) return null
+  if (agent.worktreePath) return agent.worktreePath
+  // Fallback: find zone path
+  const project = ((d.projects || []) as any[]).find(p => p.id === agent.projectId)
+  const zone = project?.zones?.find((z: any) => z.id === agent.zoneId)
+  return zone?.path || null
+}
+
 // Status + report webhook server — receives hook calls from Claude Code
 const statusServer = createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/task-status') {
@@ -147,34 +171,65 @@ const statusServer = createServer((req, res) => {
         return
       } else if (req.url === '/task-assign') {
         const homeDir = app.getPath('home')
-        const task = updateTask(homeDir, data.projectId, data.taskId, { status: 'assigned', owner: data.agentId })
+        const ctx = findTaskGroupForAgent(data.agentId)
+        const projectId = data.projectId || ctx?.projectId || ''
+        const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId })
         if (task) {
           sendToAgent(data.agentId, 'TASK', task)
           appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_start', message: task.title })
         }
       } else if (req.url === '/task-done') {
         const homeDir = app.getPath('home')
-        const task = updateTask(homeDir, data.projectId || '', data.taskId, { status: 'done' })
-        appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
-        if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
-        // Notify manager
-        const taskGroupData = loadData()
-        const tg = ((taskGroupData.taskGroups || []) as any[]).find(g => g.workerIds?.includes(data.agentId))
-        if (tg) sendToAgent(tg.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
+        const ctx = findTaskGroupForAgent(data.agentId)
+        const projectId = data.projectId || ctx?.projectId || ''
+        const task = readTask(homeDir, projectId, data.taskId)
+
+        // Run gate if worker has a worktree
+        const cwd = findAgentWorktree(data.agentId)
+        if (task && cwd && task.verify && task.verify.length > 0) {
+          runGate(cwd, { scope: task.scope, verify: task.verify }).then((gateResult) => {
+            if (gateResult.pass) {
+              updateTask(homeDir, projectId, data.taskId, { status: 'done' })
+              appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
+              if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
+              sendToAgent(data.agentId, 'MSG', { gate: 'pass', task: data.taskId })
+              if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
+            } else {
+              const attempt = (task.attempt || 0) + 1
+              const maxRetries = ctx?.taskGroup?.maxGateRetries || 3
+              if (attempt >= maxRetries) {
+                updateTask(homeDir, projectId, data.taskId, { status: 'blocked', attempt, blocked_reason: gateResult.failures.map(f => `${f.step}: ${f.detail}`).join('; ') })
+                sendToAgent(data.agentId, 'MSG', { gate: 'blocked', task: data.taskId, failures: gateResult.failures })
+                if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'blocked', reason: 'gate failed after max retries' })
+                notifyHuman('Gate Blocked', `${data.taskId}: ${gateResult.failures[0]?.detail || 'gate failed'}`)
+              } else {
+                updateTask(homeDir, projectId, data.taskId, { status: 'in_progress', attempt })
+                sendToAgent(data.agentId, 'MSG', { gate: 'failed', task: data.taskId, attempt, maxRetries, failures: gateResult.failures })
+              }
+            }
+          })
+        } else {
+          // No verify commands or no worktree — skip gate, mark done
+          updateTask(homeDir, projectId, data.taskId, { status: 'done' })
+          appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
+          if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
+          if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
+        }
       } else if (req.url === '/task-blocked') {
         const homeDir = app.getPath('home')
-        updateTask(homeDir, data.projectId || '', data.taskId, {
+        const ctx = findTaskGroupForAgent(data.agentId)
+        const projectId = data.projectId || ctx?.projectId || ''
+        updateTask(homeDir, projectId, data.taskId, {
           status: 'blocked', blocked_reason: data.reason, attempt: data.attempt || 0
         })
         appendLog(data.agentId, { time: new Date().toISOString(), type: 'notification', message: `BLOCKED: ${data.reason}` })
-        // Notify manager + human
-        const taskGroupData = loadData()
-        const tg = ((taskGroupData.taskGroups || []) as any[]).find(g => g.workerIds?.includes(data.agentId))
-        if (tg) sendToAgent(tg.managerId, 'MSG', { task: data.taskId, status: 'blocked', reason: data.reason })
+        if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'blocked', reason: data.reason })
         notifyHuman('Task Blocked', `${data.taskId}: ${data.reason}`)
-      } else if (req.url === '/task-status' || (req.method === 'GET' && req.url === '/task-status')) {
+      } else if (req.url === '/task-status') {
         const homeDir = app.getPath('home')
-        const tasks = listTasks(homeDir, data.projectId || '')
+        const ctx = findTaskGroupForAgent(data.agentId)
+        const projectId = data.projectId || ctx?.projectId || ''
+        const tasks = listTasks(homeDir, projectId)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(tasks))
         return

@@ -269,7 +269,8 @@ case "$ACTION" in
       -d "{\\"agentId\\":\\"$AGENT\\",\\"taskId\\":\\"$TASK_ID\\",\\"reason\\":\\"$REASON\\"}" > /dev/null 2>&1
     ;;
   task-status)
-    curl -s http://127.0.0.1:$PORT/task-status?projectId=
+    curl -s -X POST http://127.0.0.1:$PORT/task-status -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\"}"
     ;;
   ready)
     curl -s -X POST http://127.0.0.1:$PORT/ready -H "Content-Type: application/json" \\
