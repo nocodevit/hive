@@ -1002,24 +1002,137 @@ export default function App() {
                             ) : null
                           })}
                         </div>
-                        {/* Batch status */}
+                        {/* Batch status + task list */}
                         <div className="glass-card p-4">
                           <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-heading font-bold text-text-primary">Batch {taskGroup.currentBatch}</h3>
+                            <h3 className="text-sm font-heading font-bold text-text-primary">Batch {taskGroup.currentBatch || '—'}</h3>
                             <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider ${
                               taskGroup.status === 'executing' ? 'bg-status-working/20 text-status-working' :
                               taskGroup.status === 'awaiting_merge' ? 'bg-accent/20 text-accent' :
                               'bg-bg-hover text-text-muted'
                             }`}>{taskGroup.status.replace('_', ' ')}</span>
                           </div>
-                          <p className="text-xs text-text-muted">Task details will appear here when a batch is running.</p>
+                          {(() => {
+                            const tasks = batchTasks[taskGroup.projectId] || []
+                            const batchN = tasks.filter(t => t.batch === taskGroup.currentBatch)
+                            if (batchN.length === 0) return <p className="text-xs text-text-muted">No tasks yet. Use /manager-whip-start to begin.</p>
+                            const done = batchN.filter(t => t.status === 'done').length
+                            return (
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <div className="flex-1 h-1.5 bg-bg-hover rounded-full overflow-hidden">
+                                    <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${batchN.length ? (done / batchN.length) * 100 : 0}%` }} />
+                                  </div>
+                                  <span className="text-[10px] text-text-muted font-mono">{done}/{batchN.length}</span>
+                                </div>
+                                {batchN.map((t) => (
+                                  <div key={t.id} className="flex items-center gap-2 text-xs py-1">
+                                    <span className={`w-1.5 h-1.5 rounded-full ${
+                                      t.status === 'done' ? 'bg-status-done' :
+                                      t.status === 'blocked' ? 'bg-red-400' :
+                                      t.status === 'in_progress' || t.status === 'assigned' ? 'bg-status-working' : 'bg-text-muted/30'
+                                    }`} />
+                                    <span className="text-text-primary flex-1 truncate">{t.title}</span>
+                                    {t.owner && <span className="text-text-muted/50">⚒ {agents.find(a => a.id === t.owner)?.name || t.owner}</span>}
+                                    <span className="text-text-muted/40 text-[9px] uppercase">{t.status}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )
+                          })()}
                         </div>
+
+                        {/* Batch Proposal Card */}
+                        {batchProposal && taskGroup.status === 'batch_proposed' && (
+                          <div className="glass-card border-accent/30 p-4">
+                            <h4 className="text-xs font-heading font-bold text-accent mb-2">Batch Proposal</h4>
+                            {(batchProposal.tasks || []).map((t: any, i: number) => (
+                              <div key={i} className="text-xs text-text-primary py-0.5">
+                                {i + 1}. {t.title} <span className="text-text-muted/50">({t.scope})</span>
+                              </div>
+                            ))}
+                            <div className="flex gap-2 mt-3">
+                              <button
+                                onClick={() => {
+                                  window.api.agent.send(taskGroup.managerId, 'HUMAN', { batch: batchProposal.batch, action: 'approved' })
+                                  setTaskGroups(prev => prev.map(tg => tg.id === taskGroup.id ? { ...tg, status: 'batch_approved' as const, currentBatch: batchProposal.batch } : tg))
+                                  setBatchProposal(null)
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-xs bg-accent text-text-on-purple hover:bg-accent-hover cursor-pointer"
+                              >Approve</button>
+                              <button
+                                onClick={() => {
+                                  window.api.agent.send(taskGroup.managerId, 'HUMAN', { batch: batchProposal.batch, action: 'rejected' })
+                                  setBatchProposal(null)
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted hover:text-red-400 cursor-pointer"
+                              >Reject</button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Merge Card */}
+                        {taskGroup.status === 'awaiting_merge' && (
+                          <div className="glass-card border-accent/30 p-4">
+                            <h4 className="text-xs font-heading font-bold text-accent mb-2">Ready to Merge</h4>
+                            <div className="flex items-center gap-3 text-xs text-text-muted mb-3">
+                              <span>QA: ✅</span>
+                              <span>Critic: ✅</span>
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  window.api.agent.send(taskGroup.managerId, 'HUMAN', { action: 'merged', next: true })
+                                  setTaskGroups(prev => prev.map(tg => tg.id === taskGroup.id ? { ...tg, status: 'idle' as const } : tg))
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-xs bg-accent text-text-on-purple hover:bg-accent-hover cursor-pointer"
+                              >Merge & Next Batch</button>
+                              <button
+                                onClick={() => {
+                                  window.api.agent.send(taskGroup.managerId, 'HUMAN', { action: 'rejected', feedback: 'Needs changes' })
+                                  setTaskGroups(prev => prev.map(tg => tg.id === taskGroup.id ? { ...tg, status: 'executing' as const } : tg))
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted hover:text-red-400 cursor-pointer"
+                              >Reject</button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Manager Reports */}
+                        {managerReports.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Manager Reports</h4>
+                            <div className="space-y-1 max-h-32 overflow-y-auto">
+                              {managerReports.slice(-5).map((r, i) => (
+                                <div key={i} className="text-[11px] text-text-muted py-0.5">
+                                  <span className="text-text-muted/40 font-mono">{new Date(r.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                                  {' '}{r.message}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
                         {/* Controls */}
                         <div className="flex gap-2">
                           <button className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer">
                             ⏸ Pause
                           </button>
-                          <button className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-red-400/70 hover:text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer">
+                          <button
+                            onClick={() => {
+                              // Dissolve task group
+                              setAgents(prev => prev.map(a => {
+                                if (a.taskGroupRole) {
+                                  const { taskGroupRole, ...rest } = a
+                                  return rest as Agent
+                                }
+                                return a
+                              }))
+                              setTaskGroups(prev => prev.filter(tg => tg.id !== taskGroup.id))
+                              setBatchProposal(null)
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-red-400/70 hover:text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer"
+                          >
                             🗑 Dissolve
                           </button>
                         </div>
