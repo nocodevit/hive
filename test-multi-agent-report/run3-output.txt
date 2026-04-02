@@ -1,0 +1,36 @@
+
+Running 7 tests using 1 worker
+
+[1A[2K[1/7] e2e/integration.spec.ts:341:7 › Integration Test › select Hive project
+[1A[2K[2/7] e2e/integration.spec.ts:353:7 › Integration Test › create 5 test agents
+[1A[2K[3/7] e2e/integration.spec.ts:382:7 › Integration Test › create task group with test agents
+[1A[2K  1) e2e/integration.spec.ts:382:7 › Integration Test › create task group with test agents ─────────
+
+    Error: locator.check: Error: strict mode violation: locator('label:has-text("[TEST] Worker-1")').locator('input[type="checkbox"]') resolved to 2 elements:
+        1) <input type="checkbox" class="accent-[#3B82F6]"/> aka getByRole('checkbox', { name: '[TEST] Worker-1 Engineering' }).first()
+        2) <input type="checkbox" class="accent-[#3B82F6]"/> aka getByRole('checkbox', { name: '[TEST] Worker-1 Engineering' }).nth(1)
+
+    Call log:
+    [2m  - waiting for locator('label:has-text("[TEST] Worker-1")').locator('input[type="checkbox"]')[22m
+
+
+      399 |     const w1 = page.locator('label:has-text("[TEST] Worker-1")').locator('input[type="checkbox"]')
+      400 |     const w2 = page.locator('label:has-text("[TEST] Worker-2")').locator('input[type="checkbox"]')
+    > 401 |     await w1.check()
+          |              ^
+      402 |     await w2.check()
+      403 |
+      404 |     // Set todo source
+        at /Users/meiyang/FrontEndProjects/hive/e2e/integration.spec.ts:401:14
+
+    Error Context: test-results/integration-Integration-Te-03ee0-task-group-with-test-agents/error-context.md
+
+
+[1A[2K[4/7] e2e/integration.spec.ts:427:7 › Integration Test › manager starts and proposes batch
+[1A[2K[5/7] e2e/integration.spec.ts:492:7 › Integration Test › approve batch and workers execute
+[1A[2K[6/7] e2e/integration.spec.ts:582:7 › Integration Test › QA agent runs integration test
+[1A[2K[7/7] e2e/integration.spec.ts:603:7 › Integration Test › Critic agent reviews and creates PR
+[1A[2K  1 failed
+    e2e/integration.spec.ts:382:7 › Integration Test › create task group with test agents ──────────
+  4 did not run
+  2 passed (54.1s)

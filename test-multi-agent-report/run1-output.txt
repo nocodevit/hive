@@ -1,0 +1,45 @@
+
+Running 7 tests using 1 worker
+
+[1A[2K[1/7] e2e/integration.spec.ts:339:7 › Integration Test › select Hive project
+[1A[2K  1) e2e/integration.spec.ts:339:7 › Integration Test › select Hive project ────────────────────────
+
+    TimeoutError: electronApplication.firstWindow: Timeout 60000ms exceeded while waiting for event "window"
+
+      228 |     env: { ...process.env, NODE_ENV: 'test' }
+      229 |   })
+    > 230 |   page = await app.firstWindow({ timeout: 60000 })
+          |                    ^
+      231 |   await page.waitForLoadState('domcontentloaded')
+      232 |   await page.waitForTimeout(3000)
+      233 |
+        at /Users/meiyang/FrontEndProjects/hive/e2e/integration.spec.ts:230:20
+
+    TypeError: Cannot read properties of undefined (reading 'screenshot')
+
+      73 |   const dir = join(REPORT_DIR, 'screenshots')
+      74 |   mkdirSync(dir, { recursive: true })
+    > 75 |   await page.screenshot({ path: join(dir, `${name}.png`) })
+         |              ^
+      76 | }
+      77 |
+      78 | // Create a test agent via the 4-step UI wizard
+        at screenshot (/Users/meiyang/FrontEndProjects/hive/e2e/integration.spec.ts:75:14)
+        at /Users/meiyang/FrontEndProjects/hive/e2e/integration.spec.ts:268:9
+
+
+[1A[2K[2/7] e2e/integration.spec.ts:351:7 › Integration Test › create 5 test agents
+[1A[2K[3/7] e2e/integration.spec.ts:380:7 › Integration Test › create task group with test agents
+[1A[2K[4/7] e2e/integration.spec.ts:425:7 › Integration Test › manager starts and proposes batch
+[1A[2K[5/7] e2e/integration.spec.ts:490:7 › Integration Test › approve batch and workers execute
+[1A[2K[6/7] e2e/integration.spec.ts:580:7 › Integration Test › QA agent runs integration test
+[1A[2K[7/7] e2e/integration.spec.ts:601:7 › Integration Test › Critic agent reviews and creates PR
+[1A[2K[31mWorker teardown timeout of 600000ms exceeded.[39m
+
+[31mFailed worker ran 1 test:[39m
+e2e/integration.spec.ts:339:7 › Integration Test › select Hive project
+
+[1A[2K  1 failed
+    e2e/integration.spec.ts:339:7 › Integration Test › select Hive project ─────────────────────────
+  6 did not run
+  1 error was not a part of any test, see above for details

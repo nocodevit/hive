@@ -1,0 +1,33 @@
+
+Running 7 tests using 1 worker
+
+[1A[2K[1/7] e2e/integration.spec.ts:341:7 › Integration Test › select Hive project
+[1A[2K[2/7] e2e/integration.spec.ts:353:7 › Integration Test › create 5 test agents
+[1A[2K[3/7] e2e/integration.spec.ts:382:7 › Integration Test › create task group with test agents
+[1A[2K[4/7] e2e/integration.spec.ts:425:7 › Integration Test › manager starts and proposes batch
+[1A[2K  1) e2e/integration.spec.ts:425:7 › Integration Test › manager starts and proposes batch ──────────
+
+    TimeoutError: locator.click: Timeout 30000ms exceeded.
+    Call log:
+    [2m  - waiting for getByRole('button', { name: 'Task Group', exact: true })[22m
+
+
+      477 |
+      478 |     // Check if batch proposal appeared in Task Group tab
+    > 479 |     await page.getByRole('button', { name: 'Task Group', exact: true }).click()
+          |                                                                         ^
+      480 |     await page.waitForTimeout(1000)
+      481 |     await screenshot(page, '08-task-group-after-propose')
+      482 |
+        at /Users/meiyang/FrontEndProjects/hive/e2e/integration.spec.ts:479:73
+
+    Error Context: test-results/integration-Integration-Te-bd498-r-starts-and-proposes-batch/error-context.md
+
+
+[1A[2K[5/7] e2e/integration.spec.ts:490:7 › Integration Test › approve batch and workers execute
+[1A[2K[6/7] e2e/integration.spec.ts:580:7 › Integration Test › QA agent runs integration test
+[1A[2K[7/7] e2e/integration.spec.ts:601:7 › Integration Test › Critic agent reviews and creates PR
+[1A[2K  1 failed
+    e2e/integration.spec.ts:425:7 › Integration Test › manager starts and proposes batch ───────────
+  3 did not run
+  3 passed (1.7m)

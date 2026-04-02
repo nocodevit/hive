@@ -20,7 +20,7 @@ import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync, write
 const PROJECT_ROOT = join(__dirname, '..')
 const REPORT_DIR = join(PROJECT_ROOT, 'test-multi-agent-report')
 const TEST_TASKS_DIR = join(PROJECT_ROOT, 'test-multi-agent-tasks')
-const HIVE_PORT = 17710 // Use the REAL running dev server port
+const HIVE_PORT = 17796 // Separate port for test instance (avoids conflict with running app)
 const HIVE_DATA_DIR = join(require('os').homedir(), '.hive')
 const COMMS_DIR = join(HIVE_DATA_DIR, 'comms')
 
@@ -69,10 +69,19 @@ function timestamp(): string {
   return new Date().toISOString().slice(11, 19)
 }
 
-async function screenshot(page: Page, name: string) {
+// Navigate to Task Group tab (must deselect agent first by clicking project)
+async function goToTaskGroupTab(p: Page) {
+  await p.locator('button:has-text("Hive")').first().click()
+  await p.waitForTimeout(1000)
+  await p.getByRole('button', { name: 'Task Group', exact: true }).click()
+  await p.waitForTimeout(500)
+}
+
+async function screenshot(p: Page | undefined, name: string) {
+  if (!p) return
   const dir = join(REPORT_DIR, 'screenshots')
   mkdirSync(dir, { recursive: true })
-  await page.screenshot({ path: join(dir, `${name}.png`) })
+  try { await p.screenshot({ path: join(dir, `${name}.png`) }) } catch {}
 }
 
 // Create a test agent via the 4-step UI wizard
@@ -225,11 +234,12 @@ test.beforeAll(async () => {
 
   app = await electron.launch({
     args: [join(PROJECT_ROOT, 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test' }
+    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: String(HIVE_PORT) }
   })
-  page = await app.firstWindow({ timeout: 60000 })
+  page = await app.firstWindow({ timeout: 120000 })
   await page.waitForLoadState('domcontentloaded')
-  await page.waitForTimeout(3000)
+  await page.waitForTimeout(5000)
+  appendReport('session-log.md', `App launched on port ${HIVE_PORT}\n`)
 
   // Record baseline
   const data = await page.evaluate(async () => {
@@ -387,17 +397,15 @@ test.describe.serial('Integration Test', () => {
     const selects = page.locator('select')
 
     // Manager dropdown → [TEST] Manager
-    await selects.nth(0).selectOption({ label: /\[TEST\] Manager/ })
+    await selects.nth(0).selectOption({ label: '[TEST] Manager (GM)' })
     // QA dropdown → [TEST] QA
-    await selects.nth(1).selectOption({ label: /\[TEST\] QA/ })
+    await selects.nth(1).selectOption({ label: '[TEST] QA (QA)' })
     // Critic dropdown → [TEST] Critic
-    await selects.nth(2).selectOption({ label: /\[TEST\] Critic/ })
+    await selects.nth(2).selectOption({ label: '[TEST] Critic (Engineering)' })
 
-    // Workers — check both
-    const w1 = page.locator('label:has-text("[TEST] Worker-1")').locator('input[type="checkbox"]')
-    const w2 = page.locator('label:has-text("[TEST] Worker-2")').locator('input[type="checkbox"]')
-    await w1.check()
-    await w2.check()
+    // Workers — check both (use .first() in case of duplicate matches)
+    await page.getByRole('checkbox', { name: '[TEST] Worker-1' }).first().check()
+    await page.getByRole('checkbox', { name: '[TEST] Worker-2' }).first().check()
 
     // Set todo source
     const todoInput = page.locator('input[value="docs/todo.md"]')
@@ -475,9 +483,7 @@ test.describe.serial('Integration Test', () => {
     snapshotComms('phase1-proposal')
     await screenshot(page, '07-after-manager-propose')
 
-    // Check if batch proposal appeared in Task Group tab
-    await page.getByRole('button', { name: 'Task Group', exact: true }).click()
-    await page.waitForTimeout(1000)
+    await goToTaskGroupTab(page)
     await screenshot(page, '08-task-group-after-propose')
 
     appendReport('summary.md', `${timestamp()} Phase 1 complete — checking for batch proposal\n`)
@@ -520,9 +526,8 @@ test.describe.serial('Integration Test', () => {
     while (Date.now() - startTime < maxWait) {
       await page.waitForTimeout(30000) // 30s poll interval
 
-      // Check task board
-      await page.getByRole('button', { name: 'Task Group', exact: true }).click()
-      await page.waitForTimeout(1000)
+      // Check task board (navigate back to project view first)
+      await goToTaskGroupTab(page)
 
       const elapsed = Math.round((Date.now() - startTime) / 1000)
       await screenshot(page, `11-progress-${elapsed}s`)
@@ -614,7 +619,7 @@ test.describe.serial('Integration Test', () => {
     appendReport('summary.md', `${timestamp()} Critic phase complete\n`)
 
     // Check for merge card
-    await page.getByRole('button', { name: 'Task Group', exact: true }).click()
+    await goToTaskGroupTab(page)
     await page.waitForTimeout(1000)
     await screenshot(page, '17-final-task-group')
 

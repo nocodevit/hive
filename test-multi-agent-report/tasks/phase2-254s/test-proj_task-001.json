@@ -1,0 +1,15 @@
+{
+  "id": "task-001",
+  "title": "E2E test task",
+  "status": "blocked",
+  "owner": "w1",
+  "batch": 1,
+  "depends": [],
+  "scope": "src/",
+  "acceptance": "",
+  "verify": [
+    "echo ok"
+  ],
+  "attempt": 3,
+  "blocked_reason": "build fails"
+}
