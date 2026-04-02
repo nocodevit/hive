@@ -148,13 +148,37 @@ describe('watchTasks', () => {
   it('returns a cleanup function', () => {
     const cleanup = watchTasks(TEST_HOME, PROJECT_ID, null)
     expect(typeof cleanup).toBe('function')
-    cleanup() // should not throw
+    cleanup()
   })
 
   it('cleanup can be called multiple times safely', () => {
     const cleanup = watchTasks(TEST_HOME, PROJECT_ID, null)
     cleanup()
-    // Second call should not throw
     expect(() => cleanup()).not.toThrow()
+  })
+
+  it('fires callback with tasks when file changes', async () => {
+    const sent: any[] = []
+    const mockWin = {
+      isDestroyed: () => false,
+      webContents: { send: (_ch: string, data: any) => sent.push(data) }
+    } as any
+    const cleanup = watchTasks(TEST_HOME, PROJECT_ID, mockWin)
+    // Trigger a file change
+    createTask(TEST_HOME, PROJECT_ID, baseTask)
+    // fs.watch is async, wait for it
+    await new Promise((r) => setTimeout(r, 200))
+    cleanup()
+    // Should have received at least one update with tasks array
+    expect(sent.length).toBeGreaterThanOrEqual(1)
+    expect(sent[0].projectId).toBe(PROJECT_ID)
+    expect(Array.isArray(sent[0].tasks)).toBe(true)
+  })
+
+  it('does not crash when win is null', async () => {
+    const cleanup = watchTasks(TEST_HOME, PROJECT_ID, null)
+    createTask(TEST_HOME, PROJECT_ID, baseTask)
+    await new Promise((r) => setTimeout(r, 200))
+    cleanup() // should not throw
   })
 })
