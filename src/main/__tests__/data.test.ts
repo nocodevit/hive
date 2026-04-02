@@ -40,4 +40,33 @@ describe('saveDataToDir + loadDataFromDir', () => {
     const output = loadDataFromDir(TEST_DIR, TEST_FILE)
     expect((output.projects as any[])[0].id).toBe('2')
   })
+
+  it('loads old format without taskGroups field', () => {
+    saveDataToDir(TEST_DIR, TEST_FILE, { projects: [], agents: [] })
+    const output = loadDataFromDir(TEST_DIR, TEST_FILE)
+    expect(output.taskGroups).toBeUndefined()
+    // Consumer should default: (output.taskGroups || [])
+    expect((output.taskGroups || []) as any[]).toEqual([])
+  })
+
+  it('preserves taskGroups when present', () => {
+    const data = { projects: [], agents: [], taskGroups: [{ id: 'tg-1', projectId: 'p-1' }] }
+    saveDataToDir(TEST_DIR, TEST_FILE, data)
+    const output = loadDataFromDir(TEST_DIR, TEST_FILE)
+    expect((output.taskGroups as any[])![0].id).toBe('tg-1')
+  })
+
+  it('loads agents with taskGroupRole field', () => {
+    const data = { projects: [], agents: [{ id: 'a-1', taskGroupRole: 'manager' }] }
+    saveDataToDir(TEST_DIR, TEST_FILE, data)
+    const output = loadDataFromDir(TEST_DIR, TEST_FILE)
+    expect((output.agents as any[])[0].taskGroupRole).toBe('manager')
+  })
+
+  it('loads agents without taskGroupRole (old format)', () => {
+    const data = { projects: [], agents: [{ id: 'a-1', name: 'Alice' }] }
+    saveDataToDir(TEST_DIR, TEST_FILE, data)
+    const output = loadDataFromDir(TEST_DIR, TEST_FILE)
+    expect((output.agents as any[])[0].taskGroupRole).toBeUndefined()
+  })
 })
