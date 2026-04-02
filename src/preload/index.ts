@@ -73,6 +73,8 @@ const api = {
       ipcRenderer.invoke('agent:deleteDefinition', { cwd, agentId }),
     loadLogs: (agentId: string) => ipcRenderer.invoke('agent:loadLogs', { agentId }),
     clearLogs: (agentId: string) => ipcRenderer.invoke('agent:clearLogs', { agentId }),
+    send: (agentId: string, type: string, payload: object) =>
+      ipcRenderer.invoke('agent:send', { agentId, type, payload }),
     onStatus: (cb: (data: { agentId: string; status: string }) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: { agentId: string; status: string }) => cb(data)
       ipcRenderer.on('agent:status', handler)
@@ -82,8 +84,32 @@ const api = {
       const handler = (_event: Electron.IpcRendererEvent, data: any) => cb(data)
       ipcRenderer.on('agent:report', handler)
       return () => ipcRenderer.removeListener('agent:report', handler)
+    },
+    onTaskUpdate: (cb: (data: { projectId: string; tasks: any[] }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => cb(data)
+      ipcRenderer.on('task:update', handler)
+      return () => ipcRenderer.removeListener('task:update', handler)
+    },
+    onManagerReport: (cb: (data: { title: string; message: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => cb(data)
+      ipcRenderer.on('manager:report', handler)
+      return () => ipcRenderer.removeListener('manager:report', handler)
+    },
+    onBatchProposal: (cb: (data: any) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => cb(data)
+      ipcRenderer.on('batch:proposal', handler)
+      return () => ipcRenderer.removeListener('batch:proposal', handler)
     }
   }
 }
 
-contextBridge.exposeInMainWorld('api', api)
+// Expose getDropPaths: renderer calls this from drop event with file list
+// Preload runs in same process but isolated world — we can use webUtils to get path
+const { webUtils } = require('electron')
+
+contextBridge.exposeInMainWorld('api', {
+  ...api,
+  getFilePath: (file: File) => {
+    try { return webUtils.getPathForFile(file) } catch { return null }
+  }
+})

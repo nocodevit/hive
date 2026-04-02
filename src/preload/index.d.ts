@@ -38,6 +38,7 @@ declare global {
         stop: () => Promise<{ ok: boolean }>
         onTranscript: (cb: (line: string) => void) => () => void
       }
+      getFilePath: (file: File) => string | null
       project: {
         scan: (zones: { path: string; type: string }[]) => Promise<{ projectStage: string; todos: any[] }>
       }
@@ -53,8 +54,12 @@ declare global {
         deleteDefinition: (cwd: string, agentId: string) => Promise<boolean>
         loadLogs: (agentId: string) => Promise<any[]>
         clearLogs: (agentId: string) => Promise<boolean>
+        send: (agentId: string, type: string, payload: object) => Promise<boolean>
         onStatus: (cb: (data: { agentId: string; status: string }) => void) => () => void
         onReport: (cb: (data: any) => void) => () => void
+        onTaskUpdate: (cb: (data: { projectId: string; tasks: any[] }) => void) => () => void
+        onManagerReport: (cb: (data: { title: string; message: string }) => void) => () => void
+        onBatchProposal: (cb: (data: any) => void) => () => void
       }
     }
   }

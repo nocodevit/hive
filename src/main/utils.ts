@@ -20,6 +20,67 @@ export function parseTodoLine(line: string): { done: boolean; text: string } | n
   return { done: match[1].toLowerCase() === 'x', text: match[2].trim() }
 }
 
+// Parse todo.md in contract format: items with sub-line metadata (depends/scope/verify/acceptance)
+export interface TodoContract {
+  text: string
+  done: boolean
+  depends: string[]
+  scope: string
+  verify: string[]
+  acceptance: string
+}
+
+export function parseTodoContracts(content: string): TodoContract[] {
+  const lines = content.split('\n')
+  const contracts: TodoContract[] = []
+  let current: TodoContract | null = null
+  let lastKey = ''
+
+  for (const line of lines) {
+    const todo = parseTodoLine(line)
+    if (todo) {
+      if (current) contracts.push(current)
+      current = { text: todo.text, done: todo.done, depends: [], scope: '.', verify: [], acceptance: '' }
+      lastKey = ''
+      continue
+    }
+    if (!current) continue
+    // Metadata line: "  - key: value"
+    const meta = line.match(/^\s{2,}-\s+(depends|scope|verify|acceptance):\s*(.*)/)
+    if (meta) {
+      const [, key, value] = meta
+      lastKey = key
+      const v = value.trim()
+      if (key === 'depends') {
+        if (v === 'none' || v === '[]' || !v) {
+          current.depends = []
+        } else {
+          current.depends = v.replace(/^\[/, '').replace(/\]$/, '').split(',').map(s => s.trim()).filter(Boolean)
+        }
+      } else if (key === 'scope') {
+        current.scope = v || '.'
+      } else if (key === 'verify' && v) {
+        current.verify.push(v)
+      } else if (key === 'acceptance') {
+        current.acceptance = v
+      }
+      continue
+    }
+    // Verify sub-item: "    - command"
+    if (lastKey === 'verify') {
+      const item = line.match(/^\s{4,}-\s+(.+)/)
+      if (item) {
+        current.verify.push(item[1].trim())
+        continue
+      }
+    }
+    // Non-matching line after metadata — stop collecting for current key
+    if (!/^\s*$/.test(line) && !line.match(/^\s*#/)) lastKey = ''
+  }
+  if (current) contracts.push(current)
+  return contracts
+}
+
 // Todo categorization
 export function categorizeTodo(text: string): string {
   const lower = text.toLowerCase()
@@ -157,7 +218,15 @@ export function generateReportScript(agentId: string, port: number): string {
 # Usage:
 #   .claude/hive-report.sh start "Fixing login bug"
 #   .claude/hive-report.sh done "Fixed login bug, added validation"
-#   .claude/hive-report.sh todo '{"items":[{"text":"Fix bug","done":false}]}'
+#   .claude/hive-report.sh todo '{"items":[...]}'
+#   .claude/hive-report.sh task-create '{"projectId":"...","title":"...","scope":"..."}'
+#   .claude/hive-report.sh task-assign TASK_ID AGENT_ID
+#   .claude/hive-report.sh task-done TASK_ID "summary"
+#   .claude/hive-report.sh task-blocked TASK_ID "reason"
+#   .claude/hive-report.sh task-status
+#   .claude/hive-report.sh ready
+#   .claude/hive-report.sh report-human "message"
+#   .claude/hive-report.sh batch-propose '{"batch":1,"tasks":[...]}'
 
 ACTION="$1"
 MSG="$2"
@@ -176,6 +245,43 @@ case "$ACTION" in
   todo)
     curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
       -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"todo\\",$(echo $MSG | sed 's/^{//')}" > /dev/null 2>&1
+    ;;
+  task-create)
+    curl -s -X POST http://127.0.0.1:$PORT/task-create -H "Content-Type: application/json" \\
+      -d "$MSG"
+    ;;
+  task-assign)
+    TASK_ID="$2"
+    TARGET="$3"
+    curl -s -X POST http://127.0.0.1:$PORT/task-assign -H "Content-Type: application/json" \\
+      -d "{\\"projectId\\":\\"\\",\\"taskId\\":\\"$TASK_ID\\",\\"agentId\\":\\"$TARGET\\"}" > /dev/null 2>&1
+    ;;
+  task-done)
+    TASK_ID="$2"
+    SUMMARY="$3"
+    curl -s -X POST http://127.0.0.1:$PORT/task-done -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\",\\"taskId\\":\\"$TASK_ID\\",\\"summary\\":\\"$SUMMARY\\"}" > /dev/null 2>&1
+    ;;
+  task-blocked)
+    TASK_ID="$2"
+    REASON="$3"
+    curl -s -X POST http://127.0.0.1:$PORT/task-blocked -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\",\\"taskId\\":\\"$TASK_ID\\",\\"reason\\":\\"$REASON\\"}" > /dev/null 2>&1
+    ;;
+  task-status)
+    curl -s http://127.0.0.1:$PORT/task-status?projectId=
+    ;;
+  ready)
+    curl -s -X POST http://127.0.0.1:$PORT/ready -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\"}" > /dev/null 2>&1
+    ;;
+  report-human)
+    curl -s -X POST http://127.0.0.1:$PORT/report-human -H "Content-Type: application/json" \\
+      -d "{\\"agentId\\":\\"$AGENT\\",\\"message\\":\\"$MSG\\"}" > /dev/null 2>&1
+    ;;
+  batch-propose)
+    curl -s -X POST http://127.0.0.1:$PORT/batch-propose -H "Content-Type: application/json" \\
+      -d "$MSG" > /dev/null 2>&1
     ;;
 esac
 `
