@@ -2028,6 +2028,31 @@ export default function App() {
       })()}
 
       <MarkdownPreviewModal filePath={previewFilePath} onClose={() => setPreviewFilePath(null)} />
+
+      {/* Notification Toasts */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
+        {managerReports.slice(-3).map((r, i) => {
+          const age = Date.now() - new Date(r.time).getTime()
+          if (age > 10000) return null // auto-dismiss after 10s
+          return (
+            <div key={i} className="pointer-events-auto bg-bg-secondary border border-border rounded-xl shadow-xl p-3 max-w-xs animate-slide-in">
+              <div className="flex items-start gap-2">
+                <span className="text-sm" style={{ color: '#F59E0B' }}>♛</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-medium text-text-primary">{r.title}</p>
+                  <p className="text-[11px] text-text-muted truncate">{r.message}</p>
+                </div>
+                <button
+                  onClick={() => setManagerReports(prev => prev.filter((_, j) => j !== prev.length - 3 + i))}
+                  className="text-text-muted/40 hover:text-text-muted cursor-pointer"
+                >
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
