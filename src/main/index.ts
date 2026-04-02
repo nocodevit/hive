@@ -26,6 +26,9 @@ function loadData(): Record<string, unknown> {
 
 function saveData(data: Record<string, unknown>) {
   ensureDataDir()
+  // Backup before overwrite
+  const bakFile = DATA_FILE + '.bak'
+  try { if (existsSync(DATA_FILE)) writeFileSync(bakFile, readFileSync(DATA_FILE)) } catch {}
   writeFileSync(DATA_FILE, JSON.stringify(data, null, 2))
 }
 
