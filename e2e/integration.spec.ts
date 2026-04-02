@@ -87,38 +87,21 @@ async function createTestAgent(
   await page.getByRole('button', { name: 'New Agent' }).click()
   await page.waitForTimeout(500)
 
-  // Step 0: Select template
-  await page.locator(`text=${templateName}`).first().click()
-  await page.waitForTimeout(200)
-  await page.getByRole('button', { name: 'Next' }).click()
-  await page.waitForTimeout(300)
+  // Step 0: Select template — clicking auto-advances to step 1
+  await page.locator(`button:has-text("${templateName}")`).first().click()
+  await page.waitForTimeout(500)
 
-  // Step 1: Name + department + role
-  const nameInput = page.locator('input[placeholder="Agent name"]').first()
-  if (await nameInput.isVisible()) {
-    await nameInput.fill(name)
-  } else {
-    // Try other input — the first text input in the modal
-    const inputs = page.locator('.fixed input[type="text"]')
-    await inputs.first().fill(name)
-  }
+  // Step 1: Fill name (placeholder is "e.g. Alex")
+  const nameInput = page.locator('input[placeholder="e.g. Alex"]')
+  await nameInput.fill(name)
   await page.waitForTimeout(200)
 
-  // Select department if needed
-  if (dept === 'Non-R&D') {
-    const nonRndBtn = page.locator('button:has-text("Non-R&D")')
-    if (await nonRndBtn.isVisible()) await nonRndBtn.click()
-  }
-
-  // Select role
-  const roleBtn = page.locator(`button:has-text("${roleName}")`)
-  if (await roleBtn.isVisible()) await roleBtn.click()
-
-  await page.getByRole('button', { name: 'Next' }).click()
+  // Department + role auto-set by template. Click "Next: Skills"
+  await page.getByRole('button', { name: 'Next: Skills' }).click()
   await page.waitForTimeout(300)
 
-  // Step 2: Skills — just skip
-  await page.getByRole('button', { name: 'Next' }).click()
+  // Step 2: Skills — skip, click "Next: Settings"
+  await page.getByRole('button', { name: 'Next: Settings' }).click()
   await page.waitForTimeout(300)
 
   // Step 3: Model + Zone — keep defaults, create
@@ -355,7 +338,8 @@ test.describe.serial('Integration Test', () => {
 
   test('select Hive project', async () => {
     // Find and click the Hive project in sidebar
-    const hiveProject = page.locator('button:has-text("Hive")')
+    // Button text is like "💤 Hive 17" (emoji + name + agent count)
+    const hiveProject = page.locator('button:has-text("Hive")').first()
     await hiveProject.click()
     await page.waitForTimeout(1000)
     await screenshot(page, '01-hive-project-selected')
@@ -547,16 +531,21 @@ test.describe.serial('Integration Test', () => {
       snapshotComms(`phase2-${elapsed}s`)
 
       // Check if batch tasks are done by reading task files
-      const taskSummary = await page.evaluate(async (port) => {
+      // Get manager agent ID for task-status lookup
+      const mgrId = await page.evaluate(async () => {
+        const d = await window.api.data.load()
+        return (d.agents as any[])?.find((a: any) => a.name === '[TEST] Manager')?.id || ''
+      })
+
+      const taskSummary = await page.evaluate(async ({ port, agentId }) => {
         try {
-          // Use the HTTP endpoint to get task status
           const res = await fetch(`http://127.0.0.1:${port}/task-status`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ agentId: '' }) // empty = get all
+            body: JSON.stringify({ agentId })
           })
           const tasks = await res.json()
-          if (!Array.isArray(tasks)) return { total: 0, done: 0, blocked: 0, pending: 0 }
+          if (!Array.isArray(tasks)) return { total: 0, done: 0, blocked: 0, pending: 0, inProgress: 0 }
           return {
             total: tasks.length,
             done: tasks.filter((t: any) => t.status === 'done').length,
@@ -564,8 +553,8 @@ test.describe.serial('Integration Test', () => {
             pending: tasks.filter((t: any) => t.status === 'pending').length,
             inProgress: tasks.filter((t: any) => t.status === 'in_progress' || t.status === 'assigned').length,
           }
-        } catch { return { total: 0, done: 0, blocked: 0, pending: 0 } }
-      }, HIVE_PORT)
+        } catch { return { total: 0, done: 0, blocked: 0, pending: 0, inProgress: 0 } }
+      }, { port: HIVE_PORT, agentId: mgrId })
 
       appendReport('batch-timeline.md', `${timestamp()} [${elapsed}s] Tasks: ${taskSummary.done}/${taskSummary.total} done, ${taskSummary.blocked} blocked, ${taskSummary.pending} pending\n`)
 
