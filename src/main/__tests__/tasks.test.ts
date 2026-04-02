@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { join } from 'path'
 import { mkdirSync, rmSync, existsSync } from 'fs'
-import { createTask, readTask, updateTask, listTasks, deleteTask } from '../tasks'
+import { createTask, readTask, updateTask, listTasks, deleteTask, ensureReportsDir, watchTasks } from '../tasks'
 import type { TaskData } from '../tasks'
 
 const TEST_HOME = join(__dirname, '__test_tasks_home__')
@@ -127,5 +127,34 @@ describe('deleteTask', () => {
 
   it('returns false for non-existent task', () => {
     expect(deleteTask(TEST_HOME, PROJECT_ID, 'task-999')).toBe(false)
+  })
+})
+
+describe('ensureReportsDir', () => {
+  it('creates reports directory and returns path', () => {
+    const dir = ensureReportsDir(TEST_HOME, PROJECT_ID)
+    expect(existsSync(dir)).toBe(true)
+    expect(dir).toContain('reports')
+  })
+
+  it('returns same path on repeated calls', () => {
+    const dir1 = ensureReportsDir(TEST_HOME, PROJECT_ID)
+    const dir2 = ensureReportsDir(TEST_HOME, PROJECT_ID)
+    expect(dir1).toBe(dir2)
+  })
+})
+
+describe('watchTasks', () => {
+  it('returns a cleanup function', () => {
+    const cleanup = watchTasks(TEST_HOME, PROJECT_ID, null)
+    expect(typeof cleanup).toBe('function')
+    cleanup() // should not throw
+  })
+
+  it('cleanup can be called multiple times safely', () => {
+    const cleanup = watchTasks(TEST_HOME, PROJECT_ID, null)
+    cleanup()
+    // Second call should not throw
+    expect(() => cleanup()).not.toThrow()
   })
 })
