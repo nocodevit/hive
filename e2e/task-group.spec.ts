@@ -100,3 +100,103 @@ test.describe('Task Group Tab', () => {
     await expect(page.getByText('inactive')).toBeVisible()
   })
 })
+
+test.describe('Task Group Creation Flow', () => {
+  test('can assign all 4 roles and create task group', async () => {
+    // Go to Task Group tab
+    await page.getByRole('button', { name: 'Task Group', exact: true }).click()
+    await page.waitForTimeout(500)
+
+    // Open modal
+    await page.getByRole('button', { name: 'Create Task Group' }).click()
+    await page.waitForTimeout(500)
+
+    // Assign Manager (first dropdown) → Alice
+    const selects = page.locator('select')
+    await selects.nth(0).selectOption('a1') // Alice as Manager
+
+    // Assign QA (second dropdown) → Charlie
+    await selects.nth(1).selectOption('a3') // Charlie as QA
+
+    // Assign Critic (third dropdown) → Diana
+    await selects.nth(2).selectOption('a4') // Diana as Critic
+
+    // Check Bob as Worker
+    await page.locator('label:has-text("Bob")').locator('input[type="checkbox"]').check()
+    await page.waitForTimeout(300)
+
+    // Summary should be visible
+    await expect(page.getByText('Alice manages 1 worker')).toBeVisible()
+
+    // Create & Start should be enabled
+    const createBtn = page.getByRole('button', { name: 'Create & Start' })
+    await expect(createBtn).toBeEnabled()
+
+    // Submit
+    await createBtn.click()
+    await page.waitForTimeout(1000)
+  })
+
+  test('after creation, empty state is gone', async () => {
+    await expect(page.getByText('No active Task Group')).not.toBeVisible()
+  })
+
+  test('roles bar shows all assigned agents', async () => {
+    // Should see role badges with agent names
+    await expect(page.getByText('Alice').first()).toBeVisible()
+    await expect(page.getByText('Bob').first()).toBeVisible()
+    await expect(page.getByText('Charlie').first()).toBeVisible()
+    await expect(page.getByText('Diana').first()).toBeVisible()
+  })
+
+  test('batch panel shows idle status', async () => {
+    await expect(page.getByText('idle')).toBeVisible()
+    await expect(page.getByText('/manager-whip-start')).toBeVisible()
+  })
+
+  test('control buttons are visible', async () => {
+    await expect(page.getByText('⏸ Pause')).toBeVisible()
+    await expect(page.getByText('🗑 Dissolve')).toBeVisible()
+  })
+
+  test('sidebar agents show role badges', async () => {
+    // Role badges are small colored circles on avatar
+    // Check that agents have taskGroupRole-related styling
+    // The badge is a span with specific background colors
+    const badges = page.locator('span.absolute.-top-1.-right-1')
+    const count = await badges.count()
+    expect(count).toBeGreaterThanOrEqual(4) // 4 agents with badges
+  })
+
+  test('Dashboard status card updates to active', async () => {
+    await page.getByRole('button', { name: 'Dashboard', exact: true }).click()
+    await page.waitForTimeout(500)
+    // Task Group card should show status (not "inactive" anymore)
+    await expect(page.getByText('→ Go to Task Group')).toBeVisible()
+  })
+
+  test('dissolve removes task group', async () => {
+    // Go back to Task Group tab
+    await page.getByRole('button', { name: 'Task Group', exact: true }).click()
+    await page.waitForTimeout(500)
+
+    // Click dissolve
+    await page.getByText('🗑 Dissolve').click()
+    await page.waitForTimeout(500)
+
+    // Should return to empty state
+    await expect(page.getByText('No active Task Group')).toBeVisible()
+  })
+
+  test('after dissolve, sidebar badges are removed', async () => {
+    const badges = page.locator('span.absolute.-top-1.-right-1')
+    const count = await badges.count()
+    expect(count).toBe(0)
+  })
+
+  test('after dissolve, Dashboard shows inactive again', async () => {
+    await page.getByRole('button', { name: 'Dashboard', exact: true }).click()
+    await page.waitForTimeout(500)
+    await expect(page.getByText('inactive')).toBeVisible()
+  })
+})
