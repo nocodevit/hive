@@ -184,6 +184,16 @@ export default function App() {
     return () => { removeStatus(); removeReport(); removeTaskUpdate(); removeManagerReport(); removeBatchProposal() }
   }, [])
 
+  // Auto-cleanup stale toast notifications
+  useEffect(() => {
+    if (managerReports.length === 0) return
+    const timer = setInterval(() => {
+      const now = Date.now()
+      setManagerReports((prev) => prev.filter((r) => now - new Date(r.time).getTime() < 10000))
+    }, 2000)
+    return () => clearInterval(timer)
+  }, [managerReports.length])
+
   const startAgent = async (agent: Agent) => {
     const project = projects.find((p) => p.id === agent.projectId)
     const zone = project?.zones.find((z: Zone) => z.id === agent.zoneId)

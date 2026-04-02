@@ -40,7 +40,9 @@ const api = {
     worktreeList: (repoPath: string) =>
       ipcRenderer.invoke('git:worktreeList', { repoPath }),
     clone: (url: string, destPath: string, token?: string, provider?: string) =>
-      ipcRenderer.invoke('git:clone', { url, destPath, token, provider }) as Promise<{ ok: boolean; path?: string; name?: string; error?: string }>
+      ipcRenderer.invoke('git:clone', { url, destPath, token, provider }) as Promise<{ ok: boolean; path?: string; name?: string; error?: string }>,
+    createIntegration: (repoPath: string, batchNum: number, workerBranches: string[]) =>
+      ipcRenderer.invoke('git:createIntegration', { repoPath, batchNum, workerBranches })
   },
   speech: {
     start: () => ipcRenderer.invoke('speech:start') as Promise<{ ok: boolean; error?: string }>,
