@@ -66,7 +66,7 @@ export default function App() {
   const [teamSelectedAgents, setTeamSelectedAgents] = useState<Set<string>>(new Set())
   const [isListening, setIsListening] = useState(false)
   const [speechPartial, setSpeechPartial] = useState('')
-  const [projectTab, setProjectTab] = useState<'office' | 'project' | 'settings'>('office')
+  const [projectTab, setProjectTab] = useState<'dashboard' | 'office' | 'taskgroup' | 'settings'>('dashboard')
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
@@ -435,6 +435,18 @@ export default function App() {
                                   agent.status === 'working' ? 'bg-status-working' :
                                   agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
                                 }`} />
+                                {agent.taskGroupRole && (
+                                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] border border-bg-secondary" style={{
+                                    background: agent.taskGroupRole === 'manager' ? '#F59E0B' :
+                                      agent.taskGroupRole === 'worker' ? '#3B82F6' :
+                                      agent.taskGroupRole === 'qa' ? '#10B981' : '#8B5CF6',
+                                    color: '#fff'
+                                  }}>
+                                    {agent.taskGroupRole === 'manager' ? '♛' :
+                                     agent.taskGroupRole === 'worker' ? '⚒' :
+                                     agent.taskGroupRole === 'qa' ? '🛡' : '👁'}
+                                  </span>
+                                )}
                               </div>
                               <div className="flex flex-col min-w-0 flex-1">
                                 <span className="truncate flex items-center gap-1.5 text-[12px]">
@@ -686,7 +698,7 @@ export default function App() {
               {/* Project Header + Tabs in title bar area */}
               <div className="px-6 pt-2 pb-3 border-b border-border flex items-center gap-4">
                 <div className="flex gap-1">
-                  {([['office', 'Office'], ['project', 'Project'], ['settings', 'Settings']] as const).map(([key, label]) => (
+                  {([['dashboard', 'Dashboard'], ['office', 'Office'], ['taskgroup', 'Task Group'], ['settings', 'Settings']] as const).map(([key, label]) => (
                     <button
                       key={key}
                       onClick={() => setProjectTab(key)}
@@ -785,9 +797,50 @@ export default function App() {
                 </div>
               )}
 
-              {/* Project Tab */}
-              {projectTab === 'project' && (
+              {/* Dashboard Tab */}
+              {projectTab === 'dashboard' && (
                 <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                  {/* Progress + Task Group Status */}
+                  {projectScan && (() => {
+                    const allTodos = projectScan.todos
+                    const done = allTodos.filter((t: any) => t.done).length
+                    const total = allTodos.length
+                    const pct = total > 0 ? Math.round((done / total) * 100) : 0
+                    const taskGroup = (window as any).__taskGroups?.find((tg: any) => tg.projectId === selectedProjectId)
+                    return (
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="glass-card p-5">
+                          <h3 className="text-sm font-heading font-bold text-text-primary mb-2">Progress</h3>
+                          <div className="flex items-center gap-3">
+                            <div className="flex-1 h-2 bg-bg-hover rounded-full overflow-hidden">
+                              <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${pct}%` }} />
+                            </div>
+                            <span className="text-xs text-text-muted font-mono">{done}/{total}</span>
+                          </div>
+                          <p className="text-[11px] text-text-muted mt-1">{pct}% complete</p>
+                        </div>
+                        <div className="glass-card p-5">
+                          <h3 className="text-sm font-heading font-bold text-text-primary mb-2">Task Group</h3>
+                          {taskGroup ? (
+                            <div>
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider ${
+                                taskGroup.status === 'executing' ? 'bg-status-working/20 text-status-working' :
+                                taskGroup.status === 'awaiting_merge' ? 'bg-accent/20 text-accent' :
+                                'bg-bg-hover text-text-muted'
+                              }`}>{taskGroup.status.replace('_', ' ')}</span>
+                              <p className="text-[11px] text-text-muted mt-1">Batch {taskGroup.currentBatch}</p>
+                              <button onClick={() => setProjectTab('taskgroup')} className="text-[11px] text-accent hover:underline mt-1 cursor-pointer">→ Go to Task Group</button>
+                            </div>
+                          ) : (
+                            <div>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider bg-bg-hover text-text-muted">inactive</span>
+                              <button onClick={() => setProjectTab('taskgroup')} className="block text-[11px] text-accent hover:underline mt-1 cursor-pointer">+ Create Task Group</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })()}
                   {/* Glass Todo Cards */}
                   <div className="grid grid-cols-2 gap-4">
                     {/* R&D Card */}
@@ -880,6 +933,82 @@ export default function App() {
                       })}
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* Task Group Tab */}
+              {projectTab === 'taskgroup' && (
+                <div className="flex-1 overflow-y-auto p-6 space-y-5">
+                  {(() => {
+                    const taskGroup = (window as any).__taskGroups?.find((tg: any) => tg.projectId === selectedProjectId)
+                    if (!taskGroup) {
+                      return (
+                        <div className="flex flex-col items-center justify-center h-full text-text-muted gap-4 py-20">
+                          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--accent-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" opacity="0.5">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                            <circle cx="9" cy="7" r="4" />
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                          </svg>
+                          <p className="text-sm font-medium">No active Task Group</p>
+                          <p className="text-xs text-text-muted/60 text-center max-w-xs">
+                            Assign Manager, Workers, QA, and Critic roles to run batch-driven task execution.
+                          </p>
+                          <button
+                            onClick={() => {/* TODO: open CreateTaskGroupModal */}}
+                            className="px-4 py-2 rounded-lg bg-accent text-text-on-purple text-sm font-medium hover:bg-accent-hover transition-colors cursor-pointer flex items-center gap-2"
+                          >
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
+                            Create Task Group
+                          </button>
+                        </div>
+                      )
+                    }
+                    // Active task group
+                    return (
+                      <div className="space-y-4">
+                        {/* Roles bar */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {[
+                            { id: taskGroup.managerId, role: 'manager', icon: '♛', color: '#F59E0B' },
+                            ...taskGroup.workerIds.map((id: string) => ({ id, role: 'worker', icon: '⚒', color: '#3B82F6' })),
+                            { id: taskGroup.qaId, role: 'qa', icon: '🛡', color: '#10B981' },
+                            { id: taskGroup.criticId, role: 'critic', icon: '👁', color: '#8B5CF6' },
+                          ].map(({ id, role, icon, color }) => {
+                            const agent = agents.find(a => a.id === id)
+                            return agent ? (
+                              <span key={id} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-bg-secondary border border-border text-xs">
+                                <span style={{ color }}>{icon}</span>
+                                <span className="text-text-primary font-medium">{agent.name}</span>
+                                <span className="text-text-muted/50 uppercase text-[9px]">{role}</span>
+                              </span>
+                            ) : null
+                          })}
+                        </div>
+                        {/* Batch status */}
+                        <div className="glass-card p-4">
+                          <div className="flex items-center justify-between mb-3">
+                            <h3 className="text-sm font-heading font-bold text-text-primary">Batch {taskGroup.currentBatch}</h3>
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider ${
+                              taskGroup.status === 'executing' ? 'bg-status-working/20 text-status-working' :
+                              taskGroup.status === 'awaiting_merge' ? 'bg-accent/20 text-accent' :
+                              'bg-bg-hover text-text-muted'
+                            }`}>{taskGroup.status.replace('_', ' ')}</span>
+                          </div>
+                          <p className="text-xs text-text-muted">Task details will appear here when a batch is running.</p>
+                        </div>
+                        {/* Controls */}
+                        <div className="flex gap-2">
+                          <button className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer">
+                            ⏸ Pause
+                          </button>
+                          <button className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-red-400/70 hover:text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer">
+                            🗑 Dissolve
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })()}
                 </div>
               )}
 
