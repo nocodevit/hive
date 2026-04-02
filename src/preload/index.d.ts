@@ -50,6 +50,7 @@ declare global {
         writeDefinition: (cwd: string, config: {
           agentId: string; name: string; role: string; department: string;
           soul: string; skills: string[]; model: string; effort: string;
+          taskGroupRole?: string; todoSource?: string; maxGateRetries?: number;
         }) => Promise<{ ok: boolean; agentName?: string; error?: string }>
         deleteDefinition: (cwd: string, agentId: string) => Promise<boolean>
         loadLogs: (agentId: string) => Promise<any[]>

@@ -204,6 +204,7 @@ export default function App() {
       skills: agent.enabledSkills || [],
       model: agent.model || 'inherit',
       effort: agent.effort || 'high',
+      taskGroupRole: agent.taskGroupRole,
     })
     if (result.agentName) {
       setAgentNames((prev) => ({ ...prev, [agent.id]: result.agentName! }))
