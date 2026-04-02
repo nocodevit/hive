@@ -1,19 +1,19 @@
 import { test, expect, ElectronApplication, Page } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import { join } from 'path'
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs'
+import { writeFileSync, mkdirSync, existsSync, rmSync } from 'fs'
 
 let app: ElectronApplication
 let page: Page
 
-const TEST_DATA_DIR = join(require('os').homedir(), '.hive')
+// Isolated test directory — NEVER touch ~/.hive/
+const TEST_DATA_DIR = join(require('os').tmpdir(), 'hive-e2e-taskgroup')
 const TEST_DATA_FILE = join(TEST_DATA_DIR, 'data.json')
-let originalData: string | null = null
 
 test.beforeAll(async () => {
-  if (existsSync(TEST_DATA_FILE)) {
-    originalData = readFileSync(TEST_DATA_FILE, 'utf-8')
-  }
+  // Clean isolated test dir
+  if (existsSync(TEST_DATA_DIR)) rmSync(TEST_DATA_DIR, { recursive: true })
+  mkdirSync(TEST_DATA_DIR, { recursive: true })
 
   const avatar = { skinTone: '#f5d0a9', hairStyle: 'short', hairColor: '#2c1810', topStyle: 'tee', topColor: '#7c3aed', bottomStyle: 'pants', bottomColor: '#1e293b', hat: 'none', accessories: [] }
   const prefs = { autoRunClaude: false, startupCommand: '' }
@@ -44,7 +44,7 @@ test.beforeAll(async () => {
 
   app = await electron.launch({
     args: [join(__dirname, '..', 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: '17798' }
+    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: '17798', HIVE_DATA_DIR: TEST_DATA_DIR }
   })
   page = await app.firstWindow({ timeout: 60000 })
   await page.waitForLoadState('domcontentloaded')
@@ -53,7 +53,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close()
-  if (originalData) writeFileSync(TEST_DATA_FILE, originalData)
+  if (existsSync(TEST_DATA_DIR)) rmSync(TEST_DATA_DIR, { recursive: true })
 })
 
 test.describe('Task Group Tab', () => {

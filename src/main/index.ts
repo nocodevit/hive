@@ -10,8 +10,8 @@ import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
 import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './helpers'
 
-// Data persistence
-const DATA_DIR = join(app.getPath('home'), '.hive')
+// Data persistence — HIVE_DATA_DIR env allows E2E tests to use isolated directory
+const DATA_DIR = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
 const DATA_FILE = join(DATA_DIR, 'data.json')
 
 function ensureDataDir() {
@@ -33,7 +33,7 @@ const terminals: Map<string, pty.IPty> = new Map()
 const HIVE_PORT = parseInt(process.env.HIVE_PORT || '17710', 10)
 
 // Work logs persistence
-const LOGS_DIR = join(app.getPath('home'), '.hive', 'logs')
+const LOGS_DIR = join(DATA_DIR, 'logs')
 
 function appendLog(agentId: string, entry: { time: string; type: string; message: string }) {
   mkdirSync(LOGS_DIR, { recursive: true })
@@ -99,7 +99,7 @@ function findAgentWorktree(agentId: string): string | null {
 
 // Status + report webhook server — receives hook calls from Claude Code
 const statusServer = createServer((req, res) => {
-  if (req.method === 'GET' && req.url === '/task-status') {
+  if (req.method === 'GET' && req.url?.startsWith('/task-status')) {
     // GET /task-status?projectId=xxx
     const url = new URL(req.url, `http://127.0.0.1:${HIVE_PORT}`)
     const projectId = url.searchParams.get('projectId') || ''
