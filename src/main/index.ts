@@ -234,9 +234,13 @@ const statusServer = createServer((req, res) => {
         res.end(JSON.stringify(tasks))
         return
       } else if (req.url === '/ready') {
-        const taskGroupData = loadData()
-        const tg = ((taskGroupData.taskGroups || []) as any[]).find(g => g.workerIds?.includes(data.agentId))
-        if (tg) sendToAgent(tg.managerId, 'MSG', { worker: data.agentId, status: 'ready' })
+        // Worker is about to /clear — delay notifying manager to allow clear to complete
+        const ctx = findTaskGroupForAgent(data.agentId)
+        if (ctx?.taskGroup) {
+          setTimeout(() => {
+            sendToAgent(ctx.taskGroup.managerId, 'MSG', { worker: data.agentId, status: 'ready' })
+          }, 2000) // 2s delay: worker /clear takes ~1s, plus buffer
+        }
       } else if (req.url === '/report-human') {
         notifyHuman('Manager', data.message || '')
         appendLog(data.agentId, { time: new Date().toISOString(), type: 'report', message: data.message })
@@ -526,6 +530,33 @@ ipcMain.handle('git:worktreeList', (_event, { repoPath }) => {
     return worktrees
   } catch {
     return []
+  }
+})
+
+// Create integration branch by merging worker branches
+ipcMain.handle('git:createIntegration', (_event, { repoPath, batchNum, workerBranches }: { repoPath: string; batchNum: number; workerBranches: string[] }) => {
+  try {
+    const branchName = `integration/batch-${batchNum}`
+    execSync(`git -C "${repoPath}" checkout -b ${branchName} main`, { encoding: 'utf-8' })
+    const mergeResults: { branch: string; ok: boolean; error?: string }[] = []
+    for (const branch of workerBranches) {
+      try {
+        execSync(`git -C "${repoPath}" merge --no-ff ${branch} -m "merge ${branch} into ${branchName}"`, { encoding: 'utf-8' })
+        mergeResults.push({ branch, ok: true })
+      } catch (err: any) {
+        mergeResults.push({ branch, ok: false, error: (err.message || '').slice(0, 200) })
+        // Abort failed merge
+        try { execSync(`git -C "${repoPath}" merge --abort`, { encoding: 'utf-8' }) } catch {}
+        break
+      }
+    }
+    const allOk = mergeResults.every(r => r.ok)
+    if (allOk) {
+      execSync(`git -C "${repoPath}" push origin ${branchName}`, { encoding: 'utf-8' })
+    }
+    return { ok: allOk, branch: branchName, results: mergeResults }
+  } catch (err: any) {
+    return { ok: false, error: (err.message || '').slice(0, 300) }
   }
 })
 

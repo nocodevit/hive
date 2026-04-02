@@ -32,6 +32,8 @@ declare global {
           Promise<{ path: string; branch: string }[]>
         clone: (url: string, destPath: string, token?: string, provider?: string) =>
           Promise<{ ok: boolean; path?: string; name?: string; error?: string }>
+        createIntegration: (repoPath: string, batchNum: number, workerBranches: string[]) =>
+          Promise<{ ok: boolean; branch?: string; results?: any[]; error?: string }>
       }
       speech: {
         start: () => Promise<{ ok: boolean; error?: string }>
