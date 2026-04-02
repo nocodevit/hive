@@ -82,4 +82,59 @@ describe('runGate', () => {
     expect(result.failures[0].step).toBe('scope')
     expect(result.failures[1].step).toBe('verify')
   })
+
+  it('captures stderr from exec error', async () => {
+    mockExec.mockImplementation((cmd: any) => {
+      if (typeof cmd === 'string' && cmd.includes('npm run build')) {
+        const err: any = new Error('fail')
+        err.stderr = 'STDERR: compilation error at line 42'
+        throw err
+      }
+      return ''
+    })
+    const result = await runGate('/test', { scope: '.', verify: [] })
+    expect(result.pass).toBe(false)
+    expect(result.failures[0].detail).toContain('STDERR')
+  })
+
+  it('captures stdout from exec error when no stderr', async () => {
+    mockExec.mockImplementation((cmd: any) => {
+      if (typeof cmd === 'string' && cmd.includes('npm run build')) {
+        const err: any = new Error('fail')
+        err.stdout = 'STDOUT: some output'
+        err.stderr = ''
+        throw err
+      }
+      return ''
+    })
+    const result = await runGate('/test', { scope: '.', verify: [] })
+    expect(result.pass).toBe(false)
+    expect(result.failures[0].detail).toContain('STDOUT')
+  })
+
+  it('passes scope check when diff returns empty', async () => {
+    mockExec.mockImplementation((cmd: any) => {
+      if (typeof cmd === 'string' && cmd.includes('git diff')) return '' as any
+      return ''
+    })
+    const result = await runGate('/test', { scope: 'src/', verify: [] })
+    expect(result.pass).toBe(true)
+  })
+
+  it('passes scope check when diff command fails', async () => {
+    mockExec.mockImplementation((cmd: any) => {
+      if (typeof cmd === 'string' && cmd.includes('git diff')) throw new Error('not a git repo')
+      return ''
+    })
+    const result = await runGate('/test', { scope: 'src/', verify: [] })
+    // diff fail = can't check scope, but doesn't block gate
+    expect(result.pass).toBe(true)
+  })
+
+  it('passes verify when command succeeds', async () => {
+    mockExec.mockReturnValue('')
+    const result = await runGate('/test', { scope: '.', verify: ['echo ok', 'test -f x'] })
+    expect(result.pass).toBe(true)
+    expect(result.failures).toEqual([])
+  })
 })
