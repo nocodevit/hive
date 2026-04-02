@@ -8,6 +8,7 @@ import { execSync } from 'child_process'
 import { createTask, readTask, updateTask, listTasks } from './tasks'
 import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
+import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './helpers'
 
 // Data persistence
 const DATA_DIR = join(app.getPath('home'), '.hive')
@@ -67,8 +68,7 @@ const lastAgentStatus: Map<string, string> = new Map()
 function sendToAgent(agentId: string, type: string, payload: object): boolean {
   const term = terminals.get(agentId)
   if (!term) return false
-  const msg = JSON.stringify({ type, ...payload })
-  term.write(`[HIVE:${type.toUpperCase()}] ${msg}\r`)
+  term.write(formatHiveMessage(type, payload))
   return true
 }
 
@@ -86,27 +86,15 @@ function notifyHuman(title: string, message: string) {
   } catch {}
 }
 
-// Lookup helpers for task group context
+// Lookup helpers — delegate to extracted pure functions for testability
 function findTaskGroupForAgent(agentId: string): { taskGroup: any; projectId: string } | null {
   const d = loadData()
-  const tgs = (d.taskGroups || []) as any[]
-  for (const tg of tgs) {
-    if (tg.managerId === agentId || tg.qaId === agentId || tg.criticId === agentId || tg.workerIds?.includes(agentId)) {
-      return { taskGroup: tg, projectId: tg.projectId }
-    }
-  }
-  return null
+  return findTaskGroupForAgentInData(agentId, (d.taskGroups || []) as any[])
 }
 
 function findAgentWorktree(agentId: string): string | null {
   const d = loadData()
-  const agent = ((d.agents || []) as any[]).find(a => a.id === agentId)
-  if (!agent) return null
-  if (agent.worktreePath) return agent.worktreePath
-  // Fallback: find zone path
-  const project = ((d.projects || []) as any[]).find(p => p.id === agent.projectId)
-  const zone = project?.zones?.find((z: any) => z.id === agent.zoneId)
-  return zone?.path || null
+  return findAgentCwd(agentId, (d.agents || []) as any[], (d.projects || []) as any[])
 }
 
 // Status + report webhook server — receives hook calls from Claude Code
