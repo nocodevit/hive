@@ -1,3 +1,44 @@
+export type TaskGroupRole = 'manager' | 'worker' | 'qa' | 'critic'
+export type TaskStatus = 'pending' | 'assigned' | 'in_progress' | 'done' | 'blocked'
+export type TaskGroupStatus = 'idle' | 'batch_proposed' | 'batch_approved' | 'executing'
+  | 'qa' | 'critic' | 'awaiting_merge'
+
+export interface TaskGroup {
+  id: string
+  projectId: string
+  status: TaskGroupStatus
+  managerId: string
+  workerIds: string[]
+  qaId: string
+  criticId: string
+  currentBatch: number
+  todoSource: string        // relative path, default 'docs/todo.md'
+  maxGateRetries: number    // default 3
+}
+
+export interface Task {
+  id: string
+  title: string
+  status: TaskStatus
+  owner: string | null
+  batch: number
+  depends: string[]
+  scope: string
+  acceptance: string
+  verify: string[]
+  attempt: number
+  blocked_reason: string | null
+}
+
+export interface TodoContract {
+  text: string
+  done: boolean
+  depends: string[]
+  scope: string
+  verify: string[]
+  acceptance: string
+}
+
 export interface Zone {
   id: string
   name: string
@@ -38,6 +79,7 @@ export interface Agent {
   worktreePath?: string   // git worktree path (coding agents only)
   worktreeBranch?: string // git branch name
   tagColor?: string       // name tag color (hex), shown in sidebar
+  taskGroupRole?: TaskGroupRole
 }
 
 export const defaultPreferences: AgentPreferences = {

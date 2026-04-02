@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseTodoLine, categorizeTodo } from '../utils'
+import { parseTodoLine, categorizeTodo, parseTodoContracts } from '../utils'
 
 describe('parseTodoLine', () => {
   it('matches unchecked todo', () => {
@@ -68,5 +68,105 @@ describe('categorizeTodo', () => {
   it('returns other for uncategorized', () => {
     expect(categorizeTodo('Think about naming')).toBe('other')
     expect(categorizeTodo('Call Bob')).toBe('other')
+  })
+})
+
+describe('parseTodoContracts', () => {
+  it('parses contract with all metadata', () => {
+    const md = `- [ ] Add dark mode
+  - depends: none
+  - scope: src/renderer/styles/
+  - verify:
+    - npm run build
+    - npm test
+    - test -f test/dark-mode.test.ts
+  - acceptance: theme toggle works, persists in localStorage`
+    const result = parseTodoContracts(md)
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      text: 'Add dark mode',
+      done: false,
+      depends: [],
+      scope: 'src/renderer/styles/',
+      verify: ['npm run build', 'npm test', 'test -f test/dark-mode.test.ts'],
+      acceptance: 'theme toggle works, persists in localStorage'
+    })
+  })
+
+  it('parses depends with bracket list', () => {
+    const md = `- [ ] Settings page
+  - depends: [dark-mode, auth-refactor]
+  - scope: src/components/Settings/`
+    const result = parseTodoContracts(md)
+    expect(result[0].depends).toEqual(['dark-mode', 'auth-refactor'])
+  })
+
+  it('defaults missing metadata', () => {
+    const md = `- [ ] Simple task`
+    const result = parseTodoContracts(md)
+    expect(result[0]).toMatchObject({
+      text: 'Simple task',
+      done: false,
+      depends: [],
+      scope: '.',
+      verify: [],
+      acceptance: ''
+    })
+  })
+
+  it('parses multiple items', () => {
+    const md = `- [ ] Task A
+  - scope: src/a/
+- [x] Task B
+  - scope: src/b/
+- [ ] Task C`
+    const result = parseTodoContracts(md)
+    expect(result).toHaveLength(3)
+    expect(result[0].text).toBe('Task A')
+    expect(result[0].scope).toBe('src/a/')
+    expect(result[1].text).toBe('Task B')
+    expect(result[1].done).toBe(true)
+    expect(result[2].text).toBe('Task C')
+    expect(result[2].scope).toBe('.')
+  })
+
+  it('handles depends: none and depends: []', () => {
+    const md = `- [ ] Task A
+  - depends: none
+- [ ] Task B
+  - depends: []`
+    const result = parseTodoContracts(md)
+    expect(result[0].depends).toEqual([])
+    expect(result[1].depends).toEqual([])
+  })
+
+  it('handles single-line verify', () => {
+    const md = `- [ ] Quick fix
+  - verify: npm test`
+    const result = parseTodoContracts(md)
+    expect(result[0].verify).toEqual(['npm test'])
+  })
+
+  it('ignores headings and blank lines between items', () => {
+    const md = `# Project Todo
+
+## v0.8.0
+
+- [ ] First task
+  - scope: src/
+
+## v0.9.0
+
+- [ ] Second task
+  - scope: lib/`
+    const result = parseTodoContracts(md)
+    expect(result).toHaveLength(2)
+    expect(result[0].text).toBe('First task')
+    expect(result[1].text).toBe('Second task')
+  })
+
+  it('returns empty for no todo items', () => {
+    expect(parseTodoContracts('# Just a heading\nSome text')).toEqual([])
+    expect(parseTodoContracts('')).toEqual([])
   })
 })

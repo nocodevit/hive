@@ -4,6 +4,8 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, symlin
 import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
+import { execSync } from 'child_process'
+import { createTask, readTask, updateTask, listTasks } from './tasks'
 
 // Data persistence
 const DATA_DIR = join(app.getPath('home'), '.hive')
@@ -59,8 +61,41 @@ function loadLogs(agentId: string): any[] {
 // Track last status per agent to avoid duplicate logs
 const lastAgentStatus: Map<string, string> = new Map()
 
+// PTY injection: send [HIVE:TYPE] messages to agents
+function sendToAgent(agentId: string, type: string, payload: object): boolean {
+  const term = terminals.get(agentId)
+  if (!term) return false
+  const msg = JSON.stringify({ type, ...payload })
+  term.write(`[HIVE:${type.toUpperCase()}] ${msg}\r`)
+  return true
+}
+
+// Notify human: macOS + Telegram + UI
+function notifyHuman(title: string, message: string) {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win && !win.isDestroyed()) win.webContents.send('manager:report', { title, message })
+  try {
+    const escaped = message.replace(/"/g, '\\"').replace(/'/g, "'")
+    execSync(`osascript -e 'display notification "${escaped}" with title "Hive: ${title}" sound name "Glass"'`)
+  } catch {}
+  try {
+    const payload = JSON.stringify({ last_assistant_message: message, cwd: process.cwd() })
+    execSync(`echo '${payload.replace(/'/g, "'\\''")}' | /Users/meiyang/.claude/hooks/notify-telegram.sh`, { timeout: 5000 })
+  } catch {}
+}
+
 // Status + report webhook server — receives hook calls from Claude Code
 const statusServer = createServer((req, res) => {
+  if (req.method === 'GET' && req.url === '/task-status') {
+    // GET /task-status?projectId=xxx
+    const url = new URL(req.url, `http://127.0.0.1:${HIVE_PORT}`)
+    const projectId = url.searchParams.get('projectId') || ''
+    const homeDir = app.getPath('home')
+    const tasks = listTasks(homeDir, projectId)
+    res.writeHead(200, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(tasks))
+    return
+  }
   if (req.method !== 'POST') {
     res.writeHead(404)
     res.end()
@@ -98,6 +133,59 @@ const statusServer = createServer((req, res) => {
           appendLog(data.agentId, { time: now, type: 'report', message: JSON.stringify(data.items || data) })
         }
         if (win && !win.isDestroyed()) win.webContents.send('agent:report', data)
+      } else if (req.url === '/task-create') {
+        const homeDir = app.getPath('home')
+        const task = createTask(homeDir, data.projectId, {
+          title: data.title, status: 'pending', owner: null,
+          batch: data.batch || 1, depends: data.depends || [],
+          scope: data.scope || '.', acceptance: data.acceptance || '',
+          verify: data.verify || [], attempt: 0, blocked_reason: null
+        })
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ id: task.id }))
+        return
+      } else if (req.url === '/task-assign') {
+        const homeDir = app.getPath('home')
+        const task = updateTask(homeDir, data.projectId, data.taskId, { status: 'assigned', owner: data.agentId })
+        if (task) {
+          sendToAgent(data.agentId, 'TASK', task)
+          appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_start', message: task.title })
+        }
+      } else if (req.url === '/task-done') {
+        const homeDir = app.getPath('home')
+        const task = updateTask(homeDir, data.projectId || '', data.taskId, { status: 'done' })
+        appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
+        if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
+        // Notify manager
+        const taskGroupData = loadData()
+        const tg = ((taskGroupData.taskGroups || []) as any[]).find(g => g.workerIds?.includes(data.agentId))
+        if (tg) sendToAgent(tg.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
+      } else if (req.url === '/task-blocked') {
+        const homeDir = app.getPath('home')
+        updateTask(homeDir, data.projectId || '', data.taskId, {
+          status: 'blocked', blocked_reason: data.reason, attempt: data.attempt || 0
+        })
+        appendLog(data.agentId, { time: new Date().toISOString(), type: 'notification', message: `BLOCKED: ${data.reason}` })
+        // Notify manager + human
+        const taskGroupData = loadData()
+        const tg = ((taskGroupData.taskGroups || []) as any[]).find(g => g.workerIds?.includes(data.agentId))
+        if (tg) sendToAgent(tg.managerId, 'MSG', { task: data.taskId, status: 'blocked', reason: data.reason })
+        notifyHuman('Task Blocked', `${data.taskId}: ${data.reason}`)
+      } else if (req.url === '/task-status' || (req.method === 'GET' && req.url === '/task-status')) {
+        const homeDir = app.getPath('home')
+        const tasks = listTasks(homeDir, data.projectId || '')
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(tasks))
+        return
+      } else if (req.url === '/ready') {
+        const taskGroupData = loadData()
+        const tg = ((taskGroupData.taskGroups || []) as any[]).find(g => g.workerIds?.includes(data.agentId))
+        if (tg) sendToAgent(tg.managerId, 'MSG', { worker: data.agentId, status: 'ready' })
+      } else if (req.url === '/report-human') {
+        notifyHuman('Manager', data.message || '')
+        appendLog(data.agentId, { time: new Date().toISOString(), type: 'report', message: data.message })
+      } else if (req.url === '/batch-propose') {
+        if (win && !win.isDestroyed()) win.webContents.send('batch:proposal', data)
       }
 
       res.writeHead(200)
@@ -263,6 +351,11 @@ ipcMain.handle('pty:kill', (_event, { id }) => {
     term.kill()
     terminals.delete(id)
   }
+})
+
+// PTY injection IPC
+ipcMain.handle('agent:send', (_event, { agentId, type, payload }) => {
+  return sendToAgent(agentId, type, payload)
 })
 
 // Speech recognition (macOS native SFSpeechRecognizer)
