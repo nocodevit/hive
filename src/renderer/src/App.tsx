@@ -11,7 +11,7 @@ import FilesPanel from './components/FilesPanel'
 import MarkdownPreviewModal from './components/MarkdownPreviewModal'
 import OfficeView from './components/OfficeView'
 import Markdown from 'react-markdown'
-import type { Project, Agent, Zone, SkillInfo } from './types'
+import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES } from './types'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
@@ -88,6 +88,11 @@ export default function App() {
     projectStage: string
     todos: { zone: string; type: string; category: string; text: string; done: boolean }[]
   }>>({})
+  const [taskGroups, setTaskGroups] = useState<TaskGroup[]>([])
+  const [batchTasks, setBatchTasks] = useState<Record<string, Task[]>>({}) // projectId → tasks
+  const [managerReports, setManagerReports] = useState<{ title: string; message: string; time: string }[]>([])
+  const [batchProposal, setBatchProposal] = useState<any>(null)
+  const [showCreateTaskGroup, setShowCreateTaskGroup] = useState(false)
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || null
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) || null
@@ -108,6 +113,7 @@ export default function App() {
         setAgents(resetAgents)
       }
       if (data.appPrefs) setAppPrefs((prev) => ({ ...prev, ...(data.appPrefs as Record<string, unknown>) }))
+      if (data.taskGroups) setTaskGroups(data.taskGroups as TaskGroup[])
     })
     window.api.skills.scan().then(setAvailableSkills)
     window.api.templates.list().then(setCustomTemplates)
@@ -116,9 +122,9 @@ export default function App() {
   // Save data on change
   useEffect(() => {
     if (projects.length || agents.length) {
-      window.api.data.save({ projects, agents, appPrefs })
+      window.api.data.save({ projects, agents, appPrefs, taskGroups })
     }
-  }, [projects, agents, appPrefs])
+  }, [projects, agents, appPrefs, taskGroups])
 
   const handleCreateProject = (project: Project) => {
     setProjects((prev) => [...prev, project])
@@ -165,7 +171,16 @@ export default function App() {
         setAgentReports((prev) => ({ ...prev, [agentId]: items }))
       }
     })
-    return () => { removeStatus(); removeReport() }
+    const removeTaskUpdate = window.api.agent.onTaskUpdate(({ projectId, tasks }) => {
+      setBatchTasks((prev) => ({ ...prev, [projectId]: tasks }))
+    })
+    const removeManagerReport = window.api.agent.onManagerReport(({ title, message }) => {
+      setManagerReports((prev) => [...prev.slice(-19), { title, message, time: new Date().toISOString() }])
+    })
+    const removeBatchProposal = window.api.agent.onBatchProposal((data) => {
+      setBatchProposal(data)
+    })
+    return () => { removeStatus(); removeReport(); removeTaskUpdate(); removeManagerReport(); removeBatchProposal() }
   }, [])
 
   const startAgent = async (agent: Agent) => {
@@ -807,7 +822,7 @@ export default function App() {
                     const done = allTodos.filter((t: any) => t.done).length
                     const total = allTodos.length
                     const pct = total > 0 ? Math.round((done / total) * 100) : 0
-                    const taskGroup = (window as any).__taskGroups?.find((tg: any) => tg.projectId === selectedProjectId)
+                    const taskGroup = taskGroups.find((tg) => tg.projectId === selectedProjectId)
                     return (
                       <div className="grid grid-cols-2 gap-4">
                         <div className="glass-card p-5">
@@ -941,7 +956,7 @@ export default function App() {
               {projectTab === 'taskgroup' && (
                 <div className="flex-1 overflow-y-auto p-6 space-y-5">
                   {(() => {
-                    const taskGroup = (window as any).__taskGroups?.find((tg: any) => tg.projectId === selectedProjectId)
+                    const taskGroup = taskGroups.find((tg) => tg.projectId === selectedProjectId)
                     if (!taskGroup) {
                       return (
                         <div className="flex flex-col items-center justify-center h-full text-text-muted gap-4 py-20">
