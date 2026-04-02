@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { parseTodoLine, categorizeTodo, parseTodoContracts } from '../utils'
 
 describe('parseTodoLine', () => {
@@ -168,5 +170,16 @@ describe('parseTodoContracts', () => {
   it('returns empty for no todo items', () => {
     expect(parseTodoContracts('# Just a heading\nSome text')).toEqual([])
     expect(parseTodoContracts('')).toEqual([])
+  })
+
+  it('parses the real docs/todo.md', () => {
+    const content = readFileSync(join(__dirname, '../../../docs/todo.md'), 'utf-8')
+    const result = parseTodoContracts(content)
+    expect(result.length).toBeGreaterThanOrEqual(3)
+    expect(result[0].text).toContain('Pause')
+    expect(result[0].scope).toBe('src/renderer/src/App.tsx')
+    expect(result[0].verify.length).toBeGreaterThanOrEqual(3)
+    expect(result[0].depends).toEqual([])
+    expect(result[1].verify.length).toBeGreaterThanOrEqual(3)
   })
 })
