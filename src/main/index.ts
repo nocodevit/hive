@@ -6,6 +6,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
 import { execSync } from 'child_process'
 import { createTask, readTask, updateTask, listTasks } from './tasks'
+import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
 
 // Data persistence
 const DATA_DIR = join(app.getPath('home'), '.hive')
@@ -201,6 +202,7 @@ const statusServer = createServer((req, res) => {
 function writeAgentDefinition(cwd: string, config: {
   agentId: string; name: string; role: string; department: string;
   soul: string; skills: string[]; model: string; effort: string;
+  taskGroupRole?: string; todoSource?: string; maxGateRetries?: number;
 }) {
   const agentsDir = join(cwd, '.claude', 'agents')
   mkdirSync(agentsDir, { recursive: true })
@@ -230,6 +232,17 @@ function writeAgentDefinition(cwd: string, config: {
   yaml += config.soul
 
   yaml += `\n\n## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
+
+  // Inject role-specific soul addendum for task group agents
+  if (config.taskGroupRole === 'manager') {
+    yaml += getManagerSoulAddendum({ todoSource: config.todoSource || 'docs/todo.md' })
+  } else if (config.taskGroupRole === 'worker') {
+    yaml += getWorkerSoulAddendum({ maxRetries: config.maxGateRetries || 3 })
+  } else if (config.taskGroupRole === 'qa') {
+    yaml += getQaSoulAddendum()
+  } else if (config.taskGroupRole === 'critic') {
+    yaml += getCriticSoulAddendum()
+  }
 
   writeFileSync(join(agentsDir, `${agentName}.md`), yaml)
 
