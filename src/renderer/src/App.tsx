@@ -10,6 +10,7 @@ import EditTemplateModal from './components/EditTemplateModal'
 import FilesPanel from './components/FilesPanel'
 import MarkdownPreviewModal from './components/MarkdownPreviewModal'
 import OfficeView from './components/OfficeView'
+import CreateTaskGroupModal from './components/CreateTaskGroupModal'
 import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES } from './types'
@@ -971,7 +972,7 @@ export default function App() {
                             Assign Manager, Workers, QA, and Critic roles to run batch-driven task execution.
                           </p>
                           <button
-                            onClick={() => {/* TODO: open CreateTaskGroupModal */}}
+                            onClick={() => setShowCreateTaskGroup(true)}
                             className="px-4 py-2 rounded-lg bg-accent text-text-on-purple text-sm font-medium hover:bg-accent-hover transition-colors cursor-pointer flex items-center gap-2"
                           >
                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></svg>
@@ -1638,6 +1639,26 @@ export default function App() {
           defaultSkillsRnD={appPrefs.defaultSkillsRnD || []}
           defaultSkillsNonRnD={appPrefs.defaultSkillsNonRnD || []}
           onCreate={handleCreateAgent}
+        />
+      )}
+
+      {selectedProject && (
+        <CreateTaskGroupModal
+          open={showCreateTaskGroup}
+          onClose={() => setShowCreateTaskGroup(false)}
+          projectId={selectedProject.id}
+          agents={projectAgents}
+          onSubmit={(tg) => {
+            setTaskGroups((prev) => [...prev, tg])
+            // Set taskGroupRole on agents
+            setAgents((prev) => prev.map((a) => {
+              if (a.id === tg.managerId) return { ...a, taskGroupRole: 'manager' as const }
+              if (a.id === tg.qaId) return { ...a, taskGroupRole: 'qa' as const }
+              if (a.id === tg.criticId) return { ...a, taskGroupRole: 'critic' as const }
+              if (tg.workerIds.includes(a.id)) return { ...a, taskGroupRole: 'worker' as const }
+              return a
+            }))
+          }}
         />
       )}
 
