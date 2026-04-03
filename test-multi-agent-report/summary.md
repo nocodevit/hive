@@ -1,55 +1,53 @@
-03:55:48 # Integration Test (3 tasks)
+04:05:57 # Integration Test (3 tasks)
 
-03:55:56 Baseline: 10 projects, 17 agents
-03:56:00 Created [TEST] Manager
-03:56:02 Created [TEST] Worker-1
-03:56:05 Created [TEST] Worker-2
-03:56:07 Created [TEST] QA
-03:56:10 Created [TEST] Critic
-03:56:13 Task group created
-03:56:16 Manager terminal opened
-03:56:16 Manager ID: agent-1775188559753
-03:56:31 Sent /manager-whip-start
-03:56:41 Sent todo path: /Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/todo.md
-03:56:46 Sent Enter for default max retries
-03:56:57 [10s] task-status: 0 tasks
-03:57:10 [23s] task-status: 0 tasks
-03:57:23 [36s] task-status: 0 tasks
-03:57:35 [48s] task-status: 0 tasks
-03:57:48 [61s] task-status: 0 tasks
-03:58:01 [74s] task-status: 0 tasks
-03:58:14 [87s] task-status: 0 tasks
-03:58:27 Sent Y at 100s
-03:58:32 [100s] task-status: 0 tasks
-03:58:45 [118s] task-status: 0 tasks
-03:58:57 [130s] task-status: 0 tasks
-03:59:10 [143s] task-status: 0 tasks
-03:59:23 [156s] task-status: 0 tasks
-03:59:36 [169s] task-status: 0 tasks
-03:59:49 [182s] task-status: 0 tasks
-04:00:01 [194s] task-status: 0 tasks
-04:00:14 [207s] task-status: 0 tasks
-04:00:27 [220s] task-status: 0 tasks
-04:00:40 [233s] task-status: 0 tasks
-04:00:53 [246s] task-status: 0 tasks
-04:01:05 [259s] task-status: 0 tasks
-04:01:18 [271s] task-status: 0 tasks
-04:01:31 [284s] task-status: 0 tasks
-04:01:44 [297s] task-status: 0 tasks
-04:01:57 [310s] task-status: 0 tasks
-04:02:10 [323s] task-status: 0 tasks
-04:02:22 [336s] task-status: 0 tasks
-04:02:35 [348s] task-status: 0 tasks
-04:02:48 [361s] task-status: 0 tasks
-04:03:01 [374s] task-status: 0 tasks
-04:03:14 [387s] task-status: 0 tasks
-04:03:27 [400s] task-status: 0 tasks
-04:03:39 [412s] task-status: 0 tasks
-04:03:52 [425s] task-status: 0 tasks
-04:04:05 [438s] task-status: 0 tasks
-04:04:18 [451s] task-status: 0 tasks
-04:04:31 [464s] task-status: 0 tasks
-04:04:33 Proposal found: false
-04:04:33 
+04:06:04 Baseline: 10 projects, 17 agents
+04:06:08 Created [TEST] Manager
+04:06:10 Created [TEST] Worker-1
+04:06:13 Created [TEST] Worker-2
+04:06:16 Created [TEST] QA
+04:06:18 Created [TEST] Critic
+04:06:21 Task group created
+04:06:24 Manager terminal opened
+04:06:24 Manager ID: agent-1775189167873
+04:06:44 Sent direct instruction to manager
+04:06:55 [10s] task-status: 0 tasks
+04:07:08 [23s] task-status: 0 tasks
+04:07:21 [36s] task-status: 0 tasks
+04:07:34 [48s] task-status: 0 tasks
+04:07:47 Sent Y at 61s (in case of confirmation prompt)
+04:07:52 [61s] task-status: 0 tasks
+04:08:05 [79s] task-status: 0 tasks
+04:08:17 [92s] task-status: 0 tasks
+04:08:30 [105s] task-status: 0 tasks
+04:08:43 [118s] task-status: 0 tasks
+04:08:56 [131s] task-status: 0 tasks
+04:09:09 [144s] task-status: 0 tasks
+04:09:22 [156s] task-status: 0 tasks
+04:09:34 [169s] task-status: 0 tasks
+04:09:47 [182s] task-status: 0 tasks
+04:10:00 [195s] task-status: 0 tasks
+04:10:13 [207s] task-status: 0 tasks
+04:10:25 [220s] task-status: 0 tasks
+04:10:38 [233s] task-status: 0 tasks
+04:10:51 [246s] task-status: 0 tasks
+04:11:04 [259s] task-status: 0 tasks
+04:11:17 [271s] task-status: 0 tasks
+04:11:29 [284s] task-status: 0 tasks
+04:11:42 [297s] task-status: 0 tasks
+04:11:55 [310s] task-status: 0 tasks
+04:12:08 [323s] task-status: 0 tasks
+04:12:21 [335s] task-status: 0 tasks
+04:12:33 [348s] task-status: 0 tasks
+04:12:46 [361s] task-status: 0 tasks
+04:12:59 [374s] task-status: 0 tasks
+04:13:12 [387s] task-status: 0 tasks
+04:13:24 [399s] task-status: 0 tasks
+04:13:37 [412s] task-status: 0 tasks
+04:13:50 [425s] task-status: 0 tasks
+04:14:03 [438s] task-status: 0 tasks
+04:14:16 [451s] task-status: 0 tasks
+04:14:28 [463s] task-status: 0 tasks
+04:14:31 Proposal found: false
+04:14:31 
 --- TEARDOWN ---
-04:04:33 Final: 10 projects, 17 agents
+04:14:31 Final: 10 projects, 17 agents

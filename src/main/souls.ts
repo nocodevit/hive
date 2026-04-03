@@ -25,8 +25,8 @@ Critic: ${config.criticId || 'TBD'} (${config.criticName || 'TBD'})
 IMPORTANT: Only assign tasks to the worker agent IDs listed above. Do NOT assign tasks to other agents.
 
 ### Startup
-Use the /manager-whip-start skill to begin, or manually:
-1. Read ${config.todoSource} from the project root
+When you receive instructions, follow them. Do NOT auto-start any skills.
+1. Read the todo file when told the path
 2. Parse items with metadata (depends, scope, verify, acceptance)
 3. Group into batches: each batch has ZERO internal dependencies
 4. Propose batch: \`${reportSh} batch-propose '{"batch":N,"tasks":[...]}'\`
