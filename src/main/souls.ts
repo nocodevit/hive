@@ -5,7 +5,9 @@ export function getManagerSoulAddendum(config: {
   workers?: { id: string; name: string }[]
   qaId?: string; qaName?: string
   criticId?: string; criticName?: string
+  reportScriptPath?: string
 }): string {
+  const reportSh = config.reportScriptPath || '.claude/hive-report.sh'
   const workerList = config.workers?.map(w => `- ${w.id} (${w.name})`).join('\n') || '(none assigned)'
   return `
 
@@ -27,19 +29,19 @@ Use the /manager-whip-start skill to begin, or manually:
 1. Read ${config.todoSource} from the project root
 2. Parse items with metadata (depends, scope, verify, acceptance)
 3. Group into batches: each batch has ZERO internal dependencies
-4. Propose batch: \`.claude/hive-report.sh batch-propose '{"batch":N,"tasks":[...]}'\`
+4. Propose batch: \`${reportSh} batch-propose '{"batch":N,"tasks":[...]}'\`
 5. Wait for human approval via [HIVE:HUMAN] {"batch":N,"action":"approved"}
 
 ### Execution
-1. Assign tasks: \`.claude/hive-report.sh task-assign TASK_ID WORKER_ID\`
-2. Monitor: \`.claude/hive-report.sh task-status\` (poll every 30s)
+1. Assign tasks: \`${reportSh} task-assign TASK_ID WORKER_ID\`
+2. Monitor: \`${reportSh} task-status\` (poll every 30s)
 3. All done → merge worker branches → integration branch → trigger QA
 4. QA pass → trigger Critic (delivery agent)
 5. Critic done → report to human for merge
 
 ### On Blocked
 - Worker blocked → decide: reassign or escalate
-- All workers blocked → \`.claude/hive-report.sh report-human "all workers blocked"\`
+- All workers blocked → \`${reportSh} report-human "all workers blocked"\`
 - QA fail → create fix tasks → mini-batch
 - Re-read ${config.todoSource} periodically for new items
 
@@ -49,7 +51,8 @@ Use the /manager-whip-start skill to begin, or manually:
 `
 }
 
-export function getWorkerSoulAddendum(config: { maxRetries: number }): string {
+export function getWorkerSoulAddendum(config: { maxRetries: number; reportScriptPath?: string }): string {
+  const reportSh = config.reportScriptPath || '.claude/hive-report.sh'
   return `
 
 ## Hive Orchestration — Worker
@@ -63,14 +66,14 @@ export function getWorkerSoulAddendum(config: { maxRetries: number }): string {
 6. Commit with descriptive message, then push
 7. Gate runs automatically. If [HIVE:MSG] {"gate":"failed",...}:
    - Read failure details, fix, re-push
-   - After ${config.maxRetries} failures: \`.claude/hive-report.sh task-blocked TASK_ID "reason"\`
+   - After ${config.maxRetries} failures: \`${reportSh} task-blocked TASK_ID "reason"\`
 
 ### Task Completion Protocol
 When gate passes:
-1. \`.claude/hive-report.sh task-done TASK_ID "summary"\`
+1. \`${reportSh} task-done TASK_ID "summary"\`
 2. Wait for [HIVE:MSG] {"ack":...}
 3. Append lessons to .claude/lessons.md (max 5 lines per task)
-4. \`.claude/hive-report.sh ready\`
+4. \`${reportSh} ready\`
 5. Type \`/clear\` to reset context
 6. Wait for next [HIVE:TASK]
 
@@ -79,7 +82,8 @@ If you receive [HIVE:HUMAN], follow that instruction immediately.
 `
 }
 
-export function getQaSoulAddendum(): string {
+export function getQaSoulAddendum(config?: { reportScriptPath?: string }): string {
+  const reportSh = config?.reportScriptPath || '.claude/hive-report.sh'
   return `
 
 ## Hive Orchestration — QA
@@ -96,15 +100,16 @@ You run integration testing after a batch of tasks is complete.
    - Each verify[] result (pass/fail)
    - Any regressions vs main
 7. Report:
-   - Pass: \`.claude/hive-report.sh task-done QA_TASK "QA pass"\`
-   - Fail: \`.claude/hive-report.sh task-blocked QA_TASK "failures: [details]"\`
+   - Pass: \`${reportSh} task-done QA_TASK "QA pass"\`
+   - Fail: \`${reportSh} task-blocked QA_TASK "failures: [details]"\`
 
 You NEVER fix code. Report only.
 If you receive [HIVE:HUMAN], follow that instruction immediately.
 `
 }
 
-export function getCriticSoulAddendum(): string {
+export function getCriticSoulAddendum(config?: { reportScriptPath?: string }): string {
+  const reportSh = config?.reportScriptPath || '.claude/hive-report.sh'
   return `
 
 ## Hive Orchestration — Critic (Delivery Agent)
@@ -125,7 +130,7 @@ Run ALL checks yourself. Do NOT trust prior results.
 - \`npm test\` — must exit 0
 - Scope check: all files within declared scopes
 - Contract verify: run every verify[] command — all must exit 0
-If ANY fails: \`.claude/hive-report.sh task-blocked DELIVERY "gate: [details]"\`
+If ANY fails: \`${reportSh} task-blocked DELIVERY "gate: [details]"\`
 
 ### Step 3: Require Test Report
 Read QA report at the specified path. If not found: REFUSE to proceed.
@@ -140,7 +145,7 @@ Body must include: task list, test report summary, review findings, verify resul
 
 ### Step 6: Push & Report
 \`git push origin BRANCH\`
-\`.claude/hive-report.sh task-done DELIVERY "PR #N ready"\`
+\`${reportSh} task-done DELIVERY "PR #N ready"\`
 
 No test report = no PR. Gate fail = no PR. NEVER skip steps.
 If you receive [HIVE:HUMAN], follow that instruction immediately.
