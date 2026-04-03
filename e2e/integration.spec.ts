@@ -129,13 +129,8 @@ test.beforeAll(async () => {
   const dataFile = join(HIVE_DATA_DIR, 'data.json')
   if (existsSync(dataFile)) cpSync(dataFile, join(HIVE_DATA_DIR, 'data.json.test-backup'))
 
-  // Temporarily disable manager-whip-start skill to prevent auto-launch
-  const skillPath = join(require('os').homedir(), '.claude', 'skills', 'manager-whip-start', 'SKILL.md')
-  const skillBackup = skillPath + '.test-disabled'
-  if (existsSync(skillPath)) {
-    cpSync(skillPath, skillBackup)
-    rmSync(skillPath)
-  }
+  // Note: skill stays enabled. Previous bug was residual agent definitions
+  // with old soul (referencing skill), not auto-launch.
 
   // Launch
   const { execSync } = require('child_process')
@@ -160,15 +155,46 @@ test.beforeAll(async () => {
   baselineAgentCount = data.agents
   log(`Baseline: ${baselineProjectCount} projects, ${baselineAgentCount} agents`)
 
-  // Clean residual [TEST] agents
+  // Clean residual [TEST] agents from data
   const residual = await page.evaluate(async () => {
     const d = await window.api.data.load()
     return (d.agents as any[])?.filter((a: any) => a.name.startsWith('[TEST]')).map((a: any) => a.name) || []
   })
   for (const name of residual) {
-    log(`Cleaning residual: ${name}`)
+    log(`Cleaning residual agent: ${name}`)
     await deleteTestAgent(page, name)
   }
+
+  // Clean residual [TEST] agent DEFINITION FILES on disk (from previous failed runs)
+  const agentsDirs = [
+    join(require('os').homedir(), 'OnePersonCompany', 'Hive', '.claude', 'agents'),
+    join(PROJECT_ROOT, '.claude', 'agents'),
+  ]
+  for (const dir of agentsDirs) {
+    if (!existsSync(dir)) continue
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.md')) continue
+      const fp = join(dir, f)
+      try {
+        const content = readFileSync(fp, 'utf-8')
+        // SAFETY: only delete if description contains [TEST] — never touch production agents
+        if (content.includes('[TEST]') && content.includes('description: "[TEST]')) {
+          rmSync(fp)
+          log(`Cleaned residual definition: ${f}`)
+        }
+      } catch {}
+    }
+  }
+
+  // Also restore skill if it was disabled by a previous failed run
+  const skillPath = join(require('os').homedir(), '.claude', 'skills', 'manager-whip-start', 'SKILL.md')
+  const skillBackup = skillPath + '.test-disabled'
+  if (existsSync(skillBackup) && !existsSync(skillPath)) {
+    cpSync(skillBackup, skillPath)
+    rmSync(skillBackup)
+    log('Restored skill from previous failed teardown')
+  }
+
   await shot(page, '00-setup')
 }, 180000)
 
@@ -213,14 +239,6 @@ test.afterAll(async () => {
   } catch (err) { log(`Teardown error: ${err}`) }
 
   if (existsSync(TEST_TASKS_DIR)) rmSync(TEST_TASKS_DIR, { recursive: true })
-  // Restore skill
-  const skillPath = join(require('os').homedir(), '.claude', 'skills', 'manager-whip-start', 'SKILL.md')
-  const skillBackup = skillPath + '.test-disabled'
-  if (existsSync(skillBackup)) {
-    cpSync(skillBackup, skillPath)
-    rmSync(skillBackup)
-    log('Restored manager-whip-start skill')
-  }
   await app?.close()
 }, 120000)
 
