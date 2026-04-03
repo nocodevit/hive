@@ -463,7 +463,7 @@ export default function App() {
                                   agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
                                 }`} />
                                 {agent.taskGroupRole && (
-                                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[7px] border border-bg-secondary" style={{
+                                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full flex items-center justify-center text-[8px] leading-none border border-bg-secondary" style={{
                                     background: agent.taskGroupRole === 'manager' ? '#F59E0B' :
                                       agent.taskGroupRole === 'worker' ? '#3B82F6' :
                                       agent.taskGroupRole === 'qa' ? '#10B981' : '#8B5CF6',

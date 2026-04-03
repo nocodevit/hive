@@ -73,3 +73,15 @@ App launched on port 17796
 ### Improvement: Worker wait increased to 8 minutes
 
 ---
+App launched on port 17796
+
+
+## Run 7 — PASSED but still 0 tasks created
+
+### Bug 8: Manager cwd is Non-R&D zone, not code project
+- **Cause:** Manager agent zone = `/Users/meiyang/OnePersonCompany/Hive` (Non-R&D). But `test-multi-agent-tasks/todo.md` is relative to `/Users/meiyang/FrontEndProjects/hive`. Manager's Claude session can't find the file.
+- **Evidence:** Screenshot 07-manager-99s.png: "No todo.md found in the project. The path test-multi-agent-tasks/todo.md doesn't exist either."
+- **Fix:** Use absolute path for todo.md when injecting into PTY
+- **File:** e2e/integration.spec.ts
+
+---

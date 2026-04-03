@@ -461,11 +461,12 @@ test.describe.serial('Integration Test', () => {
     // Wait for manager to process — it will ask for todo path
     await page.waitForTimeout(10000)
 
-    // Respond with todo path (Enter for default or type path)
+    // Respond with todo path — use ABSOLUTE path since manager cwd may not be the code project
+    const todoAbsPath = join(PROJECT_ROOT, 'test-multi-agent-tasks', 'todo.md')
     if (managerId) {
-      await page.evaluate(async (id) => {
-        window.api.pty.write(id, 'test-multi-agent-tasks/todo.md\r')
-      }, managerId)
+      await page.evaluate(async ({ id, path }) => {
+        window.api.pty.write(id, path + '\r')
+      }, { id: managerId, path: todoAbsPath })
     }
 
     await page.waitForTimeout(5000)
