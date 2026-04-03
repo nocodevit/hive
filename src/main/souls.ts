@@ -1,11 +1,26 @@
 // Soul addenda for task group roles — appended to agent's existing soul
 
-export function getManagerSoulAddendum(config: { todoSource: string }): string {
+export function getManagerSoulAddendum(config: {
+  todoSource: string
+  workers?: { id: string; name: string }[]
+  qaId?: string; qaName?: string
+  criticId?: string; criticName?: string
+}): string {
+  const workerList = config.workers?.map(w => `- ${w.id} (${w.name})`).join('\n') || '(none assigned)'
   return `
 
 ## Hive Orchestration — Manager
 
 You are the manager of this task group. You coordinate workers, QA, and Critic.
+
+### Your Team
+Workers (ONLY assign tasks to these agents):
+${workerList}
+
+QA: ${config.qaId || 'TBD'} (${config.qaName || 'TBD'})
+Critic: ${config.criticId || 'TBD'} (${config.criticName || 'TBD'})
+
+IMPORTANT: Only assign tasks to the worker agent IDs listed above. Do NOT assign tasks to other agents.
 
 ### Startup
 Use the /manager-whip-start skill to begin, or manually:

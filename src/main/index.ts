@@ -254,6 +254,9 @@ function writeAgentDefinition(cwd: string, config: {
   agentId: string; name: string; role: string; department: string;
   soul: string; skills: string[]; model: string; effort: string;
   taskGroupRole?: string; todoSource?: string; maxGateRetries?: number;
+  taskGroupWorkers?: { id: string; name: string }[];
+  taskGroupQaId?: string; taskGroupQaName?: string;
+  taskGroupCriticId?: string; taskGroupCriticName?: string;
 }) {
   const agentsDir = join(cwd, '.claude', 'agents')
   mkdirSync(agentsDir, { recursive: true })
@@ -286,7 +289,12 @@ function writeAgentDefinition(cwd: string, config: {
 
   // Inject role-specific soul addendum for task group agents
   if (config.taskGroupRole === 'manager') {
-    yaml += getManagerSoulAddendum({ todoSource: config.todoSource || 'docs/todo.md' })
+    yaml += getManagerSoulAddendum({
+      todoSource: config.todoSource || 'docs/todo.md',
+      workers: config.taskGroupWorkers,
+      qaId: config.taskGroupQaId, qaName: config.taskGroupQaName,
+      criticId: config.taskGroupCriticId, criticName: config.taskGroupCriticName,
+    })
   } else if (config.taskGroupRole === 'worker') {
     yaml += getWorkerSoulAddendum({ maxRetries: config.maxGateRetries || 3 })
   } else if (config.taskGroupRole === 'qa') {
