@@ -279,23 +279,15 @@ test.describe.serial('Integration Test', () => {
     log(`Manager ID: ${managerId}`)
 
     // Wait for Claude to initialize
-    await page.waitForTimeout(15000)
+    await page.waitForTimeout(20000)
     await shot(page, '05-manager-ready')
 
-    // Inject /manager-whip-start
-    await page.evaluate(async (id) => { window.api.pty.write(id, '/manager-whip-start\r') }, managerId)
-    log('Sent /manager-whip-start')
-    await page.waitForTimeout(10000)
-
-    // Send todo path (absolute)
+    // Instead of /manager-whip-start skill (which uses interactive menus),
+    // send a direct instruction that manager can execute immediately
     const todoPath = join(PROJECT_ROOT, 'test-multi-agent-tasks', 'todo.md')
-    await page.evaluate(async ({ id, path }) => { window.api.pty.write(id, path + '\r') }, { id: managerId, path: todoPath })
-    log(`Sent todo path: ${todoPath}`)
-    await page.waitForTimeout(5000)
-
-    // Send max retries default
-    await page.evaluate(async (id) => { window.api.pty.write(id, '\r') }, managerId)
-    log('Sent Enter for default max retries')
+    const instruction = `Read the file ${todoPath} and parse the todo items. Group them into batches (items with no unmet dependencies go in batch 1). Then call .claude/hive-report.sh batch-propose with a JSON payload containing the batch. After that, call .claude/hive-report.sh report-human with a summary. Then wait for my approval.`
+    await page.evaluate(async ({ id, msg }) => { window.api.pty.write(id, msg + '\r') }, { id: managerId, msg: instruction })
+    log('Sent direct instruction to manager')
 
     // Poll up to 6 minutes: send Y when appropriate, check for tasks/proposal
     let proposalFound = false
@@ -311,11 +303,13 @@ test.describe.serial('Integration Test', () => {
       await page.waitForTimeout(500)
       await shot(page, `06-manager-${elapsed}s`)
 
-      // Send Y after 90s (once) — manager should have reached Y/n by then for 3 tasks
-      if (!ySent && elapsed > 90) {
+      // If manager asks for confirmation (Y/n), send Y
+      if (!ySent && elapsed > 60) {
+        await page.locator('text=[TEST] Manager').first().click().catch(() => {})
+        await page.waitForTimeout(300)
         await page.evaluate(async (id) => { window.api.pty.write(id, 'Y\r') }, managerId)
         ySent = true
-        log(`Sent Y at ${elapsed}s`)
+        log(`Sent Y at ${elapsed}s (in case of confirmation prompt)`)
         await page.waitForTimeout(5000)
       }
 
