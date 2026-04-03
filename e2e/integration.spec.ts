@@ -129,6 +129,14 @@ test.beforeAll(async () => {
   const dataFile = join(HIVE_DATA_DIR, 'data.json')
   if (existsSync(dataFile)) cpSync(dataFile, join(HIVE_DATA_DIR, 'data.json.test-backup'))
 
+  // Temporarily disable manager-whip-start skill to prevent auto-launch
+  const skillPath = join(require('os').homedir(), '.claude', 'skills', 'manager-whip-start', 'SKILL.md')
+  const skillBackup = skillPath + '.test-disabled'
+  if (existsSync(skillPath)) {
+    cpSync(skillPath, skillBackup)
+    rmSync(skillPath)
+  }
+
   // Launch
   const { execSync } = require('child_process')
   execSync('npx electron-vite build', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 60000 })
@@ -205,6 +213,14 @@ test.afterAll(async () => {
   } catch (err) { log(`Teardown error: ${err}`) }
 
   if (existsSync(TEST_TASKS_DIR)) rmSync(TEST_TASKS_DIR, { recursive: true })
+  // Restore skill
+  const skillPath = join(require('os').homedir(), '.claude', 'skills', 'manager-whip-start', 'SKILL.md')
+  const skillBackup = skillPath + '.test-disabled'
+  if (existsSync(skillBackup)) {
+    cpSync(skillBackup, skillPath)
+    rmSync(skillBackup)
+    log('Restored manager-whip-start skill')
+  }
   await app?.close()
 }, 120000)
 

@@ -1,53 +1,53 @@
-04:05:57 # Integration Test (3 tasks)
+04:15:21 # Integration Test (3 tasks)
 
-04:06:04 Baseline: 10 projects, 17 agents
-04:06:08 Created [TEST] Manager
-04:06:10 Created [TEST] Worker-1
-04:06:13 Created [TEST] Worker-2
-04:06:16 Created [TEST] QA
-04:06:18 Created [TEST] Critic
-04:06:21 Task group created
-04:06:24 Manager terminal opened
-04:06:24 Manager ID: agent-1775189167873
-04:06:44 Sent direct instruction to manager
-04:06:55 [10s] task-status: 0 tasks
-04:07:08 [23s] task-status: 0 tasks
-04:07:21 [36s] task-status: 0 tasks
-04:07:34 [48s] task-status: 0 tasks
-04:07:47 Sent Y at 61s (in case of confirmation prompt)
-04:07:52 [61s] task-status: 0 tasks
-04:08:05 [79s] task-status: 0 tasks
-04:08:17 [92s] task-status: 0 tasks
-04:08:30 [105s] task-status: 0 tasks
-04:08:43 [118s] task-status: 0 tasks
-04:08:56 [131s] task-status: 0 tasks
-04:09:09 [144s] task-status: 0 tasks
-04:09:22 [156s] task-status: 0 tasks
-04:09:34 [169s] task-status: 0 tasks
-04:09:47 [182s] task-status: 0 tasks
-04:10:00 [195s] task-status: 0 tasks
-04:10:13 [207s] task-status: 0 tasks
-04:10:25 [220s] task-status: 0 tasks
-04:10:38 [233s] task-status: 0 tasks
-04:10:51 [246s] task-status: 0 tasks
-04:11:04 [259s] task-status: 0 tasks
-04:11:17 [271s] task-status: 0 tasks
-04:11:29 [284s] task-status: 0 tasks
-04:11:42 [297s] task-status: 0 tasks
-04:11:55 [310s] task-status: 0 tasks
-04:12:08 [323s] task-status: 0 tasks
-04:12:21 [335s] task-status: 0 tasks
-04:12:33 [348s] task-status: 0 tasks
-04:12:46 [361s] task-status: 0 tasks
-04:12:59 [374s] task-status: 0 tasks
-04:13:12 [387s] task-status: 0 tasks
-04:13:24 [399s] task-status: 0 tasks
-04:13:37 [412s] task-status: 0 tasks
-04:13:50 [425s] task-status: 0 tasks
-04:14:03 [438s] task-status: 0 tasks
-04:14:16 [451s] task-status: 0 tasks
-04:14:28 [463s] task-status: 0 tasks
-04:14:31 Proposal found: false
-04:14:31 
+04:15:29 Baseline: 10 projects, 17 agents
+04:15:33 Created [TEST] Manager
+04:15:35 Created [TEST] Worker-1
+04:15:38 Created [TEST] Worker-2
+04:15:40 Created [TEST] QA
+04:15:43 Created [TEST] Critic
+04:15:46 Task group created
+04:15:49 Manager terminal opened
+04:15:49 Manager ID: agent-1775189732592
+04:16:09 Sent direct instruction to manager
+04:16:19 [10s] task-status: 0 tasks
+04:16:32 [23s] task-status: 0 tasks
+04:16:45 [36s] task-status: 0 tasks
+04:16:58 [48s] task-status: 0 tasks
+04:17:11 Sent Y at 61s (in case of confirmation prompt)
+04:17:16 [61s] task-status: 0 tasks
+04:17:29 [79s] task-status: 0 tasks
+04:17:42 [92s] task-status: 0 tasks
+04:17:55 [105s] task-status: 0 tasks
+04:18:07 [118s] task-status: 0 tasks
+04:18:20 [131s] task-status: 0 tasks
+04:18:33 [143s] task-status: 0 tasks
+04:18:46 [156s] task-status: 0 tasks
+04:18:58 [169s] task-status: 0 tasks
+04:19:11 [182s] task-status: 0 tasks
+04:19:24 [195s] task-status: 0 tasks
+04:19:37 [207s] task-status: 0 tasks
+04:19:50 [220s] task-status: 0 tasks
+04:20:02 [233s] task-status: 0 tasks
+04:20:15 [246s] task-status: 0 tasks
+04:20:28 [259s] task-status: 0 tasks
+04:20:41 [271s] task-status: 0 tasks
+04:20:54 [284s] task-status: 0 tasks
+04:21:06 [297s] task-status: 0 tasks
+04:21:19 [310s] task-status: 0 tasks
+04:21:32 [323s] task-status: 0 tasks
+04:21:45 [335s] task-status: 0 tasks
+04:21:58 [348s] task-status: 0 tasks
+04:22:10 [361s] task-status: 0 tasks
+04:22:23 [374s] task-status: 0 tasks
+04:22:36 [387s] task-status: 0 tasks
+04:22:49 [399s] task-status: 0 tasks
+04:23:02 [412s] task-status: 0 tasks
+04:23:14 [425s] task-status: 0 tasks
+04:23:27 [438s] task-status: 0 tasks
+04:23:40 [450s] task-status: 0 tasks
+04:23:53 [463s] task-status: 0 tasks
+04:23:55 Proposal found: false
+04:23:55 
 --- TEARDOWN ---
-04:14:31 Final: 10 projects, 17 agents
+04:23:55 Final: 10 projects, 17 agents
