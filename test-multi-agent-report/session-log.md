@@ -125,3 +125,5 @@ Manager successfully:
 3. Tests still pass as "false positive" because assertions are soft
 
 ---
+App launched on port 17796
+
