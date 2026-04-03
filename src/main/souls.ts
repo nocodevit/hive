@@ -33,8 +33,9 @@ When you receive instructions, follow them. Do NOT auto-start any skills.
 5. Wait for human approval via [HIVE:HUMAN] {"batch":N,"action":"approved"}
 
 ### Execution
-1. Assign tasks: \`${reportSh} task-assign TASK_ID WORKER_ID\`
-2. Monitor: \`${reportSh} task-status\` (poll every 30s)
+1. Create each task first: \`${reportSh} task-create '{"projectId":"...","title":"...","scope":"...","verify":[...],"depends":[],"batch":N}'\`
+2. Then assign each task to a worker: \`${reportSh} task-assign TASK_ID WORKER_ID\`
+3. Monitor: \`${reportSh} task-status\` (poll every 30s)
 3. All done → merge worker branches → integration branch → trigger QA
 4. QA pass → trigger Critic (delivery agent)
 5. Critic done → report to human for merge
