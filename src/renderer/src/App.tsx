@@ -221,7 +221,8 @@ export default function App() {
     }
 
     // Write Claude Code native agent definition file
-    const result = await window.api.agent.writeDefinition(cwd, {
+    // If manager, include task group worker/QA/critic info in config
+    const defConfig: Record<string, any> = {
       agentId: agent.id,
       name: agent.name,
       role: agent.role,
@@ -231,7 +232,25 @@ export default function App() {
       model: agent.model || 'inherit',
       effort: agent.effort || 'high',
       taskGroupRole: agent.taskGroupRole,
-    })
+    }
+    if (agent.taskGroupRole === 'manager') {
+      const tg = taskGroups.find(t => t.managerId === agent.id)
+      if (tg) {
+        defConfig.todoSource = tg.todoSource
+        defConfig.maxGateRetries = tg.maxGateRetries
+        defConfig.taskGroupWorkers = tg.workerIds.map(wid => {
+          const w = agents.find(a => a.id === wid)
+          return { id: wid, name: w?.name || wid }
+        })
+        const qa = agents.find(a => a.id === tg.qaId)
+        defConfig.taskGroupQaId = tg.qaId
+        defConfig.taskGroupQaName = qa?.name || tg.qaId
+        const critic = agents.find(a => a.id === tg.criticId)
+        defConfig.taskGroupCriticId = tg.criticId
+        defConfig.taskGroupCriticName = critic?.name || tg.criticId
+      }
+    }
+    const result = await window.api.agent.writeDefinition(cwd, defConfig)
     if (result.agentName) {
       setAgentNames((prev) => ({ ...prev, [agent.id]: result.agentName! }))
     }
