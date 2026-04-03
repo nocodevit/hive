@@ -99,3 +99,29 @@ App launched on port 17796
 **This is a MAJOR milestone** — the orchestration parsing + batching logic WORKS. Just need the Y/n answer to unblock.
 
 ---
+App launched on port 17796
+
+App launched on port 17796
+
+
+## Run 10 — MAJOR MILESTONE 🎉
+
+Manager successfully:
+✅ Read absolute path todo.md (10 contracts)
+✅ Parsed 10 tasks across 3 dependency layers
+✅ Grouped into Batch 1 (8 tasks) + Batch 2 (india) + Batch 3 (juliet)
+✅ Called hive-report.sh batch-propose with full JSON
+✅ Called hive-report.sh report-human with summary
+✅ Waiting for [HIVE:HUMAN] approval signal
+✅ Plans to create tasks and assign workers after approval
+
+### Remaining issues:
+1. Manager identified wrong workers (Ivan, Jeeva — real agents, not [TEST] Worker-1/2)
+   - Manager doesn't know which agents are in the task group
+   - Soul addendum should include worker agent IDs
+2. 0 tasks in polling — because manager waits for approval before task-create
+   - batch-propose HTTP → UI shows proposal card → user clicks Approve → [HIVE:HUMAN] → manager creates tasks
+   - But the Approve click timing needs to align with when proposal card appears
+3. Tests still pass as "false positive" because assertions are soft
+
+---
