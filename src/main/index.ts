@@ -237,6 +237,14 @@ const statusServer = createServer((req, res) => {
         notifyHuman('Manager', data.message || '')
         appendLog(data.agentId, { time: new Date().toISOString(), type: 'report', message: data.message })
       } else if (req.url === '/batch-propose') {
+        // Update TaskGroup status to batch_proposed so UI shows the proposal card
+        const d = loadData()
+        const tgs = (d.taskGroups || []) as any[]
+        const ctx = data.agentId ? findTaskGroupForAgentInData(data.agentId, tgs) : null
+        if (ctx) {
+          ctx.taskGroup.status = 'batch_proposed'
+          saveData(d)
+        }
         if (win && !win.isDestroyed()) win.webContents.send('batch:proposal', data)
       }
 
