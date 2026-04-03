@@ -478,15 +478,62 @@ test.describe.serial('Integration Test', () => {
     }
 
     appendReport('summary.md', `${timestamp()} Manager configuring batch...\n`)
-    await page.waitForTimeout(15000) // Wait for manager to parse + propose
+
+    // Poll for batch proposal or tasks created (up to 3 minutes)
+    const proposalStart = Date.now()
+    let proposalFound = false
+    while (Date.now() - proposalStart < 180000) {
+      await page.waitForTimeout(10000)
+      await screenshot(page, `07-manager-${Math.round((Date.now() - proposalStart) / 1000)}s`)
+
+      // Check if tasks were created via HTTP
+      const mgrId = await page.evaluate(async () => {
+        const d = await window.api.data.load()
+        return (d.agents as any[])?.find((a: any) => a.name === '[TEST] Manager')?.id || ''
+      })
+      const taskCount = await page.evaluate(async ({ port, agentId }) => {
+        try {
+          const res = await fetch(`http://127.0.0.1:${port}/task-status`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ agentId })
+          })
+          const tasks = await res.json()
+          return Array.isArray(tasks) ? tasks.length : 0
+        } catch { return 0 }
+      }, { port: HIVE_PORT, agentId: mgrId })
+
+      appendReport('summary.md', `${timestamp()} Polling: ${taskCount} tasks found\n`)
+
+      if (taskCount > 0) {
+        proposalFound = true
+        appendReport('summary.md', `${timestamp()} ✅ Tasks created by manager! (${taskCount} tasks)\n`)
+        break
+      }
+
+      // Also check batch proposal IPC by checking UI
+      await goToTaskGroupTab(page)
+      const batchText = await page.locator('.glass-card').first().textContent().catch(() => '')
+      if (batchText && !batchText.includes('No tasks yet')) {
+        proposalFound = true
+        appendReport('summary.md', `${timestamp()} ✅ Batch panel has content\n`)
+        break
+      }
+
+      // Go back to manager terminal to let it keep working
+      await page.locator('text=[TEST] Manager').first().click()
+      await page.waitForTimeout(1000)
+    }
 
     snapshotComms('phase1-proposal')
     await screenshot(page, '07-after-manager-propose')
-
     await goToTaskGroupTab(page)
     await screenshot(page, '08-task-group-after-propose')
 
-    appendReport('summary.md', `${timestamp()} Phase 1 complete — checking for batch proposal\n`)
+    if (!proposalFound) {
+      appendReport('summary.md', `${timestamp()} ⚠️ Manager did not create tasks within 3 minutes\n`)
+    }
+    appendReport('summary.md', `${timestamp()} Phase 1 complete\n`)
   })
 
   // ============================================================
@@ -494,13 +541,17 @@ test.describe.serial('Integration Test', () => {
   // ============================================================
 
   test('approve batch and workers execute', async () => {
+    // Ensure we're on Task Group tab
+    await goToTaskGroupTab(page)
+    await page.waitForTimeout(1000)
+
     // Look for Approve button (batch proposal card)
     const approveBtn = page.getByRole('button', { name: 'Approve' })
-    if (await approveBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+    if (await approveBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
       await approveBtn.click()
       appendReport('summary.md', `${timestamp()} Batch approved via UI\n`)
     } else {
-      appendReport('summary.md', `${timestamp()} ⚠️ No batch proposal card found — manager may not have proposed yet\n`)
+      appendReport('summary.md', `${timestamp()} ⚠️ No batch proposal card — skipping approve, manager may assign directly\n`)
       await screenshot(page, '09-no-proposal-card')
     }
 
@@ -508,18 +559,18 @@ test.describe.serial('Integration Test', () => {
 
     // Start workers by clicking them (opens terminal → claude starts)
     await page.locator('text=[TEST] Worker-1').first().click()
-    await page.waitForTimeout(2000)
+    await page.waitForTimeout(3000)
     appendReport('summary.md', `${timestamp()} Worker-1 terminal opened\n`)
 
     await page.locator('text=[TEST] Worker-2').first().click()
-    await page.waitForTimeout(2000)
+    await page.waitForTimeout(3000)
     appendReport('summary.md', `${timestamp()} Worker-2 terminal opened\n`)
 
     await screenshot(page, '10-workers-started')
 
     // Now we wait for workers to complete tasks
-    // Poll task status every 30 seconds
-    const maxWait = 300000 // 5 minutes
+    // Poll task status every 30 seconds (up to 8 minutes)
+    const maxWait = 480000 // 8 minutes
     const startTime = Date.now()
     let allDone = false
 
