@@ -289,18 +289,23 @@ function writeAgentDefinition(cwd: string, config: {
 
   // Inject role-specific soul addendum for task group agents
   if (config.taskGroupRole === 'manager') {
+    const absReportSh = join(cwd, '.claude', 'hive-report.sh')
     yaml += getManagerSoulAddendum({
       todoSource: config.todoSource || 'docs/todo.md',
       workers: config.taskGroupWorkers,
       qaId: config.taskGroupQaId, qaName: config.taskGroupQaName,
       criticId: config.taskGroupCriticId, criticName: config.taskGroupCriticName,
+      reportScriptPath: absReportSh,
     })
   } else if (config.taskGroupRole === 'worker') {
-    yaml += getWorkerSoulAddendum({ maxRetries: config.maxGateRetries || 3 })
+    const absReportSh = join(cwd, '.claude', 'hive-report.sh')
+    yaml += getWorkerSoulAddendum({ maxRetries: config.maxGateRetries || 3, reportScriptPath: absReportSh })
   } else if (config.taskGroupRole === 'qa') {
-    yaml += getQaSoulAddendum()
+    const absReportSh = join(cwd, '.claude', 'hive-report.sh')
+    yaml += getQaSoulAddendum({ reportScriptPath: absReportSh })
   } else if (config.taskGroupRole === 'critic') {
-    yaml += getCriticSoulAddendum()
+    const absReportSh = join(cwd, '.claude', 'hive-report.sh')
+    yaml += getCriticSoulAddendum({ reportScriptPath: absReportSh })
   }
 
   writeFileSync(join(agentsDir, `${agentName}.md`), yaml)
