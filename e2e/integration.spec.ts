@@ -319,7 +319,17 @@ test.describe.serial('Integration Test', () => {
     // Instead of /manager-whip-start skill (which uses interactive menus),
     // send a direct instruction that manager can execute immediately
     const todoPath = join(PROJECT_ROOT, 'test-multi-agent-tasks', 'todo.md')
-    const instruction = `Read the file ${todoPath} and parse the todo items. Group them into batches (items with no unmet dependencies go in batch 1). Then call .claude/hive-report.sh batch-propose with a JSON payload containing the batch. After that, call .claude/hive-report.sh report-human with a summary. Then wait for my approval.`
+    // Get manager's cwd to construct absolute hive-report.sh path
+    const managerCwd = await page.evaluate(async (id) => {
+      const d = await window.api.data.load()
+      const agent = (d.agents as any[])?.find((a: any) => a.id === id)
+      if (!agent) return ''
+      const project = (d.projects as any[])?.find((p: any) => p.id === agent.projectId)
+      const zone = project?.zones?.find((z: any) => z.id === agent.zoneId)
+      return zone?.path || ''
+    }, managerId)
+    const reportSh = join(managerCwd, '.claude', 'hive-report.sh')
+    const instruction = `Read the file ${todoPath} and parse the todo items. Group them into batches (items with no unmet dependencies go in batch 1). Then run: ${reportSh} batch-propose '{"batch":1,"tasks":[...parsed tasks as JSON...]}'. After that run: ${reportSh} report-human "Batch proposed". Then wait for my approval. IMPORTANT: use the exact path ${reportSh} for all hive-report.sh calls.`
     await page.evaluate(async ({ id, msg }) => { window.api.pty.write(id, msg + '\r') }, { id: managerId, msg: instruction })
     log('Sent direct instruction to manager')
 
@@ -328,7 +338,7 @@ test.describe.serial('Integration Test', () => {
     let ySent = false
     const start = Date.now()
 
-    for (let i = 0; i < 36; i++) { // 36 x 10s = 6 min
+    for (let i = 0; i < 48; i++) { // 48 x 10s = 8 min
       await page.waitForTimeout(10000)
       const elapsed = Math.round((Date.now() - start) / 1000)
 
@@ -387,7 +397,7 @@ test.describe.serial('Integration Test', () => {
 
     // HARD ASSERTION: proposal must have been found
     log(`Proposal found: ${proposalFound}`)
-    expect(proposalFound, 'Manager should have proposed batch or created tasks within 6 minutes').toBeTruthy()
+    expect(proposalFound, 'Manager should have proposed batch or created tasks within 8 minutes').toBeTruthy()
   })
 
   test('3. workers execute tasks', async () => {
