@@ -9,6 +9,7 @@ import { createTask, readTask, updateTask, listTasks } from './tasks'
 import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
 import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './helpers'
+import { generateReportScript } from './utils'
 
 // Data persistence — HIVE_DATA_DIR env allows E2E tests to use isolated directory
 const DATA_DIR = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
@@ -313,15 +314,9 @@ function writeAgentDefinition(cwd: string, config: {
     symlinkSync(memoryDir, cwdMemory)
   }
 
-  // hive-report.sh helper script
+  // hive-report.sh helper script (generated from utils.ts with all orchestration commands)
   const reportScript = join(cwd, '.claude', 'hive-report.sh')
-  writeFileSync(reportScript, `#!/bin/bash
-ACTION="$1"; MSG="$2"; AGENT="${config.agentId}"; PORT=${HIVE_PORT}
-case "$ACTION" in
-  start) curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_start\\",\\"title\\":\\"$MSG\\"}" > /dev/null 2>&1 ;;
-  done) curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_done\\",\\"summary\\":\\"$MSG\\"}" > /dev/null 2>&1 ;;
-esac
-`, { mode: 0o755 })
+  writeFileSync(reportScript, generateReportScript(config.agentId, HIVE_PORT), { mode: 0o755 })
 
   return agentName
 }
