@@ -85,3 +85,17 @@ App launched on port 17796
 - **File:** e2e/integration.spec.ts
 
 ---
+App launched on port 17796
+
+
+## Run 8 — Manager parsed todo correctly! But stuck on Y/n prompt
+
+### Bug 9: Manager asks "Submit batch proposal? [Y/n]" but test never responds
+- **Cause:** /manager-whip-start skill has a confirmation step. Manager correctly parsed todo.md (10 tasks, 3 batches), showed the proposal, asked for Y/n. But test was polling task-status instead of answering.
+- **Evidence:** Screenshot 07-manager-99s.png clearly shows batch plan + "Submit batch proposal to human? [Y/n] >"
+- **Fix:** After 60s, switch to manager terminal and send "Y\r". Then continue polling for tasks.
+- **File:** e2e/integration.spec.ts
+
+**This is a MAJOR milestone** — the orchestration parsing + batching logic WORKS. Just need the Y/n answer to unblock.
+
+---

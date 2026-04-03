@@ -481,11 +481,27 @@ test.describe.serial('Integration Test', () => {
     appendReport('summary.md', `${timestamp()} Manager configuring batch...\n`)
 
     // Poll for batch proposal or tasks created (up to 3 minutes)
+    // Also watch for manager asking "Y/n" confirmation and auto-respond
+    let confirmedProposal = false
     const proposalStart = Date.now()
     let proposalFound = false
     while (Date.now() - proposalStart < 180000) {
       await page.waitForTimeout(10000)
       await screenshot(page, `07-manager-${Math.round((Date.now() - proposalStart) / 1000)}s`)
+
+      // After ~60s, manager should be asking "Submit batch proposal? [Y/n]" — send Y once
+      const elapsed = Date.now() - proposalStart
+      if (!confirmedProposal && managerId && elapsed > 60000) {
+        // Switch to manager terminal and send Y
+        await page.locator('text=[TEST] Manager').first().click()
+        await page.waitForTimeout(500)
+        await page.evaluate(async (id) => {
+          window.api.pty.write(id, 'Y\r')
+        }, managerId)
+        confirmedProposal = true
+        appendReport('summary.md', `${timestamp()} Sent Y confirmation to manager (at ${Math.round(elapsed/1000)}s)\n`)
+        await page.waitForTimeout(10000) // Give manager time to call batch-propose
+      }
 
       // Check if tasks were created via HTTP
       const mgrId = await page.evaluate(async () => {

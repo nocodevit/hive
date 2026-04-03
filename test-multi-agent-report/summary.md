@@ -391,3 +391,75 @@ Final: 10 projects, 17 agents
 
 Teardown complete: 2026-04-03T01:53:25.931Z
 
+# Integration Test Report
+
+Started: 2026-04-03T01:58:27.981Z
+
+Baseline: 10 projects, 17 agents
+
+01:58:39 Created [TEST] Manager
+
+01:58:41 Created [TEST] Worker-1
+
+01:58:44 Created [TEST] Worker-2
+
+01:58:46 Created [TEST] QA
+
+01:58:48 Created [TEST] Critic
+
+01:58:51 Task group created
+
+01:58:54 Manager terminal opened, waiting for Claude to start...
+
+01:59:09 Sent /manager-whip-start to manager
+
+01:59:24 Manager configuring batch...
+
+01:59:34 Polling: 0 tasks found
+
+01:59:47 Polling: 0 tasks found
+
+01:59:59 Polling: 0 tasks found
+
+02:00:12 Polling: 0 tasks found
+
+02:00:25 Polling: 0 tasks found
+
+02:00:38 Polling: 0 tasks found
+
+02:00:50 Polling: 0 tasks found
+
+02:01:03 Polling: 0 tasks found
+
+02:01:16 Polling: 0 tasks found
+
+02:01:29 Polling: 0 tasks found
+
+02:01:41 Polling: 0 tasks found
+
+02:01:54 Polling: 0 tasks found
+
+02:02:07 Polling: 0 tasks found
+
+02:02:20 Polling: 0 tasks found
+
+02:02:32 Polling: 0 tasks found
+
+02:02:37 ⚠️ Manager did not create tasks within 3 minutes
+
+02:02:37 Phase 1 complete
+
+02:02:39 ⚠️ No batch proposal card — skipping approve, manager may assign directly
+
+02:02:45 Worker-1 terminal opened
+
+02:02:48 Worker-2 terminal opened
+
+02:11:15 ⚠️ Timeout: not all tasks completed in 5 minutes
+
+02:11:15 Starting QA phase...
+
+02:13:21 QA phase complete
+
+02:13:21 Starting Critic phase...
+
