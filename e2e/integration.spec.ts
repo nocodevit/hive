@@ -485,13 +485,14 @@ test.describe.serial('Integration Test', () => {
     let confirmedProposal = false
     const proposalStart = Date.now()
     let proposalFound = false
-    while (Date.now() - proposalStart < 180000) {
+    while (Date.now() - proposalStart < 240000) { // 4 minutes: ~120s for parsing + ~30s after Y
       await page.waitForTimeout(10000)
       await screenshot(page, `07-manager-${Math.round((Date.now() - proposalStart) / 1000)}s`)
 
-      // After ~60s, manager should be asking "Submit batch proposal? [Y/n]" — send Y once
+      // After ~120s, manager should be asking "Submit batch proposal? [Y/n]" — send Y once
+      // (Run 8 showed Y/n appears at ~99s, so 120s gives buffer)
       const elapsed = Date.now() - proposalStart
-      if (!confirmedProposal && managerId && elapsed > 60000) {
+      if (!confirmedProposal && managerId && elapsed > 120000) {
         // Switch to manager terminal and send Y
         await page.locator('text=[TEST] Manager').first().click()
         await page.waitForTimeout(500)
