@@ -147,79 +147,31 @@ test.beforeAll(async () => {
   if (existsSync(TEST_TASKS_DIR)) rmSync(TEST_TASKS_DIR, { recursive: true })
   mkdirSync(TEST_TASKS_DIR, { recursive: true })
 
+  // Simplified: 3 tasks (2 parallel + 1 dependent) to reduce Claude thinking time
   writeFileSync(join(TEST_TASKS_DIR, 'todo.md'), `# Integration Test Tasks
 
 ## test-batch
 
-- [ ] Create file alpha.md with 3 paragraphs about software testing
+- [ ] Create file alpha.md with a short paragraph about testing
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
     - test -f test-multi-agent-tasks/alpha.md
-  - acceptance: alpha.md exists with 3+ paragraphs
+  - acceptance: alpha.md exists
 
-- [ ] Create file bravo.md with a numbered list of 10 best practices
+- [ ] Create file bravo.md with a numbered list of 5 items
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
     - test -f test-multi-agent-tasks/bravo.md
-  - acceptance: bravo.md exists with 10 numbered items
+  - acceptance: bravo.md exists
 
-- [ ] Create file charlie.md with a comparison table
-  - depends: none
+- [ ] Create file charlie.md summarizing alpha and bravo
+  - depends: [alpha, bravo]
   - scope: test-multi-agent-tasks/
   - verify:
     - test -f test-multi-agent-tasks/charlie.md
-  - acceptance: charlie.md exists with a markdown table
-
-- [ ] Create file delta.md with code examples in 3 languages
-  - depends: none
-  - scope: test-multi-agent-tasks/
-  - verify:
-    - test -f test-multi-agent-tasks/delta.md
-  - acceptance: delta.md has code blocks
-
-- [ ] Create file echo.md with a mermaid flowchart
-  - depends: none
-  - scope: test-multi-agent-tasks/
-  - verify:
-    - test -f test-multi-agent-tasks/echo.md
-  - acceptance: echo.md has mermaid diagram
-
-- [ ] Create file foxtrot.md with pros and cons analysis
-  - depends: none
-  - scope: test-multi-agent-tasks/
-  - verify:
-    - test -f test-multi-agent-tasks/foxtrot.md
-  - acceptance: foxtrot.md has pros/cons sections
-
-- [ ] Create file golf.md with FAQ format
-  - depends: none
-  - scope: test-multi-agent-tasks/
-  - verify:
-    - test -f test-multi-agent-tasks/golf.md
-  - acceptance: golf.md has Q&A pairs
-
-- [ ] Create file hotel.md with a timeline
-  - depends: none
-  - scope: test-multi-agent-tasks/
-  - verify:
-    - test -f test-multi-agent-tasks/hotel.md
-  - acceptance: hotel.md has chronological timeline
-
-- [ ] Create file india.md summarizing alpha through delta
-  - depends: [alpha, bravo, charlie, delta]
-  - scope: test-multi-agent-tasks/
-  - verify:
-    - test -f test-multi-agent-tasks/india.md
-  - acceptance: india.md references alpha-delta content
-
-- [ ] Create file juliet.md as final summary of all files
-  - depends: [india, echo, foxtrot, golf, hotel]
-  - scope: test-multi-agent-tasks/
-  - verify:
-    - test -f test-multi-agent-tasks/juliet.md
-  - acceptance: juliet.md references all 9 previous files
+  - acceptance: charlie.md references alpha and bravo
 `)
 
   // Backup data.json
