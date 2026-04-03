@@ -1,15 +1,7 @@
 /**
- * Multi-Agent Integration Test
+ * Multi-Agent Integration Test — 3 tasks (minimal viable test)
  *
- * Tests the full orchestration lifecycle with real Claude agents:
- * Manager → batch propose → Workers execute → QA → Critic → PR
- *
- * GUARDRAILS:
- * - NEVER writes ~/.hive/data.json directly
- * - All agents created/deleted via UI
- * - All test resources prefixed [TEST]
- * - Continuous snapshots to test-multi-agent-report/
- * - Cleanup runs even on failure (afterAll)
+ * GUARDRAILS: never writes ~/.hive/data.json directly, [TEST] prefix, baseline check
  */
 
 import { test, expect, ElectronApplication, Page } from '@playwright/test'
@@ -20,7 +12,7 @@ import { mkdirSync, existsSync, cpSync, rmSync, readdirSync, readFileSync, write
 const PROJECT_ROOT = join(__dirname, '..')
 const REPORT_DIR = join(PROJECT_ROOT, 'test-multi-agent-report')
 const TEST_TASKS_DIR = join(PROJECT_ROOT, 'test-multi-agent-tasks')
-const HIVE_PORT = 17796 // Separate port for test instance (avoids conflict with running app)
+const HIVE_PORT = 17796
 const HIVE_DATA_DIR = join(require('os').homedir(), '.hive')
 const COMMS_DIR = join(HIVE_DATA_DIR, 'comms')
 
@@ -36,40 +28,32 @@ let baselineAgentCount = 0
 function snapshotComms(phase: string) {
   const dest = join(REPORT_DIR, 'tasks', phase)
   mkdirSync(dest, { recursive: true })
-  // Find all comms directories and copy task files
-  if (existsSync(COMMS_DIR)) {
-    for (const projDir of readdirSync(COMMS_DIR)) {
-      const tasksDir = join(COMMS_DIR, projDir, 'tasks')
-      if (existsSync(tasksDir)) {
-        for (const f of readdirSync(tasksDir)) {
-          if (f.endsWith('.json')) {
-            cpSync(join(tasksDir, f), join(dest, `${projDir}_${f}`))
-          }
-        }
-      }
-      const reportsDir = join(COMMS_DIR, projDir, 'reports')
-      if (existsSync(reportsDir)) {
-        const reportsDest = join(REPORT_DIR, 'reports', phase)
-        mkdirSync(reportsDest, { recursive: true })
-        for (const f of readdirSync(reportsDir)) {
-          cpSync(join(reportsDir, f), join(reportsDest, f))
-        }
+  if (!existsSync(COMMS_DIR)) return
+  for (const projDir of readdirSync(COMMS_DIR)) {
+    const tasksDir = join(COMMS_DIR, projDir, 'tasks')
+    if (existsSync(tasksDir)) {
+      for (const f of readdirSync(tasksDir).filter(f => f.endsWith('.json'))) {
+        cpSync(join(tasksDir, f), join(dest, `${projDir}_${f}`))
       }
     }
   }
 }
 
-function appendReport(file: string, content: string) {
-  const fp = join(REPORT_DIR, file)
+function log(msg: string) {
+  const ts = new Date().toISOString().slice(11, 19)
+  const line = `${ts} ${msg}\n`
+  const fp = join(REPORT_DIR, 'summary.md')
   const existing = existsSync(fp) ? readFileSync(fp, 'utf-8') : ''
-  writeFileSync(fp, existing + content + '\n')
+  writeFileSync(fp, existing + line)
 }
 
-function timestamp(): string {
-  return new Date().toISOString().slice(11, 19)
+async function shot(p: Page | undefined, name: string) {
+  if (!p) return
+  const dir = join(REPORT_DIR, 'screenshots')
+  mkdirSync(dir, { recursive: true })
+  try { await p.screenshot({ path: join(dir, `${name}.png`) }) } catch {}
 }
 
-// Navigate to Task Group tab (must deselect agent first by clicking project)
 async function goToTaskGroupTab(p: Page) {
   await p.locator('button:has-text("Hive")').first().click()
   await p.waitForTimeout(1000)
@@ -77,58 +61,28 @@ async function goToTaskGroupTab(p: Page) {
   await p.waitForTimeout(500)
 }
 
-async function screenshot(p: Page | undefined, name: string) {
-  if (!p) return
-  const dir = join(REPORT_DIR, 'screenshots')
-  mkdirSync(dir, { recursive: true })
-  try { await p.screenshot({ path: join(dir, `${name}.png`) }) } catch {}
-}
-
-// Create a test agent via the 4-step UI wizard
-async function createTestAgent(
-  page: Page,
-  name: string,
-  templateName: string,
-  dept: 'R&D' | 'Non-R&D',
-  roleName: string
-) {
-  // Click New Agent
+async function createTestAgent(page: Page, name: string, templateName: string) {
   await page.getByRole('button', { name: 'New Agent' }).click()
   await page.waitForTimeout(500)
-
-  // Step 0: Select template — clicking auto-advances to step 1
   await page.locator(`button:has-text("${templateName}")`).first().click()
   await page.waitForTimeout(500)
-
-  // Step 1: Fill name (placeholder is "e.g. Alex")
-  const nameInput = page.locator('input[placeholder="e.g. Alex"]')
-  await nameInput.fill(name)
+  await page.locator('input[placeholder="e.g. Alex"]').fill(name)
   await page.waitForTimeout(200)
-
-  // Department + role auto-set by template. Click "Next: Skills"
   await page.getByRole('button', { name: 'Next: Skills' }).click()
   await page.waitForTimeout(300)
-
-  // Step 2: Skills — skip, click "Next: Settings"
   await page.getByRole('button', { name: 'Next: Settings' }).click()
   await page.waitForTimeout(300)
-
-  // Step 3: Model + Zone — keep defaults, create
   await page.getByRole('button', { name: 'Create Agent' }).click()
   await page.waitForTimeout(500)
 }
 
-// Delete a test agent by name via UI
 async function deleteTestAgent(page: Page, name: string) {
-  // Find the agent in sidebar and hover to reveal delete button
   const agentEl = page.locator(`text=${name}`).first()
-  if (!(await agentEl.isVisible())) return
+  if (!(await agentEl.isVisible().catch(() => false))) return
   await agentEl.hover()
   await page.waitForTimeout(200)
-  // Click the delete button (trash icon) that appears on hover
-  const parent = agentEl.locator('..').locator('..')
-  const deleteBtn = parent.locator('button[title="Delete"]')
-  if (await deleteBtn.isVisible()) {
+  const deleteBtn = agentEl.locator('..').locator('..').locator('button[title="Delete"]')
+  if (await deleteBtn.isVisible().catch(() => false)) {
     await deleteBtn.click()
     await page.waitForTimeout(500)
   }
@@ -139,27 +93,24 @@ async function deleteTestAgent(page: Page, name: string) {
 // ============================================================
 
 test.beforeAll(async () => {
-  // Create report directory
   mkdirSync(REPORT_DIR, { recursive: true })
-  appendReport('summary.md', `# Integration Test Report\n\nStarted: ${new Date().toISOString()}\n`)
+  log('# Integration Test (3 tasks)\n')
 
-  // Create test tasks directory + todo.md
+  // Test todo.md — 3 tasks: 2 parallel + 1 dependent
   if (existsSync(TEST_TASKS_DIR)) rmSync(TEST_TASKS_DIR, { recursive: true })
   mkdirSync(TEST_TASKS_DIR, { recursive: true })
+  writeFileSync(join(TEST_TASKS_DIR, 'todo.md'), `# Test Tasks
 
-  // Simplified: 3 tasks (2 parallel + 1 dependent) to reduce Claude thinking time
-  writeFileSync(join(TEST_TASKS_DIR, 'todo.md'), `# Integration Test Tasks
+## batch-1
 
-## test-batch
-
-- [ ] Create file alpha.md with a short paragraph about testing
+- [ ] Create file alpha.md with a short paragraph
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
     - test -f test-multi-agent-tasks/alpha.md
   - acceptance: alpha.md exists
 
-- [ ] Create file bravo.md with a numbered list of 5 items
+- [ ] Create file bravo.md with a numbered list
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
@@ -174,16 +125,13 @@ test.beforeAll(async () => {
   - acceptance: charlie.md references alpha and bravo
 `)
 
-  // Backup data.json
+  // Backup
   const dataFile = join(HIVE_DATA_DIR, 'data.json')
-  if (existsSync(dataFile)) {
-    cpSync(dataFile, join(HIVE_DATA_DIR, 'data.json.test-backup'))
-  }
+  if (existsSync(dataFile)) cpSync(dataFile, join(HIVE_DATA_DIR, 'data.json.test-backup'))
 
-  // Launch app
+  // Launch
   const { execSync } = require('child_process')
   execSync('npx electron-vite build', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 60000 })
-
   app = await electron.launch({
     args: [join(PROJECT_ROOT, 'out', 'main', 'index.js')],
     env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: String(HIVE_PORT) }
@@ -191,468 +139,303 @@ test.beforeAll(async () => {
   page = await app.firstWindow({ timeout: 120000 })
   await page.waitForLoadState('domcontentloaded')
   await page.waitForTimeout(5000)
-  appendReport('session-log.md', `App launched on port ${HIVE_PORT}\n`)
 
-  // Record baseline
+  // Baseline
   const data = await page.evaluate(async () => {
     const d = await window.api.data.load()
     return {
-      projectCount: (d.projects as any[])?.length || 0,
-      agentCount: (d.agents as any[])?.filter((a: any) => !a.name.startsWith('[TEST]')).length || 0
+      projects: (d.projects as any[])?.length || 0,
+      agents: (d.agents as any[])?.filter((a: any) => !a.name.startsWith('[TEST]')).length || 0
     }
   })
-  baselineProjectCount = data.projectCount
-  baselineAgentCount = data.agentCount
-  appendReport('summary.md', `Baseline: ${baselineProjectCount} projects, ${baselineAgentCount} agents\n`)
+  baselineProjectCount = data.projects
+  baselineAgentCount = data.agents
+  log(`Baseline: ${baselineProjectCount} projects, ${baselineAgentCount} agents`)
 
-  // Clean any residual [TEST] agents from previous failed runs
-  const residualTestAgents = await page.evaluate(async () => {
+  // Clean residual [TEST] agents
+  const residual = await page.evaluate(async () => {
     const d = await window.api.data.load()
     return (d.agents as any[])?.filter((a: any) => a.name.startsWith('[TEST]')).map((a: any) => a.name) || []
   })
-  for (const name of residualTestAgents) {
-    appendReport('summary.md', `Cleaning residual test agent: ${name}\n`)
+  for (const name of residual) {
+    log(`Cleaning residual: ${name}`)
     await deleteTestAgent(page, name)
   }
-
-  await screenshot(page, '00-before-setup')
+  await shot(page, '00-setup')
 }, 180000)
 
 // ============================================================
-// Teardown (runs even on failure)
+// Teardown
 // ============================================================
 
 test.afterAll(async () => {
-  appendReport('summary.md', `\nTeardown started: ${new Date().toISOString()}\n`)
-
-  // Final snapshot
+  log('\n--- TEARDOWN ---')
   snapshotComms('final')
-  await screenshot(page, '99-teardown-start')
+  await shot(page, '99-teardown')
 
   try {
-    // 1. Dissolve task group (if exists)
     const tgTab = page.getByRole('button', { name: 'Task Group', exact: true })
-    if (await tgTab.isVisible()) {
-      await tgTab.click()
-      await page.waitForTimeout(500)
-      const dissolveBtn = page.getByText('🗑 Dissolve')
-      if (await dissolveBtn.isVisible()) {
-        await dissolveBtn.click()
+    if (await tgTab.isVisible().catch(() => false)) {
+      await goToTaskGroupTab(page)
+      const dissolve = page.getByText('🗑 Dissolve')
+      if (await dissolve.isVisible().catch(() => false)) {
+        await dissolve.click()
         await page.waitForTimeout(500)
-        appendReport('summary.md', 'Dissolved task group\n')
+        log('Dissolved task group')
       }
     }
-
-    // 2. Delete [TEST] agents
-    const testAgentNames = await page.evaluate(async () => {
+    const testNames = await page.evaluate(async () => {
       const d = await window.api.data.load()
       return (d.agents as any[])?.filter((a: any) => a.name.startsWith('[TEST]')).map((a: any) => a.name) || []
     })
-    for (const name of testAgentNames) {
+    for (const name of testNames) {
       await deleteTestAgent(page, name)
-      appendReport('summary.md', `Deleted agent: ${name}\n`)
+      log(`Deleted: ${name}`)
     }
-
-    // 3. Verify production data intact
-    const finalData = await page.evaluate(async () => {
+    const final = await page.evaluate(async () => {
       const d = await window.api.data.load()
       return {
-        projectCount: (d.projects as any[])?.length || 0,
-        agentCount: (d.agents as any[])?.filter((a: any) => !a.name.startsWith('[TEST]')).length || 0
+        projects: (d.projects as any[])?.length || 0,
+        agents: (d.agents as any[])?.filter((a: any) => !a.name.startsWith('[TEST]')).length || 0
       }
     })
+    log(`Final: ${final.projects} projects, ${final.agents} agents`)
+    if (final.projects !== baselineProjectCount) log(`⚠️ PROJECT COUNT CHANGED: ${baselineProjectCount} → ${final.projects}`)
+    if (final.agents !== baselineAgentCount) log(`⚠️ AGENT COUNT CHANGED: ${baselineAgentCount} → ${final.agents}`)
+  } catch (err) { log(`Teardown error: ${err}`) }
 
-    if (finalData.projectCount !== baselineProjectCount) {
-      appendReport('summary.md', `⚠️ PROJECT COUNT CHANGED: ${baselineProjectCount} → ${finalData.projectCount}\n`)
-    }
-    if (finalData.agentCount !== baselineAgentCount) {
-      appendReport('summary.md', `⚠️ AGENT COUNT CHANGED: ${baselineAgentCount} → ${finalData.agentCount}\n`)
-    }
-
-    appendReport('summary.md', `Final: ${finalData.projectCount} projects, ${finalData.agentCount} agents\n`)
-  } catch (err) {
-    appendReport('summary.md', `Teardown error: ${err}\n`)
-  }
-
-  // 4. Clean test files
   if (existsSync(TEST_TASKS_DIR)) rmSync(TEST_TASKS_DIR, { recursive: true })
-
-  // 5. Clean comms task files (test-generated only)
-  // Don't delete entire comms — only task files we created
-  // These are already snapshotted to report dir
-
-  appendReport('summary.md', `\nTeardown complete: ${new Date().toISOString()}\n`)
-  await screenshot(page, '99-teardown-done')
   await app?.close()
 }, 120000)
 
-// ============================================================
-// Test: Increase timeout for real agent work
-// ============================================================
-
-test.setTimeout(600000) // 10 min per test
+test.setTimeout(600000)
 
 // ============================================================
-// Phase 1: Setup agents and task group
+// Tests
 // ============================================================
 
 test.describe.serial('Integration Test', () => {
 
-  test('select Hive project', async () => {
-    // Find and click the Hive project in sidebar
-    // Button text is like "💤 Hive 17" (emoji + name + agent count)
-    const hiveProject = page.locator('button:has-text("Hive")').first()
-    await hiveProject.click()
+  test('1. select Hive project + create agents + task group', async () => {
+    // Select project
+    await page.locator('button:has-text("Hive")').first().click()
     await page.waitForTimeout(1000)
-    await screenshot(page, '01-hive-project-selected')
+    await shot(page, '01-project')
 
-    // Verify we're on the project
-    await expect(page.getByRole('button', { name: 'Dashboard', exact: true })).toBeVisible()
-  })
+    // Create 5 agents
+    for (const [name, tmpl] of [
+      ['[TEST] Manager', 'General Manager'],
+      ['[TEST] Worker-1', 'Full-Stack Engineer'],
+      ['[TEST] Worker-2', 'Full-Stack Engineer'],
+      ['[TEST] QA', 'QA'],
+      ['[TEST] Critic', 'Full-Stack Engineer'],
+    ] as const) {
+      await createTestAgent(page, name, tmpl)
+      log(`Created ${name}`)
+    }
+    await shot(page, '02-agents')
 
-  test('create 5 test agents', async () => {
-    // Manager
-    await createTestAgent(page, '[TEST] Manager', 'General Manager', 'Non-R&D', 'GM')
-    appendReport('summary.md', `${timestamp()} Created [TEST] Manager\n`)
-
-    // Worker 1
-    await createTestAgent(page, '[TEST] Worker-1', 'Full-Stack Engineer', 'R&D', 'Engineering')
-    appendReport('summary.md', `${timestamp()} Created [TEST] Worker-1\n`)
-
-    // Worker 2
-    await createTestAgent(page, '[TEST] Worker-2', 'Full-Stack Engineer', 'R&D', 'Engineering')
-    appendReport('summary.md', `${timestamp()} Created [TEST] Worker-2\n`)
-
-    // QA
-    await createTestAgent(page, '[TEST] QA', 'QA', 'R&D', 'QA')
-    appendReport('summary.md', `${timestamp()} Created [TEST] QA\n`)
-
-    // Critic
-    await createTestAgent(page, '[TEST] Critic', 'Full-Stack Engineer', 'R&D', 'Engineering')
-    appendReport('summary.md', `${timestamp()} Created [TEST] Critic\n`)
-
-    await screenshot(page, '02-test-agents-created')
-
-    // Verify all 5 exist
+    // Verify all exist
     for (const name of ['[TEST] Manager', '[TEST] Worker-1', '[TEST] Worker-2', '[TEST] QA', '[TEST] Critic']) {
       await expect(page.locator(`text=${name}`).first()).toBeVisible()
     }
-  })
 
-  test('create task group with test agents', async () => {
+    // Create task group
     await page.getByRole('button', { name: 'Task Group', exact: true }).click()
     await page.waitForTimeout(500)
     await page.getByRole('button', { name: 'Create Task Group' }).click()
     await page.waitForTimeout(500)
 
-    // Assign roles — find [TEST] agents in dropdowns
     const selects = page.locator('select')
-
-    // Manager dropdown → [TEST] Manager
     await selects.nth(0).selectOption({ label: '[TEST] Manager (GM)' })
-    // QA dropdown → [TEST] QA
     await selects.nth(1).selectOption({ label: '[TEST] QA (QA)' })
-    // Critic dropdown → [TEST] Critic
     await selects.nth(2).selectOption({ label: '[TEST] Critic (Engineering)' })
-
-    // Workers — check both (use .first() in case of duplicate matches)
     await page.getByRole('checkbox', { name: '[TEST] Worker-1' }).first().check()
     await page.getByRole('checkbox', { name: '[TEST] Worker-2' }).first().check()
 
-    // Set todo source
     const todoInput = page.locator('input[value="docs/todo.md"]')
-    if (await todoInput.isVisible()) {
-      await todoInput.fill('test-multi-agent-tasks/todo.md')
+    if (await todoInput.isVisible().catch(() => false)) {
+      await todoInput.fill(join(PROJECT_ROOT, 'test-multi-agent-tasks', 'todo.md'))
     }
-
     await page.waitForTimeout(300)
-    await screenshot(page, '03-task-group-config')
+    await shot(page, '03-taskgroup-config')
 
-    // Create
-    const createBtn = page.getByRole('button', { name: 'Create & Start' })
-    await expect(createBtn).toBeEnabled()
-    await createBtn.click()
+    await page.getByRole('button', { name: 'Create & Start' }).click()
     await page.waitForTimeout(1000)
-
-    await screenshot(page, '04-task-group-created')
-    appendReport('summary.md', `${timestamp()} Task group created\n`)
+    await shot(page, '04-taskgroup-created')
+    log('Task group created')
   })
 
-  // ============================================================
-  // Phase 2: Manager proposes batch
-  // ============================================================
-
-  test('manager starts and proposes batch', async () => {
-    // Click [TEST] Manager to open terminal
+  test('2. manager proposes batch (with Y/n confirmation)', async () => {
+    // Click manager to open terminal
     await page.locator('text=[TEST] Manager').first().click()
-    await page.waitForTimeout(2000) // Wait for claude --agent to start
+    await page.waitForTimeout(3000)
+    log('Manager terminal opened')
 
-    await screenshot(page, '05-manager-terminal')
-    appendReport('summary.md', `${timestamp()} Manager terminal opened, waiting for Claude to start...\n`)
-
-    // Wait for Claude to be ready (look for prompt or output)
-    // This may take 10-30 seconds for Claude to initialize
-    await page.waitForTimeout(15000)
-
-    // Inject /manager-whip-start skill
     const managerId = await page.evaluate(async () => {
       const d = await window.api.data.load()
-      const mgr = (d.agents as any[])?.find((a: any) => a.name === '[TEST] Manager')
-      return mgr?.id
+      return (d.agents as any[])?.find((a: any) => a.name === '[TEST] Manager')?.id || ''
     })
+    log(`Manager ID: ${managerId}`)
 
-    if (managerId) {
-      await page.evaluate(async (id) => {
-        window.api.pty.write(id, '/manager-whip-start\r')
-      }, managerId)
-    }
+    // Wait for Claude to initialize
+    await page.waitForTimeout(15000)
+    await shot(page, '05-manager-ready')
 
-    appendReport('summary.md', `${timestamp()} Sent /manager-whip-start to manager\n`)
-    await screenshot(page, '06-manager-whip-start')
-
-    // Wait for manager to process — it will ask for todo path
+    // Inject /manager-whip-start
+    await page.evaluate(async (id) => { window.api.pty.write(id, '/manager-whip-start\r') }, managerId)
+    log('Sent /manager-whip-start')
     await page.waitForTimeout(10000)
 
-    // Respond with todo path — use ABSOLUTE path since manager cwd may not be the code project
-    const todoAbsPath = join(PROJECT_ROOT, 'test-multi-agent-tasks', 'todo.md')
-    if (managerId) {
-      await page.evaluate(async ({ id, path }) => {
-        window.api.pty.write(id, path + '\r')
-      }, { id: managerId, path: todoAbsPath })
-    }
-
+    // Send todo path (absolute)
+    const todoPath = join(PROJECT_ROOT, 'test-multi-agent-tasks', 'todo.md')
+    await page.evaluate(async ({ id, path }) => { window.api.pty.write(id, path + '\r') }, { id: managerId, path: todoPath })
+    log(`Sent todo path: ${todoPath}`)
     await page.waitForTimeout(5000)
 
-    // Respond to max retries (Enter for default)
-    if (managerId) {
-      await page.evaluate(async (id) => {
-        window.api.pty.write(id, '\r') // default 3
-      }, managerId)
-    }
+    // Send max retries default
+    await page.evaluate(async (id) => { window.api.pty.write(id, '\r') }, managerId)
+    log('Sent Enter for default max retries')
 
-    appendReport('summary.md', `${timestamp()} Manager configuring batch...\n`)
-
-    // Poll for batch proposal or tasks created (up to 3 minutes)
-    // Also watch for manager asking "Y/n" confirmation and auto-respond
-    let confirmedProposal = false
-    const proposalStart = Date.now()
+    // Poll up to 6 minutes: send Y when appropriate, check for tasks/proposal
     let proposalFound = false
-    while (Date.now() - proposalStart < 240000) { // 4 minutes: ~120s for parsing + ~30s after Y
-      await page.waitForTimeout(10000)
-      await screenshot(page, `07-manager-${Math.round((Date.now() - proposalStart) / 1000)}s`)
+    let ySent = false
+    const start = Date.now()
 
-      // After ~120s, manager should be asking "Submit batch proposal? [Y/n]" — send Y once
-      // (Run 8 showed Y/n appears at ~99s, so 120s gives buffer)
-      const elapsed = Date.now() - proposalStart
-      if (!confirmedProposal && managerId && elapsed > 120000) {
-        // Switch to manager terminal and send Y
-        await page.locator('text=[TEST] Manager').first().click()
-        await page.waitForTimeout(500)
-        await page.evaluate(async (id) => {
-          window.api.pty.write(id, 'Y\r')
-        }, managerId)
-        confirmedProposal = true
-        appendReport('summary.md', `${timestamp()} Sent Y confirmation to manager (at ${Math.round(elapsed/1000)}s)\n`)
-        await page.waitForTimeout(10000) // Give manager time to call batch-propose
+    for (let i = 0; i < 36; i++) { // 36 x 10s = 6 min
+      await page.waitForTimeout(10000)
+      const elapsed = Math.round((Date.now() - start) / 1000)
+
+      // Screenshot manager terminal
+      await page.locator('text=[TEST] Manager').first().click().catch(() => {})
+      await page.waitForTimeout(500)
+      await shot(page, `06-manager-${elapsed}s`)
+
+      // Send Y after 90s (once) — manager should have reached Y/n by then for 3 tasks
+      if (!ySent && elapsed > 90) {
+        await page.evaluate(async (id) => { window.api.pty.write(id, 'Y\r') }, managerId)
+        ySent = true
+        log(`Sent Y at ${elapsed}s`)
+        await page.waitForTimeout(5000)
       }
 
-      // Check if tasks were created via HTTP
-      const mgrId = await page.evaluate(async () => {
-        const d = await window.api.data.load()
-        return (d.agents as any[])?.find((a: any) => a.name === '[TEST] Manager')?.id || ''
-      })
+      // Check task-status
       const taskCount = await page.evaluate(async ({ port, agentId }) => {
         try {
           const res = await fetch(`http://127.0.0.1:${port}/task-status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ agentId })
           })
           const tasks = await res.json()
           return Array.isArray(tasks) ? tasks.length : 0
-        } catch { return 0 }
-      }, { port: HIVE_PORT, agentId: mgrId })
-
-      appendReport('summary.md', `${timestamp()} Polling: ${taskCount} tasks found\n`)
+        } catch { return -1 }
+      }, { port: HIVE_PORT, agentId: managerId })
+      log(`[${elapsed}s] task-status: ${taskCount} tasks`)
 
       if (taskCount > 0) {
         proposalFound = true
-        appendReport('summary.md', `${timestamp()} ✅ Tasks created by manager! (${taskCount} tasks)\n`)
+        log(`✅ ${taskCount} tasks created!`)
         break
       }
 
-      // Check for proposal card in Task Group tab and click Approve if visible
+      // Check for Approve button in UI
       await goToTaskGroupTab(page)
       const approveBtn = page.getByRole('button', { name: 'Approve' })
       if (await approveBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
         await approveBtn.click()
-        appendReport('summary.md', `${timestamp()} ✅ Clicked Approve on batch proposal!\n`)
-        await page.waitForTimeout(5000) // Give manager time to create tasks after approval
+        log('✅ Clicked Approve')
+        await page.waitForTimeout(10000) // Wait for manager to create tasks after approval
         proposalFound = true
         break
       }
 
-      const batchText = await page.locator('.glass-card').first().textContent().catch(() => '')
-      if (batchText && !batchText.includes('No tasks yet')) {
-        proposalFound = true
-        appendReport('summary.md', `${timestamp()} ✅ Batch panel has content\n`)
-        break
-      }
-
-      // Go back to manager terminal to let it keep working
-      await page.locator('text=[TEST] Manager').first().click()
-      await page.waitForTimeout(1000)
+      // Back to manager terminal
+      await page.locator('text=[TEST] Manager').first().click().catch(() => {})
+      await page.waitForTimeout(500)
     }
 
-    snapshotComms('phase1-proposal')
-    await screenshot(page, '07-after-manager-propose')
-    await goToTaskGroupTab(page)
-    await screenshot(page, '08-task-group-after-propose')
+    snapshotComms('after-propose')
+    await shot(page, '07-after-propose')
 
-    if (!proposalFound) {
-      appendReport('summary.md', `${timestamp()} ⚠️ Manager did not create tasks within 3 minutes\n`)
-    }
-    appendReport('summary.md', `${timestamp()} Phase 1 complete\n`)
+    // HARD ASSERTION: proposal must have been found
+    log(`Proposal found: ${proposalFound}`)
+    expect(proposalFound, 'Manager should have proposed batch or created tasks within 6 minutes').toBeTruthy()
   })
 
-  // ============================================================
-  // Phase 3: Approve batch and workers execute
-  // ============================================================
-
-  test('approve batch and workers execute', async () => {
-    // Ensure we're on Task Group tab
-    await goToTaskGroupTab(page)
-    await page.waitForTimeout(1000)
-
-    // Look for Approve button (batch proposal card)
-    const approveBtn = page.getByRole('button', { name: 'Approve' })
-    if (await approveBtn.isVisible({ timeout: 10000 }).catch(() => false)) {
-      await approveBtn.click()
-      appendReport('summary.md', `${timestamp()} Batch approved via UI\n`)
-    } else {
-      appendReport('summary.md', `${timestamp()} ⚠️ No batch proposal card — skipping approve, manager may assign directly\n`)
-      await screenshot(page, '09-no-proposal-card')
-    }
-
-    await page.waitForTimeout(2000)
-
-    // Start workers by clicking them (opens terminal → claude starts)
+  test('3. workers execute tasks', async () => {
+    // Start workers
     await page.locator('text=[TEST] Worker-1').first().click()
     await page.waitForTimeout(3000)
-    appendReport('summary.md', `${timestamp()} Worker-1 terminal opened\n`)
-
+    log('Worker-1 started')
     await page.locator('text=[TEST] Worker-2').first().click()
     await page.waitForTimeout(3000)
-    appendReport('summary.md', `${timestamp()} Worker-2 terminal opened\n`)
+    log('Worker-2 started')
+    await shot(page, '08-workers')
 
-    await screenshot(page, '10-workers-started')
+    const mgrId = await page.evaluate(async () => {
+      const d = await window.api.data.load()
+      return (d.agents as any[])?.find((a: any) => a.name === '[TEST] Manager')?.id || ''
+    })
 
-    // Now we wait for workers to complete tasks
-    // Poll task status every 30 seconds (up to 8 minutes)
-    const maxWait = 480000 // 8 minutes
-    const startTime = Date.now()
+    // Poll for task completion (up to 8 min)
     let allDone = false
+    const start = Date.now()
+    for (let i = 0; i < 16; i++) { // 16 x 30s = 8 min
+      await page.waitForTimeout(30000)
+      const elapsed = Math.round((Date.now() - start) / 1000)
 
-    while (Date.now() - startTime < maxWait) {
-      await page.waitForTimeout(30000) // 30s poll interval
-
-      // Check task board (navigate back to project view first)
       await goToTaskGroupTab(page)
+      await shot(page, `09-progress-${elapsed}s`)
+      snapshotComms(`workers-${elapsed}s`)
 
-      const elapsed = Math.round((Date.now() - startTime) / 1000)
-      await screenshot(page, `11-progress-${elapsed}s`)
-
-      // Snapshot comms
-      snapshotComms(`phase2-${elapsed}s`)
-
-      // Check if batch tasks are done by reading task files
-      // Get manager agent ID for task-status lookup
-      const mgrId = await page.evaluate(async () => {
-        const d = await window.api.data.load()
-        return (d.agents as any[])?.find((a: any) => a.name === '[TEST] Manager')?.id || ''
-      })
-
-      const taskSummary = await page.evaluate(async ({ port, agentId }) => {
+      const summary = await page.evaluate(async ({ port, agentId }) => {
         try {
           const res = await fetch(`http://127.0.0.1:${port}/task-status`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ agentId })
           })
           const tasks = await res.json()
-          if (!Array.isArray(tasks)) return { total: 0, done: 0, blocked: 0, pending: 0, inProgress: 0 }
-          return {
-            total: tasks.length,
-            done: tasks.filter((t: any) => t.status === 'done').length,
-            blocked: tasks.filter((t: any) => t.status === 'blocked').length,
-            pending: tasks.filter((t: any) => t.status === 'pending').length,
-            inProgress: tasks.filter((t: any) => t.status === 'in_progress' || t.status === 'assigned').length,
-          }
-        } catch { return { total: 0, done: 0, blocked: 0, pending: 0, inProgress: 0 } }
+          if (!Array.isArray(tasks)) return 'no tasks'
+          const done = tasks.filter((t: any) => t.status === 'done').length
+          const blocked = tasks.filter((t: any) => t.status === 'blocked').length
+          const total = tasks.length
+          return `${done}/${total} done, ${blocked} blocked`
+        } catch (e) { return `error: ${e}` }
       }, { port: HIVE_PORT, agentId: mgrId })
+      log(`[${elapsed}s] Workers: ${summary}`)
 
-      appendReport('batch-timeline.md', `${timestamp()} [${elapsed}s] Tasks: ${taskSummary.done}/${taskSummary.total} done, ${taskSummary.blocked} blocked, ${taskSummary.pending} pending\n`)
-
-      if (taskSummary.total > 0 && taskSummary.done + taskSummary.blocked >= taskSummary.total) {
-        allDone = true
-        appendReport('summary.md', `${timestamp()} All batch tasks complete (${taskSummary.done} done, ${taskSummary.blocked} blocked)\n`)
-        break
+      if (summary.includes('/') && !summary.startsWith('0/')) {
+        const match = summary.match(/(\d+)\/(\d+)/)
+        if (match && parseInt(match[1]) + (summary.match(/(\d+) blocked/)?.[1] ? parseInt(summary.match(/(\d+) blocked/)![1]) : 0) >= parseInt(match[2])) {
+          allDone = true
+          log('✅ All tasks done or blocked')
+          break
+        }
       }
     }
-
-    if (!allDone) {
-      appendReport('summary.md', `${timestamp()} ⚠️ Timeout: not all tasks completed in 5 minutes\n`)
-    }
-
-    snapshotComms('phase2-complete')
-    await screenshot(page, '12-batch-complete')
+    log(`Workers complete: ${allDone}`)
+    // Soft assertion here — workers may not finish in time with real Claude
   })
 
-  // ============================================================
-  // Phase 4: QA
-  // ============================================================
-
-  test('QA agent runs integration test', async () => {
-    appendReport('summary.md', `${timestamp()} Starting QA phase...\n`)
-
-    // Click QA agent to start
+  test('4. QA + Critic + final state', async () => {
+    // Start QA
     await page.locator('text=[TEST] QA').first().click()
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(3000)
+    log('QA started')
+    await shot(page, '10-qa')
+    await page.waitForTimeout(60000)
 
-    await screenshot(page, '13-qa-started')
-
-    // Wait for QA to complete (up to 3 minutes)
-    await page.waitForTimeout(120000)
-
-    snapshotComms('phase4-qa')
-    await screenshot(page, '14-qa-complete')
-    appendReport('summary.md', `${timestamp()} QA phase complete\n`)
-  })
-
-  // ============================================================
-  // Phase 5: Critic
-  // ============================================================
-
-  test('Critic agent reviews and creates PR', async () => {
-    appendReport('summary.md', `${timestamp()} Starting Critic phase...\n`)
-
+    // Start Critic
     await page.locator('text=[TEST] Critic').first().click()
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(3000)
+    log('Critic started')
+    await shot(page, '11-critic')
+    await page.waitForTimeout(60000)
 
-    await screenshot(page, '15-critic-started')
-
-    // Wait for Critic (up to 3 minutes)
-    await page.waitForTimeout(120000)
-
-    snapshotComms('phase5-critic')
-    await screenshot(page, '16-critic-complete')
-    appendReport('summary.md', `${timestamp()} Critic phase complete\n`)
-
-    // Check for merge card
+    // Final state
     await goToTaskGroupTab(page)
-    await page.waitForTimeout(1000)
-    await screenshot(page, '17-final-task-group')
-
-    appendReport('summary.md', `${timestamp()} Integration test complete\n`)
+    await shot(page, '12-final')
+    snapshotComms('final-state')
+    log('Test complete')
   })
 })
