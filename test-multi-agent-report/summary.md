@@ -1,54 +1,61 @@
-04:33:28 # Integration Test (3 tasks)
+15:31:36 # Integration Test (3 tasks)
 
-04:33:35 Baseline: 10 projects, 17 agents
-04:33:35 Restored skill from previous failed teardown
-04:33:39 Created [TEST] Manager
-04:33:42 Created [TEST] Worker-1
-04:33:44 Created [TEST] Worker-2
-04:33:47 Created [TEST] QA
-04:33:49 Created [TEST] Critic
-04:33:52 Task group created
-04:33:55 Manager terminal opened
-04:33:55 Manager ID: agent-1775190819097
-04:34:15 Sent direct instruction to manager
-04:34:26 [10s] task-status: 0 tasks
-04:34:39 [23s] task-status: 0 tasks
-04:34:52 [36s] task-status: 0 tasks
-04:35:05 [49s] task-status: 0 tasks
-04:35:18 Sent Y at 61s (in case of confirmation prompt)
-04:35:23 [61s] task-status: 0 tasks
-04:35:35 [79s] task-status: 0 tasks
-04:35:48 [92s] task-status: 0 tasks
-04:36:01 [105s] task-status: 0 tasks
-04:36:14 [118s] task-status: 0 tasks
-04:36:27 [131s] task-status: 0 tasks
-04:36:39 [143s] task-status: 0 tasks
-04:36:52 [156s] task-status: 0 tasks
-04:37:05 [169s] task-status: 0 tasks
-04:37:18 [182s] task-status: 0 tasks
-04:37:31 [195s] task-status: 0 tasks
-04:37:43 [207s] task-status: 0 tasks
-04:37:56 [220s] task-status: 0 tasks
-04:38:09 [233s] task-status: 0 tasks
-04:38:22 [246s] task-status: 0 tasks
-04:38:34 [259s] task-status: 0 tasks
-04:38:47 [271s] task-status: 0 tasks
-04:39:00 [284s] task-status: 0 tasks
-04:39:13 [297s] task-status: 0 tasks
-04:39:26 [310s] task-status: 0 tasks
-04:39:38 [322s] task-status: 0 tasks
-04:39:51 [335s] task-status: 0 tasks
-04:40:04 [348s] task-status: 0 tasks
-04:40:17 [361s] task-status: 0 tasks
-04:40:29 [374s] task-status: 0 tasks
-04:40:42 [386s] task-status: 0 tasks
-04:40:55 [399s] task-status: 0 tasks
-04:41:08 [412s] task-status: 0 tasks
-04:41:21 [425s] task-status: 0 tasks
-04:41:33 [438s] task-status: 0 tasks
-04:41:46 [450s] task-status: 0 tasks
-04:41:59 [463s] task-status: 0 tasks
-04:42:01 Proposal found: false
-04:42:01 
+15:31:46 Baseline: 10 projects, 17 agents
+15:31:46 Cleaned residual definition: hive-agent-1775191497431.md
+15:31:50 Created [TEST] Manager
+15:31:52 Created [TEST] Worker-1
+15:31:55 Created [TEST] Worker-2
+15:31:57 Created [TEST] QA
+15:32:00 Created [TEST] Critic
+15:32:03 Task group created
+15:32:06 Manager terminal opened
+15:32:06 Manager ID: agent-1775230309661
+15:32:26 Sent direct instruction to manager
+15:32:36 [10s] task-status: 0 tasks
+15:32:49 [23s] task-status: 0 tasks
+15:33:02 [36s] task-status: 0 tasks
+15:33:15 [48s] task-status: 0 tasks
+15:33:28 Sent Y at 61s (in case of confirmation prompt)
+15:33:33 [61s] task-status: 0 tasks
+15:33:46 [79s] task-status: 0 tasks
+15:33:58 [92s] task-status: 0 tasks
+15:34:11 [105s] task-status: 0 tasks
+15:34:24 [118s] task-status: 0 tasks
+15:34:37 [130s] task-status: 0 tasks
+15:34:50 [143s] task-status: 0 tasks
+15:35:02 [156s] task-status: 0 tasks
+15:35:15 [169s] task-status: 0 tasks
+15:35:28 [181s] task-status: 0 tasks
+15:35:41 [194s] task-status: 0 tasks
+15:35:53 [207s] task-status: 0 tasks
+15:36:06 [220s] task-status: 0 tasks
+15:36:19 [232s] task-status: 0 tasks
+15:36:32 [245s] task-status: 0 tasks
+15:36:44 [258s] task-status: 0 tasks
+15:36:57 [271s] task-status: 0 tasks
+15:37:10 [284s] task-status: 0 tasks
+15:37:23 [296s] task-status: 0 tasks
+15:37:35 [309s] task-status: 0 tasks
+15:37:48 [322s] task-status: 0 tasks
+15:38:01 [335s] task-status: 0 tasks
+15:38:14 [347s] task-status: 0 tasks
+15:38:27 [360s] task-status: 0 tasks
+15:38:39 [373s] task-status: 0 tasks
+15:38:52 [386s] task-status: 0 tasks
+15:39:05 [399s] task-status: 0 tasks
+15:39:18 [411s] task-status: 0 tasks
+15:39:30 [424s] task-status: 0 tasks
+15:39:43 [437s] task-status: 0 tasks
+15:39:56 [450s] task-status: 0 tasks
+15:40:09 [462s] task-status: 0 tasks
+15:40:22 [475s] task-status: 0 tasks
+15:40:34 [488s] task-status: 0 tasks
+15:40:47 [501s] task-status: 0 tasks
+15:41:00 [514s] task-status: 0 tasks
+15:41:13 [526s] task-status: 0 tasks
+15:41:25 [539s] task-status: 0 tasks
+15:41:38 [552s] task-status: 0 tasks
+15:41:51 [565s] task-status: 0 tasks
+15:42:03 
 --- TEARDOWN ---
-04:42:01 Final: 10 projects, 17 agents
+15:42:03 Final: 10 projects, 17 agents

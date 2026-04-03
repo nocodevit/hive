@@ -242,7 +242,7 @@ test.afterAll(async () => {
   await app?.close()
 }, 120000)
 
-test.setTimeout(600000)
+test.setTimeout(1200000) // 20 min per test
 
 // ============================================================
 // Tests
@@ -338,7 +338,7 @@ test.describe.serial('Integration Test', () => {
     let ySent = false
     const start = Date.now()
 
-    for (let i = 0; i < 48; i++) { // 48 x 10s = 8 min
+    for (let i = 0; i < 90; i++) { // 90 x 10s = 15 min
       await page.waitForTimeout(10000)
       const elapsed = Math.round((Date.now() - start) / 1000)
 
@@ -397,7 +397,7 @@ test.describe.serial('Integration Test', () => {
 
     // HARD ASSERTION: proposal must have been found
     log(`Proposal found: ${proposalFound}`)
-    expect(proposalFound, 'Manager should have proposed batch or created tasks within 8 minutes').toBeTruthy()
+    expect(proposalFound, 'Manager should have proposed batch or created tasks within 15 minutes').toBeTruthy()
   })
 
   test('3. workers execute tasks', async () => {

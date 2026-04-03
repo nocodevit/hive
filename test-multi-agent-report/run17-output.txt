@@ -1,0 +1,29 @@
+
+Running 4 tests using 1 worker
+
+[1A[2K[1/4] e2e/integration.spec.ts:253:7 › Integration Test › 1. select Hive project + create agents + task group
+[1A[2K[2/4] e2e/integration.spec.ts:303:7 › Integration Test › 2. manager proposes batch (with Y/n confirmation)
+[1A[2K  1) e2e/integration.spec.ts:303:7 › Integration Test › 2. manager proposes batch (with Y/n confirmation) 
+
+    [31mTest timeout of 600000ms exceeded.[39m
+
+    Error: page.waitForTimeout: Target page, context or browser has been closed
+
+      340 |
+      341 |     for (let i = 0; i < 48; i++) { // 48 x 10s = 8 min
+    > 342 |       await page.waitForTimeout(10000)
+          |                  ^
+      343 |       const elapsed = Math.round((Date.now() - start) / 1000)
+      344 |
+      345 |       // Screenshot manager terminal
+        at /Users/meiyang/FrontEndProjects/hive/e2e/integration.spec.ts:342:18
+
+    Error Context: test-results/integration-Integration-Te-95de8-atch-with-Y-n-confirmation-/error-context.md
+
+
+[1A[2K[3/4] e2e/integration.spec.ts:403:7 › Integration Test › 3. workers execute tasks
+[1A[2K[4/4] e2e/integration.spec.ts:458:7 › Integration Test › 4. QA + Critic + final state
+[1A[2K  1 failed
+    e2e/integration.spec.ts:303:7 › Integration Test › 2. manager proposes batch (with Y/n confirmation) 
+  2 did not run
+  1 passed (10.4m)
