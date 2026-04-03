@@ -1,0 +1,31 @@
+
+Running 4 tests using 1 worker
+
+[1A[2K[1/4] e2e/integration.spec.ts:253:7 › Integration Test › 1. select Hive project + create agents + task group
+[1A[2K[2/4] e2e/integration.spec.ts:303:7 › Integration Test › 2. manager proposes batch (with Y/n confirmation)
+[1A[2K  1) e2e/integration.spec.ts:303:7 › Integration Test › 2. manager proposes batch (with Y/n confirmation) 
+
+    Error: Manager should have proposed batch or created tasks within 6 minutes
+
+    [2mexpect([22m[31mreceived[39m[2m).[22mtoBeTruthy[2m()[22m
+
+    Received: [31mfalse[39m
+
+      388 |     // HARD ASSERTION: proposal must have been found
+      389 |     log(`Proposal found: ${proposalFound}`)
+    > 390 |     expect(proposalFound, 'Manager should have proposed batch or created tasks within 6 minutes').toBeTruthy()
+          |                                                                                                   ^
+      391 |   })
+      392 |
+      393 |   test('3. workers execute tasks', async () => {
+        at /Users/meiyang/FrontEndProjects/hive/e2e/integration.spec.ts:390:99
+
+    Error Context: test-results/integration-Integration-Te-95de8-atch-with-Y-n-confirmation-/error-context.md
+
+
+[1A[2K[3/4] e2e/integration.spec.ts:393:7 › Integration Test › 3. workers execute tasks
+[1A[2K[4/4] e2e/integration.spec.ts:448:7 › Integration Test › 4. QA + Critic + final state
+[1A[2K  1 failed
+    e2e/integration.spec.ts:303:7 › Integration Test › 2. manager proposes batch (with Y/n confirmation) 
+  2 did not run
+  1 passed (8.6m)
