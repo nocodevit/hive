@@ -1,55 +1,55 @@
-03:43:30 # Integration Test (3 tasks)
+03:55:48 # Integration Test (3 tasks)
 
-03:43:37 Baseline: 10 projects, 17 agents
-03:43:41 Created [TEST] Manager
-03:43:44 Created [TEST] Worker-1
-03:43:46 Created [TEST] Worker-2
-03:43:48 Created [TEST] QA
-03:43:51 Created [TEST] Critic
-03:43:54 Task group created
-03:43:57 Manager terminal opened
-03:43:57 Manager ID: agent-1775187821047
-03:44:12 Sent /manager-whip-start
-03:44:22 Sent todo path: /Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/todo.md
-03:44:27 Sent Enter for default max retries
-03:44:38 [10s] task-status: 0 tasks
-03:44:51 [23s] task-status: 0 tasks
-03:45:03 [36s] task-status: 0 tasks
-03:45:16 [48s] task-status: 0 tasks
-03:45:29 [61s] task-status: 0 tasks
-03:45:42 [74s] task-status: 0 tasks
-03:45:55 [87s] task-status: 0 tasks
-03:46:07 Sent Y at 100s
-03:46:12 [100s] task-status: 0 tasks
-03:46:25 [117s] task-status: 0 tasks
-03:46:38 [130s] task-status: 0 tasks
-03:46:51 [143s] task-status: 0 tasks
-03:47:03 [156s] task-status: 0 tasks
-03:47:16 [169s] task-status: 0 tasks
-03:47:29 [181s] task-status: 0 tasks
-03:47:42 [194s] task-status: 0 tasks
-03:47:55 [207s] task-status: 0 tasks
-03:48:07 [220s] task-status: 0 tasks
-03:48:20 [232s] task-status: 0 tasks
-03:48:33 [245s] task-status: 0 tasks
-03:48:46 [258s] task-status: 0 tasks
-03:48:59 [271s] task-status: 0 tasks
-03:49:11 [284s] task-status: 0 tasks
-03:49:24 [296s] task-status: 0 tasks
-03:49:37 [309s] task-status: 0 tasks
-03:49:50 [322s] task-status: 0 tasks
-03:50:03 [335s] task-status: 0 tasks
-03:50:15 [348s] task-status: 0 tasks
-03:50:28 [360s] task-status: 0 tasks
-03:50:41 [373s] task-status: 0 tasks
-03:50:54 [386s] task-status: 0 tasks
-03:51:06 [399s] task-status: 0 tasks
-03:51:19 [412s] task-status: 0 tasks
-03:51:32 [424s] task-status: 0 tasks
-03:51:45 [437s] task-status: 0 tasks
-03:51:58 [450s] task-status: 0 tasks
-03:52:10 [463s] task-status: 0 tasks
-03:52:13 Proposal found: false
-03:52:13 
+03:55:56 Baseline: 10 projects, 17 agents
+03:56:00 Created [TEST] Manager
+03:56:02 Created [TEST] Worker-1
+03:56:05 Created [TEST] Worker-2
+03:56:07 Created [TEST] QA
+03:56:10 Created [TEST] Critic
+03:56:13 Task group created
+03:56:16 Manager terminal opened
+03:56:16 Manager ID: agent-1775188559753
+03:56:31 Sent /manager-whip-start
+03:56:41 Sent todo path: /Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/todo.md
+03:56:46 Sent Enter for default max retries
+03:56:57 [10s] task-status: 0 tasks
+03:57:10 [23s] task-status: 0 tasks
+03:57:23 [36s] task-status: 0 tasks
+03:57:35 [48s] task-status: 0 tasks
+03:57:48 [61s] task-status: 0 tasks
+03:58:01 [74s] task-status: 0 tasks
+03:58:14 [87s] task-status: 0 tasks
+03:58:27 Sent Y at 100s
+03:58:32 [100s] task-status: 0 tasks
+03:58:45 [118s] task-status: 0 tasks
+03:58:57 [130s] task-status: 0 tasks
+03:59:10 [143s] task-status: 0 tasks
+03:59:23 [156s] task-status: 0 tasks
+03:59:36 [169s] task-status: 0 tasks
+03:59:49 [182s] task-status: 0 tasks
+04:00:01 [194s] task-status: 0 tasks
+04:00:14 [207s] task-status: 0 tasks
+04:00:27 [220s] task-status: 0 tasks
+04:00:40 [233s] task-status: 0 tasks
+04:00:53 [246s] task-status: 0 tasks
+04:01:05 [259s] task-status: 0 tasks
+04:01:18 [271s] task-status: 0 tasks
+04:01:31 [284s] task-status: 0 tasks
+04:01:44 [297s] task-status: 0 tasks
+04:01:57 [310s] task-status: 0 tasks
+04:02:10 [323s] task-status: 0 tasks
+04:02:22 [336s] task-status: 0 tasks
+04:02:35 [348s] task-status: 0 tasks
+04:02:48 [361s] task-status: 0 tasks
+04:03:01 [374s] task-status: 0 tasks
+04:03:14 [387s] task-status: 0 tasks
+04:03:27 [400s] task-status: 0 tasks
+04:03:39 [412s] task-status: 0 tasks
+04:03:52 [425s] task-status: 0 tasks
+04:04:05 [438s] task-status: 0 tasks
+04:04:18 [451s] task-status: 0 tasks
+04:04:31 [464s] task-status: 0 tasks
+04:04:33 Proposal found: false
+04:04:33 
 --- TEARDOWN ---
-03:52:13 Final: 10 projects, 17 agents
+04:04:33 Final: 10 projects, 17 agents
