@@ -56,3 +56,20 @@ App launched on port 17796
 ---
 App launched on port 17796
 
+App launched on port 17796
+
+
+## Run 6 — PASSED but still FALSE POSITIVE
+
+### Bug 6 (confirmed): hive-report.sh now has all commands ✅ FIXED
+- Manager's hive-report.sh confirmed to have batch-propose, task-create etc.
+- But manager was still "Recombulating [thinking]" — processing todo.md
+
+### Bug 7: Manager wait time too short (15s after config → moved on)
+- **Cause:** 15s fixed wait not enough for Claude to parse 10 contracts + build batch + call hive-report.sh
+- **Fix:** Replace fixed wait with 3-minute polling loop that checks task-status HTTP endpoint every 10s
+- **File:** e2e/integration.spec.ts
+
+### Improvement: Worker wait increased to 8 minutes
+
+---
