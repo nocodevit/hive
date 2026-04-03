@@ -529,8 +529,17 @@ test.describe.serial('Integration Test', () => {
         break
       }
 
-      // Also check batch proposal IPC by checking UI
+      // Check for proposal card in Task Group tab and click Approve if visible
       await goToTaskGroupTab(page)
+      const approveBtn = page.getByRole('button', { name: 'Approve' })
+      if (await approveBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
+        await approveBtn.click()
+        appendReport('summary.md', `${timestamp()} ✅ Clicked Approve on batch proposal!\n`)
+        await page.waitForTimeout(5000) // Give manager time to create tasks after approval
+        proposalFound = true
+        break
+      }
+
       const batchText = await page.locator('.glass-card').first().textContent().catch(() => '')
       if (batchText && !batchText.includes('No tasks yet')) {
         proposalFound = true
