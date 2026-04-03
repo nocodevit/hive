@@ -180,6 +180,10 @@ export default function App() {
     })
     const removeBatchProposal = window.api.agent.onBatchProposal((data) => {
       setBatchProposal(data)
+      // Update task group status to show proposal card
+      setTaskGroups(prev => prev.map(tg =>
+        tg.managerId === data.agentId ? { ...tg, status: 'batch_proposed' as const } : tg
+      ))
     })
     return () => { removeStatus(); removeReport(); removeTaskUpdate(); removeManagerReport(); removeBatchProposal() }
   }, [])
