@@ -152,7 +152,10 @@ const statusServer = createServer((req, res) => {
         if (win && !win.isDestroyed()) win.webContents.send('agent:report', data)
       } else if (req.url === '/task-create') {
         const homeDir = app.getPath('home')
-        const task = createTask(homeDir, data.projectId, {
+        // Resolve projectId from task group if not provided or incorrect
+        const ctx = data.agentId ? findTaskGroupForAgent(data.agentId) : null
+        const projectId = ctx?.projectId || data.projectId || ''
+        const task = createTask(homeDir, projectId, {
           title: data.title, status: 'pending', owner: null,
           batch: data.batch || 1, depends: data.depends || [],
           scope: data.scope || '.', acceptance: data.acceptance || '',
