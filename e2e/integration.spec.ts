@@ -393,9 +393,36 @@ test.describe.serial('Integration Test', () => {
       const approveBtn = page.getByRole('button', { name: 'Approve' })
       if (await approveBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
         await approveBtn.click()
-        log('✅ Clicked Approve')
-        await page.waitForTimeout(10000) // Wait for manager to create tasks after approval
-        proposalFound = true
+        log('✅ Clicked Approve — now waiting for Manager to create tasks')
+
+        // Stay on Manager terminal and wait for tasks to appear
+        await page.locator('text=[TEST] Manager').first().click().catch(() => {})
+        await page.waitForTimeout(2000)
+
+        // Poll until tasks appear (up to 5 min after approve)
+        for (let j = 0; j < 30; j++) { // 30 x 10s = 5 min
+          await page.waitForTimeout(10000)
+          const jElapsed = (j + 1) * 10
+          await shot(page, `07-post-approve-${jElapsed}s`)
+
+          const postApproveCount = await page.evaluate(async ({ port, agentId }) => {
+            try {
+              const res = await fetch(`http://127.0.0.1:${port}/task-status`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ agentId })
+              })
+              const text = await res.text()
+              try { const t = JSON.parse(text); return Array.isArray(t) ? t.length : 0 } catch { return -1 }
+            } catch { return -2 }
+          }, { port: HIVE_PORT, agentId: managerId })
+          log(`[post-approve ${jElapsed}s] tasks: ${postApproveCount}`)
+
+          if (postApproveCount > 0) {
+            log(`✅ ${postApproveCount} tasks created after approve!`)
+            proposalFound = true
+            break
+          }
+        }
         break
       }
 
@@ -407,9 +434,9 @@ test.describe.serial('Integration Test', () => {
     snapshotComms('after-propose')
     await shot(page, '07-after-propose')
 
-    // HARD ASSERTION: proposal must have been found
+    // HARD ASSERTION
     log(`Proposal found: ${proposalFound}`)
-    expect(proposalFound, 'Manager should have proposed batch or created tasks within 15 minutes').toBeTruthy()
+    expect(proposalFound, 'Manager should have proposed batch and created tasks within 15 minutes').toBeTruthy()
   })
 
   test('3. workers execute tasks', async () => {
