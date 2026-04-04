@@ -1,0 +1,15 @@
+{
+  "id": "task-003",
+  "title": "Create alpha.md",
+  "status": "pending",
+  "owner": null,
+  "batch": 1,
+  "depends": [],
+  "scope": "test-multi-agent-tasks/",
+  "acceptance": "",
+  "verify": [
+    "test -f test-multi-agent-tasks/alpha.md"
+  ],
+  "attempt": 0,
+  "blocked_reason": null
+}

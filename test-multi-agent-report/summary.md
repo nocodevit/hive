@@ -1,47 +1,48 @@
-01:39:20 # Integration Test (3 tasks)
+02:20:15 # Integration Test (3 tasks)
 
-01:39:28 Baseline: 10 projects, 17 agents
-01:39:32 Created [TEST] Manager
-01:39:35 Created [TEST] Worker-1
-01:39:37 Created [TEST] Worker-2
-01:39:39 Created [TEST] QA
-01:39:42 Created [TEST] Critic
-01:39:45 Task group created
-01:39:48 Manager terminal opened
-01:39:48 Manager ID: agent-1775266772106
-01:40:08 Sent direct instruction to manager
-01:40:19 [10s] task-status: 0 tasks
-01:40:32 [23s] task-status: 0 tasks
-01:40:33 ✅ Clicked Approve
-01:40:43 Proposal found: true
-01:40:47 Worker-1 started
-01:40:50 Worker-2 started
-01:41:22 [30s] Workers: 0/0 done, 0 blocked
-01:41:54 [62s] Workers: 0/0 done, 0 blocked
-01:42:26 [93s] Workers: 0/0 done, 0 blocked
-01:42:57 [125s] Workers: 0/0 done, 0 blocked
-01:43:29 [157s] Workers: 0/0 done, 0 blocked
-01:44:01 [188s] Workers: 0/0 done, 0 blocked
-01:44:32 [220s] Workers: 0/0 done, 0 blocked
-01:45:04 [252s] Workers: 0/0 done, 0 blocked
-01:45:36 [284s] Workers: 0/0 done, 0 blocked
-01:46:07 [315s] Workers: 0/0 done, 0 blocked
-01:46:39 [347s] Workers: 0/0 done, 0 blocked
-01:47:11 [379s] Workers: 0/0 done, 0 blocked
-01:47:42 [410s] Workers: 0/0 done, 0 blocked
-01:48:14 [442s] Workers: 0/0 done, 0 blocked
-01:48:46 [474s] Workers: 0/0 done, 0 blocked
-01:49:18 [505s] Workers: 0/0 done, 0 blocked
-01:49:18 Workers complete: false
-01:49:21 QA started
-01:50:25 Critic started
-01:51:27 Test complete
-01:51:27 
+02:20:22 Baseline: 10 projects, 17 agents
+02:20:22 Cleaned residual tasks: test-proj
+02:20:26 Created [TEST] Manager
+02:20:29 Created [TEST] Worker-1
+02:20:31 Created [TEST] Worker-2
+02:20:34 Created [TEST] QA
+02:20:36 Created [TEST] Critic
+02:20:39 Task group created
+02:20:42 Manager terminal opened
+02:20:42 Manager ID: agent-1775269226137
+02:21:02 Sent direct instruction to manager
+02:21:13 [10s] task-status: 0 tasks
+02:21:26 [23s] task-status: 0 tasks
+02:21:27 ✅ Clicked Approve
+02:21:37 Proposal found: true
+02:21:41 Worker-1 started
+02:21:45 Worker-2 started
+02:22:16 [30s] Workers: 0/0 done, 0 blocked
+02:22:48 [62s] Workers: 0/0 done, 0 blocked
+02:23:20 [93s] Workers: 0/0 done, 0 blocked
+02:23:51 [125s] Workers: 0/0 done, 0 blocked
+02:24:23 [157s] Workers: 0/0 done, 0 blocked
+02:24:55 [188s] Workers: 0/0 done, 0 blocked
+02:25:26 [220s] Workers: 0/0 done, 0 blocked
+02:25:58 [252s] Workers: 0/0 done, 0 blocked
+02:26:30 [283s] Workers: 0/0 done, 0 blocked
+02:27:02 [315s] Workers: 0/0 done, 0 blocked
+02:27:33 [347s] Workers: 0/0 done, 0 blocked
+02:28:05 [378s] Workers: 0/0 done, 0 blocked
+02:28:37 [410s] Workers: 0/0 done, 0 blocked
+02:29:08 [442s] Workers: 0/0 done, 0 blocked
+02:29:40 [473s] Workers: 0/0 done, 0 blocked
+02:30:12 [505s] Workers: 0/0 done, 0 blocked
+02:30:12 Workers complete: false
+02:30:15 QA started
+02:31:19 Critic started
+02:32:21 Test complete
+02:32:21 
 --- TEARDOWN ---
-01:51:29 Dissolved task group
-01:51:30 Deleted: [TEST] Manager
-01:51:30 Deleted: [TEST] Worker-1
-01:51:31 Deleted: [TEST] Worker-2
-01:51:32 Deleted: [TEST] QA
-01:51:33 Deleted: [TEST] Critic
-01:51:33 Final: 10 projects, 17 agents
+02:32:23 Dissolved task group
+02:32:24 Deleted: [TEST] Manager
+02:32:24 Deleted: [TEST] Worker-1
+02:32:25 Deleted: [TEST] Worker-2
+02:32:26 Deleted: [TEST] QA
+02:32:27 Deleted: [TEST] Critic
+02:32:27 Final: 10 projects, 17 agents
