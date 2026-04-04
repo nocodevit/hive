@@ -430,9 +430,24 @@ test.describe.serial('Integration Test', () => {
           log(`[post-approve ${jElapsed}s] tasks: ${postApproveCount}`)
 
           if (postApproveCount > 0) {
-            log(`✅ ${postApproveCount} tasks created after approve!`)
-            proposalFound = true
-            break
+            log(`${postApproveCount} tasks exist after approve — checking assign...`)
+            // Check if any assigned
+            const assignedAfter = await page.evaluate(async ({ port, agentId }) => {
+              try {
+                const res = await fetch(`http://127.0.0.1:${port}/task-status`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ agentId })
+                })
+                const tasks = await res.json()
+                if (!Array.isArray(tasks)) return 0
+                return tasks.filter((t: any) => t.status !== 'pending').length
+              } catch { return 0 }
+            }, { port: HIVE_PORT, agentId: managerId })
+            if (assignedAfter > 0) {
+              log(`✅ ${assignedAfter}/${postApproveCount} tasks assigned!`)
+              proposalFound = true
+              break
+            }
           }
         }
         break
