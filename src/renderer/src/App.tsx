@@ -242,6 +242,7 @@ export default function App() {
       if (tg) {
         defConfig.todoSource = tg.todoSource
         defConfig.maxGateRetries = tg.maxGateRetries
+        defConfig.taskGroupProjectId = tg.projectId
         defConfig.taskGroupWorkers = tg.workerIds.map(wid => {
           const w = agents.find(a => a.id === wid)
           return { id: wid, name: w?.name || wid }
