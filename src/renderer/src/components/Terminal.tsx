@@ -47,45 +47,31 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
     termRef.current = term
     fitRef.current = fit
 
-    // Intercept drag/drop on xterm's internal elements to prevent default behavior
-    const xtermScreen = el.querySelector('.xterm-screen')
-    console.log('[Terminal] xterm-screen found:', !!xtermScreen)
-    if (xtermScreen) {
-      xtermScreen.addEventListener('dragover', (ev) => { (ev as DragEvent).preventDefault() })
-      xtermScreen.addEventListener('drop', (ev) => {
-        const e = ev as DragEvent
-        e.preventDefault()
-        e.stopPropagation()
-        console.log('[Terminal] drop event:', { filesCount: e.dataTransfer?.files.length, types: e.dataTransfer?.types })
-        if (e.dataTransfer?.files.length) {
-          const files = Array.from(e.dataTransfer.files)
-          console.log('[Terminal] files:', files.map((f: any) => ({ name: f.name, path: f.path, type: f.type, size: f.size })))
-          const paths = files.map((f: any) => f.path).filter(Boolean)
-          if (paths.length > 0) {
-            const output = paths.map((p: string) => p.includes(' ') ? `"${p}"` : p).join(' ')
-            console.log('[Terminal] writing path to pty:', output)
-            window.api.pty.write(id, output)
-            return
-          }
-        }
-        const text = e.dataTransfer?.getData('text/plain')
-        console.log('[Terminal] text/plain:', text)
-        if (text) window.api.pty.write(id, text)
+    // Intercept paste: convert file paste to path instead of image (capture phase to beat xterm)
+    const pasteHandler = (ev: Event) => {
+      if (!el.contains(document.activeElement)) return
+      const ce = ev as ClipboardEvent
+      console.log('[Terminal] paste event:', {
+        hasFiles: !!ce.clipboardData?.files.length,
+        filesCount: ce.clipboardData?.files.length,
+        types: ce.clipboardData?.types,
+        items: Array.from(ce.clipboardData?.items || []).map(i => ({ kind: i.kind, type: i.type }))
       })
-    }
-    // Also intercept on the container div as fallback
-    el.addEventListener('dragover', (ev) => { ev.preventDefault() })
-    el.addEventListener('drop', (ev) => {
-      const e = ev as DragEvent
-      e.preventDefault()
-      console.log('[Terminal] container drop fallback:', { filesCount: e.dataTransfer?.files.length })
-      if (e.dataTransfer?.files.length) {
-        const paths = Array.from(e.dataTransfer.files).map((f: any) => f.path).filter(Boolean)
+      if (ce.clipboardData?.files.length) {
+        const files = Array.from(ce.clipboardData.files)
+        console.log('[Terminal] paste files:', files.map(f => ({ name: f.name, type: f.type, size: f.size, path: window.api.getFilePath(f) })))
+        const paths = files.map((f) => window.api.getFilePath(f)).filter(Boolean) as string[]
         if (paths.length > 0) {
-          window.api.pty.write(id, paths.map((p: string) => p.includes(' ') ? `"${p}"` : p).join(' '))
+          ce.preventDefault()
+          ce.stopPropagation()
+          console.log('[Terminal] paste writing paths:', paths)
+          window.api.pty.write(id, paths.map(p => p.includes(' ') ? `"${p}"` : p).join(' '))
+          return
         }
       }
-    })
+    }
+    document.addEventListener('paste', pasteHandler, true) // capture phase
+
 
     // Track scroll position
     const checkScroll = () => {
@@ -191,23 +177,24 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
-    // Files dragged from Finder
     if (e.dataTransfer.files.length > 0) {
-      const paths = Array.from(e.dataTransfer.files).map((f) => f.path).filter(Boolean)
+      const paths = Array.from(e.dataTransfer.files)
+        .map((f) => window.api.getFilePath(f))
+        .filter(Boolean) as string[]
       if (paths.length > 0) {
         window.api.pty.write(id, paths.map((p) => p.includes(' ') ? `"${p}"` : p).join(' '))
         return
       }
     }
-    // Files dragged from FilesPanel
-    const path = e.dataTransfer.getData('text/plain')
-    if (path) window.api.pty.write(id, path)
+    const text = e.dataTransfer.getData('text/plain')
+    if (text) window.api.pty.write(id, text)
   }
 
   return (
     <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'visible' }}>
       <div
         ref={containerRef}
+        data-terminal-id={id}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         style={{

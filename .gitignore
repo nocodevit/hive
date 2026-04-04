@@ -5,3 +5,4 @@ dist/
 .DS_Store
 theme-preview.html
 resources/icon.iconset/
+coverage/
