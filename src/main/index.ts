@@ -225,6 +225,7 @@ const statusServer = createServer((req, res) => {
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
         const tasks = listTasks(homeDir, projectId)
+        console.log(`[task-status] agentId=${data.agentId} ctx=${ctx ? 'found' : 'null'} projectId=${projectId} tasks=${tasks.length} dir=${homeDir}/.hive/comms/${projectId}/tasks/`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(tasks))
         return
