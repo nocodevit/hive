@@ -252,16 +252,16 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [x] Agent groups within departments (drag-to-reorder)
 - [x] Terminal scroll-to-bottom button (follows system)
 - [x] Project Settings tab (add/remove folders inline)
-- [ ] **Multi-agent communication** — Message relay via webhook, then MCP Server ([plan](docs/multi-agent-comms-plan.md))
+- [ ] **Multi-agent communication** — PTY injection + filesystem mailbox + shared task list ([plan](docs/agent-comms-plan.md))
+- [ ] **Terminal UI customization** — React overlays on xterm: task cards, diff preview, progress bars, agent messages ([plan](docs/terminal-ui-customization-plan.md))
+- [ ] **Claude Code usage/limit bar** — Estimated 4-hour usage progress bar below terminal (self-count via hooks)
 - [ ] **MCP Server** — Auto-reporting without soul instructions
-- [ ] **Agent drag-to-reorder across groups**
 - [ ] **GNU Screen session persistence** — Terminal sessions survive app restart
 - [ ] **Notification integrations** — Slack, Telegram, WhatsApp, macOS
 - [ ] **Office visualization upgrade** — Phaser 3 + real sprite assets (currently Canvas 2D)
 - [ ] **Offline log buffer** — hive-report.sh saves to local file when Hive is offline, syncs on reconnect
-- [ ] Agency-Agents role templates
 - [ ] claude-mem / memsearch for enhanced memory
-- [ ] **Voice input** — Mic button in terminal input for push-to-talk dictation. Options: macOS native SFSpeechRecognizer (free, offline, via native module), OpenAI Whisper API ($0.006/min), or local whisper.cpp. Ref: Warp uses Wispr Flow cloud service
+- [ ] **Voice input** — macOS native SFSpeechRecognizer, free/offline ([plan](scripts/hive-speech.swift))
 
 ## Contributing
 
