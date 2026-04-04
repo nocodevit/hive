@@ -1,48 +1,50 @@
-16:01:07 # Integration Test (3 tasks)
+16:18:03 # Integration Test (3 tasks)
 
-16:01:07 Isolated data dir: /var/folders/pv/f5m189_n64ldtzhcz3z4m42m0000gn/T/hive-integration-test
-16:01:17 Baseline: 10 projects, 17 agents
-16:01:17 Cleaned residual definition: hive-agent-1775312175222.md
-16:01:20 Created [TEST] Manager
-16:01:23 Created [TEST] Worker-1
-16:01:25 Created [TEST] Worker-2
-16:01:28 Created [TEST] QA
-16:01:30 Created [TEST] Critic
-16:01:33 Task group created
-16:01:36 Manager terminal opened
-16:01:36 Manager ID: agent-1775318480475
-16:01:56 Sent direct instruction to manager
-16:02:07 [10s] task-status: 2 tasks
-16:02:07 ✅ 2 tasks created!
-16:02:07 Proposal found: true
-16:02:11 Worker-1 started
-16:02:15 Worker-2 started
-16:02:46 [30s] Workers: 0/2 done, 0 blocked
-16:03:18 [62s] Workers: 0/2 done, 0 blocked
-16:03:50 [93s] Workers: 0/2 done, 0 blocked
-16:04:22 [125s] Workers: 0/2 done, 0 blocked
-16:04:53 [157s] Workers: 0/2 done, 0 blocked
-16:05:25 [188s] Workers: 0/2 done, 0 blocked
-16:05:57 [220s] Workers: 0/2 done, 0 blocked
-16:06:28 [252s] Workers: 0/2 done, 0 blocked
-16:07:00 [283s] Workers: 0/2 done, 0 blocked
-16:07:32 [315s] Workers: 0/2 done, 0 blocked
-16:08:03 [347s] Workers: 0/2 done, 0 blocked
-16:08:35 [379s] Workers: 0/2 done, 0 blocked
-16:09:07 [410s] Workers: 0/2 done, 0 blocked
-16:09:38 [442s] Workers: 0/2 done, 0 blocked
-16:10:10 [474s] Workers: 0/2 done, 0 blocked
-16:10:42 [505s] Workers: 0/2 done, 0 blocked
-16:10:42 Workers complete: false
-16:10:45 QA started
-16:11:49 Critic started
-16:12:51 Test complete
-16:12:51 
+16:18:03 Isolated data dir: /var/folders/pv/f5m189_n64ldtzhcz3z4m42m0000gn/T/hive-integration-test
+16:18:11 Baseline: 10 projects, 17 agents
+16:18:15 Created [TEST] Manager
+16:18:17 Created [TEST] Worker-1
+16:18:20 Created [TEST] Worker-2
+16:18:22 Created [TEST] QA
+16:18:25 Created [TEST] Critic
+16:18:28 Task group created
+16:18:31 Manager terminal opened
+16:18:31 Manager ID: agent-1775319494865
+16:18:51 Sent direct instruction to manager
+16:19:02 [10s] task-status: 2 tasks
+16:19:02 2 tasks exist — waiting for assign...
+16:19:03 ✅ Clicked Approve — now waiting for Manager to create tasks
+16:19:15 [post-approve 10s] tasks: 4
+16:19:15 ✅ 4 tasks created after approve!
+16:19:16 Proposal found: true
+16:19:19 Worker-1 started
+16:19:23 Worker-2 started
+16:19:55 [30s] Workers: 0/4 done, 0 blocked
+16:20:26 [62s] Workers: 0/4 done, 0 blocked
+16:20:58 [93s] Workers: 0/4 done, 0 blocked
+16:21:30 [125s] Workers: 0/4 done, 0 blocked
+16:22:01 [157s] Workers: 0/4 done, 0 blocked
+16:22:33 [188s] Workers: 0/4 done, 0 blocked
+16:23:05 [220s] Workers: 0/4 done, 0 blocked
+16:23:36 [252s] Workers: 0/4 done, 0 blocked
+16:24:08 [284s] Workers: 0/4 done, 0 blocked
+16:24:40 [315s] Workers: 0/4 done, 0 blocked
+16:25:11 [347s] Workers: 0/4 done, 0 blocked
+16:25:43 [379s] Workers: 0/4 done, 0 blocked
+16:26:15 [410s] Workers: 0/4 done, 0 blocked
+16:26:46 [442s] Workers: 0/4 done, 0 blocked
+16:27:18 [474s] Workers: 0/4 done, 0 blocked
+16:27:50 [505s] Workers: 0/4 done, 0 blocked
+16:27:50 Workers complete: false
+16:27:54 QA started
+16:28:57 Critic started
+16:29:59 Test complete
+16:29:59 
 --- TEARDOWN ---
-16:12:53 Dissolved task group
-16:12:54 Deleted: [TEST] Manager
-16:12:55 Deleted: [TEST] Worker-1
-16:12:56 Deleted: [TEST] Worker-2
-16:12:57 Deleted: [TEST] QA
-16:12:57 Deleted: [TEST] Critic
-16:12:57 Final: 10 projects, 17 agents
+16:30:01 Dissolved task group
+16:30:02 Deleted: [TEST] Manager
+16:30:03 Deleted: [TEST] Worker-1
+16:30:04 Deleted: [TEST] Worker-2
+16:30:05 Deleted: [TEST] QA
+16:30:06 Deleted: [TEST] Critic
+16:30:06 Final: 10 projects, 17 agents
