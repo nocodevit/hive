@@ -281,8 +281,10 @@ case "$ACTION" in
       -d "{\\"agentId\\":\\"$AGENT\\",\\"message\\":\\"$MSG\\"}" > /dev/null 2>&1
     ;;
   batch-propose)
+    # Inject agentId into the JSON payload
+    PAYLOAD=$(echo "$MSG" | sed "s/^{/{\\"agentId\\":\\"$AGENT\\",/")
     curl -s -X POST http://127.0.0.1:$PORT/batch-propose -H "Content-Type: application/json" \\
-      -d "$MSG" > /dev/null 2>&1
+      -d "$PAYLOAD" > /dev/null 2>&1
     ;;
 esac
 `
