@@ -315,6 +315,18 @@ test.describe.serial('Integration Test', () => {
     await page.waitForTimeout(3000)
     log('Manager terminal opened')
 
+    // Start Workers FIRST so their terminals exist when Manager assigns
+    await page.locator('text=[TEST] Worker-1').first().click()
+    await page.waitForTimeout(3000)
+    log('Worker-1 terminal opened (before Manager instruction)')
+    await page.locator('text=[TEST] Worker-2').first().click()
+    await page.waitForTimeout(3000)
+    log('Worker-2 terminal opened (before Manager instruction)')
+
+    // Back to Manager
+    await page.locator('text=[TEST] Manager').first().click()
+    await page.waitForTimeout(1000)
+
     const managerId = await page.evaluate(async () => {
       const d = await window.api.data.load()
       return (d.agents as any[])?.find((a: any) => a.name === '[TEST] Manager')?.id || ''
@@ -322,7 +334,7 @@ test.describe.serial('Integration Test', () => {
     log(`Manager ID: ${managerId}`)
 
     // Wait for Claude to initialize
-    await page.waitForTimeout(20000)
+    await page.waitForTimeout(15000)
     await shot(page, '05-manager-ready')
 
     // Instead of /manager-whip-start skill (which uses interactive menus),
