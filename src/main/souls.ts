@@ -2,6 +2,7 @@
 
 export function getManagerSoulAddendum(config: {
   todoSource: string
+  projectId?: string
   workers?: { id: string; name: string }[]
   qaId?: string; qaName?: string
   criticId?: string; criticName?: string
@@ -14,6 +15,10 @@ export function getManagerSoulAddendum(config: {
 ## Hive Orchestration — Manager
 
 You are the manager of this task group. You coordinate workers, QA, and Critic.
+
+### Project
+Project ID: ${config.projectId || 'unknown'}
+IMPORTANT: Always use this exact projectId in task-create calls.
 
 ### Your Team
 Workers (ONLY assign tasks to these agents):

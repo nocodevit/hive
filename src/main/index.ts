@@ -262,6 +262,7 @@ function writeAgentDefinition(cwd: string, config: {
   agentId: string; name: string; role: string; department: string;
   soul: string; skills: string[]; model: string; effort: string;
   taskGroupRole?: string; todoSource?: string; maxGateRetries?: number;
+  taskGroupProjectId?: string;
   taskGroupWorkers?: { id: string; name: string }[];
   taskGroupQaId?: string; taskGroupQaName?: string;
   taskGroupCriticId?: string; taskGroupCriticName?: string;
@@ -300,6 +301,7 @@ function writeAgentDefinition(cwd: string, config: {
     const absReportSh = join(cwd, '.claude', 'hive-report.sh')
     yaml += getManagerSoulAddendum({
       todoSource: config.todoSource || 'docs/todo.md',
+      projectId: config.taskGroupProjectId,
       workers: config.taskGroupWorkers,
       qaId: config.taskGroupQaId, qaName: config.taskGroupQaName,
       criticId: config.taskGroupCriticId, criticName: config.taskGroupCriticName,
