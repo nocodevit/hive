@@ -380,9 +380,24 @@ test.describe.serial('Integration Test', () => {
       log(`[${elapsed}s] task-status: ${taskCount} tasks`)
 
       if (taskCount > 0) {
-        proposalFound = true
-        log(`✅ ${taskCount} tasks created!`)
-        break
+        log(`${taskCount} tasks exist — waiting for assign...`)
+        // Check if any are assigned (not just created)
+        const assignedCount = await page.evaluate(async ({ port, agentId }) => {
+          try {
+            const res = await fetch(`http://127.0.0.1:${port}/task-status`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ agentId })
+            })
+            const tasks = await res.json()
+            if (!Array.isArray(tasks)) return 0
+            return tasks.filter((t: any) => t.status === 'assigned' || t.status === 'in_progress' || t.status === 'done').length
+          } catch { return 0 }
+        }, { port: HIVE_PORT, agentId: managerId })
+        if (assignedCount > 0) {
+          proposalFound = true
+          log(`✅ ${assignedCount}/${taskCount} tasks assigned!`)
+          break
+        }
       }
 
       // Check for Approve button in UI
