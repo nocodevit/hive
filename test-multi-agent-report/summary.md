@@ -1,108 +1,48 @@
-00:46:43 # Integration Test (3 tasks)
+01:08:42 # Integration Test (3 tasks)
 
-00:46:54 Baseline: 10 projects, 17 agents
-00:46:54 Cleaned residual definition: hive-agent-1775230309661.md
-00:46:58 Created [TEST] Manager
-00:47:00 Created [TEST] Worker-1
-00:47:03 Created [TEST] Worker-2
-00:47:05 Created [TEST] QA
-00:47:08 Created [TEST] Critic
-00:47:11 Task group created
-00:47:14 Manager terminal opened
-00:47:14 Manager ID: agent-1775263617753
-00:47:34 Sent direct instruction to manager
-00:47:45 [10s] task-status: 0 tasks
-00:47:58 [23s] task-status: 0 tasks
-00:48:10 [36s] task-status: 0 tasks
-00:48:23 [48s] task-status: 0 tasks
-00:48:36 Sent Y at 61s (in case of confirmation prompt)
-00:48:41 [61s] task-status: 0 tasks
-00:48:54 [79s] task-status: 0 tasks
-00:49:07 [92s] task-status: 0 tasks
-00:49:20 [105s] task-status: 0 tasks
-00:49:33 [118s] task-status: 0 tasks
-00:49:45 [131s] task-status: 0 tasks
-00:49:58 [143s] task-status: 0 tasks
-00:50:11 [156s] task-status: 0 tasks
-00:50:24 [169s] task-status: 0 tasks
-00:50:36 [182s] task-status: 0 tasks
-00:50:49 [194s] task-status: 0 tasks
-00:51:02 [207s] task-status: 0 tasks
-00:51:15 [220s] task-status: 0 tasks
-00:51:28 [233s] task-status: 0 tasks
-00:51:40 [246s] task-status: 0 tasks
-00:51:53 [258s] task-status: 0 tasks
-00:52:06 [271s] task-status: 0 tasks
-00:52:19 [284s] task-status: 0 tasks
-00:52:31 [297s] task-status: 0 tasks
-00:52:44 [310s] task-status: 0 tasks
-00:52:57 [322s] task-status: 0 tasks
-00:53:10 [335s] task-status: 0 tasks
-00:53:23 [348s] task-status: 0 tasks
-00:53:35 [361s] task-status: 0 tasks
-00:53:48 [373s] task-status: 0 tasks
-00:54:01 [386s] task-status: 0 tasks
-00:54:14 [399s] task-status: 0 tasks
-00:54:26 [412s] task-status: 0 tasks
-00:54:39 [425s] task-status: 0 tasks
-00:54:52 [437s] task-status: 0 tasks
-00:55:05 [450s] task-status: 0 tasks
-00:55:18 [463s] task-status: 0 tasks
-00:55:30 [476s] task-status: 0 tasks
-00:55:43 [488s] task-status: 0 tasks
-00:55:56 [501s] task-status: 0 tasks
-00:56:09 [514s] task-status: 0 tasks
-00:56:21 [527s] task-status: 0 tasks
-00:56:34 [540s] task-status: 0 tasks
-00:56:47 [552s] task-status: 0 tasks
-00:57:00 [565s] task-status: 0 tasks
-00:57:13 [578s] task-status: 0 tasks
-00:57:25 [591s] task-status: 0 tasks
-00:57:38 [603s] task-status: 0 tasks
-00:57:51 [616s] task-status: 0 tasks
-00:58:04 [629s] task-status: 0 tasks
-00:58:16 [642s] task-status: 0 tasks
-00:58:29 [655s] task-status: 0 tasks
-00:58:42 [667s] task-status: 0 tasks
-00:58:55 [680s] task-status: 0 tasks
-00:59:08 [693s] task-status: 0 tasks
-00:59:20 [706s] task-status: 0 tasks
-00:59:33 [718s] task-status: 0 tasks
-00:59:46 [731s] task-status: 0 tasks
-00:59:59 [744s] task-status: 0 tasks
-01:00:11 [757s] task-status: 0 tasks
-01:00:24 [769s] task-status: 0 tasks
-01:00:37 [782s] task-status: 0 tasks
-01:00:50 [795s] task-status: 0 tasks
-01:01:03 [808s] task-status: 0 tasks
-01:01:15 [821s] task-status: 0 tasks
-01:01:28 [833s] task-status: 0 tasks
-01:01:41 [846s] task-status: 0 tasks
-01:01:54 [859s] task-status: 0 tasks
-01:02:07 [872s] task-status: 0 tasks
-01:02:19 [885s] task-status: 0 tasks
-01:02:32 [897s] task-status: 0 tasks
-01:02:45 [910s] task-status: 0 tasks
-01:02:58 [923s] task-status: 0 tasks
-01:03:10 [936s] task-status: 0 tasks
-01:03:23 [949s] task-status: 0 tasks
-01:03:36 [961s] task-status: 0 tasks
-01:03:49 [974s] task-status: 0 tasks
-01:04:02 [987s] task-status: 0 tasks
-01:04:14 [1000s] task-status: 0 tasks
-01:04:27 [1012s] task-status: 0 tasks
-01:04:40 [1025s] task-status: 0 tasks
-01:04:53 [1038s] task-status: 0 tasks
-01:05:05 [1051s] task-status: 0 tasks
-01:05:18 [1064s] task-status: 0 tasks
-01:05:31 [1076s] task-status: 0 tasks
-01:05:44 [1089s] task-status: 0 tasks
-01:05:57 [1102s] task-status: 0 tasks
-01:06:09 [1115s] task-status: 0 tasks
-01:06:22 [1127s] task-status: 0 tasks
-01:06:35 [1140s] task-status: 0 tasks
-01:06:48 [1153s] task-status: 0 tasks
-01:06:50 Proposal found: false
-01:06:50 
+01:08:50 Baseline: 10 projects, 17 agents
+01:08:50 Cleaned residual definition: hive-agent-1775263617753.md
+01:08:54 Created [TEST] Manager
+01:08:56 Created [TEST] Worker-1
+01:08:58 Created [TEST] Worker-2
+01:09:01 Created [TEST] QA
+01:09:03 Created [TEST] Critic
+01:09:06 Task group created
+01:09:09 Manager terminal opened
+01:09:09 Manager ID: agent-1775264933545
+01:09:30 Sent direct instruction to manager
+01:09:40 [10s] task-status: 0 tasks
+01:09:53 [23s] task-status: 0 tasks
+01:09:55 ✅ Clicked Approve
+01:10:05 Proposal found: true
+01:10:08 Worker-1 started
+01:10:12 Worker-2 started
+01:10:44 [30s] Workers: 0/0 done, 0 blocked
+01:11:15 [62s] Workers: 0/0 done, 0 blocked
+01:11:47 [93s] Workers: 0/0 done, 0 blocked
+01:12:19 [125s] Workers: 0/0 done, 0 blocked
+01:12:50 [157s] Workers: 0/0 done, 0 blocked
+01:13:22 [188s] Workers: 0/0 done, 0 blocked
+01:13:54 [220s] Workers: 0/0 done, 0 blocked
+01:14:26 [252s] Workers: 0/0 done, 0 blocked
+01:14:57 [284s] Workers: 0/0 done, 0 blocked
+01:15:29 [315s] Workers: 0/0 done, 0 blocked
+01:16:01 [347s] Workers: 0/0 done, 0 blocked
+01:16:32 [379s] Workers: 0/0 done, 0 blocked
+01:17:04 [411s] Workers: 0/0 done, 0 blocked
+01:17:36 [442s] Workers: 0/0 done, 0 blocked
+01:18:08 [474s] Workers: 0/0 done, 0 blocked
+01:18:39 [506s] Workers: 0/0 done, 0 blocked
+01:18:39 Workers complete: false
+01:18:43 QA started
+01:19:46 Critic started
+01:20:48 Test complete
+01:20:48 
 --- TEARDOWN ---
-01:06:50 Final: 10 projects, 17 agents
+01:20:50 Dissolved task group
+01:20:51 Deleted: [TEST] Manager
+01:20:52 Deleted: [TEST] Worker-1
+01:20:53 Deleted: [TEST] Worker-2
+01:20:54 Deleted: [TEST] QA
+01:20:54 Deleted: [TEST] Critic
+01:20:54 Final: 10 projects, 17 agents
