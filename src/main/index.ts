@@ -225,7 +225,12 @@ const statusServer = createServer((req, res) => {
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
         const tasks = listTasks(homeDir, projectId)
-        console.log(`[task-status] agentId=${data.agentId} ctx=${ctx ? 'found' : 'null'} projectId=${projectId} tasks=${tasks.length} dir=${homeDir}/.hive/comms/${projectId}/tasks/`)
+        // Debug: write to file so test can read it
+        try {
+          const debugLog = join(DATA_DIR, 'task-status-debug.log')
+          const line = `${new Date().toISOString()} agentId=${data.agentId} ctx=${ctx ? ctx.projectId : 'null'} projectId=${projectId} tasks=${tasks.length}\n`
+          writeFileSync(debugLog, (existsSync(debugLog) ? readFileSync(debugLog, 'utf-8') : '') + line)
+        } catch {}
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify(tasks))
         return
