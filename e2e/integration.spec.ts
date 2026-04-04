@@ -195,6 +195,18 @@ test.beforeAll(async () => {
     log('Restored skill from previous failed teardown')
   }
 
+  // Clean residual task files from ALL projects (previous failed runs leave files behind)
+  const commsDir = join(HIVE_DATA_DIR, 'comms')
+  if (existsSync(commsDir)) {
+    for (const projDir of readdirSync(commsDir)) {
+      const tasksDir = join(commsDir, projDir, 'tasks')
+      if (existsSync(tasksDir)) {
+        rmSync(tasksDir, { recursive: true })
+        log(`Cleaned residual tasks: ${projDir}`)
+      }
+    }
+  }
+
   await shot(page, '00-setup')
 }, 180000)
 
@@ -432,8 +444,10 @@ test.describe.serial('Integration Test', () => {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ agentId })
           })
-          const tasks = await res.json()
-          if (!Array.isArray(tasks)) return 'no tasks'
+          const text = await res.text()
+          let tasks: any[]
+          try { tasks = JSON.parse(text) } catch { return `parse error: ${text.slice(0, 100)}` }
+          if (!Array.isArray(tasks)) return `not array: ${text.slice(0, 100)}`
           const done = tasks.filter((t: any) => t.status === 'done').length
           const blocked = tasks.filter((t: any) => t.status === 'blocked').length
           const total = tasks.length
