@@ -1087,7 +1087,9 @@ export default function App() {
                             <div className="flex gap-2 mt-3">
                               <button
                                 onClick={() => {
+                                  // Send both formats: [HIVE:HUMAN] JSON + plain "Y" for terminal prompt
                                   window.api.agent.send(taskGroup.managerId, 'HUMAN', { batch: batchProposal.batch, action: 'approved' })
+                                  window.api.pty.write(taskGroup.managerId, 'Y\r')
                                   setTaskGroups(prev => prev.map(tg => tg.id === taskGroup.id ? { ...tg, status: 'batch_approved' as const, currentBatch: batchProposal.batch } : tg))
                                   setBatchProposal(null)
                                 }}
