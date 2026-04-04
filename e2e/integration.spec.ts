@@ -13,7 +13,9 @@ const PROJECT_ROOT = join(__dirname, '..')
 const REPORT_DIR = join(PROJECT_ROOT, 'test-multi-agent-report')
 const TEST_TASKS_DIR = join(PROJECT_ROOT, 'test-multi-agent-tasks')
 const HIVE_PORT = 17796
-const HIVE_DATA_DIR = join(require('os').homedir(), '.hive')
+// Use ISOLATED data dir to avoid real Hive app overwriting taskGroups
+const HIVE_DATA_DIR = join(require('os').tmpdir(), 'hive-integration-test')
+const REAL_HIVE_DIR = join(require('os').homedir(), '.hive')
 const COMMS_DIR = join(HIVE_DATA_DIR, 'comms')
 
 let app: ElectronApplication
@@ -125,9 +127,12 @@ test.beforeAll(async () => {
   - acceptance: charlie.md references alpha and bravo
 `)
 
-  // Backup
-  const dataFile = join(HIVE_DATA_DIR, 'data.json')
-  if (existsSync(dataFile)) cpSync(dataFile, join(HIVE_DATA_DIR, 'data.json.test-backup'))
+  // Create isolated data dir with copy of real data
+  if (existsSync(HIVE_DATA_DIR)) rmSync(HIVE_DATA_DIR, { recursive: true })
+  mkdirSync(HIVE_DATA_DIR, { recursive: true })
+  const realDataFile = join(REAL_HIVE_DIR, 'data.json')
+  if (existsSync(realDataFile)) cpSync(realDataFile, join(HIVE_DATA_DIR, 'data.json'))
+  log(`Isolated data dir: ${HIVE_DATA_DIR}`)
 
   // Note: skill stays enabled. Previous bug was residual agent definitions
   // with old soul (referencing skill), not auto-launch.
@@ -137,7 +142,7 @@ test.beforeAll(async () => {
   execSync('npx electron-vite build', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 60000 })
   app = await electron.launch({
     args: [join(PROJECT_ROOT, 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: String(HIVE_PORT) }
+    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: String(HIVE_PORT), HIVE_DATA_DIR }
   })
   page = await app.firstWindow({ timeout: 120000 })
   await page.waitForLoadState('domcontentloaded')
@@ -195,17 +200,7 @@ test.beforeAll(async () => {
     log('Restored skill from previous failed teardown')
   }
 
-  // Clean residual task files from ALL projects (previous failed runs leave files behind)
-  const commsDir = join(HIVE_DATA_DIR, 'comms')
-  if (existsSync(commsDir)) {
-    for (const projDir of readdirSync(commsDir)) {
-      const tasksDir = join(commsDir, projDir, 'tasks')
-      if (existsSync(tasksDir)) {
-        rmSync(tasksDir, { recursive: true })
-        log(`Cleaned residual tasks: ${projDir}`)
-      }
-    }
-  }
+  // Isolated dir is fresh — no residual tasks to clean
 
   await shot(page, '00-setup')
 }, 180000)
@@ -251,6 +246,8 @@ test.afterAll(async () => {
   } catch (err) { log(`Teardown error: ${err}`) }
 
   if (existsSync(TEST_TASKS_DIR)) rmSync(TEST_TASKS_DIR, { recursive: true })
+  // Clean isolated data dir
+  if (existsSync(HIVE_DATA_DIR)) rmSync(HIVE_DATA_DIR, { recursive: true })
   await app?.close()
 }, 120000)
 
