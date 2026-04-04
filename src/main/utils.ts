@@ -247,8 +247,10 @@ case "$ACTION" in
       -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"todo\\",$(echo $MSG | sed 's/^{//')}" > /dev/null 2>&1
     ;;
   task-create)
+    # Inject agentId so server can resolve projectId from task group
+    PAYLOAD=$(echo "$MSG" | sed "s/^{/{\\"agentId\\":\\"$AGENT\\",/")
     curl -s -X POST http://127.0.0.1:$PORT/task-create -H "Content-Type: application/json" \\
-      -d "$MSG"
+      -d "$PAYLOAD"
     ;;
   task-assign)
     TASK_ID="$2"
