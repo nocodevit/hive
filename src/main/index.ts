@@ -196,7 +196,7 @@ const statusServer = createServer((req, res) => {
         const allTasks = listTasks(homeDir, projectId)
         const workerBusy = allTasks.find(t => t.owner === data.agentId && (t.status === 'assigned' || t.status === 'in_progress'))
         if (workerBusy) {
-          dispatchLog('task-assign', `⏳ QUEUED ${data.taskId} — worker busy with ${workerBusy.id}`)
+          dispatchLog('task-assign', `⛔ REJECTED ${data.taskId} — worker ${data.agentId} busy with ${workerBusy.id}. Will auto-assign when free.`)
         } else {
           const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId })
           if (task) {
