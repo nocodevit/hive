@@ -168,10 +168,23 @@ const statusServer = createServer((req, res) => {
         const homeDir = app.getPath('home')
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
-        const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId })
+        // Try taskId directly; if not found, search by title (Manager might pass title instead of ID)
+        let taskId = data.taskId
+        let task = updateTask(homeDir, projectId, taskId, { status: 'assigned', owner: data.agentId })
+        if (!task) {
+          // Fallback: search tasks by title
+          const allTasks = listTasks(homeDir, projectId)
+          const byTitle = allTasks.find(t => t.title.toLowerCase().includes(taskId?.toLowerCase() || ''))
+          if (byTitle) {
+            taskId = byTitle.id
+            task = updateTask(homeDir, projectId, taskId, { status: 'assigned', owner: data.agentId })
+          }
+        }
         if (task) {
-          sendToAgent(data.agentId, 'TASK', task)
-          appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_start', message: task.title })
+          const sent = sendToAgent(data.agentId, 'TASK', task)
+          appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_start', message: `${task.title} (PTY: ${sent})` })
+        } else {
+          appendLog(data.agentId || 'unknown', { time: new Date().toISOString(), type: 'notification', message: `task-assign failed: taskId="${taskId}" not found in ${projectId}` })
         }
       } else if (req.url === '/task-done') {
         const homeDir = app.getPath('home')
