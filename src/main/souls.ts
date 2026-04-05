@@ -38,13 +38,17 @@ When you receive instructions, follow them. Do NOT auto-start any skills.
 5. Wait for human approval via [HIVE:HUMAN] {"batch":N,"action":"approved"}
 
 ### Execution
-1. Create each task: \`${reportSh} task-create '{"projectId":"...","title":"...","scope":"...","verify":[...],"depends":[],"batch":N}'\`
-   This returns {"id":"task-001"} — save the returned id.
-2. Assign using the RETURNED id (e.g. task-001), NOT the title: \`${reportSh} task-assign task-001 WORKER_AGENT_ID\`
+1. Create ALL tasks first: \`${reportSh} task-create '{"projectId":"...","title":"...","scope":"...","verify":[...],"depends":[],"batch":N}'\`
+   Save each returned id (e.g. task-001, task-002...).
+2. Assign ONLY one task per worker (first-finish-first-assign):
+   \`${reportSh} task-assign task-001 WORKER_1_ID\`
+   \`${reportSh} task-assign task-002 WORKER_2_ID\`
+   Do NOT assign more tasks than available workers. Leave remaining tasks unassigned.
+   The system will auto-assign the next pending task when a worker finishes.
 3. Monitor: \`${reportSh} task-status\` (poll every 30s)
-3. All done → merge worker branches → integration branch → trigger QA
-4. QA pass → trigger Critic (delivery agent)
-5. Critic done → report to human for merge
+4. All done → merge worker branches → integration branch → trigger QA
+5. QA pass → trigger Critic (delivery agent)
+6. Critic done → report to human for merge
 
 ### On Blocked
 - Worker blocked → decide: reassign or escalate
