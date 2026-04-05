@@ -23,18 +23,21 @@ function runCmd(cmd: string, cwd: string, timeout = 120000): { ok: boolean; outp
 export async function runGate(cwd: string, task: { scope: string; verify: string[] }): Promise<GateResult> {
   const failures: GateFailure[] = []
 
-  // ① Build
-  const build = runCmd('npm run build', cwd)
-  if (!build.ok) {
-    failures.push({ step: 'build', detail: build.output.slice(0, 500) })
-    return { pass: false, failures }
-  }
+  // ① Build (only if package.json exists)
+  const hasPackageJson = runCmd('test -f package.json', cwd)
+  if (hasPackageJson.ok) {
+    const build = runCmd('npm run build', cwd)
+    if (!build.ok) {
+      failures.push({ step: 'build', detail: build.output.slice(0, 500) })
+      return { pass: false, failures }
+    }
 
-  // ② Test
-  const test = runCmd('npm test', cwd)
-  if (!test.ok) {
-    failures.push({ step: 'test', detail: test.output.slice(0, 500) })
-    return { pass: false, failures }
+    // ② Test
+    const test = runCmd('npm test', cwd)
+    if (!test.ok) {
+      failures.push({ step: 'test', detail: test.output.slice(0, 500) })
+      return { pass: false, failures }
+    }
   }
 
   // ③ Scope check
