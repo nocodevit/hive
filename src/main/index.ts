@@ -76,6 +76,22 @@ function sendToAgent(agentId: string, type: string, payload: object): boolean {
   return true
 }
 
+// Auto-assign next pending task to a worker after task completion
+function autoAssignNext(workerId: string, projectId: string) {
+  const allTasks = listTasks(DATA_DIR, projectId)
+  // Find a pending task assigned to this worker (queued earlier)
+  let next = allTasks.find(t => t.owner === workerId && t.status === 'pending')
+  // Or find any unassigned pending task
+  if (!next) next = allTasks.find(t => !t.owner && t.status === 'pending')
+  if (next) {
+    const updated = updateTask(DATA_DIR, projectId, next.id, { status: 'assigned', owner: workerId })
+    if (updated) {
+      const sent = sendToAgent(workerId, 'TASK', updated)
+      dispatchLog('auto-assign', `${updated.id} → ${workerId} (PTY: ${sent})`)
+    }
+  }
+}
+
 // Dispatcher log: broadcast to UI for Task Group dashboard
 function dispatchLog(action: string, detail: string) {
   const win = BrowserWindow.getAllWindows()[0]
@@ -176,14 +192,20 @@ const statusServer = createServer((req, res) => {
         const homeDir = DATA_DIR
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
-        const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId })
-        if (task) {
-          const sent = sendToAgent(data.agentId, 'TASK', task)
-          dispatchLog('task-assign', `${task.id} → ${data.agentId} (PTY: ${sent})`)
-          appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_start', message: `${task.title} (PTY: ${sent})` })
+        // One task at a time per worker — queue if busy
+        const allTasks = listTasks(homeDir, projectId)
+        const workerBusy = allTasks.find(t => t.owner === data.agentId && (t.status === 'assigned' || t.status === 'in_progress'))
+        if (workerBusy) {
+          dispatchLog('task-assign', `⏳ QUEUED ${data.taskId} — worker busy with ${workerBusy.id}`)
         } else {
-          dispatchLog('task-assign', `❌ FAILED: taskId="${data.taskId}" not found in ${projectId}`)
-          appendLog(data.agentId || 'unknown', { time: new Date().toISOString(), type: 'notification', message: `task-assign FAILED: taskId="${data.taskId}" not found in project ${projectId}` })
+          const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId })
+          if (task) {
+            const sent = sendToAgent(data.agentId, 'TASK', task)
+            dispatchLog('task-assign', `${task.id} → ${data.agentId} (PTY: ${sent})`)
+            appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_start', message: `${task.title} (PTY: ${sent})` })
+          } else {
+            dispatchLog('task-assign', `❌ FAILED: taskId="${data.taskId}" not found in ${projectId}`)
+          }
         }
       } else if (req.url === '/task-done') {
         const homeDir = DATA_DIR
@@ -203,6 +225,8 @@ const statusServer = createServer((req, res) => {
               if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
               sendToAgent(data.agentId, 'MSG', { gate: 'pass', task: data.taskId })
               if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
+              // Auto-assign next pending task to this worker
+              autoAssignNext(data.agentId, projectId)
             } else {
               const attempt = (task.attempt || 0) + 1
               const maxRetries = ctx?.taskGroup?.maxGateRetries || 3
@@ -224,6 +248,8 @@ const statusServer = createServer((req, res) => {
           appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
           if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
           if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
+          // Auto-assign next pending task to this worker
+          autoAssignNext(data.agentId, projectId)
         }
       } else if (req.url === '/task-blocked') {
         const homeDir = DATA_DIR
