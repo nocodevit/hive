@@ -2,7 +2,7 @@
   "id": "task-001",
   "title": "Create alpha.md",
   "status": "assigned",
-  "owner": "agent-1775363614556",
+  "owner": "agent-1775389695002",
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",

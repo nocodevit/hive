@@ -1,8 +1,8 @@
 {
   "id": "task-002",
   "title": "Create bravo.md",
-  "status": "assigned",
-  "owner": "agent-1775363617058",
+  "status": "pending",
+  "owner": null,
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",

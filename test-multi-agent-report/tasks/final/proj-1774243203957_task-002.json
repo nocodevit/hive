@@ -2,7 +2,7 @@
   "id": "task-002",
   "title": "Create bravo.md",
   "status": "done",
-  "owner": "agent-1775363617058",
+  "owner": "agent-1775389695002",
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",
@@ -10,6 +10,6 @@
   "verify": [
     "test -f test-multi-agent-tasks/bravo.md"
   ],
-  "attempt": 1,
+  "attempt": 0,
   "blocked_reason": null
 }
