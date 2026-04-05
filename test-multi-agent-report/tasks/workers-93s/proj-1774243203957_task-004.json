@@ -1,15 +1,15 @@
 {
   "id": "task-004",
-  "title": "Create bravo.md",
-  "status": "pending",
-  "owner": null,
+  "title": "Create delta.md with code examples",
+  "status": "in_progress",
+  "owner": "agent-1775390461806",
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",
   "acceptance": "",
   "verify": [
-    "test -f test-multi-agent-tasks/bravo.md"
+    "test -f test-multi-agent-tasks/delta.md"
   ],
-  "attempt": 0,
+  "attempt": 1,
   "blocked_reason": null
 }

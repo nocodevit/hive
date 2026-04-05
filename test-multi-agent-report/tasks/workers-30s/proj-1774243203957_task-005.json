@@ -1,0 +1,15 @@
+{
+  "id": "task-005",
+  "title": "Create echo.md with a mermaid diagram",
+  "status": "assigned",
+  "owner": "agent-1775390464290",
+  "batch": 1,
+  "depends": [],
+  "scope": "test-multi-agent-tasks/",
+  "acceptance": "",
+  "verify": [
+    "test -f test-multi-agent-tasks/echo.md"
+  ],
+  "attempt": 0,
+  "blocked_reason": null
+}

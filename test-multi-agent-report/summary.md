@@ -1,43 +1,70 @@
-11:47:58 # Integration Test (3 tasks)
+12:00:47 # Integration Test (3 tasks)
 
-11:47:58 Isolated data dir: /var/folders/pv/f5m189_n64ldtzhcz3z4m42m0000gn/T/hive-integration-test
-11:48:09 Baseline: 10 projects, 17 agents
-11:48:13 Created [TEST] Manager
-11:48:15 Created [TEST] Worker-1
-11:48:18 Created [TEST] Worker-2
-11:48:20 Created [TEST] QA
-11:48:22 Created [TEST] Critic
-11:48:25 Task group created
-11:48:29 Manager terminal opened
-11:48:32 Worker-1 terminal opened (before Manager instruction)
-11:48:36 Worker-2 terminal opened (before Manager instruction)
-11:48:37 Manager ID: agent-1775389692536
-11:48:52 Sent direct instruction to manager
-11:49:03 [10s] task-status: 0 tasks
-11:49:16 [23s] task-status: 0 tasks
-11:49:17 ✅ Clicked Approve — now waiting for Manager to create tasks
-11:49:29 [post-approve 10s] tasks: 2
-11:49:29 2 tasks exist after approve — checking assign...
-11:49:29 ✅ 1/2 tasks assigned!
-11:49:30 Proposal found: true
-11:49:33 Worker-1 started
-11:49:36 Worker-2 started
-11:50:08 [30s] Workers: 0/2 done, 0 blocked
-11:50:41 [62s] Workers: 1/2 done, 0 blocked
-11:51:13 [96s] Workers: 1/2 done, 0 blocked
-11:51:45 [127s] Workers: 1/2 done, 0 blocked
-11:52:17 [159s] Workers: 2/2 done, 0 blocked
-11:52:17 ✅ All tasks done or blocked
-11:52:17 Workers complete: true
-11:52:20 QA started
-11:53:24 Critic started
-11:54:26 Test complete
-11:54:26 
+12:00:47 Isolated data dir: /var/folders/pv/f5m189_n64ldtzhcz3z4m42m0000gn/T/hive-integration-test
+12:00:55 Baseline: 10 projects, 17 agents
+12:00:55 Cleaned residual definition: hive-agent-1775389695002.md
+12:00:59 Created [TEST] Manager
+12:01:02 Created [TEST] Worker-1
+12:01:04 Created [TEST] Worker-2
+12:01:07 Created [TEST] QA
+12:01:09 Created [TEST] Critic
+12:01:12 Task group created
+12:01:15 Manager terminal opened
+12:01:19 Worker-1 terminal opened (before Manager instruction)
+12:01:23 Worker-2 terminal opened (before Manager instruction)
+12:01:24 Manager ID: agent-1775390459323
+12:01:39 Sent direct instruction to manager
+12:01:50 [10s] task-status: 0 tasks
+12:02:02 [23s] task-status: 0 tasks
+12:02:04 ✅ Clicked Approve — now waiting for Manager to create tasks
+12:02:16 [post-approve 10s] tasks: 6
+12:02:16 6 tasks exist after approve — checking assign...
+12:02:26 [post-approve 20s] tasks: 8
+12:02:26 8 tasks exist after approve — checking assign...
+12:02:26 ✅ 8/8 tasks assigned!
+12:02:27 Proposal found: true
+12:02:30 Worker-1 started
+12:02:33 Worker-2 started
+12:03:05 [30s] Workers: 0/8 done, 0 blocked
+12:03:36 [62s] Workers: 0/8 done, 0 blocked
+12:04:08 [93s] Workers: 0/8 done, 0 blocked
+12:04:40 [125s] Workers: 0/8 done, 0 blocked
+12:05:11 [157s] Workers: 0/8 done, 0 blocked
+12:05:43 [189s] Workers: 0/8 done, 0 blocked
+12:06:15 [220s] Workers: 0/8 done, 0 blocked
+12:06:47 [252s] Workers: 0/8 done, 0 blocked
+12:07:18 [284s] Workers: 0/8 done, 0 blocked
+12:07:50 [316s] Workers: 0/8 done, 0 blocked
+12:08:22 [347s] Workers: 0/8 done, 0 blocked
+12:08:54 [379s] Workers: 0/8 done, 0 blocked
+12:09:25 [411s] Workers: 0/8 done, 0 blocked
+12:09:57 [442s] Workers: 0/8 done, 0 blocked
+12:10:29 [474s] Workers: 0/8 done, 0 blocked
+12:11:00 [506s] Workers: 0/8 done, 0 blocked
+12:11:32 [538s] Workers: 0/8 done, 0 blocked
+12:12:04 [569s] Workers: 0/8 done, 0 blocked
+12:12:36 [601s] Workers: 0/8 done, 0 blocked
+12:13:07 [633s] Workers: 0/8 done, 0 blocked
+12:13:39 [664s] Workers: 0/8 done, 0 blocked
+12:14:11 [696s] Workers: 0/8 done, 0 blocked
+12:14:42 [728s] Workers: 0/8 done, 0 blocked
+12:15:14 [760s] Workers: 0/8 done, 0 blocked
+12:15:46 [791s] Workers: 0/8 done, 0 blocked
+12:16:18 [823s] Workers: 0/8 done, 0 blocked
+12:16:49 [855s] Workers: 0/8 done, 0 blocked
+12:17:21 [887s] Workers: 0/8 done, 0 blocked
+12:17:53 [918s] Workers: 0/8 done, 0 blocked
+12:18:24 [950s] Workers: 0/8 done, 0 blocked
+12:18:24 Workers complete: false
+12:18:28 QA started
+12:19:32 Critic started
+12:20:34 Test complete
+12:20:34 
 --- TEARDOWN ---
-11:54:28 Dissolved task group
-11:54:29 Deleted: [TEST] Manager
-11:54:32 Deleted: [TEST] Worker-1
-11:54:32 Deleted: [TEST] Worker-2
-11:54:33 Deleted: [TEST] QA
-11:54:34 Deleted: [TEST] Critic
-11:54:34 Final: 10 projects, 17 agents
+12:20:36 Dissolved task group
+12:20:37 Deleted: [TEST] Manager
+12:20:39 Deleted: [TEST] Worker-1
+12:20:42 Deleted: [TEST] Worker-2
+12:20:43 Deleted: [TEST] QA
+12:20:44 Deleted: [TEST] Critic
+12:20:44 Final: 10 projects, 17 agents

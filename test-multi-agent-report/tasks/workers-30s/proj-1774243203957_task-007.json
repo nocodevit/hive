@@ -1,0 +1,15 @@
+{
+  "id": "task-007",
+  "title": "Create golf.md with FAQ format",
+  "status": "assigned",
+  "owner": "agent-1775390464290",
+  "batch": 1,
+  "depends": [],
+  "scope": "test-multi-agent-tasks/",
+  "acceptance": "",
+  "verify": [
+    "test -f test-multi-agent-tasks/golf.md"
+  ],
+  "attempt": 0,
+  "blocked_reason": null
+}

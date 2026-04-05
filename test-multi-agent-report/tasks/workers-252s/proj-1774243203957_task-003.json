@@ -1,15 +1,15 @@
 {
   "id": "task-003",
-  "title": "Create alpha.md",
-  "status": "pending",
-  "owner": null,
+  "title": "Create charlie.md with a comparison table",
+  "status": "in_progress",
+  "owner": "agent-1775390461806",
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",
   "acceptance": "",
   "verify": [
-    "test -f test-multi-agent-tasks/alpha.md"
+    "test -f test-multi-agent-tasks/charlie.md"
   ],
-  "attempt": 0,
+  "attempt": 1,
   "blocked_reason": null
 }

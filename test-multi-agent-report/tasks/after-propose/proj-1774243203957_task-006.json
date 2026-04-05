@@ -1,0 +1,15 @@
+{
+  "id": "task-006",
+  "title": "Create foxtrot.md with pros and cons",
+  "status": "assigned",
+  "owner": "agent-1775390464290",
+  "batch": 1,
+  "depends": [],
+  "scope": "test-multi-agent-tasks/",
+  "acceptance": "",
+  "verify": [
+    "test -f test-multi-agent-tasks/foxtrot.md"
+  ],
+  "attempt": 0,
+  "blocked_reason": null
+}
