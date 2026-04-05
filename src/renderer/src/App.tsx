@@ -94,6 +94,7 @@ export default function App() {
   const [managerReports, setManagerReports] = useState<{ title: string; message: string; time: string }[]>([])
   const [batchProposal, setBatchProposal] = useState<any>(null)
   const [showCreateTaskGroup, setShowCreateTaskGroup] = useState(false)
+  const [dispatcherLog, setDispatcherLog] = useState<{ time: string; action: string; detail: string }[]>([])
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || null
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) || null
@@ -180,12 +181,14 @@ export default function App() {
     })
     const removeBatchProposal = window.api.agent.onBatchProposal((data) => {
       setBatchProposal(data)
-      // Update task group status to show proposal card
       setTaskGroups(prev => prev.map(tg =>
         tg.managerId === data.agentId ? { ...tg, status: 'batch_proposed' as const } : tg
       ))
     })
-    return () => { removeStatus(); removeReport(); removeTaskUpdate(); removeManagerReport(); removeBatchProposal() }
+    const removeDispatcherLog = window.api.agent.onDispatcherLog((entry) => {
+      setDispatcherLog(prev => [...prev.slice(-49), entry]) // keep last 50
+    })
+    return () => { removeStatus(); removeReport(); removeTaskUpdate(); removeManagerReport(); removeBatchProposal(); removeDispatcherLog() }
   }, [])
 
   // Auto-cleanup stale toast notifications
@@ -1143,6 +1146,26 @@ export default function App() {
                                 <div key={i} className="text-[11px] text-text-muted py-0.5">
                                   <span className="text-text-muted/40 font-mono">{new Date(r.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   {' '}{r.message}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Dispatcher Log */}
+                        {dispatcherLog.length > 0 && (
+                          <div>
+                            <h4 className="text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Dispatcher Log</h4>
+                            <div className="space-y-0.5 max-h-48 overflow-y-auto bg-bg-primary rounded-lg p-2 border border-border font-mono text-[10px]">
+                              {dispatcherLog.slice(-20).map((entry, i) => (
+                                <div key={i} className="text-text-muted">
+                                  <span className="text-text-muted/40">{new Date(entry.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
+                                  {' '}<span className={`font-medium ${
+                                    entry.action.includes('FAIL') || entry.detail.includes('❌') ? 'text-red-400' :
+                                    entry.detail.includes('✅') ? 'text-green-400' :
+                                    'text-accent'
+                                  }`}>[{entry.action}]</span>
+                                  {' '}{entry.detail}
                                 </div>
                               ))}
                             </div>
