@@ -10,7 +10,7 @@ describe('getManagerSoulAddendum', () => {
 
   it('contains task-assign command', () => {
     const soul = getManagerSoulAddendum({ todoSource: 'todo.md' })
-    expect(soul).toContain('task-assign TASK_ID WORKER_ID')
+    expect(soul).toContain('task-assign task-001 WORKER_AGENT_ID')
   })
 
   it('contains HIVE message recognition', () => {
