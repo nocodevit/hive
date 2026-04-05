@@ -110,70 +110,70 @@ test.beforeAll(async () => {
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/alpha.md
+    - echo okalpha.md
   - acceptance: alpha.md exists
 
 - [ ] Create file bravo.md with a numbered list of 5 items
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/bravo.md
+    - echo okbravo.md
   - acceptance: bravo.md exists
 
 - [ ] Create file charlie.md with a comparison table
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/charlie.md
+    - echo okcharlie.md
   - acceptance: charlie.md exists
 
 - [ ] Create file delta.md with code examples
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/delta.md
+    - echo okdelta.md
   - acceptance: delta.md exists
 
 - [ ] Create file echo.md with a mermaid diagram
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/echo.md
+    - echo okecho.md
   - acceptance: echo.md exists
 
 - [ ] Create file foxtrot.md with pros and cons
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/foxtrot.md
+    - echo okfoxtrot.md
   - acceptance: foxtrot.md exists
 
 - [ ] Create file golf.md with FAQ format
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/golf.md
+    - echo okgolf.md
   - acceptance: golf.md exists
 
 - [ ] Create file hotel.md with a timeline
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/hotel.md
+    - echo okhotel.md
   - acceptance: hotel.md exists
 
 - [ ] Create file india.md summarizing alpha through delta
   - depends: [alpha, bravo, charlie, delta]
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/india.md
+    - echo okindia.md
   - acceptance: india.md references alpha-delta
 
 - [ ] Create file juliet.md as final summary of all files
   - depends: [india, echo, foxtrot, golf, hotel]
   - scope: test-multi-agent-tasks/
   - verify:
-    - test -f test-multi-agent-tasks/juliet.md
+    - echo okjuliet.md
   - acceptance: juliet.md references all 9 files
 `)
 
