@@ -1,8 +1,8 @@
 {
   "id": "task-008",
   "title": "Create hotel.md with a timeline",
-  "status": "assigned",
-  "owner": "agent-1775390464290",
+  "status": "pending",
+  "owner": null,
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",

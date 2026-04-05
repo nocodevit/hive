@@ -2,7 +2,7 @@
   "id": "task-001",
   "title": "Create alpha.md with a paragraph about testing",
   "status": "in_progress",
-  "owner": "agent-1775390461806",
+  "owner": "agent-1775392392865",
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",

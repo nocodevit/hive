@@ -1,6 +1,6 @@
 {
   "id": "task-003",
-  "title": "Create alpha.md",
+  "title": "Create charlie.md with a comparison table",
   "status": "pending",
   "owner": null,
   "batch": 1,
@@ -8,7 +8,7 @@
   "scope": "test-multi-agent-tasks/",
   "acceptance": "",
   "verify": [
-    "test -f test-multi-agent-tasks/alpha.md"
+    "test -f test-multi-agent-tasks/charlie.md"
   ],
   "attempt": 0,
   "blocked_reason": null

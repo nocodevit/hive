@@ -2,7 +2,7 @@
   "id": "task-005",
   "title": "Create echo.md with a mermaid diagram",
   "status": "in_progress",
-  "owner": "agent-1775390464290",
+  "owner": "agent-1775392395347",
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",
