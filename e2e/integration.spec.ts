@@ -101,30 +101,80 @@ test.beforeAll(async () => {
   // Test todo.md — 3 tasks: 2 parallel + 1 dependent
   if (existsSync(TEST_TASKS_DIR)) rmSync(TEST_TASKS_DIR, { recursive: true })
   mkdirSync(TEST_TASKS_DIR, { recursive: true })
+  // 10 tasks: 8 parallel (batch 1) + 1 dep on 2 (batch 2) + 1 dep on all (batch 3)
   writeFileSync(join(TEST_TASKS_DIR, 'todo.md'), `# Test Tasks
 
 ## batch-1
 
-- [ ] Create file alpha.md with a short paragraph
+- [ ] Create file alpha.md with a paragraph about testing
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
     - test -f test-multi-agent-tasks/alpha.md
   - acceptance: alpha.md exists
 
-- [ ] Create file bravo.md with a numbered list
+- [ ] Create file bravo.md with a numbered list of 5 items
   - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
     - test -f test-multi-agent-tasks/bravo.md
   - acceptance: bravo.md exists
 
-- [ ] Create file charlie.md summarizing alpha and bravo
-  - depends: [alpha, bravo]
+- [ ] Create file charlie.md with a comparison table
+  - depends: none
   - scope: test-multi-agent-tasks/
   - verify:
     - test -f test-multi-agent-tasks/charlie.md
-  - acceptance: charlie.md references alpha and bravo
+  - acceptance: charlie.md exists
+
+- [ ] Create file delta.md with code examples
+  - depends: none
+  - scope: test-multi-agent-tasks/
+  - verify:
+    - test -f test-multi-agent-tasks/delta.md
+  - acceptance: delta.md exists
+
+- [ ] Create file echo.md with a mermaid diagram
+  - depends: none
+  - scope: test-multi-agent-tasks/
+  - verify:
+    - test -f test-multi-agent-tasks/echo.md
+  - acceptance: echo.md exists
+
+- [ ] Create file foxtrot.md with pros and cons
+  - depends: none
+  - scope: test-multi-agent-tasks/
+  - verify:
+    - test -f test-multi-agent-tasks/foxtrot.md
+  - acceptance: foxtrot.md exists
+
+- [ ] Create file golf.md with FAQ format
+  - depends: none
+  - scope: test-multi-agent-tasks/
+  - verify:
+    - test -f test-multi-agent-tasks/golf.md
+  - acceptance: golf.md exists
+
+- [ ] Create file hotel.md with a timeline
+  - depends: none
+  - scope: test-multi-agent-tasks/
+  - verify:
+    - test -f test-multi-agent-tasks/hotel.md
+  - acceptance: hotel.md exists
+
+- [ ] Create file india.md summarizing alpha through delta
+  - depends: [alpha, bravo, charlie, delta]
+  - scope: test-multi-agent-tasks/
+  - verify:
+    - test -f test-multi-agent-tasks/india.md
+  - acceptance: india.md references alpha-delta
+
+- [ ] Create file juliet.md as final summary of all files
+  - depends: [india, echo, foxtrot, golf, hotel]
+  - scope: test-multi-agent-tasks/
+  - verify:
+    - test -f test-multi-agent-tasks/juliet.md
+  - acceptance: juliet.md references all 9 files
 `)
 
   // Create isolated data dir with copy of real data
@@ -496,7 +546,7 @@ test.describe.serial('Integration Test', () => {
     // Poll for task completion (up to 8 min)
     let allDone = false
     const start = Date.now()
-    for (let i = 0; i < 16; i++) { // 16 x 30s = 8 min
+    for (let i = 0; i < 30; i++) { // 30 x 30s = 15 min
       await page.waitForTimeout(30000)
       const elapsed = Math.round((Date.now() - start) / 1000)
 
