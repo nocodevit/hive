@@ -1,0 +1,10 @@
+
+Running 4 tests using 1 worker
+
+[1A[2K[1/4] e2e/integration.spec.ts:262:7 › Integration Test › 1. select Hive project + create agents + task group
+[1A[2K[2/4] e2e/integration.spec.ts:312:7 › Integration Test › 2. manager proposes batch (with Y/n confirmation)
+[1A[2K[3/4] e2e/integration.spec.ts:481:7 › Integration Test › 3. workers execute tasks
+[1A[2K[4/4] e2e/integration.spec.ts:538:7 › Integration Test › 4. QA + Critic + final state
+[1A[2K  Slow test file: e2e/integration.spec.ts (11.6m)
+  Consider running tests from slow files in parallel. See: https://playwright.dev/docs/test-parallel
+  4 passed (11.9m)

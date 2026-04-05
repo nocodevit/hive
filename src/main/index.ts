@@ -115,7 +115,7 @@ const statusServer = createServer((req, res) => {
     // GET /task-status?projectId=xxx
     const url = new URL(req.url, `http://127.0.0.1:${HIVE_PORT}`)
     const projectId = url.searchParams.get('projectId') || ''
-    const homeDir = app.getPath('home')
+    const homeDir = DATA_DIR
     const tasks = listTasks(homeDir, projectId)
     res.writeHead(200, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify(tasks))
@@ -159,7 +159,7 @@ const statusServer = createServer((req, res) => {
         }
         if (win && !win.isDestroyed()) win.webContents.send('agent:report', data)
       } else if (req.url === '/task-create') {
-        const homeDir = app.getPath('home')
+        const homeDir = DATA_DIR
         const ctx = data.agentId ? findTaskGroupForAgent(data.agentId) : null
         const projectId = ctx?.projectId || data.projectId || ''
         const task = createTask(homeDir, projectId, {
@@ -173,7 +173,7 @@ const statusServer = createServer((req, res) => {
         res.end(JSON.stringify({ id: task.id }))
         return
       } else if (req.url === '/task-assign') {
-        const homeDir = app.getPath('home')
+        const homeDir = DATA_DIR
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
         const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId })
@@ -186,7 +186,7 @@ const statusServer = createServer((req, res) => {
           appendLog(data.agentId || 'unknown', { time: new Date().toISOString(), type: 'notification', message: `task-assign FAILED: taskId="${data.taskId}" not found in project ${projectId}` })
         }
       } else if (req.url === '/task-done') {
-        const homeDir = app.getPath('home')
+        const homeDir = DATA_DIR
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
         const task = readTask(homeDir, projectId, data.taskId)
@@ -226,7 +226,7 @@ const statusServer = createServer((req, res) => {
           if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
         }
       } else if (req.url === '/task-blocked') {
-        const homeDir = app.getPath('home')
+        const homeDir = DATA_DIR
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
         updateTask(homeDir, projectId, data.taskId, {
@@ -237,7 +237,7 @@ const statusServer = createServer((req, res) => {
         if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'blocked', reason: data.reason })
         notifyHuman('Task Blocked', `${data.taskId}: ${data.reason}`)
       } else if (req.url === '/task-status') {
-        const homeDir = app.getPath('home')
+        const homeDir = DATA_DIR
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
         const tasks = listTasks(homeDir, projectId)
