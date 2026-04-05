@@ -1,8 +1,8 @@
 {
   "id": "task-001",
   "title": "Create alpha.md with a short paragraph",
-  "status": "pending",
-  "owner": null,
+  "status": "in_progress",
+  "owner": "agent-1775362609569",
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",
@@ -10,6 +10,6 @@
   "verify": [
     "test -f test-multi-agent-tasks/alpha.md"
   ],
-  "attempt": 0,
+  "attempt": 1,
   "blocked_reason": null
 }
