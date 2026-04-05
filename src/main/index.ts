@@ -76,6 +76,14 @@ function sendToAgent(agentId: string, type: string, payload: object): boolean {
   return true
 }
 
+// Dispatcher log: broadcast to UI for Task Group dashboard
+function dispatchLog(action: string, detail: string) {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('dispatcher:log', { time: new Date().toISOString(), action, detail })
+  }
+}
+
 // Notify human: macOS + Telegram + UI
 function notifyHuman(title: string, message: string) {
   const win = BrowserWindow.getAllWindows()[0]
@@ -152,7 +160,6 @@ const statusServer = createServer((req, res) => {
         if (win && !win.isDestroyed()) win.webContents.send('agent:report', data)
       } else if (req.url === '/task-create') {
         const homeDir = app.getPath('home')
-        // Resolve projectId from task group if not provided or incorrect
         const ctx = data.agentId ? findTaskGroupForAgent(data.agentId) : null
         const projectId = ctx?.projectId || data.projectId || ''
         const task = createTask(homeDir, projectId, {
@@ -161,6 +168,7 @@ const statusServer = createServer((req, res) => {
           scope: data.scope || '.', acceptance: data.acceptance || '',
           verify: data.verify || [], attempt: 0, blocked_reason: null
         })
+        dispatchLog('task-create', `${task.id}: "${data.title}" in ${projectId}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ id: task.id }))
         return
@@ -171,8 +179,10 @@ const statusServer = createServer((req, res) => {
         const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId })
         if (task) {
           const sent = sendToAgent(data.agentId, 'TASK', task)
+          dispatchLog('task-assign', `${task.id} → ${data.agentId} (PTY: ${sent})`)
           appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_start', message: `${task.title} (PTY: ${sent})` })
         } else {
+          dispatchLog('task-assign', `❌ FAILED: taskId="${data.taskId}" not found in ${projectId}`)
           appendLog(data.agentId || 'unknown', { time: new Date().toISOString(), type: 'notification', message: `task-assign FAILED: taskId="${data.taskId}" not found in project ${projectId}` })
         }
       } else if (req.url === '/task-done') {
@@ -180,13 +190,15 @@ const statusServer = createServer((req, res) => {
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
         const task = readTask(homeDir, projectId, data.taskId)
+        dispatchLog('task-done', `${data.taskId} by ${data.agentId}: "${data.summary || ''}"`)
 
-        // Run gate if worker has a worktree
         const cwd = findAgentWorktree(data.agentId)
         if (task && cwd && task.verify && task.verify.length > 0) {
+          dispatchLog('gate', `Running gate on ${data.taskId} (${task.verify.length} verify commands)`)
           runGate(cwd, { scope: task.scope, verify: task.verify }).then((gateResult) => {
             if (gateResult.pass) {
               updateTask(homeDir, projectId, data.taskId, { status: 'done' })
+              dispatchLog('gate', `✅ ${data.taskId} PASSED`)
               appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
               if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
               sendToAgent(data.agentId, 'MSG', { gate: 'pass', task: data.taskId })
@@ -194,6 +206,7 @@ const statusServer = createServer((req, res) => {
             } else {
               const attempt = (task.attempt || 0) + 1
               const maxRetries = ctx?.taskGroup?.maxGateRetries || 3
+              dispatchLog('gate', `❌ ${data.taskId} FAILED (attempt ${attempt}/${maxRetries}): ${gateResult.failures.map(f => f.step).join(', ')}`)
               if (attempt >= maxRetries) {
                 updateTask(homeDir, projectId, data.taskId, { status: 'blocked', attempt, blocked_reason: gateResult.failures.map(f => `${f.step}: ${f.detail}`).join('; ') })
                 sendToAgent(data.agentId, 'MSG', { gate: 'blocked', task: data.taskId, failures: gateResult.failures })
@@ -206,8 +219,8 @@ const statusServer = createServer((req, res) => {
             }
           })
         } else {
-          // No verify commands or no worktree — skip gate, mark done
           updateTask(homeDir, projectId, data.taskId, { status: 'done' })
+          dispatchLog('task-done', `${data.taskId} → done (no gate)`)
           appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
           if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
           if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
@@ -219,6 +232,7 @@ const statusServer = createServer((req, res) => {
         updateTask(homeDir, projectId, data.taskId, {
           status: 'blocked', blocked_reason: data.reason, attempt: data.attempt || 0
         })
+        dispatchLog('task-blocked', `❌ ${data.taskId}: ${data.reason}`)
         appendLog(data.agentId, { time: new Date().toISOString(), type: 'notification', message: `BLOCKED: ${data.reason}` })
         if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'blocked', reason: data.reason })
         notifyHuman('Task Blocked', `${data.taskId}: ${data.reason}`)
@@ -237,18 +251,18 @@ const statusServer = createServer((req, res) => {
         res.end(JSON.stringify(tasks))
         return
       } else if (req.url === '/ready') {
-        // Worker is about to /clear — delay notifying manager to allow clear to complete
+        dispatchLog('ready', `${data.agentId} available for next task`)
         const ctx = findTaskGroupForAgent(data.agentId)
         if (ctx?.taskGroup) {
           setTimeout(() => {
             sendToAgent(ctx.taskGroup.managerId, 'MSG', { worker: data.agentId, status: 'ready' })
-          }, 2000) // 2s delay: worker /clear takes ~1s, plus buffer
+          }, 2000)
         }
       } else if (req.url === '/report-human') {
         notifyHuman('Manager', data.message || '')
         appendLog(data.agentId, { time: new Date().toISOString(), type: 'report', message: data.message })
       } else if (req.url === '/batch-propose') {
-        // Update TaskGroup status to batch_proposed so UI shows the proposal card
+        dispatchLog('batch-propose', `Batch ${data.batch || '?'}: ${(data.tasks || []).length} tasks`)
         const d = loadData()
         const tgs = (d.taskGroups || []) as any[]
         const ctx = data.agentId ? findTaskGroupForAgentInData(data.agentId, tgs) : null

@@ -101,6 +101,11 @@ const api = {
       const handler = (_event: Electron.IpcRendererEvent, data: any) => cb(data)
       ipcRenderer.on('batch:proposal', handler)
       return () => ipcRenderer.removeListener('batch:proposal', handler)
+    },
+    onDispatcherLog: (cb: (data: { time: string; action: string; detail: string }) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, data: any) => cb(data)
+      ipcRenderer.on('dispatcher:log', handler)
+      return () => ipcRenderer.removeListener('dispatcher:log', handler)
     }
   }
 }

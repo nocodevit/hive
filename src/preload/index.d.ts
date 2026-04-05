@@ -63,6 +63,7 @@ declare global {
         onTaskUpdate: (cb: (data: { projectId: string; tasks: any[] }) => void) => () => void
         onManagerReport: (cb: (data: { title: string; message: string }) => void) => () => void
         onBatchProposal: (cb: (data: any) => void) => () => void
+        onDispatcherLog: (cb: (data: { time: string; action: string; detail: string }) => void) => () => void
       }
     }
   }
