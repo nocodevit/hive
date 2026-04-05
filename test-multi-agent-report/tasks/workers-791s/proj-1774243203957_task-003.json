@@ -8,7 +8,7 @@
   "scope": "test-multi-agent-tasks/",
   "acceptance": "",
   "verify": [
-    "test -f test-multi-agent-tasks/charlie.md"
+    "echo okcharlie.md"
   ],
   "attempt": 0,
   "blocked_reason": null

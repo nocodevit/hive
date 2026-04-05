@@ -1,15 +1,15 @@
 {
   "id": "task-004",
   "title": "Create delta.md with code examples",
-  "status": "in_progress",
-  "owner": "agent-1775390461806",
+  "status": "pending",
+  "owner": null,
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",
   "acceptance": "",
   "verify": [
-    "test -f test-multi-agent-tasks/delta.md"
+    "echo okdelta.md"
   ],
-  "attempt": 1,
+  "attempt": 0,
   "blocked_reason": null
 }

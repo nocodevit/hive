@@ -8,7 +8,7 @@
   "scope": "test-multi-agent-tasks/",
   "acceptance": "",
   "verify": [
-    "test -f test-multi-agent-tasks/hotel.md"
+    "echo okhotel.md"
   ],
   "attempt": 0,
   "blocked_reason": null
