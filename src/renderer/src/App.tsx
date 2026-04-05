@@ -490,15 +490,15 @@ export default function App() {
                                   agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
                                 }`} />
                                 {agent.taskGroupRole && (
-                                  <span className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] leading-none" style={{
+                                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full flex items-center justify-center text-[8px] font-bold leading-none" style={{
                                     background: agent.taskGroupRole === 'manager' ? '#F59E0B' :
                                       agent.taskGroupRole === 'worker' ? '#3B82F6' :
                                       agent.taskGroupRole === 'qa' ? '#10B981' : '#8B5CF6',
                                     color: '#fff'
                                   }}>
-                                    {agent.taskGroupRole === 'manager' ? '♛' :
-                                     agent.taskGroupRole === 'worker' ? '⚒' :
-                                     agent.taskGroupRole === 'qa' ? '🛡' : '👁'}
+                                    {agent.taskGroupRole === 'manager' ? 'M' :
+                                     agent.taskGroupRole === 'worker' ? 'W' :
+                                     agent.taskGroupRole === 'qa' ? 'Q' : 'C'}
                                   </span>
                                 )}
                               </div>
