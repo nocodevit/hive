@@ -1,8 +1,8 @@
 {
   "id": "task-001",
-  "title": "Create alpha.md with a short paragraph",
-  "status": "in_progress",
-  "owner": "agent-1775362609569",
+  "title": "Create alpha.md",
+  "status": "done",
+  "owner": "agent-1775363617058",
   "batch": 1,
   "depends": [],
   "scope": "test-multi-agent-tasks/",
