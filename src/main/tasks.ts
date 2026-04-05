@@ -16,26 +16,25 @@ export interface TaskData {
   blocked_reason: string | null
 }
 
-const COMMS_BASE = '.hive/comms'
-
-function tasksDir(homeDir: string, projectId: string): string {
-  return join(homeDir, COMMS_BASE, projectId, 'tasks')
+// dataDir = ~/.hive or /tmp/hive-test (set by HIVE_DATA_DIR env)
+function tasksDir(dataDir: string, projectId: string): string {
+  return join(dataDir, 'comms', projectId, 'tasks')
 }
 
-function reportsDir(homeDir: string, projectId: string): string {
-  return join(homeDir, COMMS_BASE, projectId, 'reports')
+function reportsDir(dataDir: string, projectId: string): string {
+  return join(dataDir, 'comms', projectId, 'reports')
 }
 
 function ensureDir(dir: string) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
 }
 
-function taskFilePath(homeDir: string, projectId: string, taskId: string): string {
-  return join(tasksDir(homeDir, projectId), `${taskId}.json`)
+function taskFilePath(dataDir: string, projectId: string, taskId: string): string {
+  return join(tasksDir(dataDir, projectId), `${taskId}.json`)
 }
 
-function getNextId(homeDir: string, projectId: string): string {
-  const dir = tasksDir(homeDir, projectId)
+function getNextId(dataDir: string, projectId: string): string {
+  const dir = tasksDir(dataDir, projectId)
   ensureDir(dir)
   const files = readdirSync(dir).filter(f => f.match(/^task-\d+\.json$/))
   if (files.length === 0) return 'task-001'
@@ -44,31 +43,31 @@ function getNextId(homeDir: string, projectId: string): string {
   return `task-${String(next).padStart(3, '0')}`
 }
 
-export function createTask(homeDir: string, projectId: string, data: Omit<TaskData, 'id'>): TaskData {
-  const id = getNextId(homeDir, projectId)
+export function createTask(dataDir: string, projectId: string, data: Omit<TaskData, 'id'>): TaskData {
+  const id = getNextId(dataDir, projectId)
   const task: TaskData = { id, ...data }
-  const dir = tasksDir(homeDir, projectId)
+  const dir = tasksDir(dataDir, projectId)
   ensureDir(dir)
   writeFileSync(join(dir, `${id}.json`), JSON.stringify(task, null, 2))
   return task
 }
 
-export function readTask(homeDir: string, projectId: string, taskId: string): TaskData | null {
-  const fp = taskFilePath(homeDir, projectId, taskId)
+export function readTask(dataDir: string, projectId: string, taskId: string): TaskData | null {
+  const fp = taskFilePath(dataDir, projectId, taskId)
   if (!existsSync(fp)) return null
   return JSON.parse(readFileSync(fp, 'utf-8'))
 }
 
-export function updateTask(homeDir: string, projectId: string, taskId: string, updates: Partial<TaskData>): TaskData | null {
-  const task = readTask(homeDir, projectId, taskId)
+export function updateTask(dataDir: string, projectId: string, taskId: string, updates: Partial<TaskData>): TaskData | null {
+  const task = readTask(dataDir, projectId, taskId)
   if (!task) return null
   const updated = { ...task, ...updates, id: task.id } // never overwrite id
-  writeFileSync(taskFilePath(homeDir, projectId, taskId), JSON.stringify(updated, null, 2))
+  writeFileSync(taskFilePath(dataDir, projectId, taskId), JSON.stringify(updated, null, 2))
   return updated
 }
 
-export function listTasks(homeDir: string, projectId: string): TaskData[] {
-  const dir = tasksDir(homeDir, projectId)
+export function listTasks(dataDir: string, projectId: string): TaskData[] {
+  const dir = tasksDir(dataDir, projectId)
   ensureDir(dir)
   const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort()
   return files.map(f => {
@@ -76,24 +75,24 @@ export function listTasks(homeDir: string, projectId: string): TaskData[] {
   }).filter(Boolean) as TaskData[]
 }
 
-export function deleteTask(homeDir: string, projectId: string, taskId: string): boolean {
-  const fp = taskFilePath(homeDir, projectId, taskId)
+export function deleteTask(dataDir: string, projectId: string, taskId: string): boolean {
+  const fp = taskFilePath(dataDir, projectId, taskId)
   if (!existsSync(fp)) return false
   unlinkSync(fp)
   return true
 }
 
-export function ensureReportsDir(homeDir: string, projectId: string): string {
-  const dir = reportsDir(homeDir, projectId)
+export function ensureReportsDir(dataDir: string, projectId: string): string {
+  const dir = reportsDir(dataDir, projectId)
   ensureDir(dir)
   return dir
 }
 
-export function watchTasks(homeDir: string, projectId: string, win: BrowserWindow | null): () => void {
-  const dir = tasksDir(homeDir, projectId)
+export function watchTasks(dataDir: string, projectId: string, win: BrowserWindow | null): () => void {
+  const dir = tasksDir(dataDir, projectId)
   ensureDir(dir)
   const watcher = watch(dir, () => {
-    const tasks = listTasks(homeDir, projectId)
+    const tasks = listTasks(dataDir, projectId)
     if (win && !win.isDestroyed()) {
       win.webContents.send('task:update', { projectId, tasks })
     }
