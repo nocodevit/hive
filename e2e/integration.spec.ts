@@ -108,72 +108,72 @@ test.beforeAll(async () => {
 
 - [ ] Create file alpha.md with a paragraph about testing
   - depends: none
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okalpha.md
+    - test -f ${TEST_TASKS_DIR}/alpha.md
   - acceptance: alpha.md exists
 
 - [ ] Create file bravo.md with a numbered list of 5 items
   - depends: none
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okbravo.md
+    - test -f ${TEST_TASKS_DIR}/bravo.md
   - acceptance: bravo.md exists
 
 - [ ] Create file charlie.md with a comparison table
   - depends: none
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okcharlie.md
+    - test -f ${TEST_TASKS_DIR}/charlie.md
   - acceptance: charlie.md exists
 
 - [ ] Create file delta.md with code examples
   - depends: none
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okdelta.md
+    - test -f ${TEST_TASKS_DIR}/delta.md
   - acceptance: delta.md exists
 
 - [ ] Create file echo.md with a mermaid diagram
   - depends: none
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okecho.md
+    - test -f ${TEST_TASKS_DIR}/echo.md
   - acceptance: echo.md exists
 
 - [ ] Create file foxtrot.md with pros and cons
   - depends: none
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okfoxtrot.md
+    - test -f ${TEST_TASKS_DIR}/foxtrot.md
   - acceptance: foxtrot.md exists
 
 - [ ] Create file golf.md with FAQ format
   - depends: none
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okgolf.md
+    - test -f ${TEST_TASKS_DIR}/golf.md
   - acceptance: golf.md exists
 
 - [ ] Create file hotel.md with a timeline
   - depends: none
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okhotel.md
+    - test -f ${TEST_TASKS_DIR}/hotel.md
   - acceptance: hotel.md exists
 
 - [ ] Create file india.md summarizing alpha through delta
   - depends: [alpha, bravo, charlie, delta]
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okindia.md
+    - test -f ${TEST_TASKS_DIR}/india.md
   - acceptance: india.md references alpha-delta
 
 - [ ] Create file juliet.md as final summary of all files
   - depends: [india, echo, foxtrot, golf, hotel]
-  - scope: test-multi-agent-tasks/
+  - scope: ${TEST_TASKS_DIR}/
   - verify:
-    - echo okjuliet.md
+    - test -f ${TEST_TASKS_DIR}/juliet.md
   - acceptance: juliet.md references all 9 files
 `)
 
