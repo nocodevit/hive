@@ -1,14 +1,14 @@
 {
   "id": "task-003",
   "title": "Create charlie.md with a comparison table",
-  "status": "pending",
-  "owner": null,
+  "status": "assigned",
+  "owner": "agent-1775441422789",
   "batch": 1,
   "depends": [],
-  "scope": "test-multi-agent-tasks/",
+  "scope": "/Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/",
   "acceptance": "",
   "verify": [
-    "test -f test-multi-agent-tasks/charlie.md"
+    "test -f /Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/charlie.md"
   ],
   "attempt": 0,
   "blocked_reason": null

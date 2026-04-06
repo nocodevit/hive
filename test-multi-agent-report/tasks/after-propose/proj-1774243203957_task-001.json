@@ -2,7 +2,7 @@
   "id": "task-001",
   "title": "Create alpha.md with a paragraph about testing",
   "status": "assigned",
-  "owner": "agent-1775396585874",
+  "owner": "agent-1775441422789",
   "batch": 1,
   "depends": [],
   "scope": "/Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/",

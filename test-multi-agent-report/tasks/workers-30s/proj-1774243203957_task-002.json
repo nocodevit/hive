@@ -1,8 +1,8 @@
 {
   "id": "task-002",
   "title": "Create bravo.md with a numbered list of 5 items",
-  "status": "assigned",
-  "owner": "agent-1775396588390",
+  "status": "in_progress",
+  "owner": "agent-1775441425255",
   "batch": 1,
   "depends": [],
   "scope": "/Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/",
@@ -10,6 +10,6 @@
   "verify": [
     "test -f /Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/bravo.md"
   ],
-  "attempt": 0,
+  "attempt": 1,
   "blocked_reason": null
 }

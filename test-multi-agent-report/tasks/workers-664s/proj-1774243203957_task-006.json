@@ -1,14 +1,14 @@
 {
   "id": "task-006",
   "title": "Create foxtrot.md with pros and cons",
-  "status": "pending",
-  "owner": null,
+  "status": "assigned",
+  "owner": "agent-1775441425255",
   "batch": 1,
   "depends": [],
-  "scope": "test-multi-agent-tasks/",
+  "scope": "/Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/",
   "acceptance": "",
   "verify": [
-    "test -f test-multi-agent-tasks/foxtrot.md"
+    "test -f /Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/foxtrot.md"
   ],
   "attempt": 0,
   "blocked_reason": null

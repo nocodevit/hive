@@ -1,8 +1,8 @@
 {
   "id": "task-005",
   "title": "Create echo.md with a mermaid diagram",
-  "status": "pending",
-  "owner": null,
+  "status": "assigned",
+  "owner": "agent-1775441425255",
   "batch": 1,
   "depends": [],
   "scope": "/Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/",
