@@ -93,6 +93,15 @@ Browse and toggle [GStack](https://github.com/garrytan/gstack) skills per agent.
 - **Project status** — Auto-detected: Active Online, Active, Incubating, Early Stage
 - **Project Settings** — Add/remove R&D and Non-R&D folders inline
 
+### Task Group Orchestration
+Coordinate multiple agents on a shared task list with Manager/Worker/QA/Critic roles:
+- **Manager** reads a todo.md, groups tasks into batches, proposes for human approval, assigns to workers
+- **Workers** execute tasks in parallel; gate verification runs only task-specific `verify[]` commands (scope check + contract) — no redundant build/test
+- **QA** runs full build + test + coverage after a batch completes
+- **Critic** reviews QA report, creates PR — skips build/test (trusts QA)
+- **Stuck detection** — tasks carry `estimatedMinutes`; dispatcher pings the worker and notifies humans on timeout
+- **Auto-assign** — when a worker finishes, the next pending task is assigned automatically
+
 ### Task Reporting
 Claude auto-reports task start (title) and completion (summary) via `.claude/hive-report.sh`. Displayed in agent title bar, kanban cards, and grouped work logs.
 
@@ -172,6 +181,7 @@ Permanent activity log per agent. Tasks grouped with START/DONE badges. Status t
 
 | Version | Description | Download |
 |---------|-------------|----------|
+| v0.8.0-beta | Task group orchestration, gate verification, stuck detection | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.8.0-beta) |
 | v0.6.0-beta | Team management, drag-drop, auto rebase, markdown preview, GM template | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.6.0-beta) |
 | v0.5.0-beta | File explorer tree, git clone, GitHub/GitLab tokens, scroll fix | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.5.0-beta) |
 | v0.4.0-beta | Native --agent, templates, split editor, session resume | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.4.0-beta) |
@@ -252,6 +262,7 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [x] Agent groups within departments (drag-to-reorder)
 - [x] Terminal scroll-to-bottom button (follows system)
 - [x] Project Settings tab (add/remove folders inline)
+- [x] **Multi-agent task orchestration** — Manager/Worker/QA/Critic roles, gate verification, stuck detection, auto-assign
 - [ ] **Multi-agent communication** — PTY injection + filesystem mailbox + shared task list ([plan](docs/agent-comms-plan.md))
 - [ ] **Terminal UI customization** — React overlays on xterm: task cards, diff preview, progress bars, agent messages ([plan](docs/terminal-ui-customization-plan.md))
 - [ ] **Claude Code usage/limit bar** — Estimated 4-hour usage progress bar below terminal (self-count via hooks)

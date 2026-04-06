@@ -84,7 +84,7 @@ function autoAssignNext(workerId: string, projectId: string) {
   // Or find any unassigned pending task
   if (!next) next = allTasks.find(t => !t.owner && t.status === 'pending')
   if (next) {
-    const updated = updateTask(DATA_DIR, projectId, next.id, { status: 'assigned', owner: workerId })
+    const updated = updateTask(DATA_DIR, projectId, next.id, { status: 'assigned', owner: workerId, assignedAt: new Date().toISOString() })
     if (updated) {
       const sent = sendToAgent(workerId, 'TASK', updated)
       dispatchLog('auto-assign', `${updated.id} → ${workerId} (PTY: ${sent})`)
@@ -182,7 +182,8 @@ const statusServer = createServer((req, res) => {
           title: data.title, status: 'pending', owner: null,
           batch: data.batch || 1, depends: data.depends || [],
           scope: data.scope || '.', acceptance: data.acceptance || '',
-          verify: data.verify || [], attempt: 0, blocked_reason: null
+          verify: data.verify || [], attempt: 0, blocked_reason: null,
+          estimatedMinutes: data.estimatedMinutes || null, assignedAt: null
         })
         dispatchLog('task-create', `${task.id}: "${data.title}" in ${projectId}`)
         res.writeHead(200, { 'Content-Type': 'application/json' })
@@ -198,7 +199,7 @@ const statusServer = createServer((req, res) => {
         if (workerBusy) {
           dispatchLog('task-assign', `⛔ REJECTED ${data.taskId} — worker ${data.agentId} busy with ${workerBusy.id}. Will auto-assign when free.`)
         } else {
-          const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId })
+          const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId, assignedAt: new Date().toISOString() })
           if (task) {
             const sent = sendToAgent(data.agentId, 'TASK', task)
             dispatchLog('task-assign', `${task.id} → ${data.agentId} (PTY: ${sent})`)
@@ -909,6 +910,28 @@ app.whenReady().then(() => {
   statusServer.listen(HIVE_PORT, '127.0.0.1', () => {
     console.log(`[Hive] Status server on http://127.0.0.1:${HIVE_PORT}`)
   })
+
+  // Stuck task detection — poll every 60s
+  setInterval(() => {
+    const d = loadData()
+    const tgs = (d.taskGroups || []) as any[]
+    for (const tg of tgs) {
+      const tasks = listTasks(DATA_DIR, tg.projectId)
+      const now = Date.now()
+      for (const task of tasks) {
+        if ((task.status !== 'assigned' && task.status !== 'in_progress') || !task.assignedAt) continue
+        const elapsed = (now - new Date(task.assignedAt).getTime()) / 60000
+        const limit = task.estimatedMinutes || 10 // default 10 min
+        if (elapsed > limit) {
+          dispatchLog('stuck', `⏰ ${task.id} "${task.title}" exceeded ${limit}m (${Math.round(elapsed)}m elapsed, worker: ${task.owner})`)
+          sendToAgent(task.owner!, 'MSG', { ping: task.id, message: `Task ${task.id} exceeded estimated time (${limit}m). Status?` })
+          notifyHuman('Task Stuck', `${task.id} "${task.title}" — ${Math.round(elapsed)}m elapsed (est. ${limit}m). Worker: ${task.owner}`)
+          // Bump assignedAt to avoid re-notifying every 60s — next alert in another estimatedMinutes cycle
+          updateTask(DATA_DIR, tg.projectId, task.id, { assignedAt: new Date().toISOString() })
+        }
+      }
+    }
+  }, 60000)
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })

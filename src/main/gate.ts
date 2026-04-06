@@ -23,24 +23,7 @@ function runCmd(cmd: string, cwd: string, timeout = 120000): { ok: boolean; outp
 export async function runGate(cwd: string, task: { scope: string; verify: string[] }): Promise<GateResult> {
   const failures: GateFailure[] = []
 
-  // ① Build (only if package.json exists)
-  const hasPackageJson = runCmd('test -f package.json', cwd)
-  if (hasPackageJson.ok) {
-    const build = runCmd('npm run build', cwd)
-    if (!build.ok) {
-      failures.push({ step: 'build', detail: build.output.slice(0, 500) })
-      return { pass: false, failures }
-    }
-
-    // ② Test
-    const test = runCmd('npm test', cwd)
-    if (!test.ok) {
-      failures.push({ step: 'test', detail: test.output.slice(0, 500) })
-      return { pass: false, failures }
-    }
-  }
-
-  // ③ Scope check
+  // ① Scope check (build/test is QA's responsibility, not worker gate)
   if (task.scope && task.scope !== '.') {
     const diff = runCmd('git diff --name-only origin/main...HEAD', cwd)
     if (diff.ok && diff.output) {
@@ -52,7 +35,7 @@ export async function runGate(cwd: string, task: { scope: string; verify: string
     }
   }
 
-  // ④ Contract verify
+  // ② Contract verify
   for (const cmd of task.verify) {
     const result = runCmd(cmd, cwd, 30000)
     if (!result.ok) {

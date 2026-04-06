@@ -13,6 +13,11 @@ describe('getManagerSoulAddendum', () => {
     expect(soul).toContain('task-assign task-001 WORKER_1_ID')
   })
 
+  it('contains estimatedMinutes in task-create', () => {
+    const soul = getManagerSoulAddendum({ todoSource: 'todo.md' })
+    expect(soul).toContain('estimatedMinutes')
+  })
+
   it('contains HIVE message recognition', () => {
     const soul = getManagerSoulAddendum({ todoSource: 'todo.md' })
     expect(soul).toContain('[HIVE:HUMAN]')
@@ -66,8 +71,7 @@ describe('getCriticSoulAddendum', () => {
   it('contains delivery protocol steps', () => {
     const soul = getCriticSoulAddendum()
     expect(soul).toContain('Rebase')
-    expect(soul).toContain('Independent Gate')
-    expect(soul).toContain('Test Report')
+    expect(soul).toContain('QA Report')
     expect(soul).toContain('PR Review')
     expect(soul).toContain('Create PR')
   })
@@ -77,10 +81,10 @@ describe('getCriticSoulAddendum', () => {
     expect(soul).toContain('/review')
   })
 
-  it('requires test report before PR', () => {
+  it('requires QA report before PR', () => {
     const soul = getCriticSoulAddendum()
     expect(soul).toContain('REFUSE to proceed')
-    expect(soul).toContain('No test report = no PR')
+    expect(soul).toContain('No QA report = no PR')
   })
 
   it('contains gh pr create', () => {

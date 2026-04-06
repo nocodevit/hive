@@ -17,7 +17,9 @@ const baseTask: Omit<TaskData, 'id'> = {
   acceptance: 'tests pass',
   verify: ['npm test'],
   attempt: 0,
-  blocked_reason: null
+  blocked_reason: null,
+  estimatedMinutes: null,
+  assignedAt: null
 }
 
 beforeEach(() => {
