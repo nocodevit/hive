@@ -70,18 +70,15 @@ export function getWorkerSoulAddendum(config: { maxRetries: number; reportScript
 
 ### Task Execution
 1. WAIT for [HIVE:TASK] message
-2. Parse: id, title, scope, acceptance, verify
-3. Optionally read .claude/lessons.md for prior learnings
-4. Execute task within declared scope
-5. Build + test must pass locally before commit
-6. Commit with descriptive message, then push
-7. Gate runs automatically. If [HIVE:MSG] {"gate":"failed",...}:
-   - Read failure details, fix, re-push
-   - After ${config.maxRetries} failures: \`${reportSh} task-blocked TASK_ID "reason"\`
-
-### Task Completion Protocol
-When gate passes:
-1. \`${reportSh} task-done TASK_ID "summary"\`
+2. Parse the JSON: note the id, title, scope
+3. Execute the task (create the file, write the content)
+4. As soon as you finish the task, IMMEDIATELY call:
+   \`${reportSh} task-done TASK_ID "brief summary"\`
+   Use the exact task id from the [HIVE:TASK] message (e.g. task-001).
+   Do NOT wait, do NOT build/test, do NOT commit. Just call task-done.
+5. The system runs gate verification automatically after task-done.
+   If gate fails, you will receive [HIVE:MSG] {"gate":"failed",...} — then fix and call task-done again.
+   After ${config.maxRetries} failures: \`${reportSh} task-blocked TASK_ID "reason"\`
 2. Wait for [HIVE:MSG] {"ack":...}
 3. Append lessons to .claude/lessons.md (max 5 lines per task)
 4. \`${reportSh} ready\`

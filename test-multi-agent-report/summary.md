@@ -1,71 +1,71 @@
-12:58:28 # Integration Test (3 tasks)
+13:42:52 # Integration Test (3 tasks)
 
-12:58:28 Isolated data dir: /var/folders/pv/f5m189_n64ldtzhcz3z4m42m0000gn/T/hive-integration-test
-12:58:36 Baseline: 10 projects, 17 agents
-12:58:39 Created [TEST] Manager
-12:58:42 Created [TEST] Worker-1
-12:58:45 Created [TEST] Worker-2
-12:58:47 Created [TEST] QA
-12:58:50 Created [TEST] Critic
-12:58:53 Task group created
-12:58:56 Manager terminal opened
-12:58:59 Worker-1 terminal opened (before Manager instruction)
-12:59:03 Worker-2 terminal opened (before Manager instruction)
-12:59:04 Manager ID: agent-1775393919441
-12:59:19 Sent direct instruction to manager
-12:59:30 [10s] task-status: 0 tasks
-12:59:43 [23s] task-status: 0 tasks
-12:59:44 ✅ Clicked Approve — now waiting for Manager to create tasks
-12:59:56 [post-approve 10s] tasks: 1
-12:59:56 1 tasks exist after approve — checking assign...
-13:00:07 [post-approve 20s] tasks: 8
-13:00:07 8 tasks exist after approve — checking assign...
-13:00:17 [post-approve 30s] tasks: 8
-13:00:17 8 tasks exist after approve — checking assign...
-13:00:17 ✅ 2/8 tasks assigned!
-13:00:17 Proposal found: true
-13:00:20 Worker-1 started
-13:00:23 Worker-2 started
-13:00:55 [30s] Workers: 0/8 done, 0 blocked
-13:01:27 [62s] Workers: 0/8 done, 0 blocked
-13:01:58 [93s] Workers: 0/8 done, 0 blocked
-13:02:30 [125s] Workers: 0/8 done, 0 blocked
-13:03:02 [157s] Workers: 0/8 done, 0 blocked
-13:03:34 [189s] Workers: 0/8 done, 0 blocked
-13:04:05 [220s] Workers: 0/8 done, 0 blocked
-13:04:37 [252s] Workers: 0/8 done, 0 blocked
-13:05:09 [284s] Workers: 0/8 done, 0 blocked
-13:05:40 [316s] Workers: 0/8 done, 0 blocked
-13:06:12 [347s] Workers: 0/8 done, 0 blocked
-13:06:44 [379s] Workers: 0/8 done, 0 blocked
-13:07:16 [411s] Workers: 0/8 done, 0 blocked
-13:07:47 [442s] Workers: 0/8 done, 0 blocked
-13:08:19 [474s] Workers: 0/8 done, 0 blocked
-13:08:51 [506s] Workers: 0/8 done, 0 blocked
-13:09:23 [538s] Workers: 0/8 done, 0 blocked
-13:09:54 [569s] Workers: 0/8 done, 0 blocked
-13:10:26 [601s] Workers: 0/8 done, 0 blocked
-13:10:58 [633s] Workers: 0/8 done, 0 blocked
-13:11:29 [665s] Workers: 0/8 done, 0 blocked
-13:12:01 [696s] Workers: 0/8 done, 0 blocked
-13:12:33 [728s] Workers: 0/8 done, 0 blocked
-13:13:05 [760s] Workers: 0/8 done, 0 blocked
-13:13:36 [791s] Workers: 0/8 done, 0 blocked
-13:14:08 [823s] Workers: 0/8 done, 0 blocked
-13:14:40 [855s] Workers: 0/8 done, 0 blocked
-13:15:12 [887s] Workers: 0/8 done, 0 blocked
-13:15:43 [918s] Workers: 0/8 done, 0 blocked
-13:16:15 [950s] Workers: 0/8 done, 0 blocked
-13:16:15 Workers complete: false
-13:16:19 QA started
-13:17:23 Critic started
-13:18:25 Test complete
-13:18:25 
+13:42:52 Isolated data dir: /var/folders/pv/f5m189_n64ldtzhcz3z4m42m0000gn/T/hive-integration-test
+13:42:59 Baseline: 10 projects, 17 agents
+13:43:03 Created [TEST] Manager
+13:43:06 Created [TEST] Worker-1
+13:43:08 Created [TEST] Worker-2
+13:43:11 Created [TEST] QA
+13:43:13 Created [TEST] Critic
+13:43:16 Task group created
+13:43:19 Manager terminal opened
+13:43:23 Worker-1 terminal opened (before Manager instruction)
+13:43:27 Worker-2 terminal opened (before Manager instruction)
+13:43:28 Manager ID: agent-1775396583357
+13:43:43 Sent direct instruction to manager
+13:43:53 [10s] task-status: 0 tasks
+13:44:07 [23s] task-status: 0 tasks
+13:44:09 ✅ Clicked Approve — now waiting for Manager to create tasks
+13:44:21 [post-approve 10s] tasks: 3
+13:44:21 3 tasks exist after approve — checking assign...
+13:44:31 [post-approve 20s] tasks: 8
+13:44:31 8 tasks exist after approve — checking assign...
+13:44:41 [post-approve 30s] tasks: 8
+13:44:41 8 tasks exist after approve — checking assign...
+13:44:41 ✅ 2/8 tasks assigned!
+13:44:42 Proposal found: true
+13:44:45 Worker-1 started
+13:44:48 Worker-2 started
+13:45:20 [30s] Workers: 0/8 done, 0 blocked
+13:45:51 [62s] Workers: 0/8 done, 0 blocked
+13:46:23 [93s] Workers: 0/8 done, 0 blocked
+13:46:55 [125s] Workers: 0/8 done, 0 blocked
+13:47:27 [157s] Workers: 0/8 done, 0 blocked
+13:47:58 [189s] Workers: 0/8 done, 0 blocked
+13:48:30 [220s] Workers: 0/8 done, 0 blocked
+13:49:02 [252s] Workers: 0/8 done, 0 blocked
+13:49:34 [284s] Workers: 0/8 done, 0 blocked
+13:50:05 [316s] Workers: 0/8 done, 0 blocked
+13:50:37 [347s] Workers: 0/8 done, 0 blocked
+13:51:09 [379s] Workers: 0/8 done, 0 blocked
+13:51:40 [411s] Workers: 0/8 done, 0 blocked
+13:52:12 [443s] Workers: 0/8 done, 0 blocked
+13:52:44 [474s] Workers: 0/8 done, 0 blocked
+13:53:16 [506s] Workers: 0/8 done, 0 blocked
+13:53:47 [538s] Workers: 0/8 done, 0 blocked
+13:54:19 [570s] Workers: 0/8 done, 0 blocked
+13:54:51 [601s] Workers: 0/8 done, 0 blocked
+13:55:23 [633s] Workers: 0/8 done, 0 blocked
+13:55:54 [665s] Workers: 0/8 done, 0 blocked
+13:56:26 [697s] Workers: 0/8 done, 0 blocked
+13:56:58 [728s] Workers: 0/8 done, 0 blocked
+13:57:30 [760s] Workers: 0/8 done, 0 blocked
+13:58:01 [792s] Workers: 0/8 done, 0 blocked
+13:58:33 [823s] Workers: 0/8 done, 0 blocked
+13:59:05 [855s] Workers: 0/8 done, 0 blocked
+13:59:37 [887s] Workers: 0/8 done, 0 blocked
+14:00:08 [919s] Workers: 0/8 done, 0 blocked
+14:00:40 [950s] Workers: 0/8 done, 0 blocked
+14:00:40 Workers complete: false
+14:00:44 QA started
+14:01:48 Critic started
+14:02:49 Test complete
+14:02:49 
 --- TEARDOWN ---
-13:18:27 Dissolved task group
-13:18:28 Deleted: [TEST] Manager
-13:18:30 Deleted: [TEST] Worker-1
-13:18:31 Deleted: [TEST] Worker-2
-13:18:32 Deleted: [TEST] QA
-13:18:33 Deleted: [TEST] Critic
-13:18:33 Final: 10 projects, 17 agents
+14:02:52 Dissolved task group
+14:02:53 Deleted: [TEST] Manager
+14:02:53 Deleted: [TEST] Worker-1
+14:02:54 Deleted: [TEST] Worker-2
+14:02:55 Deleted: [TEST] QA
+14:02:56 Deleted: [TEST] Critic
+14:02:56 Final: 10 projects, 17 agents
