@@ -14,6 +14,8 @@ export interface TaskData {
   verify: string[]
   attempt: number
   blocked_reason: string | null
+  estimatedMinutes: number | null
+  assignedAt: string | null
 }
 
 // dataDir = ~/.hive or /tmp/hive-test (set by HIVE_DATA_DIR env)

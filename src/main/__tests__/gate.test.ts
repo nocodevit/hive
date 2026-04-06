@@ -22,26 +22,6 @@ describe('runGate', () => {
     expect(result.failures).toEqual([])
   })
 
-  it('fails on build error', async () => {
-    mockExec.mockImplementation((cmd: any) => {
-      if (typeof cmd === 'string' && cmd.includes('npm run build')) throw new Error('build failed')
-      return ''
-    })
-    const result = await runGate('/test', { scope: '.', verify: [] })
-    expect(result.pass).toBe(false)
-    expect(result.failures[0].step).toBe('build')
-  })
-
-  it('fails on test error', async () => {
-    mockExec.mockImplementation((cmd: any) => {
-      if (typeof cmd === 'string' && cmd.includes('npm test')) throw new Error('test failed')
-      return ''
-    })
-    const result = await runGate('/test', { scope: '.', verify: [] })
-    expect(result.pass).toBe(false)
-    expect(result.failures[0].step).toBe('test')
-  })
-
   it('detects scope violation', async () => {
     mockExec.mockImplementation((cmd: any) => {
       if (typeof cmd === 'string' && cmd.includes('git diff')) return 'src/main/auth.ts\nsrc/renderer/App.tsx' as any
@@ -83,35 +63,6 @@ describe('runGate', () => {
     expect(result.failures[1].step).toBe('verify')
   })
 
-  it('captures stderr from exec error', async () => {
-    mockExec.mockImplementation((cmd: any) => {
-      if (typeof cmd === 'string' && cmd.includes('npm run build')) {
-        const err: any = new Error('fail')
-        err.stderr = 'STDERR: compilation error at line 42'
-        throw err
-      }
-      return ''
-    })
-    const result = await runGate('/test', { scope: '.', verify: [] })
-    expect(result.pass).toBe(false)
-    expect(result.failures[0].detail).toContain('STDERR')
-  })
-
-  it('captures stdout from exec error when no stderr', async () => {
-    mockExec.mockImplementation((cmd: any) => {
-      if (typeof cmd === 'string' && cmd.includes('npm run build')) {
-        const err: any = new Error('fail')
-        err.stdout = 'STDOUT: some output'
-        err.stderr = ''
-        throw err
-      }
-      return ''
-    })
-    const result = await runGate('/test', { scope: '.', verify: [] })
-    expect(result.pass).toBe(false)
-    expect(result.failures[0].detail).toContain('STDOUT')
-  })
-
   it('passes scope check when diff returns empty', async () => {
     mockExec.mockImplementation((cmd: any) => {
       if (typeof cmd === 'string' && cmd.includes('git diff')) return '' as any
@@ -127,7 +78,6 @@ describe('runGate', () => {
       return ''
     })
     const result = await runGate('/test', { scope: 'src/', verify: [] })
-    // diff fail = can't check scope, but doesn't block gate
     expect(result.pass).toBe(true)
   })
 

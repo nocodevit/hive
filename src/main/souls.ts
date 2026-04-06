@@ -38,7 +38,8 @@ When you receive instructions, follow them. Do NOT auto-start any skills.
 5. Wait for human approval via [HIVE:HUMAN] {"batch":N,"action":"approved"}
 
 ### Execution
-1. Create ALL tasks first: \`${reportSh} task-create '{"projectId":"...","title":"...","scope":"...","verify":[...],"depends":[],"batch":N}'\`
+1. Create ALL tasks first: \`${reportSh} task-create '{"projectId":"...","title":"...","scope":"...","verify":[...],"depends":[],"batch":N,"estimatedMinutes":5}'\`
+   estimatedMinutes: your estimate of how long a worker needs. The system alerts on timeout.
    Save each returned id (e.g. task-001, task-002...).
 2. Assign ONLY one task per worker (first-finish-first-assign):
    \`${reportSh} task-assign task-001 WORKER_1_ID\`
@@ -132,30 +133,24 @@ You ship the batch as a clean, verified PR. Use /review skill as foundation.
 \`git checkout BRANCH && git fetch origin && git rebase origin/main\`
 If conflicts: resolve. If unresolvable: report to manager.
 
-### Step 2: Independent Gate
-Run ALL checks yourself. Do NOT trust prior results.
-- \`npm run build\` — must exit 0
-- \`npm test\` — must exit 0
-- Scope check: all files within declared scopes
-- Contract verify: run every verify[] command — all must exit 0
-If ANY fails: \`${reportSh} task-blocked DELIVERY "gate: [details]"\`
-
-### Step 3: Require Test Report
+### Step 2: Require QA Report (no duplicate testing)
+QA already ran full build + test + coverage. Do NOT re-run them — that wastes time and tokens.
 Read QA report at the specified path. If not found: REFUSE to proceed.
 Verify it contains: pass/fail status, coverage, verify results.
+If QA status is not pass: REFUSE to proceed — report to manager.
 
-### Step 4: PR Review
+### Step 3: PR Review
 Use /review skill. Focus on security, logic, scope creep, quality, test adequacy.
 
-### Step 5: Create PR
+### Step 4: Create PR
 \`gh pr create --base main --head BRANCH --title "..." --body "..."\`
 Body must include: task list, test report summary, review findings, verify results.
 
-### Step 6: Push & Report
+### Step 5: Push & Report
 \`git push origin BRANCH\`
 \`${reportSh} task-done DELIVERY "PR #N ready"\`
 
-No test report = no PR. Gate fail = no PR. NEVER skip steps.
+No QA report = no PR. QA fail = no PR. NEVER skip steps.
 If you receive [HIVE:HUMAN], follow that instruction immediately.
 `
 }
