@@ -76,7 +76,7 @@ export default function EditTemplateModal({ open, template, agents, availableSki
       <div className="space-y-4 max-h-[70vh] overflow-y-auto">
         {/* Name */}
         <div>
-          <label className="block text-[10px] text-text-muted uppercase mb-1">Template Name</label>
+          <label className="block text-[11px] text-text-muted uppercase mb-1">Template Name</label>
           <input type="text" value={name} onChange={e => setName(e.target.value)}
             className="w-full px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm focus:outline-none focus:border-accent" />
         </div>
@@ -99,7 +99,7 @@ export default function EditTemplateModal({ open, template, agents, availableSki
         {/* Sections */}
         {sections.map((sec, i) => (
           <div key={i}>
-            <label className="block text-[10px] text-text-muted uppercase mb-1">
+            <label className="block text-[11px] text-text-muted uppercase mb-1">
               {sec.title} <span className="normal-case text-text-muted/50">— {sec.hint}</span>
             </label>
             <textarea value={sec.content} onChange={e => updateSection(i, e.target.value)}
@@ -110,12 +110,12 @@ export default function EditTemplateModal({ open, template, agents, availableSki
 
         {/* Skills */}
         <div>
-          <label className="block text-[10px] text-text-muted uppercase mb-1">Default Skills</label>
+          <label className="block text-[11px] text-text-muted uppercase mb-1">Default Skills</label>
           <div className="flex flex-wrap gap-1">
             {availableSkills.map(s => (
               <button key={s.name}
                 onClick={() => setSkills(prev => prev.includes(s.name) ? prev.filter(x => x !== s.name) : [...prev, s.name])}
-                className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${skills.includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
+                className={`px-2 py-0.5 rounded-full text-[11px] cursor-pointer ${skills.includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
               >/{s.name}</button>
             ))}
           </div>
@@ -124,14 +124,14 @@ export default function EditTemplateModal({ open, template, agents, availableSki
         {/* Model + Effort */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-[10px] text-text-muted uppercase mb-1">Model</label>
+            <label className="block text-[11px] text-text-muted uppercase mb-1">Model</label>
             <select value={model} onChange={e => setModel(e.target.value)}
               className="w-full px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm cursor-pointer focus:outline-none focus:border-accent">
               <option value="inherit">Inherit</option><option value="opus">Opus</option><option value="sonnet">Sonnet</option><option value="haiku">Haiku</option>
             </select>
           </div>
           <div>
-            <label className="block text-[10px] text-text-muted uppercase mb-1">Effort</label>
+            <label className="block text-[11px] text-text-muted uppercase mb-1">Effort</label>
             <select value={effort} onChange={e => setEffort(e.target.value)}
               className="w-full px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm cursor-pointer focus:outline-none focus:border-accent">
               <option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option><option value="max">Max</option>
@@ -141,11 +141,11 @@ export default function EditTemplateModal({ open, template, agents, availableSki
 
         {/* Preview */}
         <div>
-          <label className="block text-[10px] text-text-muted uppercase mb-1">Preview</label>
+          <label className="block text-[11px] text-text-muted uppercase mb-1">Preview</label>
           <div className="px-3 py-2 rounded-lg bg-bg-primary border border-border max-h-32 overflow-y-auto prose prose-sm prose-invert max-w-none
             [&_h2]:text-xs [&_h2]:text-accent [&_h2]:mt-2 [&_h2]:mb-1
-            [&_p]:text-[11px] [&_p]:text-text-secondary [&_p]:my-1
-            [&_li]:text-[11px] [&_li]:text-text-secondary">
+            [&_p]:text-[12px] [&_p]:text-text-secondary [&_p]:my-1
+            [&_li]:text-[12px] [&_li]:text-text-secondary">
             <Markdown>{preview}</Markdown>
           </div>
         </div>
@@ -153,7 +153,7 @@ export default function EditTemplateModal({ open, template, agents, availableSki
         {/* Save buttons */}
         <div className="pt-2 border-t border-border space-y-2">
           {inheritingAgents.length > 0 && (
-            <p className="text-[11px] text-text-muted">
+            <p className="text-[12px] text-text-muted">
               {inheritingAgents.length} agent{inheritingAgents.length > 1 ? 's' : ''} using this role: {inheritingAgents.map(a => a.name).join(', ')}
             </p>
           )}

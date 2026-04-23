@@ -2,93 +2,72 @@ import { describe, it, expect } from 'vitest'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from '../souls'
 
 describe('getManagerSoulAddendum', () => {
-  it('contains batch proposal instructions', () => {
+  it('contains batch proposal and task-assign', () => {
     const soul = getManagerSoulAddendum({ todoSource: 'docs/todo.md' })
     expect(soul).toContain('batch-propose')
-    expect(soul).toContain('docs/todo.md')
-  })
-
-  it('contains task-assign command', () => {
-    const soul = getManagerSoulAddendum({ todoSource: 'todo.md' })
-    expect(soul).toContain('task-assign task-001 WORKER_1_ID')
-  })
-
-  it('contains estimatedMinutes in task-create', () => {
-    const soul = getManagerSoulAddendum({ todoSource: 'todo.md' })
+    expect(soul).toContain('task-assign')
     expect(soul).toContain('estimatedMinutes')
   })
 
-  it('contains HIVE message recognition', () => {
+  it('contains QA loop and HIVE messages', () => {
     const soul = getManagerSoulAddendum({ todoSource: 'todo.md' })
     expect(soul).toContain('[HIVE:HUMAN]')
-    expect(soul).toContain('[HIVE:MSG]')
+    expect(soul).toContain('QA Failure Loop')
+    expect(soul).toContain('3 rounds')
+    expect(soul).toContain('report-human')
+  })
+
+  it('contains task-abandon with required reason', () => {
+    const soul = getManagerSoulAddendum({ todoSource: 'todo.md' })
+    expect(soul).toContain('task-abandon')
+    expect(soul).toContain('reason required')
   })
 })
 
 describe('getWorkerSoulAddendum', () => {
-  it('contains /clear protocol', () => {
-    const soul = getWorkerSoulAddendum({ maxRetries: 3 })
-    expect(soul).toContain('/clear')
-    expect(soul).toContain('lessons.md')
-  })
-
-  it('contains HIVE:TASK recognition', () => {
+  it('contains task-done and verify flow', () => {
     const soul = getWorkerSoulAddendum({ maxRetries: 3 })
     expect(soul).toContain('[HIVE:TASK]')
+    expect(soul).toContain('verify[]')
+    expect(soul).toContain('task-done TASK_ID')
+    expect(soul).toContain('task-blocked TASK_ID')
+    expect(soul).toContain('/clear')
   })
 
   it('includes max retries value', () => {
     const soul = getWorkerSoulAddendum({ maxRetries: 5 })
-    expect(soul).toContain('5 failures')
-  })
-
-  it('contains task-done and task-blocked commands', () => {
-    const soul = getWorkerSoulAddendum({ maxRetries: 3 })
-    expect(soul).toContain('task-done TASK_ID')
-    expect(soul).toContain('task-blocked TASK_ID')
+    expect(soul).toContain('5 attempts')
   })
 })
 
 describe('getQaSoulAddendum', () => {
-  it('contains test report instructions', () => {
+  it('contains merge and test steps', () => {
     const soul = getQaSoulAddendum()
-    expect(soul).toContain('test report')
-    expect(soul).toContain('coverage')
-  })
-
-  it('contains verify instructions', () => {
-    const soul = getQaSoulAddendum()
+    expect(soul).toContain('workerBranches')
+    expect(soul).toContain('git merge --no-edit')
+    expect(soul).toContain('merge conflict')
+    expect(soul).toContain('npm test')
     expect(soul).toContain('verify[]')
   })
 
-  it('specifies never fix code', () => {
+  it('never fixes code', () => {
     const soul = getQaSoulAddendum()
     expect(soul).toContain('NEVER fix code')
   })
 })
 
 describe('getCriticSoulAddendum', () => {
-  it('contains delivery protocol steps', () => {
+  it('contains delivery flow', () => {
     const soul = getCriticSoulAddendum()
     expect(soul).toContain('Rebase')
-    expect(soul).toContain('QA Report')
-    expect(soul).toContain('PR Review')
-    expect(soul).toContain('Create PR')
-  })
-
-  it('references /review skill', () => {
-    const soul = getCriticSoulAddendum()
+    expect(soul).toContain('QA report')
     expect(soul).toContain('/review')
-  })
-
-  it('requires QA report before PR', () => {
-    const soul = getCriticSoulAddendum()
-    expect(soul).toContain('REFUSE to proceed')
-    expect(soul).toContain('No QA report = no PR')
-  })
-
-  it('contains gh pr create', () => {
-    const soul = getCriticSoulAddendum()
     expect(soul).toContain('gh pr create')
+  })
+
+  it('refuses without QA report', () => {
+    const soul = getCriticSoulAddendum()
+    expect(soul).toContain('REFUSE')
+    expect(soul).toContain('No QA report = no PR')
   })
 })

@@ -212,7 +212,10 @@ export function generateHookSettings(agentId: string, port: number): Record<stri
 }
 
 // Generate report script content
-export function generateReportScript(agentId: string, port: number): string {
+// dataDir: absolute path to this Hive instance's data dir (default: ~/.hive, dev: /tmp/hive-dev)
+export function generateReportScript(agentId: string, port: number, dataDir?: string, targetBranch?: string): string {
+  const branch = targetBranch || 'staging'
+  const lockPath = dataDir ? `${dataDir}/port.lock` : '$HOME/.hive/port.lock'
   return `#!/bin/bash
 # Report task progress to Hive
 # Usage:
@@ -231,62 +234,114 @@ export function generateReportScript(agentId: string, port: number): string {
 ACTION="$1"
 MSG="$2"
 AGENT="${agentId}"
-PORT=${port}
+LOCK_FILE="${lockPath}"
+if [ -f "$LOCK_FILE" ]; then
+  PORT=$(head -1 "$LOCK_FILE")
+else
+  PORT=${port}
+fi
+
+CMD="curl -s -w \\"\\n%{http_code}\\" -X POST http://127.0.0.1:$PORT"
+HDR="-H \\"Content-Type: application/json\\""
 
 case "$ACTION" in
-  start)
-    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_start\\",\\"title\\":\\"$MSG\\"}" > /dev/null 2>&1
-    ;;
-  done)
-    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_done\\",\\"summary\\":\\"$MSG\\"}" > /dev/null 2>&1
-    ;;
-  todo)
-    curl -s -X POST http://127.0.0.1:$PORT/report -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"todo\\",$(echo $MSG | sed 's/^{//')}" > /dev/null 2>&1
-    ;;
+  # === Task Management ===
   task-create)
-    # Inject agentId so server can resolve projectId from task group
     PAYLOAD=$(echo "$MSG" | sed "s/^{/{\\"agentId\\":\\"$AGENT\\",/")
-    curl -s -X POST http://127.0.0.1:$PORT/task-create -H "Content-Type: application/json" \\
-      -d "$PAYLOAD"
+    $CMD/task-create $HDR -d "$PAYLOAD"
     ;;
   task-assign)
-    TASK_ID="$2"
-    TARGET="$3"
-    curl -s -X POST http://127.0.0.1:$PORT/task-assign -H "Content-Type: application/json" \\
-      -d "{\\"projectId\\":\\"\\",\\"taskId\\":\\"$TASK_ID\\",\\"agentId\\":\\"$TARGET\\"}" > /dev/null 2>&1
+    TASK_ID="$2"; TARGET="$3"
+    RESULT=$($CMD/task-assign $HDR -d "{\\"projectId\\":\\"\\",\\"taskId\\":\\"$TASK_ID\\",\\"agentId\\":\\"$TARGET\\"}")
+    HTTP_CODE=$(echo "$RESULT" | tail -1)
+    BODY=$(echo "$RESULT" | sed '$d')
+    echo "$BODY"
+    if [ "$HTTP_CODE" != "200" ]; then
+      echo "ERROR: task-assign failed (HTTP $HTTP_CODE)" >&2
+      exit 1
+    fi
     ;;
   task-done)
-    TASK_ID="$2"
-    SUMMARY="$3"
-    curl -s -X POST http://127.0.0.1:$PORT/task-done -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\",\\"taskId\\":\\"$TASK_ID\\",\\"summary\\":\\"$SUMMARY\\"}" > /dev/null 2>&1
+    TASK_ID="$2"; SUMMARY="$3"
+    # Git: commit + rebase + push with retry
+    git add -A 2>/dev/null
+    git diff --cached --quiet 2>/dev/null || git commit -m "task $TASK_ID: $SUMMARY" 2>/dev/null
+    PUSH_OK=false
+    for ATTEMPT in 1 2 3; do
+      git fetch origin 2>/dev/null
+      if git rev-parse --verify origin/${branch} >/dev/null 2>&1; then
+        if ! git rebase origin/${branch} 2>/dev/null; then
+          git rebase --abort 2>/dev/null
+          if [ "$ATTEMPT" -lt 3 ]; then sleep 3; continue; fi
+          echo "{\\"ok\\":false,\\"error\\":\\"rebase conflict on ${branch} after 3 attempts\\",\\"code\\":\\"REBASE_CONFLICT\\"}"
+          exit 1
+        fi
+      fi
+      if git push --force-with-lease 2>/dev/null; then
+        PUSH_OK=true; break
+      fi
+      if [ "$ATTEMPT" -lt 3 ]; then sleep 3; fi
+    done
+    if [ "$PUSH_OK" = false ]; then
+      echo "{\\"ok\\":false,\\"error\\":\\"git push failed after 3 attempts\\",\\"code\\":\\"PUSH_FAILED\\"}"
+      exit 1
+    fi
+    # Retry curl to dispatcher
+    for ATTEMPT in 1 2 3; do
+      RESULT=$($CMD/task-done $HDR -d "{\\"agentId\\":\\"$AGENT\\",\\"taskId\\":\\"$TASK_ID\\",\\"summary\\":\\"$SUMMARY\\"}")
+      if [ -n "$RESULT" ]; then echo "$RESULT"; break; fi
+      if [ "$ATTEMPT" -lt 3 ]; then sleep 2; fi
+    done
     ;;
   task-blocked)
-    TASK_ID="$2"
-    REASON="$3"
-    curl -s -X POST http://127.0.0.1:$PORT/task-blocked -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\",\\"taskId\\":\\"$TASK_ID\\",\\"reason\\":\\"$REASON\\"}" > /dev/null 2>&1
+    TASK_ID="$2"; REASON="$3"
+    $CMD/task-blocked $HDR -d "{\\"agentId\\":\\"$AGENT\\",\\"taskId\\":\\"$TASK_ID\\",\\"reason\\":\\"$REASON\\"}"
     ;;
+  task-abandon)
+    TASK_ID="$2"; REASON="$3"
+    RESULT=$($CMD/task-abandon $HDR -d "{\\"agentId\\":\\"$AGENT\\",\\"taskId\\":\\"$TASK_ID\\",\\"reason\\":\\"$REASON\\"}")
+    HTTP_CODE=$(echo "$RESULT" | tail -1)
+    BODY=$(echo "$RESULT" | sed '$d')
+    echo "$BODY"
+    if [ "$HTTP_CODE" != "200" ]; then
+      echo "ERROR: task-abandon failed (HTTP $HTTP_CODE)" >&2
+      exit 1
+    fi
+    ;;
+
+  # === Query ===
   task-status)
-    curl -s -X POST http://127.0.0.1:$PORT/task-status -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\"}"
+    $CMD/task-status $HDR -d "{\\"agentId\\":\\"$AGENT\\"}"
     ;;
-  ready)
-    curl -s -X POST http://127.0.0.1:$PORT/ready -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\"}" > /dev/null 2>&1
+
+  # === Batch ===
+  batch-propose)
+    PAYLOAD=$(echo "$MSG" | sed "s/^{/{\\"agentId\\":\\"$AGENT\\",/")
+    $CMD/batch-propose $HDR -d "$PAYLOAD"
+    ;;
+
+  # === Reporting ===
+  start)
+    $CMD/report $HDR -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_start\\",\\"title\\":\\"$MSG\\"}"
+    ;;
+  done)
+    $CMD/report $HDR -d "{\\"agentId\\":\\"$AGENT\\",\\"type\\":\\"task_done\\",\\"summary\\":\\"$MSG\\"}"
     ;;
   report-human)
-    curl -s -X POST http://127.0.0.1:$PORT/report-human -H "Content-Type: application/json" \\
-      -d "{\\"agentId\\":\\"$AGENT\\",\\"message\\":\\"$MSG\\"}" > /dev/null 2>&1
+    $CMD/report-human $HDR -d "{\\"agentId\\":\\"$AGENT\\",\\"message\\":\\"$MSG\\"}"
     ;;
-  batch-propose)
-    # Inject agentId into the JSON payload
-    PAYLOAD=$(echo "$MSG" | sed "s/^{/{\\"agentId\\":\\"$AGENT\\",/")
-    curl -s -X POST http://127.0.0.1:$PORT/batch-propose -H "Content-Type: application/json" \\
-      -d "$PAYLOAD" > /dev/null 2>&1
+  ready)
+    $CMD/ready $HDR -d "{\\"agentId\\":\\"$AGENT\\"}"
+    ;;
+
+  # === Inbox (message queue) ===
+  check-inbox)
+    $CMD/check-inbox $HDR -d "{\\"agentId\\":\\"$AGENT\\"}"
+    ;;
+
+  *)
+    echo "{\\"ok\\":false,\\"error\\":\\"unknown command: $ACTION\\"}"
+    exit 1
     ;;
 esac
 `

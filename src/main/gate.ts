@@ -9,6 +9,7 @@ export interface GateFailure {
 export interface GateResult {
   pass: boolean
   failures: GateFailure[]
+  warnings: GateFailure[]
 }
 
 function runCmd(cmd: string, cwd: string, timeout = 120000): { ok: boolean; output: string } {
@@ -22,26 +23,22 @@ function runCmd(cmd: string, cwd: string, timeout = 120000): { ok: boolean; outp
 
 export async function runGate(cwd: string, task: { scope: string; verify: string[] }): Promise<GateResult> {
   const failures: GateFailure[] = []
+  const warnings: GateFailure[] = []
 
-  // ① Scope check (build/test is QA's responsibility, not worker gate)
+  // ① Scope check — warning only. Worker is responsible for self-checking scope.
   if (task.scope && task.scope !== '.') {
     const diff = runCmd('git diff --name-only origin/main...HEAD', cwd)
     if (diff.ok && diff.output) {
       const files = diff.output.split('\n').filter(Boolean)
       const outside = files.filter(f => !f.startsWith(task.scope))
       if (outside.length > 0) {
-        failures.push({ step: 'scope', detail: `Files outside scope "${task.scope}": ${outside.join(', ')}` })
+        warnings.push({ step: 'scope', detail: `Files outside scope "${task.scope}": ${outside.join(', ')}` })
       }
     }
   }
 
-  // ② Contract verify
-  for (const cmd of task.verify) {
-    const result = runCmd(cmd, cwd, 30000)
-    if (!result.ok) {
-      failures.push({ step: 'verify', detail: `"${cmd}" failed: ${result.output.slice(0, 200)}` })
-    }
-  }
+  // ② Contract verify — Worker runs verify[] themselves for full output visibility
+  // Gate only issues scope warnings. Verify is the Worker's responsibility.
 
-  return { pass: failures.length === 0, failures }
+  return { pass: failures.length === 0, failures, warnings }
 }

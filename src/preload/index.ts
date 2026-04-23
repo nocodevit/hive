@@ -25,6 +25,16 @@ const api = {
     load: () => ipcRenderer.invoke('data:load'),
     save: (data: Record<string, unknown>) => ipcRenderer.invoke('data:save', data)
   },
+  tasks: {
+    list: (projectId: string) => ipcRenderer.invoke('tasks:list', { projectId })
+  },
+  dispatcher: {
+    loadLog: () => ipcRenderer.invoke('dispatcher:loadLog') as Promise<any[]>,
+    clearLog: (keepAfter?: string) => ipcRenderer.invoke('dispatcher:clearLog', { keepAfter }) as Promise<any[]>,
+  },
+  inbox: {
+    list: (projectId: string) => ipcRenderer.invoke('inbox:list', { projectId }) as Promise<{ agentId: string; messages: any[] }[]>,
+  },
   fs: {
     hasGit: (path: string) => ipcRenderer.invoke('fs:hasGit', { path }),
     scanFiles: (dirPath: string, limit?: number) => ipcRenderer.invoke('fs:scanFiles', { dirPath, limit }),
@@ -33,6 +43,10 @@ const api = {
     writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:writeFile', { filePath, content }) as Promise<boolean>
   },
   git: {
+    currentBranch: (cwd: string) => ipcRenderer.invoke('git:currentBranch', { cwd }) as Promise<string>,
+    commitHistory: (cwd: string, days: number) => ipcRenderer.invoke('git:commitHistory', { cwd, days }) as Promise<Record<string, number>>,
+    createTargetBranch: (repoPath: string, branch: string) =>
+      ipcRenderer.invoke('git:createTargetBranch', { repoPath, branch }) as Promise<{ ok: boolean; existed?: boolean; error?: string }>,
     worktreeAdd: (repoPath: string, agentId: string, agentName: string) =>
       ipcRenderer.invoke('git:worktreeAdd', { repoPath, agentId, agentName }),
     worktreeRemove: (repoPath: string, worktreePath: string) =>

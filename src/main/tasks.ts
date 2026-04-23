@@ -5,7 +5,7 @@ import type { BrowserWindow } from 'electron'
 export interface TaskData {
   id: string
   title: string
-  status: 'pending' | 'assigned' | 'in_progress' | 'done' | 'blocked'
+  status: 'pending' | 'assigned' | 'in_progress' | 'done' | 'blocked' | 'abandoned'
   owner: string | null
   batch: number
   depends: string[]
@@ -14,6 +14,8 @@ export interface TaskData {
   verify: string[]
   attempt: number
   blocked_reason: string | null
+  abandoned_reason: string | null
+  note: string | null
   estimatedMinutes: number | null
   assignedAt: string | null
 }

@@ -16,6 +16,9 @@ export interface TaskGroupData {
   qaId: string
   criticId: string
   maxGateRetries?: number
+  maxQaLoops?: number
+  dailyReportEnabled?: boolean
+  targetBranch?: string
 }
 
 export interface ProjectData {
