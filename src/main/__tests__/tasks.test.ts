@@ -18,6 +18,8 @@ const baseTask: Omit<TaskData, 'id'> = {
   verify: ['npm test'],
   attempt: 0,
   blocked_reason: null,
+  abandoned_reason: null,
+  note: null,
   estimatedMinutes: null,
   assignedAt: null
 }
@@ -77,6 +79,16 @@ describe('updateTask', () => {
 
   it('returns null for non-existent task', () => {
     expect(updateTask(TEST_HOME, PROJECT_ID, 'task-999', { status: 'done' })).toBeNull()
+  })
+
+  it('supports abandoned status with reason', () => {
+    createTask(TEST_HOME, PROJECT_ID, baseTask)
+    const updated = updateTask(TEST_HOME, PROJECT_ID, 'task-001', {
+      status: 'abandoned',
+      abandoned_reason: 'no longer needed'
+    })
+    expect(updated?.status).toBe('abandoned')
+    expect(updated?.abandoned_reason).toBe('no longer needed')
   })
 
   it('status transition: pending → assigned → in_progress → done', () => {

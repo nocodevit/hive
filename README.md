@@ -88,19 +88,35 @@ Customize each agent's appearance: skin tone, hair style/color, top/bottom style
 Browse and toggle [GStack](https://github.com/garrytan/gstack) skills per agent. Expand any skill to read the full SKILL.md content. Skills auto-linked to agent's working directory.
 
 ### Project Dashboard
-- **Glassmorphism todo cards** — R&D and Admin todos scanned from project markdown files
+![Dashboard with analytics, commit density, and agent work time](docs/screenshot-dashboard-v2.png)
+*Unified todo list, task group stats, 7-day commit density per agent, and agent work time tracking.*
+
+- **Unified todo list** — All todos in one scannable table with zone tags (R&D / Admin / Ops)
 - **Agent kanban** — Working / Waiting / Idle columns with avatars and task titles
 - **Project status** — Auto-detected: Active Online, Active, Incubating, Early Stage
-- **Project Settings** — Add/remove R&D and Non-R&D folders inline
+- **Project drag-and-drop** — Reorder projects by dragging in the sidebar
+- **Right-click context menu** — (Re)start all agents in a project
 
 ### Task Group Orchestration
-Coordinate multiple agents on a shared task list with Manager/Worker/QA/Critic roles:
-- **Manager** reads a todo.md, groups tasks into batches, proposes for human approval, assigns to workers
-- **Workers** execute tasks in parallel; gate verification runs only task-specific `verify[]` commands (scope check + contract) — no redundant build/test
-- **QA** runs full build + test + coverage after a batch completes
-- **Critic** reviews QA report, creates PR — skips build/test (trusts QA)
-- **Stuck detection** — tasks carry `estimatedMinutes`; dispatcher pings the worker and notifies humans on timeout
-- **Auto-assign** — when a worker finishes, the next pending task is assigned automatically
+![Task Group with agent roster, batch history, and activity log](docs/screenshot-taskgroup.png)
+*Agent roster (vertical list with role emoji, department, stats), collapsible batch history, and structured activity log.*
+
+Coordinate multiple agents on a shared task list with Manager (👑), Worker (🔧), QA (🛡️), Critic (⚖️) roles:
+- **Batch workflow** — Manager reads todo.md → proposes batches → human approves (or auto-approve) → workers execute in parallel
+- **Batch history** — All batches visible, collapsible with dates. Task table: Worker | Task ID | Summary | Result
+- **Activity log** — Timeline: Who | Time | Action | Content, color-coded by action type (create/assign/done/blocked/abandoned)
+- **Auto-approve mode** — Approve once, all subsequent batches auto-approved until stopped
+- **Gate verification** — Scope warnings only (not blocking). Workers run verify[] themselves for full output visibility
+- **Stuck detection** — Max 3 notifications per task, then silent polling. Skips agents waiting for 5h limit reset
+- **5-hour limit auto-whip** — Detects "You've hit your limit" in PTY output, parses reset time, auto-restarts agent
+- **Task abandon** — Manager-only, reason required. Shows in batch as 🚫 with reason tooltip
+- **Task notes** — Optional special instructions per task (📌 indicator)
+- **Daily report** — Toggle per task group. Dispatcher triggers Manager at 00:01 to write daily summary + tomorrow's plan
+- **Staging/UAT branch** — Configurable target branch. Auto-created on task group setup. Workers forced to push + rebase before task-done
+- **Forced git push** — `hive-report.sh task-done` auto-commits, rebases on staging, pushes. No push = no done.
+
+![Batch proposal with Approve / Always Approve / Reject](docs/screenshot-taskgroup-proposal.png)
+*Batch proposal card appears above the batch list. Three actions: Approve, Always Approve (enables auto-mode), Reject.*
 
 ### Task Reporting
 Claude auto-reports task start (title) and completion (summary) via `.claude/hive-report.sh`. Displayed in agent title bar, kanban cards, and grouped work logs.
@@ -117,7 +133,10 @@ When creating a project, you can **git clone** a repo directly into an R&D folde
 4. Worktree and branch are auto-removed when the agent is deleted
 
 ### File Explorer
-Tree-view file browser in right sidebar. Collapsible directories, VSCode-style icons (colored letters for code, emoji for media/docs). Click `.md` files to open split editor + live preview (GFM tables, task lists, code blocks). Drag files to terminal to insert path. Supports Finder drag-drop.
+![File Explorer with path and branch tag](docs/screenshot-file-explorer.png)
+*Path display + 🌿 branch tag under File Explorer title. Tree-view with VSCode-style icons.*
+
+Tree-view file browser in right sidebar. Path + current git branch displayed under title. Collapsible directories, VSCode-style icons (colored letters for code, emoji for media/docs). Click `.md` files to open split editor + live preview (GFM tables, task lists, code blocks). Drag files to terminal to insert path. Supports Finder drag-drop.
 
 ### Team Management
 Organize agents into teams within departments. `+ Team` button opens modal to name a team and select ungrouped agents. Drag agents between teams or drop to ungroup. Reorder agents via drag-and-drop. Agents cannot move across departments.
@@ -181,6 +200,7 @@ Permanent activity log per agent. Tasks grouped with START/DONE badges. Status t
 
 | Version | Description | Download |
 |---------|-------------|----------|
+| v0.9.27-beta | Staging/UAT workflow, dashboard analytics, activity log, batch history, auto-whip, forced push | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.9.27-beta) |
 | v0.8.0-beta | Task group orchestration, gate verification, stuck detection | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.8.0-beta) |
 | v0.6.0-beta | Team management, drag-drop, auto rebase, markdown preview, GM template | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.6.0-beta) |
 | v0.5.0-beta | File explorer tree, git clone, GitHub/GitLab tokens, scroll fix | [DMG (Apple Silicon)](https://github.com/nocodevit/hive/releases/tag/v0.5.0-beta) |
@@ -263,6 +283,18 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [x] Terminal scroll-to-bottom button (follows system)
 - [x] Project Settings tab (add/remove folders inline)
 - [x] **Multi-agent task orchestration** — Manager/Worker/QA/Critic roles, gate verification, stuck detection, auto-assign
+- [x] **Staging/UAT workflow** — Configurable target branch, forced push + rebase on task-done, auto-create staging branch
+- [x] **Activity log** — Structured timeline (Who/Time/Action/Content), color-coded actions, clear controls
+- [x] **Batch history** — All batches collapsible with dates, task table (Worker/Task/Summary/Result)
+- [x] **Auto-approve** — Batch proposals auto-approved when enabled
+- [x] **5-hour limit auto-whip** — PTY output detection, reset time parsing, auto-restart
+- [x] **Task abandon** — Manager-only with required reason
+- [x] **Daily report** — Dispatcher triggers Manager at 00:01 for daily summary
+- [x] **Forced git push** — task-done commits + rebases staging + pushes before reporting
+- [x] **R&D Rebase button** — One click rebases all active R&D agents
+- [x] **File Explorer branch tag** — Shows path + 🌿 branch under File Explorer title
+- [x] **Project drag-and-drop** — Reorder projects in sidebar
+- [x] **Port lock isolation** — Dispatcher writes port.lock, dev server fully isolated
 - [ ] **Multi-agent communication** — PTY injection + filesystem mailbox + shared task list ([plan](docs/agent-comms-plan.md))
 - [ ] **Terminal UI customization** — React overlays on xterm: task cards, diff preview, progress bars, agent messages ([plan](docs/terminal-ui-customization-plan.md))
 - [ ] **Claude Code usage/limit bar** — Estimated 4-hour usage progress bar below terminal (self-count via hooks)

@@ -14,6 +14,8 @@ export interface TaskGroup {
   currentBatch: number
   todoSource: string        // relative path, default 'docs/todo.md'
   maxGateRetries: number    // default 3
+  targetBranch?: string     // PR base branch, default 'staging'
+  dailyReportEnabled?: boolean
 }
 
 export interface Task {
@@ -52,6 +54,7 @@ export interface Project {
   name: string
   officePath: string  // root office folder
   zones: Zone[]
+  group?: string      // project group name for sidebar organization
 }
 
 export interface AgentPreferences {

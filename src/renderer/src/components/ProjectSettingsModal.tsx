@@ -67,7 +67,7 @@ export default function ProjectSettingsModal({ open, onClose, project, onUpdate,
               <div key={zone.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-primary border border-border text-sm">
                 <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
                 <span className="font-medium text-text-primary truncate">{zone.name}</span>
-                <span className="text-[11px] text-text-muted truncate ml-auto max-w-[160px]">{zone.path}</span>
+                <span className="text-[12px] text-text-muted truncate ml-auto max-w-[160px]">{zone.path}</span>
                 <button onClick={() => removeZone(zone.id)} className="text-text-muted hover:text-red-400 cursor-pointer flex-shrink-0">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 </button>
@@ -95,7 +95,7 @@ export default function ProjectSettingsModal({ open, onClose, project, onUpdate,
               <div key={zone.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-primary border border-border text-sm">
                 <span className="w-2 h-2 rounded-full bg-status-waiting flex-shrink-0" />
                 <span className="font-medium text-text-primary truncate">{zone.name}</span>
-                <span className="text-[11px] text-text-muted truncate ml-auto max-w-[160px]">{zone.path}</span>
+                <span className="text-[12px] text-text-muted truncate ml-auto max-w-[160px]">{zone.path}</span>
                 <button onClick={() => removeZone(zone.id)} className="text-text-muted hover:text-red-400 cursor-pointer flex-shrink-0">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
                 </button>

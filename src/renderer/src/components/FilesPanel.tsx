@@ -107,7 +107,7 @@ function TreeItem({ node, depth, agentCwd, expanded, toggleExpand, search, onOpe
       <>
         <button
           onClick={() => toggleExpand(node.path)}
-          className="w-full text-left py-1 rounded-md text-[11px]
+          className="w-full text-left py-1 rounded-md text-[12px]
             hover:bg-bg-hover transition-colors cursor-pointer
             flex items-center gap-1 group"
           style={{ paddingLeft: indent + 8 }}
@@ -126,7 +126,7 @@ function TreeItem({ node, depth, agentCwd, expanded, toggleExpand, search, onOpe
             )}
           </span>
           <span className="text-text-primary truncate font-mono">{node.name}</span>
-          <span className="text-text-muted/40 text-[10px] flex-shrink-0 opacity-0 group-hover:opacity-100">
+          <span className="text-text-muted/40 text-[11px] flex-shrink-0 opacity-0 group-hover:opacity-100">
             {node.children.length}
           </span>
         </button>
@@ -163,16 +163,16 @@ function TreeItem({ node, depth, agentCwd, expanded, toggleExpand, search, onOpe
           window.api.fs.revealInFinder(fullPath)
         }
       }}
-      className="w-full text-left py-1 rounded-md text-[11px]
+      className="w-full text-left py-1 rounded-md text-[12px]
         hover:bg-bg-hover transition-colors cursor-pointer
         flex items-center gap-1.5 group"
       style={{ paddingLeft: indent + 20 }}
     >
-      <span className="w-3.5 h-3.5 rounded text-[9px] font-bold flex items-center justify-center flex-shrink-0" style={{ color: icon.color }}>
+      <span className="w-3.5 h-3.5 rounded text-[10px] font-bold flex items-center justify-center flex-shrink-0" style={{ color: icon.color }}>
         {icon.letter}
       </span>
       <span className="text-text-primary truncate flex-1 font-mono">{node.name}</span>
-      <span className="text-text-muted/40 flex-shrink-0 text-[10px] opacity-0 group-hover:opacity-100 transition-opacity pr-2">
+      <span className="text-text-muted/40 flex-shrink-0 text-[11px] opacity-0 group-hover:opacity-100 transition-opacity pr-2">
         {node.file ? formatTime(node.file.mtime) : ''}
       </span>
     </button>
@@ -184,6 +184,12 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [branch, setBranch] = useState('')
+
+  useEffect(() => {
+    if (!agentCwd) { setBranch(''); return }
+    window.api.git.currentBranch(agentCwd).then(setBranch).catch(() => setBranch(''))
+  }, [agentCwd])
 
   useEffect(() => {
     if (!agentCwd) return
@@ -255,7 +261,7 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
     <div className="h-full flex flex-col bg-sidebar-bg border-l border-border" style={{ width }}>
       {/* Header */}
       <div className="drag-region h-16 flex items-end px-3 pb-2 justify-between">
-        <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
+        <h2 className="no-drag text-[12px] font-heading font-semibold text-text-muted uppercase tracking-widest">
           File Explorer
         </h2>
         <div className="no-drag flex items-center gap-2">
@@ -268,11 +274,20 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></svg>
           </button>
           <button onClick={refresh}
-            className="text-[11px] text-accent hover:text-accent-hover cursor-pointer">
+            className="text-[12px] text-accent hover:text-accent-hover cursor-pointer">
             Refresh
           </button>
         </div>
       </div>
+
+      {/* Branch tag */}
+      {branch && (
+        <div className="px-3 pb-2">
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/20">
+            🌿 {branch}
+          </span>
+        </div>
+      )}
 
       {/* Search */}
       <div className="px-2 pb-2 relative">
@@ -282,7 +297,7 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search files..."
           className="w-full px-2 py-1.5 pr-6 rounded-lg bg-bg-primary border border-border
-            text-text-primary text-[11px] placeholder:text-text-muted/50
+            text-text-primary text-[12px] placeholder:text-text-muted/50
             focus:outline-none focus:border-accent transition-colors"
         />
         {search && (
@@ -297,9 +312,9 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
 
       {/* Tree */}
       <div className="flex-1 overflow-y-auto px-1">
-        {loading && <p className="text-[11px] text-text-muted text-center py-4">Scanning...</p>}
+        {loading && <p className="text-[12px] text-text-muted text-center py-4">Scanning...</p>}
         {!loading && files.length === 0 && (
-          <p className="text-[11px] text-text-muted text-center py-4">No files</p>
+          <p className="text-[12px] text-text-muted text-center py-4">No files</p>
         )}
         {!loading && tree.children.map((node) => (
           <TreeItem
@@ -317,7 +332,7 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
 
       {/* Footer */}
       <div className="px-3 py-2 border-t border-border">
-        <p className="text-[10px] text-text-muted truncate">{files.length} files · {agentCwd}</p>
+        <p className="text-[11px] text-text-muted truncate">{files.length} files · {agentCwd}</p>
       </div>
     </div>
   )

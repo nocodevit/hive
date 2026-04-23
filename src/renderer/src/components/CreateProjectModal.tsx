@@ -88,8 +88,8 @@ export default function CreateProjectModal({ open, onClose, onCreate, gitTokens 
         <div key={zone.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-primary border border-border text-sm">
           <span className={`w-2 h-2 rounded-full flex-shrink-0 ${type === 'rnd' ? 'bg-accent' : 'bg-status-waiting'}`} />
           <span className="font-medium text-text-primary truncate">{zone.name}</span>
-          {type === 'rnd' && <span className="text-[10px] text-text-muted">{zone.hasGit ? 'git' : 'no git'}</span>}
-          <span className="text-[11px] text-text-muted truncate ml-auto max-w-[160px]">{zone.path}</span>
+          {type === 'rnd' && <span className="text-[11px] text-text-muted">{zone.hasGit ? 'git' : 'no git'}</span>}
+          <span className="text-[12px] text-text-muted truncate ml-auto max-w-[160px]">{zone.path}</span>
           <button onClick={() => removeZone(zone.id)} className="text-text-muted hover:text-red-400 cursor-pointer flex-shrink-0">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
           </button>
@@ -156,7 +156,7 @@ export default function CreateProjectModal({ open, onClose, onCreate, gitTokens 
             <div className="flex rounded-lg border border-border overflow-hidden flex-shrink-0">
               {(['github', 'gitlab'] as const).map((p) => (
                 <button key={p} onClick={() => setCloneProvider(p)}
-                  className={`px-2.5 py-2 text-[11px] font-medium cursor-pointer transition-colors ${
+                  className={`px-2.5 py-2 text-[12px] font-medium cursor-pointer transition-colors ${
                     cloneProvider === p ? 'bg-accent text-text-on-purple' : 'bg-bg-primary text-text-muted hover:bg-bg-hover'
                   }`}
                 >{p === 'github' ? 'GitHub' : 'GitLab'}</button>
@@ -172,12 +172,12 @@ export default function CreateProjectModal({ open, onClose, onCreate, gitTokens 
                 focus:outline-none focus:border-accent transition-colors font-mono"
             />
           </div>
-          {cloneError && <p className="text-[11px] text-red-400 mt-1">{cloneError}</p>}
+          {cloneError && <p className="text-[12px] text-red-400 mt-1">{cloneError}</p>}
           {cloneProvider === 'gitlab' && !gitTokens?.gitlab && (
-            <p className="text-[11px] text-status-waiting mt-1">No GitLab token set. Add one in App Settings for private repos.</p>
+            <p className="text-[12px] text-status-waiting mt-1">No GitLab token set. Add one in App Settings for private repos.</p>
           )}
           {cloneProvider === 'github' && !gitTokens?.github && (
-            <p className="text-[11px] text-status-waiting mt-1">No GitHub token set. Add one in App Settings for private repos.</p>
+            <p className="text-[12px] text-status-waiting mt-1">No GitHub token set. Add one in App Settings for private repos.</p>
           )}
         </div>
 

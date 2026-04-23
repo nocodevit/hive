@@ -80,13 +80,13 @@ export default function MarkdownPreviewModal({ filePath, onClose }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-sm font-heading font-semibold text-text-primary">{fileName}</span>
             {dirty && <span className="w-2 h-2 rounded-full bg-status-waiting" title="Unsaved changes" />}
-            <span className="text-[10px] text-text-muted font-mono truncate max-w-[400px]">{filePath}</span>
+            <span className="text-[11px] text-text-muted font-mono truncate max-w-[400px]">{filePath}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={save}
               disabled={!dirty || saving}
-              className="px-3 py-1 rounded-md text-[11px] font-medium bg-accent text-text-on-purple
+              className="px-3 py-1 rounded-md text-[12px] font-medium bg-accent text-text-on-purple
                 hover:bg-accent-hover transition-colors cursor-pointer
                 disabled:opacity-40 disabled:cursor-not-allowed"
             >
@@ -104,7 +104,7 @@ export default function MarkdownPreviewModal({ filePath, onClose }: Props) {
           {/* Editor */}
           <div className="w-1/2 border-r border-border flex flex-col">
             <div className="px-3 py-1.5 border-b border-border">
-              <span className="text-[10px] text-text-muted uppercase tracking-wider font-semibold">Editor</span>
+              <span className="text-[11px] text-text-muted uppercase tracking-wider font-semibold">Editor</span>
             </div>
             <textarea
               value={content}
@@ -118,7 +118,7 @@ export default function MarkdownPreviewModal({ filePath, onClose }: Props) {
           {/* Preview */}
           <div className="w-1/2 flex flex-col">
             <div className="px-3 py-1.5 border-b border-border">
-              <span className="text-[10px] text-text-muted uppercase tracking-wider font-semibold">Preview</span>
+              <span className="text-[11px] text-text-muted uppercase tracking-wider font-semibold">Preview</span>
             </div>
             <div className="flex-1 overflow-y-auto p-5 text-text-secondary text-[13px]">
               <Markdown remarkPlugins={[remarkGfm]} components={mdComponents}>{content}</Markdown>

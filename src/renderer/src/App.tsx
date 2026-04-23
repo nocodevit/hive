@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Terminal from './components/Terminal'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import Modal from './components/Modal'
@@ -94,7 +94,23 @@ export default function App() {
   const [managerReports, setManagerReports] = useState<{ title: string; message: string; time: string }[]>([])
   const [batchProposal, setBatchProposal] = useState<any>(null)
   const [showCreateTaskGroup, setShowCreateTaskGroup] = useState(false)
-  const [dispatcherLog, setDispatcherLog] = useState<{ time: string; action: string; detail: string }[]>([])
+  const [dispatcherLog, setDispatcherLog] = useState<{ time: string; action: string; detail: string; agentId?: string | null }[]>([])
+  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set())
+  const [autoApprove, setAutoApprove] = useState(false)
+  const autoApproveRef = useRef(false)
+  useEffect(() => { autoApproveRef.current = autoApprove }, [autoApprove])
+  const [commitData, setCommitData] = useState<Record<string, Record<string, number>>>({}) // agentId → {date: count}
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null)
+  const [showInbox, setShowInbox] = useState(false)
+  const [inboxData, setInboxData] = useState<{ agentId: string; messages: any[] }[]>([])
+  const [projectGroupPrompt, setProjectGroupPrompt] = useState<{ projectId: string } | null>(null)
+  const [projectGroupInput, setProjectGroupInput] = useState('')
+  const [collapsedProjectGroups, setCollapsedProjectGroups] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    const close = () => setContextMenu(null)
+    window.addEventListener('click', close)
+    return () => window.removeEventListener('click', close)
+  }, [])
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || null
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) || null
@@ -110,15 +126,82 @@ export default function App() {
   useEffect(() => {
     window.api.data.load().then((data) => {
       if (data.projects) setProjects(data.projects as Project[])
+      const loadedProjects = (data.projects || []) as Project[]
+      const tgs = (data.taskGroups || []) as TaskGroup[]
       if (data.agents) {
-        const resetAgents = (data.agents as Agent[]).map((a) => ({ ...a, status: 'done' as const }))
+        let resetAgents = (data.agents as Agent[]).map((a) => ({ ...a, status: 'done' as const }))
+        // Restore taskGroupRole from existing task groups + rewrite definition files
+        for (const tg of tgs) {
+          resetAgents = resetAgents.map(a => {
+            if (a.id === tg.managerId) return { ...a, taskGroupRole: 'manager' as const }
+            if (a.id === tg.qaId) return { ...a, taskGroupRole: 'qa' as const }
+            if (a.id === tg.criticId) return { ...a, taskGroupRole: 'critic' as const }
+            if (tg.workerIds.includes(a.id)) return { ...a, taskGroupRole: 'worker' as const }
+            return a
+          })
+          // Rewrite definition files for all task group members
+          const tgAgentIds = [tg.managerId, ...tg.workerIds, tg.qaId, tg.criticId]
+          for (const agId of tgAgentIds) {
+            const ag = resetAgents.find(a => a.id === agId)
+            if (!ag) continue
+            const proj = loadedProjects.find(p => p.id === ag.projectId)
+            const zone = proj?.zones?.find((z: Zone) => z.id === ag.zoneId)
+            const cwd = ag.worktreePath || zone?.path
+            if (!cwd) continue
+            const defCfg: Record<string, any> = {
+              agentId: ag.id, name: ag.name, role: ag.role, department: ag.department,
+              soul: ag.soul, skills: ag.enabledSkills || [], model: ag.model || 'inherit',
+              effort: ag.effort || 'high', taskGroupRole: ag.taskGroupRole,
+            }
+            if (ag.taskGroupRole === 'manager') {
+              defCfg.todoSource = tg.todoSource
+              defCfg.maxGateRetries = tg.maxGateRetries
+              defCfg.taskGroupProjectId = tg.projectId
+              defCfg.taskGroupWorkers = tg.workerIds.map(wid => {
+                const w = resetAgents.find(a => a.id === wid)
+                return { id: wid, name: w?.name || wid }
+              })
+              const qa = resetAgents.find(a => a.id === tg.qaId)
+              defCfg.taskGroupQaId = tg.qaId
+              defCfg.taskGroupQaName = qa?.name || tg.qaId
+              const critic = resetAgents.find(a => a.id === tg.criticId)
+              defCfg.taskGroupCriticId = tg.criticId
+              defCfg.taskGroupCriticName = critic?.name || tg.criticId
+              defCfg.dailyReportEnabled = tg.dailyReportEnabled
+              defCfg.targetBranch = tg.targetBranch
+            }
+            window.api.agent.writeDefinition(cwd, defCfg)
+          }
+        }
         setAgents(resetAgents)
       }
       if (data.appPrefs) setAppPrefs((prev) => ({ ...prev, ...(data.appPrefs as Record<string, unknown>) }))
-      if (data.taskGroups) setTaskGroups(data.taskGroups as TaskGroup[])
+      if (tgs.length) {
+        setTaskGroups(tgs)
+        // Load existing tasks from disk for each task group's project
+        const loaded: Record<string, any[]> = {}
+        Promise.all(tgs.map(async (tg) => {
+          try {
+            const tasks = await window.api.tasks.list(tg.projectId)
+            loaded[tg.projectId] = tasks
+          } catch {}
+        })).then(() => setBatchTasks(loaded))
+      }
     })
     window.api.skills.scan().then(setAvailableSkills)
     window.api.templates.list().then(setCustomTemplates)
+    // Load persisted dispatcher log
+    window.api.dispatcher.loadLog().then(setDispatcherLog).catch(() => {})
+    // Load commit history for all agents with worktrees
+    window.api.data.load().then((d2) => {
+      const allAgents = (d2.agents || []) as Agent[]
+      const commitPromises: Record<string, Promise<Record<string, number>>> = {}
+      for (const ag of allAgents) {
+        if (ag.worktreePath) commitPromises[ag.id] = window.api.git.commitHistory(ag.worktreePath, 7)
+      }
+      Promise.all(Object.entries(commitPromises).map(async ([id, p]) => [id, await p.catch(() => ({}))] as const))
+        .then(results => setCommitData(Object.fromEntries(results)))
+    })
   }, [])
 
   // Save data on change
@@ -181,12 +264,26 @@ export default function App() {
     })
     const removeBatchProposal = window.api.agent.onBatchProposal((data) => {
       setBatchProposal(data)
-      setTaskGroups(prev => prev.map(tg =>
-        tg.managerId === data.agentId ? { ...tg, status: 'batch_proposed' as const } : tg
-      ))
+      setTaskGroups(prev => {
+        const updated = prev.map(tg =>
+          tg.managerId === data.agentId ? { ...tg, status: 'batch_proposed' as const } : tg
+        )
+        // Auto-approve if enabled
+        if (autoApproveRef.current) {
+          setTimeout(() => {
+            window.api.agent.send(data.agentId, 'HUMAN', { batch: data.batch, action: 'approved' })
+            window.api.pty.write(data.agentId, 'Y\r')
+            setTaskGroups(p => p.map(tg =>
+              tg.managerId === data.agentId ? { ...tg, status: 'batch_approved' as const, currentBatch: data.batch } : tg
+            ))
+            setBatchProposal(null)
+          }, 500)
+        }
+        return updated
+      })
     })
     const removeDispatcherLog = window.api.agent.onDispatcherLog((entry) => {
-      setDispatcherLog(prev => [...prev.slice(-49), entry]) // keep last 50
+      setDispatcherLog(prev => [...prev.slice(-199), entry]) // keep last 200
     })
     return () => { removeStatus(); removeReport(); removeTaskUpdate(); removeManagerReport(); removeBatchProposal(); removeDispatcherLog() }
   }, [])
@@ -256,6 +353,7 @@ export default function App() {
         const critic = agents.find(a => a.id === tg.criticId)
         defConfig.taskGroupCriticId = tg.criticId
         defConfig.taskGroupCriticName = critic?.name || tg.criticId
+        defConfig.dailyReportEnabled = tg.dailyReportEnabled
       }
     }
     const result = await window.api.agent.writeDefinition(cwd, defConfig)
@@ -273,16 +371,6 @@ export default function App() {
     const project = projects.find((p) => p.id === agent.projectId)
     const zone = project?.zones.find((z: Zone) => z.id === agent.zoneId)
     return zone?.path || '/'
-  }
-
-  const getAgentZonePath = (agent: Agent): string => {
-    const path = agent.worktreePath || (() => {
-      const project = projects.find((p) => p.id === agent.projectId)
-      const zone = project?.zones.find((z: Zone) => z.id === agent.zoneId)
-      return zone?.path || ''
-    })()
-    const home = '/Users/' + path.split('/Users/')[1]?.split('/')[0]
-    return path.replace(home ? `/Users/${path.split('/Users/')[1]?.split('/')[0]}` : '', '~')
   }
 
   const updateAgent = (id: string, updates: Partial<Agent>) => {
@@ -305,44 +393,171 @@ export default function App() {
       {/* Left: Projects */}
       <div className="bg-sidebar-bg flex flex-col flex-shrink-0" style={{ width: panelWidths.projects }}>
         <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
-          <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
-            Hive v0.7.0
+          <h2 className="no-drag text-[13px] font-heading font-semibold text-text-muted uppercase tracking-widest">
+            Hive v{__APP_VERSION__}
           </h2>
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-1">
-          {projects.map((project) => (
-            <button
-              key={project.id}
-              onClick={() => {
-                setSelectedProjectId(project.id)
-                setSelectedAgentId(null)
-              }}
-              className={`w-full text-left px-3 py-2.5 rounded-lg text-sm cursor-pointer
-                transition-colors flex items-center gap-2 ${
-                selectedProjectId === project.id
-                  ? 'bg-sidebar-active text-text-primary font-medium'
-                  : 'text-text-secondary hover:bg-bg-hover'
-              }`}
-            >
-              {(() => {
-                const projectAgents = agents.filter((a) => a.projectId === project.id)
-                const hasWorking = projectAgents.some((a) => a.status === 'working')
-                const hasWaiting = projectAgents.some((a) => a.status === 'waiting')
-                if (projectAgents.length === 0) return <span className="w-4 text-center text-[11px] flex-shrink-0" title="No agents">🕳️</span>
-                if (hasWorking) return <span className="w-4 text-center text-[11px] flex-shrink-0" title="Agents working">🏃</span>
-                if (hasWaiting) return <span className="w-4 text-center text-[11px] flex-shrink-0" title="Agents idle">☕</span>
-                return <span className="w-4 text-center text-[11px] flex-shrink-0" title="Agents offline">💤</span>
-              })()}
-              <span className="truncate">{project.name}</span>
-              {(() => {
-                const count = agents.filter((a) => a.projectId === project.id).length
-                return count > 0 ? <span className="ml-auto text-[10px] text-text-muted/50 flex-shrink-0">{count}</span> : null
-              })()}
-            </button>
-          ))}
+        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+          {(() => {
+            const groups = [...new Set(projects.map(p => p.group || ''))]
+            // Put ungrouped ('') first, then alphabetical
+            groups.sort((a, b) => a === '' ? -1 : b === '' ? 1 : a.localeCompare(b))
+
+            const renderProject = (project: Project, idx: number) => (
+              <button
+                key={project.id}
+                draggable
+                onDragStart={(e) => e.dataTransfer.setData('projectId', project.id)}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  const draggedId = e.dataTransfer.getData('projectId')
+                  if (!draggedId || draggedId === project.id) return
+                  // Move dragged project to same group + position
+                  setProjects(prev => {
+                    const fromIdx = prev.findIndex(p => p.id === draggedId)
+                    const toIdx = prev.findIndex(p => p.id === project.id)
+                    if (fromIdx < 0 || toIdx < 0) return prev
+                    const next = [...prev]
+                    const [moved] = next.splice(fromIdx, 1)
+                    moved.group = project.group // adopt target's group
+                    next.splice(toIdx, 0, moved)
+                    return next
+                  })
+                }}
+                onClick={() => {
+                  setSelectedProjectId(project.id)
+                  setSelectedAgentId(null)
+                }}
+                onContextMenu={(e) => {
+                  e.preventDefault()
+                  setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id })
+                }}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer
+                  transition-colors flex items-center gap-2 ${
+                  selectedProjectId === project.id
+                    ? 'bg-sidebar-active text-text-primary font-medium'
+                    : 'text-text-secondary hover:bg-bg-hover'
+                }`}
+              >
+                {(() => {
+                  const projectAgents = agents.filter((a) => a.projectId === project.id)
+                  const hasWorking = projectAgents.some((a) => a.status === 'working')
+                  const hasWaiting = projectAgents.some((a) => a.status === 'waiting')
+                  if (projectAgents.length === 0) return <span className="w-4 text-center text-[13px] flex-shrink-0" title="No agents">🕳️</span>
+                  if (hasWorking) return <span className="w-4 text-center text-[13px] flex-shrink-0" title="Agents working">🏃</span>
+                  if (hasWaiting) return <span className="w-4 text-center text-[13px] flex-shrink-0" title="Agents idle">☕</span>
+                  return <span className="w-4 text-center text-[13px] flex-shrink-0" title="Agents offline">💤</span>
+                })()}
+                <span className="truncate">{project.name}</span>
+                {(() => {
+                  const count = agents.filter((a) => a.projectId === project.id).length
+                  return count > 0 ? <span className="ml-auto text-[13px] text-text-muted/50 flex-shrink-0">{count}</span> : null
+                })()}
+              </button>
+            )
+
+            return groups.map(grp => {
+              const grpProjects = projects.filter(p => (p.group || '') === grp)
+              const isCollapsed = collapsedProjectGroups.has(grp)
+              if (!grp) {
+                // Ungrouped projects — render flat
+                return grpProjects.map((p, i) => renderProject(p, i))
+              }
+              return (
+                <div key={grp} className="rounded-lg bg-bg-primary/30 border border-border/30 mb-1"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    const draggedId = e.dataTransfer.getData('projectId')
+                    if (!draggedId) return
+                    setProjects(prev => prev.map(p => p.id === draggedId ? { ...p, group: grp } : p))
+                  }}
+                >
+                  <button
+                    onClick={() => setCollapsedProjectGroups(prev => {
+                      const next = new Set(prev)
+                      if (next.has(grp)) next.delete(grp); else next.add(grp)
+                      return next
+                    })}
+                    className="w-full px-2.5 py-1.5 text-[11px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5 cursor-pointer hover:text-text-primary"
+                  >
+                    <span className="text-xs">{isCollapsed ? '▸' : '▾'}</span>
+                    {grp}
+                    <span className="ml-auto text-[10px] font-normal">{grpProjects.length}</span>
+                  </button>
+                  {!isCollapsed && grpProjects.map((p, i) => renderProject(p, i))}
+                </div>
+              )
+            })
+          })()}
           {projects.length === 0 && (
             <p className="text-xs text-text-muted text-center py-6">No projects yet</p>
+          )}
+          {/* Project context menu */}
+          {contextMenu && (
+            <div
+              className="fixed z-50 bg-bg-secondary border border-border rounded-lg shadow-2xl py-1 min-w-[200px]"
+              style={{ left: contextMenu.x, top: contextMenu.y }}
+            >
+              <button
+                onClick={() => {
+                  const projAgents = agents.filter(a => a.projectId === contextMenu.projectId)
+                  for (const ag of projAgents) {
+                    if (!activeTerminals.has(ag.id)) startAgent(ag)
+                  }
+                  setContextMenu(null)
+                }}
+                className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer"
+              >🚀 (Re)start All Agents</button>
+              <button
+                onClick={() => {
+                  setProjectGroupPrompt({ projectId: contextMenu.projectId })
+                  const proj = projects.find(p => p.id === contextMenu.projectId)
+                  setProjectGroupInput(proj?.group || '')
+                  setContextMenu(null)
+                }}
+                className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer"
+              >📁 Move to Group...</button>
+              <button
+                onClick={() => {
+                  setProjects(prev => prev.map(p => p.id === contextMenu.projectId ? { ...p, group: undefined } : p))
+                  setContextMenu(null)
+                }}
+                className="w-full text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg-hover cursor-pointer"
+              >✖ Remove from Group</button>
+            </div>
+          )}
+          {/* Group name prompt */}
+          {projectGroupPrompt && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setProjectGroupPrompt(null)} />
+              <div className="relative bg-bg-secondary border border-border rounded-xl shadow-2xl p-4 w-[280px]">
+                <h3 className="text-sm font-heading font-bold mb-2">Move to Group</h3>
+                <input
+                  autoFocus
+                  value={projectGroupInput}
+                  onChange={(e) => setProjectGroupInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && projectGroupInput.trim()) {
+                      setProjects(prev => prev.map(p => p.id === projectGroupPrompt.projectId ? { ...p, group: projectGroupInput.trim() } : p))
+                      setProjectGroupPrompt(null)
+                    }
+                    if (e.key === 'Escape') setProjectGroupPrompt(null)
+                  }}
+                  placeholder="Group name (e.g. Active, Archive)"
+                  className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary mb-2"
+                />
+                {/* Existing groups as quick picks */}
+                <div className="flex gap-1 flex-wrap">
+                  {[...new Set(projects.map(p => p.group).filter(Boolean))].map(g => (
+                    <button key={g} onClick={() => {
+                      setProjects(prev => prev.map(p => p.id === projectGroupPrompt.projectId ? { ...p, group: g } : p))
+                      setProjectGroupPrompt(null)
+                    }} className="px-2 py-1 rounded text-[11px] bg-bg-hover text-text-muted hover:text-text-primary cursor-pointer">{g}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
           )}
         </div>
         <div className="p-2 border-t border-border space-y-1">
@@ -376,7 +591,7 @@ export default function App() {
       {/* Middle: Agents */}
       <div className="bg-bg-secondary flex flex-col flex-shrink-0" style={{ width: panelWidths.agents }}>
         <div className="drag-region h-16 flex items-end px-4 pb-2">
-          <h2 className="no-drag text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
+          <h2 className="no-drag text-[13px] font-heading font-semibold text-text-muted uppercase tracking-widest">
             {selectedProject ? selectedProject.name : 'Agents'}
           </h2>
         </div>
@@ -416,14 +631,29 @@ export default function App() {
 
                 return (
                   <div key={dept} className="rounded-xl bg-bg-primary/50 border border-border/50 shadow-sm p-1.5">
-                    <div className="px-2.5 py-1.5 text-[11px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
+                    <div className="px-2.5 py-1.5 text-[13px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                       </svg>
                       {dept}
+                      {dept === 'R&D' && (
+                        <button
+                          onClick={() => {
+                            const activeRdAgents = deptAgents.filter(a => activeTerminals.has(a.id))
+                            if (activeRdAgents.length === 0) return
+                            const prompt = 'Please rebase your worktree: `git fetch origin && BASE=$(for b in develop main master; do git rev-parse --verify origin/$b >/dev/null 2>&1 && echo $b && break; done) && [ -n "$BASE" ] && git rebase origin/$BASE`. Resolve conflicts if any, then confirm rebase completed.'
+                            for (const ag of activeRdAgents) {
+                              window.api.pty.write(ag.id, prompt)
+                              setTimeout(() => window.api.pty.write(ag.id, '\r'), 150)
+                            }
+                          }}
+                          className="ml-auto text-[13px] text-accent hover:text-accent-hover cursor-pointer"
+                          title="Send rebase prompt to all active R&D agents"
+                        >⟳ Rebase</button>
+                      )}
                       <button
                         onClick={() => { setTeamPrompt({ dept }); setTeamNameInput(''); setTeamSelectedAgents(new Set()) }}
-                        className="ml-auto text-[10px] text-accent hover:text-accent-hover cursor-pointer"
+                        className={`${dept === 'R&D' ? '' : 'ml-auto'} text-[13px] text-accent hover:text-accent-hover cursor-pointer`}
                         title="Add team"
                       >+ Team</button>
                     </div>
@@ -446,7 +676,7 @@ export default function App() {
                           }}
                         >
                           {grp && (
-                            <div className="px-5 py-1 text-[10px] font-heading font-medium text-text-muted/70 uppercase tracking-wider flex items-center">
+                            <div className="px-5 py-1 text-[13px] font-heading font-medium text-text-muted/70 uppercase tracking-wider flex items-center">
                               {grp}
                               <button
                                 onClick={() => {
@@ -479,6 +709,7 @@ export default function App() {
                                   : 'text-text-secondary hover:bg-bg-hover'
                               }`}
                               onClick={() => {
+                                if (agent.projectId !== selectedProjectId) setSelectedProjectId(agent.projectId)
                                 setSelectedAgentId(agent.id)
                                 if (!activeTerminals.has(agent.id)) startAgent(agent)
                               }}
@@ -490,26 +721,21 @@ export default function App() {
                                   agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
                                 }`} />
                                 {agent.taskGroupRole && (
-                                  <span className="absolute -top-0.5 -right-0.5 w-3 h-3 rounded-full flex items-center justify-center text-[8px] font-bold leading-none" style={{
-                                    background: agent.taskGroupRole === 'manager' ? '#F59E0B' :
-                                      agent.taskGroupRole === 'worker' ? '#3B82F6' :
-                                      agent.taskGroupRole === 'qa' ? '#10B981' : '#8B5CF6',
-                                    color: '#fff'
-                                  }}>
-                                    {agent.taskGroupRole === 'manager' ? 'M' :
-                                     agent.taskGroupRole === 'worker' ? 'W' :
-                                     agent.taskGroupRole === 'qa' ? 'Q' : 'C'}
+                                  <span className="absolute -top-1 -right-1 text-sm leading-none drop-shadow">
+                                    {agent.taskGroupRole === 'manager' ? '👑' :
+                                     agent.taskGroupRole === 'worker' ? '🔧' :
+                                     agent.taskGroupRole === 'qa' ? '🛡️' : '⚖️'}
                                   </span>
                                 )}
                               </div>
                               <div className="flex flex-col min-w-0 flex-1">
-                                <span className="truncate flex items-center gap-1.5 text-[12px]">
+                                <span className="truncate flex items-center gap-1.5 text-[13px]">
                                   {agent.tagColor && (
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
                                   {agent.name}
                                 </span>
-                                <span className="text-[9px] text-text-muted/60 truncate group-hover:invisible">{agent.role}</span>
+                                <span className="text-[13px] text-text-muted/60 truncate group-hover:invisible">{agent.role}</span>
                               </div>
                               <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2">
                                 <button
@@ -553,7 +779,7 @@ export default function App() {
                     })}
                     {/* Drop zone to remove from team (ungrouped) */}
                     <div
-                      className={`mx-1 mt-1 rounded-lg border border-dashed border-transparent text-center text-[10px] text-text-muted/40 transition-colors py-1 ${dragAgentId ? 'border-border !text-text-muted/70' : 'hidden'}`}
+                      className={`mx-1 mt-1 rounded-lg border border-dashed border-transparent text-center text-[13px] text-text-muted/40 transition-colors py-1 ${dragAgentId ? 'border-border !text-text-muted/70' : 'hidden'}`}
                       onDragOver={(e) => e.preventDefault()}
                       onDrop={() => {
                         if (dragAgentId) {
@@ -603,21 +829,18 @@ export default function App() {
       <div className="flex-1 flex flex-col bg-bg-primary min-w-0">
         <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
           <div className="no-drag flex items-center gap-2">
-            <h2 className="text-[11px] font-heading font-semibold text-text-muted uppercase tracking-widest">
+            <h2 className="text-[13px] font-heading font-semibold text-text-muted uppercase tracking-widest">
               {selectedAgent ? selectedAgent.name : (selectedProject ? 'Dashboard' : 'Select an agent')}
             </h2>
             {selectedAgent && (
               <>
-                <span className="text-[10px] text-text-muted font-mono px-2 py-0.5 rounded-md bg-bg-hover">
-                  {getAgentZonePath(selectedAgent)}
-                </span>
                 {agentTasks[selectedAgent.id]?.active && agentTasks[selectedAgent.id]?.title && (
-                  <span className="text-[10px] text-accent font-medium px-2 py-0.5 rounded-md bg-accent/10 truncate max-w-[250px]">
+                  <span className="text-[13px] text-accent font-medium px-2 py-0.5 rounded-md bg-accent/10 truncate max-w-[250px]">
                     {agentTasks[selectedAgent.id].title}
                   </span>
                 )}
                 {!agentTasks[selectedAgent.id]?.active && agentTasks[selectedAgent.id]?.summary && (
-                  <span className="text-[10px] text-status-working font-medium px-2 py-0.5 rounded-md bg-status-working/10 truncate max-w-[250px]">
+                  <span className="text-[13px] text-status-working font-medium px-2 py-0.5 rounded-md bg-status-working/10 truncate max-w-[250px]">
                     {agentTasks[selectedAgent.id].summary}
                   </span>
                 )}
@@ -628,7 +851,7 @@ export default function App() {
             <div className="no-drag flex items-center gap-1">
               <button
                 onClick={() => setMainView('terminal')}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors cursor-pointer ${
                   mainView === 'terminal'
                     ? 'bg-accent text-text-on-purple'
                     : 'text-text-muted hover:bg-bg-hover'
@@ -638,7 +861,7 @@ export default function App() {
               </button>
               <button
                 onClick={() => setMainView('editor')}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors cursor-pointer ${
                   mainView === 'editor'
                     ? 'bg-accent text-text-on-purple'
                     : 'text-text-muted hover:bg-bg-hover'
@@ -648,7 +871,7 @@ export default function App() {
               </button>
               <button
                 onClick={() => setMainView('logs')}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-medium transition-colors cursor-pointer ${
+                className={`px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors cursor-pointer ${
                   mainView === 'logs'
                     ? 'bg-accent text-text-on-purple'
                     : 'text-text-muted hover:bg-bg-hover'
@@ -730,7 +953,7 @@ export default function App() {
           )}
         </div>
         {isListening && speechPartial && (
-          <div className="px-4 py-1.5 bg-red-500/10 border-b border-red-500/20 text-[11px] text-red-300 font-mono truncate">
+          <div className="px-4 py-1.5 bg-red-500/10 border-b border-red-500/20 text-[13px] text-red-300 font-mono truncate">
             🎙 {speechPartial}
           </div>
         )}
@@ -769,7 +992,7 @@ export default function App() {
                 <div className="flex items-center gap-2 ml-auto">
                   <h1 className="text-sm font-heading font-semibold text-text-primary">{selectedProject.name}</h1>
                   {projectScan && (
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider ${
+                    <span className={`px-2 py-0.5 rounded-full text-[13px] font-heading font-bold uppercase tracking-wider ${
                       projectScan.projectStage === 'active-online' || projectScan.projectStage === 'active'
                         ? 'bg-status-working/20 text-status-working'
                         : projectScan.projectStage === 'incubating'
@@ -812,7 +1035,7 @@ export default function App() {
                           </div>
                           <div className="p-2 space-y-1.5 min-h-[80px]">
                             {columnAgents.length === 0 && (
-                              <p className="text-[11px] text-text-muted text-center py-4">No agents</p>
+                              <p className="text-[13px] text-text-muted text-center py-4">No agents</p>
                             )}
                             {columnAgents.map((agent) => (
                               <button
@@ -827,17 +1050,17 @@ export default function App() {
                                 <div className="flex items-center gap-2">
                                   <AvatarPreview config={agent.avatar} size={20} />
                                   <span className="text-sm font-medium text-text-primary">{agent.name}</span>
-                                  <span className="text-[10px] text-text-muted uppercase ml-auto">
+                                  <span className="text-[13px] text-text-muted uppercase ml-auto">
                                     {agent.role || agent.department}
                                   </span>
                                 </div>
                                 {agentTasks[agent.id] && (
                                   <div className="mt-1.5">
                                     {agentTasks[agent.id].active && agentTasks[agent.id].title && (
-                                      <p className="text-[11px] text-accent truncate">{agentTasks[agent.id].title}</p>
+                                      <p className="text-[13px] text-accent truncate">{agentTasks[agent.id].title}</p>
                                     )}
                                     {!agentTasks[agent.id].active && agentTasks[agent.id].summary && (
-                                      <p className="text-[11px] text-status-working truncate">{agentTasks[agent.id].summary}</p>
+                                      <p className="text-[13px] text-status-working truncate">{agentTasks[agent.id].summary}</p>
                                     )}
                                   </div>
                                 )}
@@ -854,118 +1077,234 @@ export default function App() {
               {/* Dashboard Tab */}
               {projectTab === 'dashboard' && (
                 <div className="flex-1 overflow-y-auto p-6 space-y-5">
-                  {/* Progress + Task Group Status */}
-                  {projectScan && (() => {
-                    const allTodos = projectScan.todos
-                    const done = allTodos.filter((t: any) => t.done).length
-                    const total = allTodos.length
-                    const pct = total > 0 ? Math.round((done / total) * 100) : 0
+                  {/* Task Group Overview Stats */}
+                  {(() => {
                     const taskGroup = taskGroups.find((tg) => tg.projectId === selectedProjectId)
+                    const tasks = batchTasks[selectedProjectId!] || []
+                    const totalTasks = tasks.length
+                    const doneTasks = tasks.filter(t => t.status === 'done').length
+                    const blockedTasks = tasks.filter(t => t.status === 'blocked').length
+                    const abandonedTasks = tasks.filter(t => t.status === 'abandoned').length
+                    const inProgressTasks = tasks.filter(t => t.status === 'in_progress' || t.status === 'assigned').length
+                    const batchNums = [...new Set(tasks.map(t => t.batch || 1))]
+                    const maxBatch = batchNums.length > 0 ? Math.max(...batchNums) : 0
+                    const latestTask = tasks.length > 0 ? tasks[tasks.length - 1]?.id : '—'
+                    const pct = totalTasks > 0 ? Math.round((doneTasks / totalTasks) * 100) : 0
+
                     return (
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="glass-card p-5">
-                          <h3 className="text-sm font-heading font-bold text-text-primary mb-2">Progress</h3>
-                          <div className="flex items-center gap-3">
-                            <div className="flex-1 h-2 bg-bg-hover rounded-full overflow-hidden">
-                              <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${pct}%` }} />
-                            </div>
-                            <span className="text-xs text-text-muted font-mono">{done}/{total}</span>
+                      <div className="space-y-4">
+                        {/* 4 metric cards */}
+                        <div className="grid grid-cols-4 gap-3">
+                          <div className="glass-card p-4">
+                            <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">Total Tasks</div>
+                            <div className="text-2xl font-heading font-bold">{totalTasks}</div>
+                            <div className="text-[11px] text-text-muted mt-1">Latest: {latestTask}</div>
                           </div>
-                          <p className="text-[11px] text-text-muted mt-1">{pct}% complete</p>
+                          <div className="glass-card p-4">
+                            <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">Completed</div>
+                            <div className="text-2xl font-heading font-bold text-status-working">{doneTasks}</div>
+                            <div className="text-[11px] text-text-muted mt-1">{pct}% done</div>
+                          </div>
+                          <div className="glass-card p-4">
+                            <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">Batches</div>
+                            <div className="text-2xl font-heading font-bold">{maxBatch}</div>
+                            <div className="text-[11px] text-text-muted mt-1">{inProgressTasks} in progress</div>
+                          </div>
+                          <div className="glass-card p-4">
+                            <div className="text-[10px] font-mono uppercase tracking-wider text-text-muted mb-1">Blocked</div>
+                            <div className="text-2xl font-heading font-bold text-red-400">{blockedTasks}</div>
+                            <div className="text-[11px] text-text-muted mt-1">{abandonedTasks} abandoned</div>
+                          </div>
                         </div>
-                        <div className="glass-card p-5">
-                          <h3 className="text-sm font-heading font-bold text-text-primary mb-2">Task Group</h3>
-                          {taskGroup ? (
-                            <div>
-                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider ${
-                                taskGroup.status === 'executing' ? 'bg-status-working/20 text-status-working' :
-                                taskGroup.status === 'awaiting_merge' ? 'bg-accent/20 text-accent' :
-                                'bg-bg-hover text-text-muted'
-                              }`}>{taskGroup.status.replace('_', ' ')}</span>
-                              <p className="text-[11px] text-text-muted mt-1">Batch {taskGroup.currentBatch}</p>
-                              <button onClick={() => setProjectTab('taskgroup')} className="text-[11px] text-accent hover:underline mt-1 cursor-pointer">→ Go to Task Group</button>
+
+                        {/* Task Group quick stats bar */}
+                        {taskGroup && totalTasks > 0 && (
+                          <div className="glass-card p-4">
+                            <div className="flex justify-between items-center mb-2">
+                              <div className="flex items-center gap-3">
+                                <span className="text-sm font-heading font-bold">Task Group</span>
+                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider ${
+                                  taskGroup.status === 'executing' ? 'bg-status-working/20 text-status-working' :
+                                  taskGroup.status === 'awaiting_merge' ? 'bg-accent/20 text-accent' :
+                                  'bg-bg-hover text-text-muted'
+                                }`}>{taskGroup.status.replace('_', ' ')}</span>
+                              </div>
+                              <button onClick={() => setProjectTab('taskgroup')} className="text-[11px] text-accent hover:underline cursor-pointer">→ Task Group</button>
                             </div>
-                          ) : (
-                            <div>
-                              <span className="px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider bg-bg-hover text-text-muted">inactive</span>
-                              <button onClick={() => setProjectTab('taskgroup')} className="block text-[11px] text-accent hover:underline mt-1 cursor-pointer">+ Create Task Group</button>
+                            <div className="flex items-center gap-3">
+                              <div className="flex-1 h-1.5 bg-bg-hover rounded-full overflow-hidden">
+                                <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${pct}%` }} />
+                              </div>
+                              <span className="text-[11px] text-text-muted font-mono">{doneTasks}/{totalTasks}</span>
                             </div>
-                          )}
-                        </div>
+                          </div>
+                        )}
+                        {!taskGroup && (
+                          <div className="glass-card p-4">
+                            <span className="text-sm font-heading font-bold">Task Group</span>
+                            <span className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider bg-bg-hover text-text-muted">inactive</span>
+                            <button onClick={() => setProjectTab('taskgroup')} className="block text-[11px] text-accent hover:underline mt-1 cursor-pointer">+ Create Task Group</button>
+                          </div>
+                        )}
+
+                        {/* 7-Day Commit Density */}
+                        {projectAgents.some(a => commitData[a.id] && Object.keys(commitData[a.id]).length > 0) && (
+                          <div className="glass-card overflow-hidden">
+                            <div className="px-4 py-2 border-b border-border flex justify-between items-center">
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-text-muted">7-Day Commit Density</span>
+                              <span className="text-[11px] font-mono text-text-secondary">
+                                {(() => {
+                                  let total = 0
+                                  for (const ag of projectAgents) {
+                                    const d = commitData[ag.id] || {}
+                                    total += Object.values(d).reduce((s, n) => s + n, 0)
+                                  }
+                                  return `${total} commits`
+                                })()}
+                              </span>
+                            </div>
+                            <div className="px-4 py-3">
+                              {(() => {
+                                const days: string[] = []
+                                for (let i = 6; i >= 0; i--) {
+                                  const d = new Date(); d.setDate(d.getDate() - i)
+                                  days.push(d.toISOString().slice(0, 10))
+                                }
+                                const agentColors: Record<string, string> = {}
+                                const roleColors = { manager: '#F59E0B', worker: '#3B82F6', qa: '#10B981', critic: '#8B5CF6' }
+                                const defaultColors = ['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#f472b6', '#22d3ee']
+                                let colorIdx = 0
+                                for (const ag of projectAgents) {
+                                  agentColors[ag.id] = ag.taskGroupRole ? roleColors[ag.taskGroupRole] || defaultColors[colorIdx++ % 6] : defaultColors[colorIdx++ % 6]
+                                }
+                                const maxDay = Math.max(1, ...days.map(day => {
+                                  let sum = 0
+                                  for (const ag of projectAgents) sum += (commitData[ag.id] || {})[day] || 0
+                                  return sum
+                                }))
+                                return (
+                                  <>
+                                    <div className="flex items-end gap-1 overflow-hidden" style={{ height: '60px' }}>
+                                      {days.map(day => (
+                                        <div key={day} className="flex-1 flex flex-col items-center gap-0.5">
+                                          <div className="w-full flex flex-col-reverse gap-px" style={{ height: `${60}px` }}>
+                                            {projectAgents.map(ag => {
+                                              const count = (commitData[ag.id] || {})[day] || 0
+                                              if (count === 0) return null
+                                              const h = Math.max(2, (count / maxDay) * 48)
+                                              return <div key={ag.id} style={{ height: `${h}px`, background: agentColors[ag.id], borderRadius: '2px' }} title={`${ag.name}: ${count}`} />
+                                            })}
+                                          </div>
+                                          <span className="text-[9px] font-mono text-text-muted">{parseInt(day.slice(8))}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                    <div className="flex gap-3 mt-2 flex-wrap">
+                                      {projectAgents.filter(ag => Object.values(commitData[ag.id] || {}).some(n => n > 0)).map(ag => (
+                                        <span key={ag.id} className="flex items-center gap-1 text-[10px] text-text-muted">
+                                          <span className="w-2 h-2 rounded-sm" style={{ background: agentColors[ag.id] }} />
+                                          {ag.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </>
+                                )
+                              })()}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Agent Work Time (from logs) */}
+                        {projectAgents.length > 0 && (
+                          <div className="glass-card overflow-hidden">
+                            <div className="px-4 py-2 border-b border-border">
+                              <span className="text-[10px] font-mono uppercase tracking-wider text-text-muted">Agent Activity (this session)</span>
+                            </div>
+                            <div className="px-4 py-2">
+                              {projectAgents.map(ag => {
+                                const emoji = ag.taskGroupRole === 'manager' ? '👑' : ag.taskGroupRole === 'worker' ? '🔧' : ag.taskGroupRole === 'qa' ? '🛡️' : ag.taskGroupRole === 'critic' ? '⚖️' : '👤'
+                                const color = ag.taskGroupRole === 'manager' ? 'text-amber-400' : ag.taskGroupRole === 'worker' ? 'text-blue-400' : ag.taskGroupRole === 'qa' ? 'text-emerald-400' : ag.taskGroupRole === 'critic' ? 'text-purple-400' : 'text-text-secondary'
+                                const barColor = ag.taskGroupRole === 'manager' ? 'bg-amber-400' : ag.taskGroupRole === 'worker' ? 'bg-blue-400' : ag.taskGroupRole === 'qa' ? 'bg-emerald-400' : ag.taskGroupRole === 'critic' ? 'bg-purple-400' : 'bg-accent'
+                                const agTasks = tasks.filter(t => t.owner === ag.id)
+                                const agDone = agTasks.filter(t => t.status === 'done').length
+                                return (
+                                  <div key={ag.id} className="grid grid-cols-[20px_1fr_80px_48px] gap-2 items-center py-1.5 text-[12px]">
+                                    <span className="text-center">{emoji}</span>
+                                    <span className={`font-medium truncate ${color}`}>{ag.name}</span>
+                                    <div className="h-1.5 bg-bg-hover rounded-full overflow-hidden">
+                                      <div className={`h-full rounded-full ${barColor}`} style={{ width: `${totalTasks > 0 ? (agDone / Math.max(...projectAgents.map(a => tasks.filter(t => t.owner === a.id && t.status === 'done').length), 1)) * 100 : 0}%` }} />
+                                    </div>
+                                    <span className="text-right font-mono text-[11px] text-text-muted">{agDone} done</span>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )
                   })()}
-                  {/* Glass Todo Cards */}
-                  <div className="grid grid-cols-2 gap-4">
-                    {/* R&D Card */}
-                    <div className="glass-card p-5">
-                      <div className="flex items-center gap-2 mb-3">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
-                        </svg>
-                        <h3 className="text-sm font-heading font-bold text-text-primary">R&D</h3>
-                        {projectScan && (() => {
-                          const rdTodos = projectScan.todos.filter((t) => t.category === 'rd' || (t.type === 'rnd' && t.category === 'other'))
-                          const open = rdTodos.filter((t) => !t.done).length
-                          const done = rdTodos.filter((t) => t.done).length
-                          return <span className="text-[11px] text-text-muted ml-auto">{open} open{done > 0 ? ` · ${done} done` : ''}</span>
-                        })()}
-                      </div>
-                      {projectScan && (() => {
-                        const rdTodos = projectScan.todos.filter((t) => t.category === 'rd' || (t.type === 'rnd' && t.category === 'other')).filter((t) => !t.done)
-                        return rdTodos.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {rdTodos.slice(0, 8).map((t, i) => (
-                              <div key={i} className="flex items-start gap-2 text-[12px]">
-                                <span className="text-accent mt-0.5">{'\u25CB'}</span>
-                                <span className="text-text-primary">{t.text}</span>
+                  {/* Unified Todo List */}
+                  {projectScan && (() => {
+                    const allTodos = projectScan.todos
+                    const openTodos = allTodos.filter((t) => !t.done)
+                    const doneTodos = allTodos.filter((t) => t.done)
+                    const total = allTodos.length
+                    const doneCount = doneTodos.length
+                    const pctDone = total > 0 ? Math.round((doneCount / total) * 100) : 0
+                    const displayed = [...openTodos.slice(0, 10), ...doneTodos.slice(0, 2)]
+                    const remaining = total - displayed.length
+                    const zoneTag = (t: any) => {
+                      if (t.type === 'non-rnd') return { label: 'Admin', cls: 'bg-status-working/10 text-status-working' }
+                      if (t.category === 'rd') return { label: 'R&D', cls: 'bg-accent/10 text-accent' }
+                      return { label: t.category || 'R&D', cls: 'bg-accent/10 text-accent' }
+                    }
+                    return total > 0 ? (
+                      <div className="glass-card overflow-hidden">
+                        <div className="flex items-center gap-4 px-5 py-3 border-b border-border">
+                          <div>
+                            <span className="text-2xl font-heading font-bold text-text-primary">{total}</span>
+                            <span className="text-[11px] text-text-muted ml-1">todos</span>
+                          </div>
+                          <div className="flex-1">
+                            <div className="flex justify-between mb-1">
+                              <span className="text-[11px] text-text-muted">{doneCount} done · {openTodos.length} open</span>
+                              <span className="text-[11px] text-text-muted font-mono">{pctDone}%</span>
+                            </div>
+                            <div className="h-1 bg-bg-hover rounded-full overflow-hidden">
+                              <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${pctDone}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-[24px_1fr_56px_48px] gap-2 px-5 py-1.5 text-[11px] font-heading font-bold uppercase tracking-wider text-text-muted border-b border-border/50">
+                          <span className="text-right">#</span>
+                          <span>Task</span>
+                          <span className="text-center">Zone</span>
+                          <span className="text-right">Status</span>
+                        </div>
+                        <div>
+                          {displayed.map((t, i) => {
+                            const zt = zoneTag(t)
+                            return (
+                              <div key={i} className="grid grid-cols-[24px_1fr_56px_48px] gap-2 items-center px-5 py-1.5 hover:bg-bg-hover/50 transition-colors">
+                                <span className="text-[11px] text-text-muted text-right font-mono">{i + 1}</span>
+                                <span className={`text-[13px] truncate ${t.done ? 'text-text-muted line-through' : 'text-text-primary'}`}>{t.text}</span>
+                                <span className={`text-[11px] font-bold uppercase tracking-wide text-center px-1.5 py-0.5 rounded ${zt.cls}`}>{zt.label}</span>
+                                <span className={`text-[11px] text-right font-mono ${t.done ? 'text-status-done' : 'text-text-muted'}`}>{t.done ? 'done' : 'open'}</span>
                               </div>
-                            ))}
-                            {rdTodos.length > 8 && <p className="text-[11px] text-text-muted">+{rdTodos.length - 8} more</p>}
-                          </div>
-                        ) : <p className="text-xs text-text-muted py-2">No open R&D todos</p>
-                      })()}
-                    </div>
-
-                    {/* Admin Card */}
-                    <div className="glass-card-warm p-5">
-                      <div className="flex items-center gap-2 mb-3">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--status-working)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z" /><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z" />
-                        </svg>
-                        <h3 className="text-sm font-heading font-bold text-text-primary">Admin</h3>
-                        {projectScan && (() => {
-                          const adminTodos = projectScan.todos.filter((t) => t.type === 'non-rnd')
-                          const open = adminTodos.filter((t) => !t.done).length
-                          const done = adminTodos.filter((t) => t.done).length
-                          return <span className="text-[11px] text-text-muted ml-auto">{open} open{done > 0 ? ` · ${done} done` : ''}</span>
-                        })()}
+                            )
+                          })}
+                          {remaining > 0 && (
+                            <div className="px-5 py-2 text-[11px] text-text-muted">+{remaining} more</div>
+                          )}
+                        </div>
                       </div>
-                      {projectScan && (() => {
-                        const adminTodos = projectScan.todos.filter((t) => t.type === 'non-rnd').filter((t) => !t.done)
-                        const hasNonRnd = selectedProject.zones.some((z: Zone) => z.type === 'non-rnd')
-                        return adminTodos.length > 0 ? (
-                          <div className="space-y-1.5">
-                            {adminTodos.slice(0, 8).map((t, i) => (
-                              <div key={i} className="flex items-start gap-2 text-[12px]">
-                                <span className="text-status-working mt-0.5">{'\u25CB'}</span>
-                                <span className="text-text-primary flex-1">{t.text}</span>
-                                <span className="text-[10px] text-text-muted flex-shrink-0">{t.category}</span>
-                              </div>
-                            ))}
-                            {adminTodos.length > 8 && <p className="text-[11px] text-text-muted">+{adminTodos.length - 8} more</p>}
-                          </div>
-                        ) : (
-                          <div className="text-center py-2">
-                            <p className="text-xs text-text-muted mb-2">{hasNonRnd ? 'No open admin todos' : 'No Non-R&D zone'}</p>
-                            <button onClick={() => setShowCreateAgent(true)} className="px-3 py-1.5 rounded-lg bg-accent text-text-on-purple text-xs font-medium hover:bg-accent-hover transition-colors cursor-pointer">
-                              Create Business Manager
-                            </button>
-                          </div>
-                        )
-                      })()}
-                    </div>
-                  </div>
+                    ) : (
+                      <div className="glass-card p-5 text-center">
+                        <p className="text-xs text-text-muted">No todos found in project markdown files</p>
+                      </div>
+                    )
+                  })()}
 
                   {/* Work Zones */}
                   <div>
@@ -978,10 +1317,10 @@ export default function App() {
                             <span className={`w-2.5 h-2.5 rounded-full ${zone.type === 'rnd' ? 'bg-accent' : 'bg-status-working'}`} />
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-text-primary">{zone.name}</p>
-                              <p className="text-[11px] text-text-muted font-mono truncate">{zone.path}</p>
+                              <p className="text-[13px] text-text-muted font-mono truncate">{zone.path}</p>
                             </div>
-                            <span className="text-[10px] text-text-muted uppercase">{zone.type === 'rnd' ? 'R&D' : 'Docs'}</span>
-                            <span className="text-[11px] text-text-muted">{zoneAgents.length} agent{zoneAgents.length !== 1 ? 's' : ''}</span>
+                            <span className="text-[13px] text-text-muted uppercase">{zone.type === 'rnd' ? 'R&D' : 'Docs'}</span>
+                            <span className="text-[13px] text-text-muted">{zoneAgents.length} agent{zoneAgents.length !== 1 ? 's' : ''}</span>
                           </div>
                         )
                       })}
@@ -1021,66 +1360,50 @@ export default function App() {
                     // Active task group
                     return (
                       <div className="space-y-4">
-                        {/* Roles bar */}
-                        <div className="flex items-center gap-3 flex-wrap">
-                          {[
-                            { id: taskGroup.managerId, role: 'manager', icon: '♛', color: '#F59E0B' },
-                            ...taskGroup.workerIds.map((id: string) => ({ id, role: 'worker', icon: '⚒', color: '#3B82F6' })),
-                            { id: taskGroup.qaId, role: 'qa', icon: '🛡', color: '#10B981' },
-                            { id: taskGroup.criticId, role: 'critic', icon: '👁', color: '#8B5CF6' },
-                          ].map(({ id, role, icon, color }) => {
-                            const agent = agents.find(a => a.id === id)
-                            return agent ? (
-                              <span key={id} className="inline-flex items-center gap-1.5 px-2 py-1 rounded-lg bg-bg-secondary border border-border text-xs">
-                                <span style={{ color }}>{icon}</span>
-                                <span className="text-text-primary font-medium">{agent.name}</span>
-                                <span className="text-text-muted/50 uppercase text-[9px]">{role}</span>
-                              </span>
-                            ) : null
-                          })}
-                        </div>
-                        {/* Batch status + task list */}
-                        <div className="glass-card p-4">
-                          <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-heading font-bold text-text-primary">Batch {taskGroup.currentBatch || '—'}</h3>
-                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-heading font-bold uppercase tracking-wider ${
-                              taskGroup.status === 'executing' ? 'bg-status-working/20 text-status-working' :
-                              taskGroup.status === 'awaiting_merge' ? 'bg-accent/20 text-accent' :
-                              'bg-bg-hover text-text-muted'
-                            }`}>{taskGroup.status.replace('_', ' ')}</span>
+                        {/* Agent Roster — vertical list */}
+                        <div className="glass-card overflow-hidden">
+                          <div className="grid grid-cols-[36px_1fr_80px_100px] gap-2 px-4 py-2 text-[11px] font-heading font-bold uppercase tracking-wider text-text-muted border-b border-border">
+                            <span></span>
+                            <span>Agent</span>
+                            <span className="text-center">Dept</span>
+                            <span className="text-center">Role</span>
                           </div>
-                          {(() => {
-                            const tasks = batchTasks[taskGroup.projectId] || []
-                            const batchN = tasks.filter(t => t.batch === taskGroup.currentBatch)
-                            if (batchN.length === 0) return <p className="text-xs text-text-muted">No tasks yet. Use /manager-whip-start to begin.</p>
-                            const done = batchN.filter(t => t.status === 'done').length
+                          {[
+                            { id: taskGroup.managerId, role: 'manager', icon: '👑', color: '#F59E0B', bgColor: 'rgba(245,158,11,0.1)', borderColor: 'rgba(245,158,11,0.2)' },
+                            ...taskGroup.workerIds.map((id: string) => ({ id, role: 'worker', icon: '🔧', color: '#3B82F6', bgColor: 'rgba(59,130,246,0.1)', borderColor: 'rgba(59,130,246,0.2)' })),
+                            { id: taskGroup.qaId, role: 'qa', icon: '🛡️', color: '#10B981', bgColor: 'rgba(16,185,129,0.1)', borderColor: 'rgba(16,185,129,0.2)' },
+                            { id: taskGroup.criticId, role: 'critic', icon: '⚖️', color: '#8B5CF6', bgColor: 'rgba(139,92,246,0.1)', borderColor: 'rgba(139,92,246,0.2)' },
+                          ].map(({ id, role, icon, color, bgColor, borderColor }) => {
+                            const agent = agents.find(a => a.id === id)
+                            if (!agent) return null
+                            const dept = agent.department === 'rnd' ? 'R&D' : agent.department === 'non-rnd' ? 'Non-R&D' : agent.department || ''
+                            const jobLabel = agent.role ? `${dept} · ${agent.role}` : dept
                             return (
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <div className="flex-1 h-1.5 bg-bg-hover rounded-full overflow-hidden">
-                                    <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${batchN.length ? (done / batchN.length) * 100 : 0}%` }} />
-                                  </div>
-                                  <span className="text-[10px] text-text-muted font-mono">{done}/{batchN.length}</span>
+                              <div key={id} className="grid grid-cols-[36px_1fr_80px_100px] gap-2 items-center px-4 py-2.5 hover:bg-bg-hover transition-colors">
+                                <span className="w-9 h-9 flex items-center justify-center rounded-lg text-lg" style={{ background: bgColor, border: `1px solid ${borderColor}` }}>{icon}</span>
+                                <div className="min-w-0">
+                                  <div className="text-[13px] font-semibold text-text-primary truncate">{agent.name}</div>
+                                  <div className="text-[11px] text-text-muted truncate">{agent.role || role}</div>
                                 </div>
-                                {batchN.map((t) => (
-                                  <div key={t.id} className="flex items-center gap-2 text-xs py-1">
-                                    <span className={`w-1.5 h-1.5 rounded-full ${
-                                      t.status === 'done' ? 'bg-status-done' :
-                                      t.status === 'blocked' ? 'bg-red-400' :
-                                      t.status === 'in_progress' || t.status === 'assigned' ? 'bg-status-working' : 'bg-text-muted/30'
-                                    }`} />
-                                    <span className="text-text-primary flex-1 truncate">{t.title}</span>
-                                    {t.owner && <span className="text-text-muted/50">⚒ {agents.find(a => a.id === t.owner)?.name || t.owner}</span>}
-                                    <span className="text-text-muted/40 text-[9px] uppercase">{t.status}</span>
-                                  </div>
-                                ))}
+                                <span className="text-[11px] text-text-muted text-center font-mono">{jobLabel}</span>
+                                <span className="text-[13px] text-center px-2 py-1 rounded-md flex items-center justify-center gap-1" style={{ background: bgColor, border: `1px solid ${borderColor}` }}>
+                                  <span className="text-base">{icon}</span>
+                                  <span className="text-[11px] font-bold uppercase tracking-wide" style={{ color }}>{role}</span>
+                                </span>
                               </div>
                             )
-                          })()}
+                          })}
                         </div>
+                        {/* Auto-approve indicator */}
+                        {autoApprove && (
+                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-status-working/10 border border-status-working/20">
+                            <span className="text-[11px] text-status-working font-medium">Auto-approve ON</span>
+                            <button onClick={() => setAutoApprove(false)} className="text-[11px] text-text-muted hover:text-red-400 cursor-pointer ml-auto">Stop</button>
+                          </div>
+                        )}
 
-                        {/* Batch Proposal Card */}
-                        {batchProposal && taskGroup.status === 'batch_proposed' && (
+                        {/* Batch Proposal Card — above batch list */}
+                        {batchProposal && taskGroup.status === 'batch_proposed' && !autoApprove && (
                           <div className="glass-card border-accent/30 p-4">
                             <h4 className="text-xs font-heading font-bold text-accent mb-2">Batch Proposal</h4>
                             {(batchProposal.tasks || []).map((t: any, i: number) => (
@@ -1091,7 +1414,6 @@ export default function App() {
                             <div className="flex gap-2 mt-3">
                               <button
                                 onClick={() => {
-                                  // Send both formats: [HIVE:HUMAN] JSON + plain "Y" for terminal prompt
                                   window.api.agent.send(taskGroup.managerId, 'HUMAN', { batch: batchProposal.batch, action: 'approved' })
                                   window.api.pty.write(taskGroup.managerId, 'Y\r')
                                   setTaskGroups(prev => prev.map(tg => tg.id === taskGroup.id ? { ...tg, status: 'batch_approved' as const, currentBatch: batchProposal.batch } : tg))
@@ -1099,6 +1421,16 @@ export default function App() {
                                 }}
                                 className="px-3 py-1.5 rounded-lg text-xs bg-accent text-text-on-purple hover:bg-accent-hover cursor-pointer"
                               >Approve</button>
+                              <button
+                                onClick={() => {
+                                  setAutoApprove(true)
+                                  window.api.agent.send(taskGroup.managerId, 'HUMAN', { batch: batchProposal.batch, action: 'approved' })
+                                  window.api.pty.write(taskGroup.managerId, 'Y\r')
+                                  setTaskGroups(prev => prev.map(tg => tg.id === taskGroup.id ? { ...tg, status: 'batch_approved' as const, currentBatch: batchProposal.batch } : tg))
+                                  setBatchProposal(null)
+                                }}
+                                className="px-3 py-1.5 rounded-lg text-xs bg-status-working/20 text-status-working hover:bg-status-working/30 cursor-pointer"
+                              >Always Approve</button>
                               <button
                                 onClick={() => {
                                   window.api.agent.send(taskGroup.managerId, 'HUMAN', { batch: batchProposal.batch, action: 'rejected' })
@@ -1109,6 +1441,85 @@ export default function App() {
                             </div>
                           </div>
                         )}
+
+                        {/* Batches — current expanded, historical collapsed */}
+                        {(() => {
+                          const allTasks = batchTasks[taskGroup.projectId] || []
+                          if (allTasks.length === 0) return (
+                            <div className="glass-card p-4">
+                              <p className="text-xs text-text-muted">No tasks yet. Use /manager-whip-start to begin.</p>
+                            </div>
+                          )
+                          // Find current batch = batch with most recent task activity
+                          const byBatch = new Map<number, typeof allTasks>()
+                          allTasks.forEach(t => {
+                            const b = t.batch || 1
+                            if (!byBatch.has(b)) byBatch.set(b, [])
+                            byBatch.get(b)!.push(t)
+                          })
+                          let currentBatchNum = 1
+                          let latestTime = 0
+                          for (const [bNum, bTasks] of byBatch) {
+                            const t = Math.max(...bTasks.map(t => t.assignedAt ? new Date(t.assignedAt).getTime() : 0))
+                            if (t > latestTime) { latestTime = t; currentBatchNum = bNum }
+                          }
+                          const bTasks = byBatch.get(currentBatchNum) || []
+                          const done = bTasks.filter(t => t.status === 'done').length
+                          const blocked = bTasks.filter(t => t.status === 'blocked').length
+                          const abandoned = bTasks.filter(t => t.status === 'abandoned').length
+                          return (
+                            <div className="glass-card">
+                              <div className="flex items-center justify-between px-4 py-3">
+                                <div className="flex items-center gap-3">
+                                  <h3 className="text-sm font-heading font-bold text-text-primary">Current Batch</h3>
+                                  {(() => {
+                                    const dates = bTasks.map(t => t.assignedAt).filter(Boolean).sort().reverse()
+                                    if (!dates.length) return null
+                                    const start = new Date(dates[0]!).toLocaleDateString([], { month: 'short', day: 'numeric' })
+                                    return <span className="text-[11px] text-text-muted font-mono">{start}</span>
+                                    })()}
+                                  <span className={`px-2 py-0.5 rounded-full text-[11px] font-heading font-bold uppercase tracking-wider ${
+                                    taskGroup.status === 'executing' ? 'bg-status-working/20 text-status-working' :
+                                    taskGroup.status === 'awaiting_merge' ? 'bg-accent/20 text-accent' :
+                                    'bg-bg-hover text-text-muted'
+                                  }`}>{taskGroup.status.replace('_', ' ')}</span>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-24 h-1.5 bg-bg-hover rounded-full overflow-hidden">
+                                    <div className="h-full bg-accent rounded-full transition-all" style={{ width: `${bTasks.length ? ((done + abandoned) / bTasks.length) * 100 : 0}%` }} />
+                                  </div>
+                                  <span className="text-[12px] text-text-muted font-mono">
+                                    {done}/{bTasks.length}
+                                    {blocked > 0 && ` · ${blocked} blocked`}
+                                    {abandoned > 0 && ` · ${abandoned} abandoned`}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="pb-2">
+                                <div className="grid grid-cols-[100px_72px_1fr_80px] gap-2 px-4 py-1.5 text-[11px] font-heading font-bold uppercase tracking-wider text-text-muted border-b border-border/50">
+                                  <span>Worker</span>
+                                  <span>Task</span>
+                                  <span>Summary</span>
+                                  <span className="text-right">Result</span>
+                                </div>
+                                {[...bTasks].reverse().map((t) => {
+                                  const workerName = t.owner ? (agents.find(a => a.id === t.owner)?.name || t.owner) : '—'
+                                  const statusIcon = t.status === 'done' ? '✅' : t.status === 'blocked' ? '❌' : t.status === 'abandoned' ? '🚫' : t.status === 'in_progress' ? '🔄' : t.status === 'assigned' ? '📋' : '⏳'
+                                  return (
+                                    <div key={t.id} className={`grid grid-cols-[100px_72px_1fr_80px] gap-2 items-center px-4 py-1.5 text-[12px] hover:bg-bg-hover/30 transition-colors ${t.status === 'abandoned' ? 'opacity-50' : ''}`}
+                                      title={t.status === 'abandoned' ? `Abandoned: ${t.abandoned_reason || ''}` : t.status === 'blocked' ? `Blocked: ${t.blocked_reason || ''}` : t.note ? `Note: ${t.note}` : ''}>
+                                      <span className="text-text-secondary truncate">{t.owner ? '🔧 ' : ''}{workerName}</span>
+                                      <span className="font-mono text-[11px] text-text-muted">{t.id}</span>
+                                      <span className={`truncate ${t.status === 'abandoned' ? 'text-text-muted line-through' : 'text-text-primary'}`}>{t.title}{t.note ? ' 📌' : ''}</span>
+                                      <span className="text-right text-[11px]">{statusIcon} {t.status}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
+                            </div>
+                          )
+                        })()}
+
 
                         {/* Merge Card */}
                         {taskGroup.status === 'awaiting_merge' && (
@@ -1143,7 +1554,7 @@ export default function App() {
                             <h4 className="text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Manager Reports</h4>
                             <div className="space-y-1 max-h-32 overflow-y-auto">
                               {managerReports.slice(-5).map((r, i) => (
-                                <div key={i} className="text-[11px] text-text-muted py-0.5">
+                                <div key={i} className="text-[13px] text-text-muted py-0.5">
                                   <span className="text-text-muted/40 font-mono">{new Date(r.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                   {' '}{r.message}
                                 </div>
@@ -1152,28 +1563,122 @@ export default function App() {
                           </div>
                         )}
 
-                        {/* Dispatcher Log */}
-                        {dispatcherLog.length > 0 && (
-                          <div>
-                            <h4 className="text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Dispatcher Log</h4>
-                            <div className="space-y-0.5 max-h-48 overflow-y-auto bg-bg-primary rounded-lg p-2 border border-border font-mono text-[10px]">
-                              {dispatcherLog.slice(-20).map((entry, i) => (
-                                <div key={i} className="text-text-muted">
-                                  <span className="text-text-muted/40">{new Date(entry.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>
-                                  {' '}<span className={`font-medium ${
-                                    entry.action.includes('FAIL') || entry.detail.includes('❌') ? 'text-red-400' :
-                                    entry.detail.includes('✅') ? 'text-green-400' :
-                                    'text-accent'
-                                  }`}>[{entry.action}]</span>
-                                  {' '}{entry.detail}
+                        {/* Activity Log */}
+                        {(() => {
+                          const sysActions = ['gate', 'auto-assign', 'stuck', 'dispatch']
+                          const roleEmoji = (agId: string | null) => {
+                            if (!agId) return '⚡'
+                            const ag = agents.find(a => a.id === agId)
+                            if (!ag) return '⚡'
+                            const r = ag.taskGroupRole
+                            return r === 'manager' ? '👑' : r === 'worker' ? '🔧' : r === 'qa' ? '🛡️' : r === 'critic' ? '⚖️' : '⚡'
+                          }
+                          const roleName = (agId: string | null) => {
+                            if (!agId) return null
+                            const ag = agents.find(a => a.id === agId)
+                            return ag?.name || null
+                          }
+                          const roleColor = (agId: string | null) => {
+                            if (!agId) return 'text-text-muted'
+                            const ag = agents.find(a => a.id === agId)
+                            const r = ag?.taskGroupRole
+                            return r === 'manager' ? 'text-amber-400' : r === 'worker' ? 'text-blue-400' : r === 'qa' ? 'text-emerald-400' : r === 'critic' ? 'text-purple-400' : 'text-text-muted'
+                          }
+                          const isSys = (e: any) => !e.agentId || sysActions.includes(e.action)
+                          const actionColor = (action: string, detail: string) => {
+                            if (action === 'task-abandon' || detail.includes('🚫')) return 'text-amber-400'
+                            if (action === 'task-blocked' || detail.includes('❌') || detail.includes('FAIL')) return 'text-red-400'
+                            if (action === 'task-done' || detail.includes('✅') || detail.includes('PASSED')) return 'text-emerald-400'
+                            if (action === 'task-create' || action === 'batch-propose') return 'text-accent'
+                            if (action === 'task-assign' || action === 'auto-assign') return 'text-blue-400'
+                            if (action === 'stuck' || action === 'limit') return 'text-amber-400'
+                            return 'text-text-muted'
+                          }
+                          return (
+                            <div className="glass-card overflow-hidden">
+                              <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+                                <h4 className="text-[13px] font-heading font-bold">Activity Log</h4>
+                                <div className="flex gap-1">
+                                  <button onClick={() => { window.api.dispatcher.clearLog(); setDispatcherLog([]) }} className="px-2 py-1 rounded text-[11px] text-text-muted hover:text-red-400 hover:bg-bg-hover transition-colors cursor-pointer">Clear</button>
+                                  <button onClick={() => {
+                                    const cutoff = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString()
+                                    window.api.dispatcher.clearLog(cutoff).then(setDispatcherLog)
+                                  }} className="px-2 py-1 rounded text-[11px] text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer">&gt;3d</button>
+                                  <button onClick={() => {
+                                    const cutoff = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString()
+                                    window.api.dispatcher.clearLog(cutoff).then(setDispatcherLog)
+                                  }} className="px-2 py-1 rounded text-[11px] text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer">&gt;10d</button>
                                 </div>
-                              ))}
+                              </div>
+                              <div className="grid grid-cols-[20px_90px_56px_64px_80px_1fr] gap-1.5 px-4 py-1.5 text-[10px] font-heading font-bold uppercase tracking-wider text-text-muted border-b border-border/50">
+                                <span></span>
+                                <span>Who</span>
+                                <span>Time</span>
+                                <span>Task</span>
+                                <span>Action</span>
+                                <span>Content</span>
+                              </div>
+                              <div className="max-h-[400px] overflow-y-auto">
+                                {dispatcherLog.length === 0 && (
+                                  <div className="px-4 py-6 text-center text-[12px] text-text-muted">No activity yet</div>
+                                )}
+                                {dispatcherLog.map((entry, i) => {
+                                  const sys = isSys(entry)
+                                  const d = new Date(entry.time)
+                                  const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                                  const datePrefix = d.toLocaleDateString([], { month: 'short', day: 'numeric' })
+                                  const name = roleName(entry.agentId) || 'system'
+                                  return (
+                                    <div key={i} className={`grid grid-cols-[20px_90px_56px_64px_80px_1fr] gap-1.5 items-center px-4 py-1.5 text-[12px] hover:bg-bg-hover/30 transition-colors border-b border-border/30 ${sys ? 'opacity-50 hover:opacity-80' : ''}`}>
+                                      <span className="text-[14px] text-center">{roleEmoji(entry.agentId)}</span>
+                                      <span className={`font-medium truncate ${roleColor(entry.agentId)}`}>{name}</span>
+                                      <span className="text-text-muted/50 font-mono text-[10px]" title={`${datePrefix} ${timeStr}`}>{timeStr}</span>
+                                      <span className="font-mono text-[10px] text-text-muted">{(entry.detail.match(/task-\d+/) || [''])[0]}</span>
+                                      <span className={`font-mono text-[10px] font-bold uppercase tracking-wide ${actionColor(entry.action, entry.detail)}`}>{entry.action.replace('task-', '')}</span>
+                                      <span className="text-text-primary truncate">{entry.detail}</span>
+                                    </div>
+                                  )
+                                })}
+                              </div>
                             </div>
-                          </div>
-                        )}
+                          )
+                        })()}
 
                         {/* Controls */}
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 items-center flex-wrap">
+                          <button
+                            onClick={() => {
+                              window.api.inbox.list(taskGroup.projectId).then(setInboxData)
+                              setShowInbox(true)
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer"
+                          >📬 Inbox</button>
+                          <button
+                            onClick={() => {
+                              setTaskGroups(prev => prev.map(tg =>
+                                tg.id === taskGroup.id ? { ...tg, dailyReportEnabled: !tg.dailyReportEnabled } : tg
+                              ))
+                            }}
+                            className={`px-3 py-1.5 rounded-lg text-xs border transition-colors cursor-pointer ${
+                              taskGroup.dailyReportEnabled
+                                ? 'bg-accent/10 border-accent/30 text-accent'
+                                : 'bg-bg-secondary border-border text-text-muted hover:text-text-primary hover:bg-bg-hover'
+                            }`}
+                          >
+                            📋 Daily Report {taskGroup.dailyReportEnabled ? 'ON' : 'OFF'}
+                          </button>
+                          <button
+                            onClick={() => {
+                              setBatchTasks(prev => {
+                                const next = { ...prev }
+                                delete next[taskGroup.projectId]
+                                return next
+                              })
+                              window.api.dispatcher.clearLog()
+                              setDispatcherLog([])
+                            }}
+                            className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer"
+                          >🧹 Clear History</button>
                           <button className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer">
                             ⏸ Pause
                           </button>
@@ -1198,6 +1703,44 @@ export default function App() {
                       </div>
                     )
                   })()}
+                </div>
+              )}
+
+              {/* Inbox Modal */}
+              {showInbox && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowInbox(false)} />
+                  <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-2xl w-[600px] max-h-[70vh] overflow-hidden flex flex-col">
+                    <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+                      <h2 className="font-heading font-semibold text-sm">📬 Message Inbox</h2>
+                      <button onClick={() => setShowInbox(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:bg-bg-hover cursor-pointer">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                      {inboxData.length === 0 && <p className="text-text-muted text-sm text-center py-8">No inbox messages</p>}
+                      {inboxData.map(({ agentId, messages }) => {
+                        const ag = agents.find(a => a.id === agentId)
+                        const name = ag?.name || agentId
+                        const emoji = ag?.taskGroupRole === 'manager' ? '👑' : ag?.taskGroupRole === 'worker' ? '🔧' : ag?.taskGroupRole === 'qa' ? '🛡️' : ag?.taskGroupRole === 'critic' ? '⚖️' : '👤'
+                        if (messages.length === 0) return null
+                        return (
+                          <div key={agentId}>
+                            <div className="text-[12px] font-semibold text-text-secondary mb-1">{emoji} {name} ({messages.length} messages)</div>
+                            <div className="space-y-1 max-h-[200px] overflow-y-auto">
+                              {[...messages].reverse().map((msg, i) => (
+                                <div key={i} className={`text-[11px] font-mono px-3 py-1.5 rounded-lg border border-border/30 ${msg._read ? 'bg-bg-primary/30 text-text-muted' : 'bg-accent/5 text-text-primary'}`}>
+                                  <span className="text-text-muted/50">{new Date(msg.time).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                  {' '}<span className={`font-bold ${msg._read ? 'text-text-muted' : 'text-accent'}`}>[{msg.type}]</span>
+                                  {' '}{msg.message || msg.summary || msg.title || msg.status || JSON.stringify(msg).slice(0, 120)}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1230,7 +1773,7 @@ export default function App() {
                         <div key={zone.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border text-sm">
                           <span className="w-2 h-2 rounded-full bg-accent flex-shrink-0" />
                           <span className="font-medium text-text-primary truncate">{zone.name}</span>
-                          <span className="text-[11px] text-text-muted truncate ml-auto max-w-[200px] font-mono">{zone.path}</span>
+                          <span className="text-[13px] text-text-muted truncate ml-auto max-w-[200px] font-mono">{zone.path}</span>
                           <button
                             onClick={() => setProjects((prev) => prev.map((p) =>
                               p.id === selectedProject.id ? { ...p, zones: p.zones.filter((z) => z.id !== zone.id) } : p
@@ -1273,7 +1816,7 @@ export default function App() {
                         <div key={zone.id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-secondary border border-border text-sm">
                           <span className="w-2 h-2 rounded-full bg-status-waiting flex-shrink-0" />
                           <span className="font-medium text-text-primary truncate">{zone.name}</span>
-                          <span className="text-[11px] text-text-muted truncate ml-auto max-w-[200px] font-mono">{zone.path}</span>
+                          <span className="text-[13px] text-text-muted truncate ml-auto max-w-[200px] font-mono">{zone.path}</span>
                           <button
                             onClick={() => setProjects((prev) => prev.map((p) =>
                               p.id === selectedProject.id ? { ...p, zones: p.zones.filter((z) => z.id !== zone.id) } : p
@@ -1393,7 +1936,7 @@ export default function App() {
                           placeholder="Name"
                         />
                         <div className="flex items-center gap-1.5 px-3">
-                          <span className="text-[10px] text-text-muted">Tag:</span>
+                          <span className="text-[13px] text-text-muted">Tag:</span>
                           {['', '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899', '#6b7280'].map((c) => (
                             <button
                               key={c || 'none'}
@@ -1474,7 +2017,7 @@ export default function App() {
                           }
                           window.api.templates.save(t)
                         }}
-                        className="text-[10px] text-accent hover:text-accent-hover cursor-pointer font-medium"
+                        className="text-[13px] text-accent hover:text-accent-hover cursor-pointer font-medium"
                       >
                         Save as Template
                       </button>
@@ -1492,7 +2035,7 @@ export default function App() {
                         [&_p]:text-xs [&_p]:text-text-secondary [&_p]:my-1
                         [&_li]:text-xs [&_li]:text-text-secondary
                         [&_ul]:my-1 [&_ol]:my-1
-                        [&_code]:text-[10px] [&_code]:bg-bg-primary [&_code]:px-1 [&_code]:rounded">
+                        [&_code]:text-[13px] [&_code]:bg-bg-primary [&_code]:px-1 [&_code]:rounded">
                         <Markdown>{selectedAgent.soul || '*No content*'}</Markdown>
                       </div>
                     </div>
@@ -1523,7 +2066,7 @@ export default function App() {
                                     <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
                                   </svg>
                                   <span className="text-xs font-heading font-semibold text-text-primary uppercase">{pack}</span>
-                                  <span className="text-[10px] text-text-muted">{enabledCount}/{packSkills.length}</span>
+                                  <span className="text-[13px] text-text-muted">{enabledCount}/{packSkills.length}</span>
                                 </div>
                                 <button
                                   onClick={() => {
@@ -1532,7 +2075,7 @@ export default function App() {
                                     const next = allEnabled ? current.filter((s) => !packSkills.some((ps) => ps.name === s)) : [...new Set([...current, ...packSkills.map((s) => s.name)])]
                                     updateAgent(selectedAgent.id, { enabledSkills: next })
                                   }}
-                                  className="text-[10px] text-accent hover:text-accent-hover cursor-pointer font-medium"
+                                  className="text-[13px] text-accent hover:text-accent-hover cursor-pointer font-medium"
                                 >
                                   {packSkills.every((s) => (selectedAgent.enabledSkills || []).includes(s.name)) ? 'Disable all' : 'Enable all'}
                                 </button>
@@ -1574,11 +2117,11 @@ export default function App() {
                                       </button>
                                     </div>
                                     {!isExpanded && skill.description && (
-                                      <p className="text-[11px] text-text-muted px-4 pb-2 pl-9">{skill.description}</p>
+                                      <p className="text-[13px] text-text-muted px-4 pb-2 pl-9">{skill.description}</p>
                                     )}
                                     {isExpanded && skillContent && (
                                       <pre className="px-4 py-3 mx-4 mb-3 rounded-lg bg-bg-primary border border-border
-                                        text-[11px] text-text-muted font-mono leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap">
+                                        text-[13px] text-text-muted font-mono leading-relaxed max-h-64 overflow-y-auto whitespace-pre-wrap">
                                         {skillContent}
                                       </pre>
                                     )}
@@ -1610,7 +2153,7 @@ export default function App() {
                       placeholder="Override default (e.g. claude --model sonnet)"
                       className="w-full px-3 py-2 rounded-lg bg-bg-secondary border border-border text-text-primary text-sm font-mono focus:outline-none focus:border-accent transition-colors"
                     />
-                    <p className="text-[11px] text-text-muted mt-1.5">Leave empty to use app default</p>
+                    <p className="text-[13px] text-text-muted mt-1.5">Leave empty to use app default</p>
                   </div>
 
                   {/* Work Zone */}
@@ -1631,7 +2174,7 @@ export default function App() {
                           >
                             <span className={`inline-block w-2 h-2 rounded-full ${zone.type === 'rnd' ? 'bg-accent' : 'bg-status-working'}`} />
                             <span className="font-medium">{zone.name}</span>
-                            <span className="text-[10px] text-text-muted uppercase ml-auto">{zone.type === 'rnd' ? 'R&D' : 'Docs'}</span>
+                            <span className="text-[13px] text-text-muted uppercase ml-auto">{zone.type === 'rnd' ? 'R&D' : 'Docs'}</span>
                           </button>
                         ))}
                     </div>
@@ -1642,8 +2185,8 @@ export default function App() {
                           <path d="M18 9a9 9 0 0 1-9 9" />
                         </svg>
                         <span className="text-xs text-accent font-mono">{selectedAgent.worktreeBranch}</span>
-                        <span className="text-[11px] text-text-muted font-mono truncate">{selectedAgent.worktreePath}</span>
-                        <p className="text-[10px] text-text-muted ml-auto">Changing zone will reset worktree</p>
+                        <span className="text-[13px] text-text-muted font-mono truncate">{selectedAgent.worktreePath}</span>
+                        <p className="text-[13px] text-text-muted ml-auto">Changing zone will reset worktree</p>
                       </div>
                     )}
                   </div>
@@ -1661,7 +2204,7 @@ export default function App() {
                 <div className="flex items-center gap-2">
                   <button
                     onClick={() => window.api.agent.loadLogs(selectedAgent.id).then(setAgentLogs)}
-                    className="text-[11px] text-accent hover:text-accent-hover cursor-pointer"
+                    className="text-[13px] text-accent hover:text-accent-hover cursor-pointer"
                   >
                     Refresh
                   </button>
@@ -1669,7 +2212,7 @@ export default function App() {
                     onClick={() => {
                       window.api.agent.clearLogs(selectedAgent.id).then(() => setAgentLogs([]))
                     }}
-                    className="text-[11px] text-red-400 hover:text-red-300 cursor-pointer"
+                    className="text-[13px] text-red-400 hover:text-red-300 cursor-pointer"
                   >
                     Clear All
                   </button>
@@ -1713,14 +2256,14 @@ export default function App() {
                         <div className="px-4 py-2.5 border-b border-border flex items-center gap-2">
                           {block.title ? (
                             <>
-                              <span className="text-[10px] px-1.5 py-0.5 rounded bg-accent/20 text-accent font-semibold uppercase">Task</span>
+                              <span className="text-[13px] px-1.5 py-0.5 rounded bg-accent/20 text-accent font-semibold uppercase">Task</span>
                               <span className="text-sm font-medium text-text-primary">{block.title}</span>
                             </>
                           ) : (
                             <span className="text-sm text-text-muted">Activity</span>
                           )}
                           {block.startTime && (
-                            <span className="text-[10px] text-text-muted ml-auto font-mono">
+                            <span className="text-[13px] text-text-muted ml-auto font-mono">
                               {new Date(block.startTime).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })}
                             </span>
                           )}
@@ -1728,7 +2271,7 @@ export default function App() {
                         {/* Summary if done */}
                         {block.summary && (
                           <div className="px-4 py-2 border-b border-border flex items-center gap-2 bg-status-working/5">
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-status-working/20 text-status-working font-semibold uppercase">Done</span>
+                            <span className="text-[13px] px-1.5 py-0.5 rounded bg-status-working/20 text-status-working font-semibold uppercase">Done</span>
                             <span className="text-sm text-text-primary">{block.summary}</span>
                           </div>
                         )}
@@ -1742,7 +2285,7 @@ export default function App() {
                               const time = new Date(log.time)
                               const timeStr = time.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
                               return (
-                                <div key={li} className="flex items-center gap-2 text-[11px]">
+                                <div key={li} className="flex items-center gap-2 text-[13px]">
                                   <span className="text-text-muted font-mono w-16">{timeStr}</span>
                                   {log.type === 'status' && (
                                     <span className={log.message === 'working' ? 'text-status-working' : 'text-status-waiting'}>
@@ -1759,7 +2302,7 @@ export default function App() {
                               )
                             })}
                           {block.statusChanges > 3 && (
-                            <p className="text-[10px] text-text-muted">{block.statusChanges} status changes</p>
+                            <p className="text-[13px] text-text-muted">{block.statusChanges} status changes</p>
                           )}
                         </div>
                       </div>
@@ -1822,14 +2365,55 @@ export default function App() {
           agents={projectAgents}
           onSubmit={(tg) => {
             setTaskGroups((prev) => [...prev, tg])
-            // Set taskGroupRole on agents
-            setAgents((prev) => prev.map((a) => {
+            // Set taskGroupRole on agents and rewrite their definition files
+            const updatedAgents = agents.map((a) => {
               if (a.id === tg.managerId) return { ...a, taskGroupRole: 'manager' as const }
               if (a.id === tg.qaId) return { ...a, taskGroupRole: 'qa' as const }
               if (a.id === tg.criticId) return { ...a, taskGroupRole: 'critic' as const }
               if (tg.workerIds.includes(a.id)) return { ...a, taskGroupRole: 'worker' as const }
               return a
-            }))
+            })
+            setAgents(updatedAgents)
+            // Rewrite agent definition files with soul addendum for all task group members
+            const tgAgentIds = [tg.managerId, ...tg.workerIds, tg.qaId, tg.criticId]
+            for (const agId of tgAgentIds) {
+              const ag = updatedAgents.find(a => a.id === agId)
+              if (!ag) continue
+              const proj = projects.find(p => p.id === ag.projectId)
+              const zone = proj?.zones?.find((z: Zone) => z.id === ag.zoneId)
+              const cwd = ag.worktreePath || zone?.path
+              if (!cwd) continue
+              const defCfg: Record<string, any> = {
+                agentId: ag.id, name: ag.name, role: ag.role, department: ag.department,
+                soul: ag.soul, skills: ag.enabledSkills || [], model: ag.model || 'inherit',
+                effort: ag.effort || 'high', taskGroupRole: ag.taskGroupRole,
+              }
+              if (ag.taskGroupRole === 'manager') {
+                defCfg.todoSource = tg.todoSource
+                defCfg.maxGateRetries = tg.maxGateRetries
+                defCfg.taskGroupProjectId = tg.projectId
+                defCfg.taskGroupWorkers = tg.workerIds.map(wid => {
+                  const w = updatedAgents.find(a => a.id === wid)
+                  return { id: wid, name: w?.name || wid }
+                })
+                const qa = updatedAgents.find(a => a.id === tg.qaId)
+                defCfg.taskGroupQaId = tg.qaId
+                defCfg.taskGroupQaName = qa?.name || tg.qaId
+                const critic = updatedAgents.find(a => a.id === tg.criticId)
+                defCfg.taskGroupCriticId = tg.criticId
+                defCfg.taskGroupCriticName = critic?.name || tg.criticId
+                defCfg.dailyReportEnabled = tg.dailyReportEnabled
+              }
+              window.api.agent.writeDefinition(cwd, defCfg)
+            }
+            // Auto-create target branch (staging) if it doesn't exist
+            if (tg.targetBranch) {
+              const proj = projects.find(p => p.id === tg.projectId)
+              const rndZone = proj?.zones?.find((z: Zone) => z.type === 'rnd')
+              if (rndZone?.path) {
+                window.api.git.createTargetBranch(rndZone.path, tg.targetBranch)
+              }
+            }
           }}
         />
       )}
@@ -1889,27 +2473,27 @@ export default function App() {
                 <div className="px-4 py-2.5 border-b border-border">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm text-text-primary">GitHub</span>
-                    <span className="text-[10px] text-text-muted">{appPrefs.githubToken ? 'configured' : 'not set'}</span>
+                    <span className="text-[13px] text-text-muted">{appPrefs.githubToken ? 'configured' : 'not set'}</span>
                   </div>
                   <input
                     type="password"
                     value={appPrefs.githubToken || ''}
                     onChange={(e) => setAppPrefs((p) => ({ ...p, githubToken: e.target.value }))}
                     placeholder="ghp_..."
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[12px] font-mono placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] font-mono placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
                   />
                 </div>
                 <div className="px-4 py-2.5">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm text-text-primary">GitLab</span>
-                    <span className="text-[10px] text-text-muted">{appPrefs.gitlabToken ? 'configured' : 'not set'}</span>
+                    <span className="text-[13px] text-text-muted">{appPrefs.gitlabToken ? 'configured' : 'not set'}</span>
                   </div>
                   <input
                     type="password"
                     value={appPrefs.gitlabToken || ''}
                     onChange={(e) => setAppPrefs((p) => ({ ...p, gitlabToken: e.target.value }))}
                     placeholder="glpat-..."
-                    className="w-full px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[12px] font-mono placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] font-mono placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
                   />
                 </div>
               </div>
@@ -1920,7 +2504,7 @@ export default function App() {
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Default Skills</label>
               <div className="space-y-3">
                 <div className="p-3 rounded-xl bg-bg-secondary border border-border">
-                  <p className="text-[11px] text-accent font-semibold uppercase mb-2">R&D Agents</p>
+                  <p className="text-[13px] text-accent font-semibold uppercase mb-2">R&D Agents</p>
                   <div className="flex flex-wrap gap-1">
                     {availableSkills.map((s) => (
                       <button key={`rnd-${s.name}`}
@@ -1928,13 +2512,13 @@ export default function App() {
                           const cur = p.defaultSkillsRnD || []
                           return { ...p, defaultSkillsRnD: cur.includes(s.name) ? cur.filter((x) => x !== s.name) : [...cur, s.name] }
                         })}
-                        className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${(appPrefs.defaultSkillsRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
+                        className={`px-2 py-0.5 rounded-full text-[13px] cursor-pointer ${(appPrefs.defaultSkillsRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
                       >/{s.name}</button>
                     ))}
                   </div>
                 </div>
                 <div className="p-3 rounded-xl bg-bg-secondary border border-border">
-                  <p className="text-[11px] text-status-working font-semibold uppercase mb-2">Non-R&D Agents</p>
+                  <p className="text-[13px] text-status-working font-semibold uppercase mb-2">Non-R&D Agents</p>
                   <div className="flex flex-wrap gap-1">
                     {availableSkills.map((s) => (
                       <button key={`non-${s.name}`}
@@ -1942,7 +2526,7 @@ export default function App() {
                           const cur = p.defaultSkillsNonRnD || []
                           return { ...p, defaultSkillsNonRnD: cur.includes(s.name) ? cur.filter((x) => x !== s.name) : [...cur, s.name] }
                         })}
-                        className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${(appPrefs.defaultSkillsNonRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
+                        className={`px-2 py-0.5 rounded-full text-[13px] cursor-pointer ${(appPrefs.defaultSkillsNonRnD || []).includes(s.name) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted'}`}
                       >/{s.name}</button>
                     ))}
                   </div>
@@ -1961,22 +2545,22 @@ export default function App() {
                     <div key={t.id} className="px-4 py-3 rounded-xl bg-bg-primary border border-border">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-text-primary">{t.name}</span>
-                        <span className="text-[10px] text-text-muted">{t.role} · {t.category}</span>
+                        <span className="text-[13px] text-text-muted">{t.role} · {t.category}</span>
                         {inheritCount > 0 && (
-                          <span className="ml-auto px-2 py-0.5 rounded-full bg-accent/15 text-accent text-[10px] font-semibold">
+                          <span className="ml-auto px-2 py-0.5 rounded-full bg-accent/15 text-accent text-[13px] font-semibold">
                             {inheritCount} agent{inheritCount > 1 ? 's' : ''}
                           </span>
                         )}
                         {inheritCount === 0 && (
-                          <span className="ml-auto text-[10px] text-text-muted">No agents</span>
+                          <span className="ml-auto text-[13px] text-text-muted">No agents</span>
                         )}
                         <button onClick={() => { setShowAppSettings(false); setEditingTemplate(t) }}
-                          className="text-[11px] text-accent hover:text-accent-hover cursor-pointer font-medium">Edit</button>
+                          className="text-[13px] text-accent hover:text-accent-hover cursor-pointer font-medium">Edit</button>
                       </div>
                       {inheritCount > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {inheritNames.map(name => (
-                            <span key={name} className="px-2 py-0.5 rounded-md bg-bg-secondary text-[10px] text-text-muted">{name}</span>
+                            <span key={name} className="px-2 py-0.5 rounded-md bg-bg-secondary text-[13px] text-text-muted">{name}</span>
                           ))}
                         </div>
                       )}
@@ -2048,7 +2632,7 @@ export default function App() {
               />
               {ungroupedAgents.length > 0 ? (
                 <>
-                  <label className="block text-[10px] text-text-muted uppercase tracking-wider font-semibold mb-2">Select agents to add</label>
+                  <label className="block text-[13px] text-text-muted uppercase tracking-wider font-semibold mb-2">Select agents to add</label>
                   <div className="space-y-1 max-h-[200px] overflow-y-auto">
                     {ungroupedAgents.map((a) => (
                       <label key={a.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-bg-hover cursor-pointer transition-colors">
@@ -2065,20 +2649,20 @@ export default function App() {
                         />
                         <div className="w-5 h-5 flex-shrink-0"><AvatarPreview config={a.avatar} size={20} /></div>
                         <span className="text-sm text-text-primary">{a.name}</span>
-                        <span className="text-[10px] text-text-muted ml-auto">{a.role}</span>
+                        <span className="text-[13px] text-text-muted ml-auto">{a.role}</span>
                       </label>
                     ))}
                   </div>
                 </>
               ) : (
-                <p className="text-[11px] text-text-muted italic py-2">No ungrouped agents in {teamPrompt.dept}.</p>
+                <p className="text-[13px] text-text-muted italic py-2">No ungrouped agents in {teamPrompt.dept}.</p>
               )}
               <div className="flex justify-end gap-2 mt-3">
-                <button onClick={() => setTeamPrompt(null)} className="px-3 py-1.5 rounded-lg text-[11px] text-text-muted hover:bg-bg-hover cursor-pointer">Cancel</button>
+                <button onClick={() => setTeamPrompt(null)} className="px-3 py-1.5 rounded-lg text-[13px] text-text-muted hover:bg-bg-hover cursor-pointer">Cancel</button>
                 <button
                   onClick={handleCreateTeam}
                   disabled={!canCreate}
-                  className="px-3 py-1.5 rounded-lg text-[11px] bg-accent text-text-on-purple font-medium hover:bg-accent-hover cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-3 py-1.5 rounded-lg text-[13px] bg-accent text-text-on-purple font-medium hover:bg-accent-hover cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 >Create Team ({teamSelectedAgents.size})</button>
               </div>
             </div>
@@ -2099,7 +2683,7 @@ export default function App() {
                 <span className="text-sm" style={{ color: '#F59E0B' }}>♛</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-medium text-text-primary">{r.title}</p>
-                  <p className="text-[11px] text-text-muted truncate">{r.message}</p>
+                  <p className="text-[13px] text-text-muted truncate">{r.message}</p>
                 </div>
                 <button
                   onClick={() => setManagerReports(prev => prev.filter((_, j) => j !== prev.length - 3 + i))}

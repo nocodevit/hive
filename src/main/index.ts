@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync } from 'fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync } from 'fs'
 import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
@@ -36,6 +36,24 @@ function saveData(data: Record<string, unknown>) {
 const terminals: Map<string, pty.IPty> = new Map()
 const HIVE_PORT = parseInt(process.env.HIVE_PORT || '17710', 10)
 
+// 5-hour limit whip: track agents that hit usage limit (persisted)
+const LIMIT_STATE_FILE = join(DATA_DIR, 'limit-state.json')
+function loadLimitState(): Record<string, { resetTime: string; taskId?: string; whipScheduled?: boolean }> {
+  try { if (existsSync(LIMIT_STATE_FILE)) return JSON.parse(readFileSync(LIMIT_STATE_FILE, 'utf-8')) } catch {}
+  return {}
+}
+function saveLimitState(state: Record<string, any>) {
+  try { writeFileSync(LIMIT_STATE_FILE, JSON.stringify(state)) } catch {}
+}
+const limitResets: Map<string, { resetTime: Date; taskId?: string; whipScheduled?: boolean }> = new Map()
+// Hydrate from disk
+try {
+  const saved = loadLimitState()
+  for (const [k, v] of Object.entries(saved)) {
+    limitResets.set(k, { ...v, resetTime: new Date(v.resetTime) })
+  }
+} catch {}
+
 // Work logs persistence
 const LOGS_DIR = join(DATA_DIR, 'logs')
 
@@ -69,11 +87,33 @@ function loadLogs(agentId: string): any[] {
 const lastAgentStatus: Map<string, string> = new Map()
 
 // PTY injection: send [HIVE:TYPE] messages to agents
+// Split content and Enter to bypass bracketed-paste mode in Claude Code CLI
+// File-based message queue: write to agent's inbox (persistent, reliable)
+function writeToInbox(agentId: string, type: string, payload: object): boolean {
+  try {
+    // Find project for this agent to determine inbox path
+    const d = loadData()
+    const ctx = findTaskGroupForAgentInData(agentId, (d.taskGroups || []) as any[])
+    const projectId = ctx?.projectId || '_global'
+    const inboxDir = join(DATA_DIR, 'comms', projectId, 'inbox')
+    mkdirSync(inboxDir, { recursive: true })
+    const inboxFile = join(inboxDir, `${agentId}.jsonl`)
+    const entry = JSON.stringify({ time: new Date().toISOString(), type, ...payload, _read: false }) + '\n'
+    appendFileSync(inboxFile, entry)
+    return true
+  } catch { return false }
+}
+
+// Send message to agent: write to inbox (persistent) + PTY nudge (best-effort notification)
 function sendToAgent(agentId: string, type: string, payload: object): boolean {
+  const written = writeToInbox(agentId, type, payload)
+  // PTY nudge: short prompt telling agent to check inbox (not the actual message)
   const term = terminals.get(agentId)
-  if (!term) return false
-  term.write(formatHiveMessage(type, payload))
-  return true
+  if (term) {
+    term.write('[HIVE:INBOX] Check your inbox: .claude/hive-report.sh check-inbox')
+    setTimeout(() => { const t = terminals.get(agentId); if (t) t.write('\r') }, 150)
+  }
+  return written
 }
 
 // Auto-assign next pending task to a worker after task completion
@@ -87,17 +127,136 @@ function autoAssignNext(workerId: string, projectId: string) {
     const updated = updateTask(DATA_DIR, projectId, next.id, { status: 'assigned', owner: workerId, assignedAt: new Date().toISOString() })
     if (updated) {
       const sent = sendToAgent(workerId, 'TASK', updated)
-      dispatchLog('auto-assign', `${updated.id} → ${workerId} (PTY: ${sent})`)
+      dispatchLog('auto-assign', `${updated.id} → ${workerId} (PTY: ${sent})`, workerId)
+      broadcastTasks(projectId)
     }
   }
 }
 
-// Dispatcher log: broadcast to UI for Task Group dashboard
-function dispatchLog(action: string, detail: string) {
+// Check if all worker tasks in a batch are done → auto-trigger QA → then Critic
+// Batch lifecycle state machine — persisted to disk
+const BATCH_STATE_FILE = join(DATA_DIR, 'batch-state.json')
+
+function loadBatchState(): Record<string, { phase: string; notifiedAt: string; retries: number }> {
+  try { if (existsSync(BATCH_STATE_FILE)) return JSON.parse(readFileSync(BATCH_STATE_FILE, 'utf-8')) } catch {}
+  return {}
+}
+
+function saveBatchState(state: Record<string, any>) {
+  try { writeFileSync(BATCH_STATE_FILE, JSON.stringify(state, null, 2)) } catch {}
+}
+
+// Check if all worker tasks in batch are done → notify Manager (Manager decides next step)
+function checkBatchComplete(projectId: string) {
+  const d = loadData()
+  const tgs = (d.taskGroups || []) as any[]
+  const tg = tgs.find(t => t.projectId === projectId)
+  if (!tg) return
+
+  const allTasks = listTasks(DATA_DIR, projectId)
+  if (allTasks.length === 0) return
+
+  // Find the current active batch (most recent activity)
+  const byBatch = new Map<number, typeof allTasks>()
+  allTasks.forEach(t => { const b = t.batch || 1; if (!byBatch.has(b)) byBatch.set(b, []); byBatch.get(b)!.push(t) })
+  let currentBatch = 1
+  let latestTime = 0
+  for (const [bNum, bTasks] of byBatch) {
+    const t = Math.max(...bTasks.map(t => t.assignedAt ? new Date(t.assignedAt).getTime() : 0))
+    if (t > latestTime) { latestTime = t; currentBatch = bNum }
+  }
+
+  const batchTasks = byBatch.get(currentBatch) || []
+  const pending = batchTasks.filter(t => t.status === 'pending' || t.status === 'assigned' || t.status === 'in_progress')
+  if (pending.length > 0) return // still working
+
+  const done = batchTasks.filter(t => t.status === 'done').length
+  const blocked = batchTasks.filter(t => t.status === 'blocked').length
+  const abandoned = batchTasks.filter(t => t.status === 'abandoned').length
+  if (done === 0) return // nothing done
+
+  // Collect worker branches for Manager's reference
+  const workerBranches = [...new Set(batchTasks.filter(t => t.owner).map(t => {
+    const ag = ((d.agents || []) as any[]).find(a => a.id === t.owner)
+    return ag?.worktreeBranch || ''
+  }).filter(Boolean))]
+
+  // State machine: track batch lifecycle
+  const stateKey = `${projectId}:batch:${currentBatch}`
+  const batchStates = loadBatchState()
+  const existing = batchStates[stateKey]
+  if (existing && existing.phase === 'notified_manager') {
+    // Already notified. Check if Manager hasn't acted in 5 min → re-notify
+    const elapsed = (Date.now() - new Date(existing.notifiedAt).getTime()) / 60000
+    if (elapsed > 5 && existing.retries < 3) {
+      sendToAgent(tg.managerId, 'MSG', {
+        batch: currentBatch, status: 'batch_complete_reminder',
+        message: `Reminder: Batch ${currentBatch} complete (${done}/${batchTasks.length}). Create QA task.`
+      })
+      batchStates[stateKey] = { phase: 'notified_manager', notifiedAt: new Date().toISOString(), retries: existing.retries + 1 }
+      saveBatchState(batchStates)
+      dispatchLog('batch-complete', `📋 Batch ${currentBatch}: reminder ${existing.retries + 1}/3 → Manager`, tg.managerId)
+    } else if (elapsed > 5 && existing.retries >= 3) {
+      // Manager not responding after 3 reminders → notify human
+      notifyHuman('Manager Unresponsive', `Batch ${currentBatch} done ${Math.round(elapsed)}m ago. Manager hasn't created QA task. Please intervene.`)
+      batchStates[stateKey] = { ...existing, phase: 'escalated' }
+      saveBatchState(batchStates)
+    }
+    return
+  }
+  if (existing && (existing.phase === 'escalated' || existing.phase === 'qa_created')) return
+
+  // First notification
+  const sent = sendToAgent(tg.managerId, 'MSG', {
+    batch: currentBatch,
+    status: 'batch_complete',
+    done, blocked, abandoned,
+    total: batchTasks.length,
+    workerBranches,
+    integrationBranch: tg.targetBranch || 'staging',
+    message: `Batch ${currentBatch} complete: ${done} done, ${blocked} blocked, ${abandoned} abandoned. Worker branches: ${workerBranches.join(', ')}. Create QA task when ready.`
+  })
+  batchStates[stateKey] = { phase: 'notified_manager', notifiedAt: new Date().toISOString(), retries: 0 }
+  saveBatchState(batchStates)
+  dispatchLog('batch-complete', `📋 Batch ${currentBatch}: ${done}/${batchTasks.length} done → notified Manager`, tg.managerId)
+  if (!sent) {
+    notifyHuman('Batch Complete', `Batch ${currentBatch} done (${done}/${batchTasks.length}). Manager offline — create QA task manually.`)
+  }
+}
+
+// Broadcast task list to UI after any task mutation
+function broadcastTasks(projectId: string) {
   const win = BrowserWindow.getAllWindows()[0]
   if (win && !win.isDestroyed()) {
-    win.webContents.send('dispatcher:log', { time: new Date().toISOString(), action, detail })
+    const tasks = listTasks(DATA_DIR, projectId)
+    win.webContents.send('task:update', { projectId, tasks })
   }
+}
+
+// Dispatcher log: broadcast to UI + persist to disk
+const DISPATCH_LOG_FILE = join(DATA_DIR, 'dispatcher-log.json')
+
+function loadDispatchLog(): any[] {
+  try {
+    if (existsSync(DISPATCH_LOG_FILE)) return JSON.parse(readFileSync(DISPATCH_LOG_FILE, 'utf-8'))
+  } catch {}
+  return []
+}
+
+function saveDispatchLog(entries: any[]) {
+  try { writeFileSync(DISPATCH_LOG_FILE, JSON.stringify(entries.slice(-500))) } catch {}
+}
+
+function dispatchLog(action: string, detail: string, agentId?: string) {
+  const entry = { time: new Date().toISOString(), action, detail, agentId: agentId || null }
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('dispatcher:log', entry)
+  }
+  // Persist
+  const logs = loadDispatchLog()
+  logs.push(entry)
+  saveDispatchLog(logs)
 }
 
 // Notify human: macOS + Telegram + UI
@@ -178,14 +337,26 @@ const statusServer = createServer((req, res) => {
         const homeDir = DATA_DIR
         const ctx = data.agentId ? findTaskGroupForAgent(data.agentId) : null
         const projectId = ctx?.projectId || data.projectId || ''
+        // Auto-inject PR instruction if task group has targetBranch
+        let note = data.note || null
+        if (ctx?.taskGroup) {
+          const tgData = loadData()
+          const tg = ((tgData.taskGroups || []) as any[]).find(t => t.id === ctx.taskGroup.id)
+          const targetBranch = tg?.targetBranch
+          if (targetBranch) {
+            const prInstruction = `\n\n[AUTO] 完成后: git push && gh pr create --base ${targetBranch}`
+            note = note ? note + prInstruction : prInstruction.trim()
+          }
+        }
         const task = createTask(homeDir, projectId, {
           title: data.title, status: 'pending', owner: null,
           batch: data.batch || 1, depends: data.depends || [],
           scope: data.scope || '.', acceptance: data.acceptance || '',
-          verify: data.verify || [], attempt: 0, blocked_reason: null,
+          verify: data.verify || [], attempt: 0, blocked_reason: null, abandoned_reason: null, note,
           estimatedMinutes: data.estimatedMinutes || null, assignedAt: null
         })
-        dispatchLog('task-create', `${task.id}: "${data.title}" in ${projectId}`)
+        dispatchLog('task-create', `${task.id}: "${data.title}" in ${projectId}`, data.agentId)
+        broadcastTasks(projectId)
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ id: task.id }))
         return
@@ -197,13 +368,17 @@ const statusServer = createServer((req, res) => {
         const allTasks = listTasks(homeDir, projectId)
         const workerBusy = allTasks.find(t => t.owner === data.agentId && (t.status === 'assigned' || t.status === 'in_progress'))
         if (workerBusy) {
-          dispatchLog('task-assign', `⛔ REJECTED ${data.taskId} — worker ${data.agentId} busy with ${workerBusy.id}. Will auto-assign when free.`)
+          dispatchLog('task-assign', `⛔ REJECTED ${data.taskId} — busy with ${workerBusy.id}`, data.agentId)
+          res.writeHead(409, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: false, error: `Worker busy with ${workerBusy.id}`, code: 'WORKER_BUSY', busyTask: workerBusy.id }))
+          return
         } else {
           const task = updateTask(homeDir, projectId, data.taskId, { status: 'assigned', owner: data.agentId, assignedAt: new Date().toISOString() })
           if (task) {
             const sent = sendToAgent(data.agentId, 'TASK', task)
-            dispatchLog('task-assign', `${task.id} → ${data.agentId} (PTY: ${sent})`)
+            dispatchLog('task-assign', `${task.id} → ${data.agentId} (PTY: ${sent})`, data.agentId)
             appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_start', message: `${task.title} (PTY: ${sent})` })
+            broadcastTasks(projectId)
           } else {
             dispatchLog('task-assign', `❌ FAILED: taskId="${data.taskId}" not found in ${projectId}`)
           }
@@ -213,44 +388,39 @@ const statusServer = createServer((req, res) => {
         const ctx = findTaskGroupForAgent(data.agentId)
         const projectId = data.projectId || ctx?.projectId || ''
         const task = readTask(homeDir, projectId, data.taskId)
-        dispatchLog('task-done', `${data.taskId} by ${data.agentId}: "${data.summary || ''}"`)
+        dispatchLog('task-done', `${data.taskId}: "${data.summary || ''}"`, data.agentId)
 
         const cwd = findAgentWorktree(data.agentId)
-        if (task && cwd && task.verify && task.verify.length > 0) {
-          dispatchLog('gate', `Running gate on ${data.taskId} (${task.verify.length} verify commands)`)
-          runGate(cwd, { scope: task.scope, verify: task.verify }).then((gateResult) => {
-            if (gateResult.pass) {
-              updateTask(homeDir, projectId, data.taskId, { status: 'done' })
-              dispatchLog('gate', `✅ ${data.taskId} PASSED`)
-              appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
-              if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
-              sendToAgent(data.agentId, 'MSG', { gate: 'pass', task: data.taskId })
-              if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
-              // Auto-assign next pending task to this worker
-              autoAssignNext(data.agentId, projectId)
+        if (task && cwd && task.scope && task.scope !== '.') {
+          dispatchLog('gate', `Scope check on ${data.taskId}`, data.agentId)
+          runGate(cwd, { scope: task.scope, verify: task.verify || [] }).then((gateResult) => {
+            // Task is always marked done — gate warnings are informational only
+            updateTask(homeDir, projectId, data.taskId, { status: 'done' })
+            appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
+            if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
+            if (gateResult.warnings.length > 0) {
+              // Scope warning: inform Worker for awareness, don't block
+              const detail = gateResult.warnings.map(w => w.detail).join('; ')
+              dispatchLog('gate', `⚠️ ${data.taskId} scope warning (not blocking): ${detail.slice(0, 200)}`, data.agentId)
+              sendToAgent(data.agentId, 'MSG', { gate: 'warning', task: data.taskId, warnings: gateResult.warnings })
             } else {
-              const attempt = (task.attempt || 0) + 1
-              const maxRetries = ctx?.taskGroup?.maxGateRetries || 3
-              dispatchLog('gate', `❌ ${data.taskId} FAILED (attempt ${attempt}/${maxRetries}): ${gateResult.failures.map(f => f.step).join(', ')}`)
-              if (attempt >= maxRetries) {
-                updateTask(homeDir, projectId, data.taskId, { status: 'blocked', attempt, blocked_reason: gateResult.failures.map(f => `${f.step}: ${f.detail}`).join('; ') })
-                sendToAgent(data.agentId, 'MSG', { gate: 'blocked', task: data.taskId, failures: gateResult.failures })
-                if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'blocked', reason: 'gate failed after max retries' })
-                notifyHuman('Gate Blocked', `${data.taskId}: ${gateResult.failures[0]?.detail || 'gate failed'}`)
-              } else {
-                updateTask(homeDir, projectId, data.taskId, { status: 'in_progress', attempt })
-                sendToAgent(data.agentId, 'MSG', { gate: 'failed', task: data.taskId, attempt, maxRetries, failures: gateResult.failures })
-              }
+              dispatchLog('gate', `✅ ${data.taskId} scope clean`, data.agentId)
             }
+            sendToAgent(data.agentId, 'MSG', { gate: 'pass', task: data.taskId })
+            if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
+            broadcastTasks(projectId)
+            autoAssignNext(data.agentId, projectId)
+            checkBatchComplete(projectId)
           })
         } else {
           updateTask(homeDir, projectId, data.taskId, { status: 'done' })
-          dispatchLog('task-done', `${data.taskId} → done (no gate)`)
+          dispatchLog('task-done', `${data.taskId} → done (no gate)`, data.agentId)
           appendLog(data.agentId, { time: new Date().toISOString(), type: 'task_done', message: data.summary || 'Task completed' })
           if (win && !win.isDestroyed()) win.webContents.send('agent:report', { ...data, type: 'task_done' })
           if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'done', summary: data.summary })
-          // Auto-assign next pending task to this worker
+          broadcastTasks(projectId)
           autoAssignNext(data.agentId, projectId)
+          checkBatchComplete(projectId)
         }
       } else if (req.url === '/task-blocked') {
         const homeDir = DATA_DIR
@@ -259,10 +429,50 @@ const statusServer = createServer((req, res) => {
         updateTask(homeDir, projectId, data.taskId, {
           status: 'blocked', blocked_reason: data.reason, attempt: data.attempt || 0
         })
-        dispatchLog('task-blocked', `❌ ${data.taskId}: ${data.reason}`)
+        dispatchLog('task-blocked', `❌ ${data.taskId}: ${data.reason}`, data.agentId)
         appendLog(data.agentId, { time: new Date().toISOString(), type: 'notification', message: `BLOCKED: ${data.reason}` })
         if (ctx?.taskGroup) sendToAgent(ctx.taskGroup.managerId, 'MSG', { task: data.taskId, status: 'blocked', reason: data.reason })
         notifyHuman('Task Blocked', `${data.taskId}: ${data.reason}`)
+        broadcastTasks(projectId)
+      } else if (req.url === '/task-abandon') {
+        const homeDir = DATA_DIR
+        const ctx = findTaskGroupForAgent(data.agentId)
+        const projectId = data.projectId || ctx?.projectId || ''
+        // Permission: only the task group manager may abandon
+        if (!ctx || ctx.taskGroup.managerId !== data.agentId) {
+          dispatchLog('task-abandon', `⛔ REJECTED ${data.taskId} — only manager can abandon`, data.agentId)
+          res.writeHead(403)
+          res.end('forbidden: only manager can abandon')
+          return
+        }
+        // Reason is required
+        if (!data.reason || !String(data.reason).trim()) {
+          dispatchLog('task-abandon', `⛔ REJECTED ${data.taskId} — reason required`, data.agentId)
+          res.writeHead(400)
+          res.end('reason required')
+          return
+        }
+        const existing = readTask(homeDir, projectId, data.taskId)
+        if (!existing) {
+          res.writeHead(404)
+          res.end('task not found')
+          return
+        }
+        if (existing.status === 'done') {
+          dispatchLog('task-abandon', `⛔ REJECTED ${data.taskId} — already done`, data.agentId)
+          res.writeHead(409)
+          res.end('cannot abandon completed task')
+          return
+        }
+        updateTask(homeDir, projectId, data.taskId, { status: 'abandoned', abandoned_reason: data.reason })
+        dispatchLog('task-abandon', `🚫 ${data.taskId}: ${data.reason}`, data.agentId)
+        appendLog(data.agentId, { time: new Date().toISOString(), type: 'notification', message: `ABANDONED: ${data.taskId} — ${data.reason}` })
+        // Notify the worker if task was assigned
+        if (existing.owner) {
+          sendToAgent(existing.owner, 'MSG', { task: data.taskId, status: 'abandoned', reason: data.reason })
+        }
+        notifyHuman('Task Abandoned', `${data.taskId}: ${data.reason}`)
+        broadcastTasks(projectId)
       } else if (req.url === '/task-status') {
         const homeDir = DATA_DIR
         const ctx = findTaskGroupForAgent(data.agentId)
@@ -278,7 +488,7 @@ const statusServer = createServer((req, res) => {
         res.end(JSON.stringify(tasks))
         return
       } else if (req.url === '/ready') {
-        dispatchLog('ready', `${data.agentId} available for next task`)
+        dispatchLog('ready', `available for next task`, data.agentId)
         const ctx = findTaskGroupForAgent(data.agentId)
         if (ctx?.taskGroup) {
           setTimeout(() => {
@@ -289,7 +499,7 @@ const statusServer = createServer((req, res) => {
         notifyHuman('Manager', data.message || '')
         appendLog(data.agentId, { time: new Date().toISOString(), type: 'report', message: data.message })
       } else if (req.url === '/batch-propose') {
-        dispatchLog('batch-propose', `Batch ${data.batch || '?'}: ${(data.tasks || []).length} tasks`)
+        dispatchLog('batch-propose', `Batch ${data.batch || '?'}: ${(data.tasks || []).length} tasks`, data.agentId)
         const d = loadData()
         const tgs = (d.taskGroups || []) as any[]
         const ctx = data.agentId ? findTaskGroupForAgentInData(data.agentId, tgs) : null
@@ -298,6 +508,29 @@ const statusServer = createServer((req, res) => {
           saveData(d)
         }
         if (win && !win.isDestroyed()) win.webContents.send('batch:proposal', data)
+      } else if (req.url === '/check-inbox') {
+        const ctx = findTaskGroupForAgent(data.agentId)
+        const projectId = ctx?.projectId || '_global'
+        const inboxFile = join(DATA_DIR, 'comms', projectId, 'inbox', `${data.agentId}.jsonl`)
+        if (!existsSync(inboxFile)) {
+          res.writeHead(200, { 'Content-Type': 'application/json' })
+          res.end(JSON.stringify({ ok: true, messages: [] }))
+          return
+        }
+        const lines = readFileSync(inboxFile, 'utf-8').split('\n').filter(Boolean)
+        const messages: any[] = []
+        const updated: string[] = []
+        for (const line of lines) {
+          try {
+            const msg = JSON.parse(line)
+            if (!msg._read) { messages.push(msg); msg._read = true }
+            updated.push(JSON.stringify(msg))
+          } catch { updated.push(line) }
+        }
+        writeFileSync(inboxFile, updated.join('\n') + '\n')
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ ok: true, messages }))
+        return
       }
 
       res.writeHead(200)
@@ -318,6 +551,7 @@ function writeAgentDefinition(cwd: string, config: {
   taskGroupWorkers?: { id: string; name: string }[];
   taskGroupQaId?: string; taskGroupQaName?: string;
   taskGroupCriticId?: string; taskGroupCriticName?: string;
+  dailyReportEnabled?: boolean; targetBranch?: string;
 }) {
   const agentsDir = join(cwd, '.claude', 'agents')
   mkdirSync(agentsDir, { recursive: true })
@@ -346,28 +580,29 @@ function writeAgentDefinition(cwd: string, config: {
   // Markdown body = soul content
   yaml += config.soul
 
-  yaml += `\n\n## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
+  if (!config.soul.includes('Task Reporting')) {
+    yaml += `\n\n## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
+  }
 
   // Inject role-specific soul addendum for task group agents
+  const rsh = '.claude/hive-report.sh'
   if (config.taskGroupRole === 'manager') {
-    const absReportSh = join(cwd, '.claude', 'hive-report.sh')
     yaml += getManagerSoulAddendum({
       todoSource: config.todoSource || 'docs/todo.md',
       projectId: config.taskGroupProjectId,
       workers: config.taskGroupWorkers,
       qaId: config.taskGroupQaId, qaName: config.taskGroupQaName,
       criticId: config.taskGroupCriticId, criticName: config.taskGroupCriticName,
-      reportScriptPath: absReportSh,
+      reportScriptPath: rsh,
+      dailyReportEnabled: config.dailyReportEnabled,
+      targetBranch: config.targetBranch,
     })
   } else if (config.taskGroupRole === 'worker') {
-    const absReportSh = join(cwd, '.claude', 'hive-report.sh')
-    yaml += getWorkerSoulAddendum({ maxRetries: config.maxGateRetries || 3, reportScriptPath: absReportSh })
+    yaml += getWorkerSoulAddendum({ maxRetries: config.maxGateRetries || 3, reportScriptPath: rsh })
   } else if (config.taskGroupRole === 'qa') {
-    const absReportSh = join(cwd, '.claude', 'hive-report.sh')
-    yaml += getQaSoulAddendum({ reportScriptPath: absReportSh })
+    yaml += getQaSoulAddendum({ reportScriptPath: rsh })
   } else if (config.taskGroupRole === 'critic') {
-    const absReportSh = join(cwd, '.claude', 'hive-report.sh')
-    yaml += getCriticSoulAddendum({ reportScriptPath: absReportSh })
+    yaml += getCriticSoulAddendum({ reportScriptPath: rsh })
   }
 
   writeFileSync(join(agentsDir, `${agentName}.md`), yaml)
@@ -391,7 +626,7 @@ function writeAgentDefinition(cwd: string, config: {
 
   // hive-report.sh helper script (generated from utils.ts with all orchestration commands)
   const reportScript = join(cwd, '.claude', 'hive-report.sh')
-  writeFileSync(reportScript, generateReportScript(config.agentId, HIVE_PORT), { mode: 0o755 })
+  writeFileSync(reportScript, generateReportScript(config.agentId, HIVE_PORT, DATA_DIR, config.targetBranch), { mode: 0o755 })
 
   return agentName
 }
@@ -450,6 +685,40 @@ ipcMain.handle('pty:create', (_event, { id, cwd }) => {
       const win = BrowserWindow.getAllWindows()[0]
       if (win && !win.isDestroyed()) {
         win.webContents.send(`pty:data:${id}`, data)
+      }
+      // Detect 5-hour usage limit hit
+      if (data.includes("You've hit your limit")) {
+        const resetMatch = data.match(/resets\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm))/i)
+        if (resetMatch) {
+          const now = new Date()
+          const timeStr = resetMatch[1] // e.g. "1pm" or "1:00pm"
+          const match12 = timeStr.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i)
+          if (match12) {
+            let hours = parseInt(match12[1])
+            const mins = match12[2] ? parseInt(match12[2]) : 0
+            const ampm = match12[3].toLowerCase()
+            if (ampm === 'pm' && hours !== 12) hours += 12
+            if (ampm === 'am' && hours === 12) hours = 0
+            const resetTime = new Date(now)
+            resetTime.setHours(hours, mins, 0, 0)
+            // If reset time is in the past, it's tomorrow
+            if (resetTime.getTime() <= now.getTime()) resetTime.setDate(resetTime.getDate() + 1)
+            // Find current task for this agent
+            const d = loadData()
+            const ctx = findTaskGroupForAgentInData(id, (d.taskGroups || []) as any[])
+            let currentTaskId: string | undefined
+            if (ctx) {
+              const tasks = listTasks(DATA_DIR, ctx.projectId)
+              const activeTask = tasks.find(t => t.owner === id && (t.status === 'assigned' || t.status === 'in_progress'))
+              currentTaskId = activeTask?.id
+            }
+            limitResets.set(id, { resetTime, taskId: currentTaskId, whipScheduled: false })
+            saveLimitState(Object.fromEntries([...limitResets].map(([k, v]) => [k, { ...v, resetTime: v.resetTime.toISOString() }])))
+            const resetStr = resetTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            dispatchLog('limit', `🔴 ${id} hit 5h limit — resets at ${resetStr}`, id)
+            notifyHuman('Agent Limit', `Agent hit 5h limit. Resets at ${resetStr}. Will auto-whip.`)
+          }
+        }
       }
     })
 
@@ -535,7 +804,34 @@ ipcMain.handle('dialog:selectFolder', async (_event, { title }) => {
 })
 
 // Data persistence
+})
+
+ipcMain.handle('inbox:list', (_event, { projectId }) => {
+  const inboxDir = join(DATA_DIR, 'comms', projectId, 'inbox')
+  if (!existsSync(inboxDir)) return []
+  const result: { agentId: string; messages: any[] }[] = []
+  for (const f of readdirSync(inboxDir).filter(f => f.endsWith('.jsonl'))) {
+    const agentId = f.replace('.jsonl', '')
+    const lines = readFileSync(join(inboxDir, f), 'utf-8').split('\n').filter(Boolean)
+    const messages = lines.map(l => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
+    result.push({ agentId, messages })
+  }
+  return result
+})
+
 ipcMain.handle('data:load', () => loadData())
+ipcMain.handle('dispatcher:loadLog', () => loadDispatchLog())
+ipcMain.handle('dispatcher:clearLog', (_event, { keepAfter }: { keepAfter?: string }) => {
+  if (keepAfter) {
+    const cutoff = new Date(keepAfter).getTime()
+    const logs = loadDispatchLog().filter(e => new Date(e.time).getTime() > cutoff)
+    saveDispatchLog(logs)
+    return logs
+  }
+  saveDispatchLog([])
+  return []
+})
+ipcMain.handle('tasks:list', (_event, { projectId }) => listTasks(DATA_DIR, projectId))
 ipcMain.handle('data:save', (_event, data) => {
   saveData(data)
   return true
@@ -547,6 +843,41 @@ ipcMain.handle('fs:hasGit', (_event, { path }) => {
 })
 
 // Git worktree management
+ipcMain.handle('git:commitHistory', (_event, { cwd, days }: { cwd: string; days: number }) => {
+  try {
+    const output = execSync(`git log --since="${days} days ago" --format="%ai" --all`, { cwd, encoding: 'utf-8', timeout: 10000 })
+    const byDay: Record<string, number> = {}
+    for (const line of output.trim().split('\n').filter(Boolean)) {
+      const date = line.slice(0, 10) // YYYY-MM-DD
+      byDay[date] = (byDay[date] || 0) + 1
+    }
+    return byDay
+  } catch { return {} }
+})
+
+ipcMain.handle('git:createTargetBranch', (_event, { repoPath, branch }) => {
+  try {
+    // Check if branch already exists locally or remotely
+    const exists = execSync(`git rev-parse --verify ${branch} 2>/dev/null || git rev-parse --verify origin/${branch} 2>/dev/null`, { cwd: repoPath, encoding: 'utf-8' }).trim()
+    if (exists) return { ok: true, existed: true }
+  } catch {
+    // Branch doesn't exist — create from main
+    try {
+      execSync(`git branch ${branch} main && git push origin ${branch}`, { cwd: repoPath, encoding: 'utf-8' })
+      return { ok: true, existed: false }
+    } catch (err: any) {
+      return { ok: false, error: err.message }
+    }
+  }
+  return { ok: true, existed: true }
+})
+
+ipcMain.handle('git:currentBranch', (_event, { cwd }) => {
+  try {
+    return execSync('git branch --show-current', { cwd, encoding: 'utf-8' }).trim()
+  } catch { return '' }
+})
+
 ipcMain.handle('git:worktreeAdd', (_event, { repoPath, agentId, agentName }) => {
   try {
     const { execSync } = require('child_process')
@@ -722,7 +1053,7 @@ ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type
 
 // Scan files in directory, flattened, sorted by mtime
 ipcMain.handle('fs:scanFiles', (_event, { dirPath, limit = 100 }) => {
-  const SKIP = new Set(['node_modules', '.git', '.next', '.cache', '.hive', '.claude', '__pycache__', '.DS_Store', '.Trash', '.Spotlight-V100', 'dist', 'build', 'out'])
+  const SKIP = new Set(['node_modules', '.next', '.cache', '.hive', '__pycache__', '.DS_Store', '.Trash', '.Spotlight-V100'])
   const files: { path: string; mtime: number; size: number }[] = []
 
   function walk(dir: string, depth: number) {
@@ -901,37 +1232,132 @@ ipcMain.handle('skills:scan', () => {
       }
     }
   } catch {}
-  return skills
+  // Deduplicate by skill name — keep the first one found (sub-skill > standalone)
+  const seen = new Set<string>()
+  const unique = skills.filter(s => {
+    if (seen.has(s.name)) return false
+    seen.add(s.name)
+    return true
+  })
+  return unique
 })
 
 app.whenReady().then(() => {
   app.setName('Hive')
   electronApp.setAppUserModelId('com.hive.app')
+  // Write port lock file — single source of truth for hive-report.sh
+  const portLockFile = join(DATA_DIR, 'port.lock')
+  const existingLock = existsSync(portLockFile) ? readFileSync(portLockFile, 'utf-8').trim().split('\n') : []
+  if (existingLock.length >= 2) {
+    const oldPid = parseInt(existingLock[1])
+    try { process.kill(oldPid, 0); console.log(`[Hive] Warning: PID ${oldPid} still alive, overriding lock`) } catch {}
+  }
+  writeFileSync(portLockFile, `${HIVE_PORT}\n${process.pid}`)
+
   statusServer.listen(HIVE_PORT, '127.0.0.1', () => {
     console.log(`[Hive] Status server on http://127.0.0.1:${HIVE_PORT}`)
   })
 
-  // Stuck task detection — poll every 60s
+  // Stuck task detection — poll every 60s, max 3 notifications per task
+  // Stuck notification counter — persisted
+  const STUCK_COUNT_FILE = join(DATA_DIR, 'stuck-count.json')
+  function loadStuckCounts(): Record<string, number> {
+    try { if (existsSync(STUCK_COUNT_FILE)) return JSON.parse(readFileSync(STUCK_COUNT_FILE, 'utf-8')) } catch {}
+    return {}
+  }
+  function saveStuckCounts(counts: Record<string, number>) {
+    try { writeFileSync(STUCK_COUNT_FILE, JSON.stringify(counts)) } catch {}
+  }
+  let stuckCounts = loadStuckCounts()
+  const stuckNotifyCount = new Map<string, number>(Object.entries(stuckCounts))
   setInterval(() => {
     const d = loadData()
     const tgs = (d.taskGroups || []) as any[]
     for (const tg of tgs) {
       const tasks = listTasks(DATA_DIR, tg.projectId)
       const now = Date.now()
+      // Resolve project + agent names for readable notifications
+      const project = (d.projects || []).find((p: any) => p.id === tg.projectId) as any
+      const projectName = project?.name || tg.projectId
       for (const task of tasks) {
         if ((task.status !== 'assigned' && task.status !== 'in_progress') || !task.assignedAt) continue
+        // Skip agents waiting for 5h limit reset — they're not stuck, just paused
+        if (task.owner && limitResets.has(task.owner)) continue
+        // Reset counter when task status changes (done/blocked/abandoned clear the key)
+        if (task.status === 'done' || task.status === 'blocked' || task.status === 'abandoned') {
+          stuckNotifyCount.delete(task.id)
+          continue
+        }
         const elapsed = (now - new Date(task.assignedAt).getTime()) / 60000
-        const limit = task.estimatedMinutes || 10 // default 10 min
+        const limit = task.estimatedMinutes || 10
         if (elapsed > limit) {
-          dispatchLog('stuck', `⏰ ${task.id} "${task.title}" exceeded ${limit}m (${Math.round(elapsed)}m elapsed, worker: ${task.owner})`)
-          sendToAgent(task.owner!, 'MSG', { ping: task.id, message: `Task ${task.id} exceeded estimated time (${limit}m). Status?` })
-          notifyHuman('Task Stuck', `${task.id} "${task.title}" — ${Math.round(elapsed)}m elapsed (est. ${limit}m). Worker: ${task.owner}`)
-          // Bump assignedAt to avoid re-notifying every 60s — next alert in another estimatedMinutes cycle
-          updateTask(DATA_DIR, tg.projectId, task.id, { assignedAt: new Date().toISOString() })
+          const count = stuckNotifyCount.get(task.id) || 0
+          const workerAgent = (d.agents || []).find((a: any) => a.id === task.owner) as any
+          const workerName = workerAgent?.name || task.owner || 'unknown'
+          // Always log to dispatcher (silent polling)
+          dispatchLog('stuck', `⏰ [${projectName}] ${task.id} "${task.title}" — ${Math.round(elapsed)}m elapsed (est. ${limit}m, notify ${count + 1}/3)`, task.owner || undefined)
+          if (count < 3) {
+            // First 3 times: notify human + ping worker
+            sendToAgent(task.owner!, 'MSG', { ping: task.id, message: `Task ${task.id} exceeded estimated time (${limit}m). Status?` })
+            notifyHuman('Task Stuck', `[${projectName}] ${workerName} · ${task.id} "${task.title}" — ${Math.round(elapsed)}m (est. ${limit}m)`)
+            stuckNotifyCount.set(task.id, count + 1)
+            saveStuckCounts(Object.fromEntries(stuckNotifyCount))
+          }
+          // No longer bump assignedAt — let stuck tasks remain visible
         }
       }
     }
   }, 60000)
+
+  // 5-hour whip: auto-restart agents after limit reset
+  setInterval(() => {
+    const now = Date.now()
+    for (const [agentId, info] of limitResets) {
+      if (info.whipScheduled) continue
+      if (now < info.resetTime.getTime()) continue
+      // Reset time has passed — whip the agent
+      info.whipScheduled = true
+      const term = terminals.get(agentId)
+      if (!term) {
+        dispatchLog('whip', `⚠️ Cannot whip ${agentId} — no terminal`, agentId)
+        limitResets.delete(agentId)
+        continue
+      }
+      dispatchLog('whip', `🔄 Whipping ${agentId} — limit reset, resuming session`, agentId)
+      notifyHuman('Agent Whip', `Auto-restarting agent after 5h limit reset`)
+      // Send Enter to dismiss any prompt, then resume claude session
+      term.write('\r')
+      setTimeout(() => {
+        const t = terminals.get(agentId)
+        if (t) t.write('claude -c\r')
+      }, 2000)
+      // Clean up after whip
+      setTimeout(() => limitResets.delete(agentId), 10000)
+    }
+  }, 30000) // check every 30s for faster response after reset
+
+  // Daily report trigger — schedule precisely at 00:01
+  function scheduleDailyReport() {
+    const now = new Date()
+    const next = new Date(now)
+    next.setHours(0, 1, 0, 0)
+    if (next.getTime() <= now.getTime()) next.setDate(next.getDate() + 1)
+    const ms = next.getTime() - now.getTime()
+    setTimeout(() => {
+      const dateStr = new Date().toISOString().slice(0, 10)
+      const d = loadData()
+      const tgs = (d.taskGroups || []) as any[]
+      for (const tg of tgs) {
+        if (!tg.dailyReportEnabled) continue
+        const sent = sendToAgent(tg.managerId, 'HUMAN', { action: 'daily-report', date: dateStr })
+        dispatchLog('daily-report', `📋 Triggered daily report for ${dateStr}`, tg.managerId)
+        if (!sent) dispatchLog('daily-report', `⚠️ Manager terminal offline — daily report not sent`, tg.managerId)
+      }
+      scheduleDailyReport() // schedule next day
+    }, ms)
+  }
+  scheduleDailyReport()
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -947,5 +1373,8 @@ app.on('window-all-closed', () => {
     term.kill()
   }
   terminals.clear()
+  // Remove port lock
+  const portLockFile = join(DATA_DIR, 'port.lock')
+  try { unlinkSync(portLockFile) } catch {}
   if (process.platform !== 'darwin') app.quit()
 })

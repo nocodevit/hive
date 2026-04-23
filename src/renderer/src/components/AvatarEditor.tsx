@@ -154,7 +154,7 @@ function ColorPicker({ colors, value, onChange, label }: {
 }) {
   return (
     <div>
-      <p className="text-[11px] text-text-muted mb-1">{label}</p>
+      <p className="text-[12px] text-text-muted mb-1">{label}</p>
       <div className="flex gap-1 flex-wrap">
         {colors.map((c) => (
           <button
@@ -179,13 +179,13 @@ function OptionPicker({ options, value, onChange, label }: {
 }) {
   return (
     <div>
-      <p className="text-[11px] text-text-muted mb-1">{label}</p>
+      <p className="text-[12px] text-text-muted mb-1">{label}</p>
       <div className="flex gap-1 flex-wrap">
         {options.map((o) => (
           <button
             key={o}
             onClick={() => onChange(o)}
-            className={`px-2 py-1 rounded-md text-[11px] capitalize cursor-pointer transition-colors ${
+            className={`px-2 py-1 rounded-md text-[12px] capitalize cursor-pointer transition-colors ${
               value === o
                 ? 'bg-accent text-text-on-purple'
                 : 'bg-bg-primary border border-border text-text-muted hover:text-text-primary'
@@ -276,13 +276,13 @@ export default function AvatarEditor({ config, onChange, size = 128 }: Props) {
 
       {/* Accessories */}
       <div>
-        <p className="text-[11px] text-text-muted mb-1">Accessories</p>
+        <p className="text-[12px] text-text-muted mb-1">Accessories</p>
         <div className="flex gap-1">
           {ACCESSORIES.map((acc) => (
             <button
               key={acc}
               onClick={() => toggleAccessory(acc)}
-              className={`px-2 py-1 rounded-md text-[11px] capitalize cursor-pointer transition-colors ${
+              className={`px-2 py-1 rounded-md text-[12px] capitalize cursor-pointer transition-colors ${
                 config.accessories?.includes(acc)
                   ? 'bg-accent text-text-on-purple'
                   : 'bg-bg-primary border border-border text-text-muted hover:text-text-primary'
