@@ -192,14 +192,14 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
                         <span className="text-text-muted ml-1">{t.role} · {t.suggestedSkills.length} skills</span>
                       </button>
                       <button onClick={() => { applyTemplate(t); setStep(1) }}
-                        className="text-[10px] text-text-muted hover:text-accent cursor-pointer opacity-0 group-hover:opacity-100"
+                        className="text-[11px] text-text-muted hover:text-accent cursor-pointer opacity-0 group-hover:opacity-100"
                         title="Edit template"
                       >Edit</button>
                       <button onClick={() => {
                         window.api.templates.delete(t.id)
                         setCustomTemplates(prev => prev.filter(x => x.id !== t.id))
                       }}
-                        className="text-[10px] text-text-muted hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100"
+                        className="text-[11px] text-text-muted hover:text-red-400 cursor-pointer opacity-0 group-hover:opacity-100"
                         title="Delete template"
                       >Del</button>
                     </div>
@@ -211,7 +211,7 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
             {projectContext && (
               <div className="mt-3">
                 <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1">Project Context (CLAUDE.md)</label>
-                <pre className="px-3 py-2 rounded-lg bg-bg-primary border border-border text-[10px] text-text-muted font-mono max-h-24 overflow-y-auto whitespace-pre-wrap">
+                <pre className="px-3 py-2 rounded-lg bg-bg-primary border border-border text-[11px] text-text-muted font-mono max-h-24 overflow-y-auto whitespace-pre-wrap">
                   {projectContext.slice(0, 300)}{projectContext.length > 300 ? '...' : ''}
                 </pre>
               </div>
@@ -242,12 +242,12 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
           <>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] text-text-muted uppercase mb-1">Name</label>
+                <label className="block text-[11px] text-text-muted uppercase mb-1">Name</label>
                 <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder="e.g. Alex"
                   className="w-full px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm focus:outline-none focus:border-accent" />
               </div>
               <div>
-                <label className="block text-[10px] text-text-muted uppercase mb-1">Group</label>
+                <label className="block text-[11px] text-text-muted uppercase mb-1">Group</label>
                 <input type="text" value={group} onChange={e => setGroup(e.target.value)} placeholder="e.g. Frontend Team"
                   className="w-full px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-muted text-sm focus:outline-none focus:border-accent" />
               </div>
@@ -274,11 +274,11 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
             </div>
 
             <div>
-              <label className="block text-[10px] text-text-muted uppercase mb-1">Personality</label>
+              <label className="block text-[11px] text-text-muted uppercase mb-1">Personality</label>
               <div className="flex flex-wrap gap-1">
                 {TRAIT_OPTIONS.map(t => (
                   <button key={t} onClick={() => setTraits(prev => prev.includes(t) ? prev.filter(x => x !== t) : [...prev, t])}
-                    className={`px-2 py-0.5 rounded-full text-[10px] cursor-pointer ${traits.includes(t) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted hover:bg-bg-hover'}`}
+                    className={`px-2 py-0.5 rounded-full text-[11px] cursor-pointer ${traits.includes(t) ? 'bg-accent text-text-on-purple' : 'bg-bg-primary border border-border text-text-muted hover:bg-bg-hover'}`}
                   >{t}</button>
                 ))}
               </div>
@@ -286,7 +286,7 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
 
             {sections.map((sec, i) => (
               <div key={i}>
-                <label className="block text-[10px] text-text-muted uppercase mb-1">{sec.title} <span className="normal-case text-text-muted/50">— {sec.hint}</span></label>
+                <label className="block text-[11px] text-text-muted uppercase mb-1">{sec.title} <span className="normal-case text-text-muted/50">— {sec.hint}</span></label>
                 <textarea value={sec.content} onChange={e => updateSection(i, e.target.value)}
                   className="w-full h-20 px-3 py-2 rounded-lg bg-bg-primary border border-border text-text-primary text-xs font-mono resize-y focus:outline-none focus:border-accent"
                   placeholder={sec.hint} />
@@ -319,7 +319,7 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
                         <button onClick={() => {
                           const all = packSkills.every(s => enabledSkills.includes(s.name))
                           setEnabledSkills(prev => all ? prev.filter(s => !packSkills.some(ps => ps.name === s)) : [...new Set([...prev, ...packSkills.map(s => s.name)])])
-                        }} className="text-[10px] text-accent cursor-pointer ml-auto">
+                        }} className="text-[11px] text-accent cursor-pointer ml-auto">
                           {packSkills.every(s => enabledSkills.includes(s.name)) ? 'Disable all' : 'Enable all'}
                         </button>
                       </div>
@@ -327,7 +327,7 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
                         <div key={skill.name} className="flex items-center justify-between px-3 py-1.5 border-b border-border last:border-0 hover:bg-bg-hover">
                           <div className="flex-1 min-w-0">
                             <span className="text-xs text-text-primary">/{skill.name}</span>
-                            {skill.description && <p className="text-[10px] text-text-muted truncate">{skill.description}</p>}
+                            {skill.description && <p className="text-[11px] text-text-muted truncate">{skill.description}</p>}
                           </div>
                           <button onClick={() => setEnabledSkills(prev => prev.includes(skill.name) ? prev.filter(s => s !== skill.name) : [...prev, skill.name])}
                             className={`ml-2 w-8 h-4 rounded-full cursor-pointer relative flex-shrink-0 ${enabledSkills.includes(skill.name) ? 'bg-accent' : 'bg-bg-hover'}`}>
@@ -352,7 +352,7 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
           <>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[10px] text-text-muted uppercase mb-1">Model</label>
+                <label className="block text-[11px] text-text-muted uppercase mb-1">Model</label>
                 <select value={model} onChange={e => setModel(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm cursor-pointer focus:outline-none focus:border-accent">
                   <option value="inherit">Inherit</option>
@@ -362,7 +362,7 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
                 </select>
               </div>
               <div>
-                <label className="block text-[10px] text-text-muted uppercase mb-1">Effort</label>
+                <label className="block text-[11px] text-text-muted uppercase mb-1">Effort</label>
                 <select value={effort} onChange={e => setEffort(e.target.value)}
                   className="w-full px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm cursor-pointer focus:outline-none focus:border-accent">
                   <option value="low">Low</option>
@@ -374,7 +374,7 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
             </div>
 
             <div>
-              <label className="block text-[10px] text-text-muted uppercase mb-1">Work Zone</label>
+              <label className="block text-[11px] text-text-muted uppercase mb-1">Work Zone</label>
               <div className="space-y-1">
                 {filteredZones.map((zone: Zone) => (
                   <button key={zone.id} onClick={() => setZoneId(zone.id)}
@@ -383,13 +383,13 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
                     <span>{zone.name}</span>
                   </button>
                 ))}
-                {filteredZones.length === 0 && <p className="text-[10px] text-text-muted">No {department} zones.</p>}
+                {filteredZones.length === 0 && <p className="text-[11px] text-text-muted">No {department} zones.</p>}
               </div>
             </div>
 
             <div>
-              <label className="block text-[10px] text-text-muted uppercase mb-1">Agent Definition Preview</label>
-              <pre className="px-3 py-2 rounded-lg bg-bg-primary border border-border text-[10px] text-text-muted font-mono max-h-32 overflow-y-auto whitespace-pre-wrap">
+              <label className="block text-[11px] text-text-muted uppercase mb-1">Agent Definition Preview</label>
+              <pre className="px-3 py-2 rounded-lg bg-bg-primary border border-border text-[11px] text-text-muted font-mono max-h-32 overflow-y-auto whitespace-pre-wrap">
                 {buildPreview()}
               </pre>
             </div>

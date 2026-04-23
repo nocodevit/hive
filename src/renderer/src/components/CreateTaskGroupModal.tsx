@@ -11,9 +11,9 @@ interface Props {
 }
 
 const ROLE_CONFIG: { role: TaskGroupRole; label: string; icon: string; color: string; multi?: boolean }[] = [
-  { role: 'manager', label: 'Manager', icon: '♛', color: '#F59E0B' },
-  { role: 'qa', label: 'QA', icon: '🛡', color: '#10B981' },
-  { role: 'critic', label: 'Critic', icon: '👁', color: '#8B5CF6' },
+  { role: 'manager', label: 'Manager', icon: '👑', color: '#F59E0B' },
+  { role: 'qa', label: 'QA', icon: '🛡️', color: '#10B981' },
+  { role: 'critic', label: 'Critic', icon: '⚖️', color: '#8B5CF6' },
 ]
 
 export default function CreateTaskGroupModal({ open, onClose, projectId, agents, onSubmit }: Props) {
@@ -23,6 +23,7 @@ export default function CreateTaskGroupModal({ open, onClose, projectId, agents,
   const [workerIds, setWorkerIds] = useState<Set<string>>(new Set())
   const [todoSource, setTodoSource] = useState('docs/todo.md')
   const [maxRetries, setMaxRetries] = useState(3)
+  const [targetBranch, setTargetBranch] = useState('staging')
 
   const assigned = new Set([managerId, qaId, criticId, ...workerIds].filter(Boolean))
   const available = (excludeId?: string) => agents.filter(a => !assigned.has(a.id) || a.id === excludeId)
@@ -43,6 +44,7 @@ export default function CreateTaskGroupModal({ open, onClose, projectId, agents,
       currentBatch: 0,
       todoSource,
       maxGateRetries: maxRetries,
+      targetBranch: targetBranch || 'staging',
     }
     onSubmit(tg)
     onClose()
@@ -81,7 +83,7 @@ export default function CreateTaskGroupModal({ open, onClose, projectId, agents,
         {/* Workers multi-select */}
         <div>
           <div className="flex items-center gap-2 mb-2">
-            <span className="w-5 text-center" style={{ color: '#3B82F6' }}>⚒</span>
+            <span className="w-5 text-center" style={{ color: '#3B82F6' }}>🔧</span>
             <label className="text-xs text-text-muted">Workers (1+)</label>
           </div>
           <div className="space-y-1 max-h-40 overflow-y-auto">
@@ -126,6 +128,15 @@ export default function CreateTaskGroupModal({ open, onClose, projectId, agents,
               value={maxRetries}
               onChange={(e) => setMaxRetries(parseInt(e.target.value) || 3)}
               className="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-text-muted block mb-1">Target branch (PR base)</label>
+            <input
+              value={targetBranch}
+              onChange={(e) => setTargetBranch(e.target.value)}
+              placeholder="staging"
+              className="w-full bg-bg-primary border border-border rounded-lg px-3 py-1.5 text-sm text-text-primary font-mono"
             />
           </div>
         </div>

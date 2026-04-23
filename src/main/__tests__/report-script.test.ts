@@ -4,75 +4,97 @@ import { generateReportScript } from '../utils'
 describe('generateReportScript', () => {
   const script = generateReportScript('test-agent-123', 17710)
 
-  it('generates valid bash script', () => {
+  it('generates valid bash script with CMD helper', () => {
     expect(script).toContain('#!/bin/bash')
     expect(script).toContain('AGENT="test-agent-123"')
-    expect(script).toContain('PORT=17710')
+    expect(script).toContain('CMD="curl')
   })
 
-  it('includes original commands: start, done, todo', () => {
-    expect(script).toContain('start)')
-    expect(script).toContain('done)')
-    expect(script).toContain('todo)')
+  it('defaults to $HOME/.hive/port.lock when no dataDir passed', () => {
+    expect(script).toContain('LOCK_FILE="$HOME/.hive/port.lock"')
   })
 
-  it('includes task-create command', () => {
-    expect(script).toContain('task-create)')
-    expect(script).toContain('/task-create')
+  it('uses custom dataDir for lock file (dev isolation)', () => {
+    const devScript = generateReportScript('dev-agent', 17711, '/tmp/hive-dev')
+    expect(devScript).toContain('LOCK_FILE="/tmp/hive-dev/port.lock"')
   })
 
-  it('includes task-assign command with TASK_ID and TARGET args', () => {
-    expect(script).toContain('task-assign)')
-    expect(script).toContain('TASK_ID="$2"')
-    expect(script).toContain('TARGET="$3"')
-    expect(script).toContain('/task-assign')
-  })
-
-  it('includes task-done command with TASK_ID and SUMMARY', () => {
+  it('task-done has git commit + rebase + push with structured error output', () => {
     expect(script).toContain('task-done)')
+    expect(script).toContain('git add -A')
+    expect(script).toContain('git commit')
+    expect(script).toContain('git rebase')
+    expect(script).toContain('git push --force-with-lease')
+    expect(script).toContain('REBASE_CONFLICT')
+    expect(script).toContain('PUSH_FAILED')
+    expect(script).toContain('exit 1')
+  })
+
+  it('task-assign checks HTTP code and exits on failure', () => {
+    expect(script).toContain('task-assign)')
+    expect(script).toContain('HTTP_CODE')
+    expect(script).toContain('exit 1')
+  })
+
+  it('task-abandon checks HTTP code and exits on failure', () => {
+    expect(script).toContain('task-abandon)')
+    expect(script).toContain('HTTP_CODE')
+  })
+
+  it('all task commands hit correct endpoints', () => {
+    expect(script).toContain('/task-create')
+    expect(script).toContain('/task-assign')
     expect(script).toContain('/task-done')
-    // Should send agentId + taskId + summary
-    expect(script).toContain('agentId')
-    expect(script).toContain('taskId')
-    expect(script).toContain('summary')
-  })
-
-  it('includes task-blocked command with reason', () => {
-    expect(script).toContain('task-blocked)')
     expect(script).toContain('/task-blocked')
-    expect(script).toContain('reason')
-  })
-
-  it('includes task-status as POST with agentId', () => {
-    expect(script).toContain('task-status)')
+    expect(script).toContain('/task-abandon')
     expect(script).toContain('/task-status')
-    expect(script).toContain('agentId')
   })
 
-  it('includes ready command', () => {
-    expect(script).toContain('ready)')
-    expect(script).toContain('/ready')
-  })
-
-  it('includes report-human command', () => {
-    expect(script).toContain('report-human)')
+  it('all reporting commands hit correct endpoints', () => {
+    expect(script).toContain('/report')
     expect(script).toContain('/report-human')
-    expect(script).toContain('message')
-  })
-
-  it('includes batch-propose command', () => {
-    expect(script).toContain('batch-propose)')
+    expect(script).toContain('/ready')
     expect(script).toContain('/batch-propose')
   })
 
-  it('uses correct port in all curl commands', () => {
-    const portMatches = script.match(/127\.0\.0\.1:\$PORT/g)
-    // Should have many curl calls using $PORT
-    expect(portMatches!.length).toBeGreaterThanOrEqual(10)
+  it('has unknown command handler', () => {
+    expect(script).toContain('unknown command')
+    expect(script).toContain('exit 1')
   })
 
-  it('uses correct agent ID variable', () => {
-    const agentMatches = script.match(/\$AGENT/g)
-    expect(agentMatches!.length).toBeGreaterThanOrEqual(5)
+  it('no commands swallow output (no >/dev/null)', () => {
+    // All commands should print their response for agent to read
+    const devNullCount = (script.match(/> \/dev\/null/g) || []).length
+    expect(devNullCount).toBe(0)
+  })
+
+  it('uses target branch variable for rebase', () => {
+    const branchScript = generateReportScript('ag', 17710, undefined, 'develop')
+    expect(branchScript).toContain('origin/develop')
+  })
+
+  it('has check-inbox command for message queue', () => {
+    expect(script).toContain('check-inbox)')
+    expect(script).toContain('/check-inbox')
+  })
+
+  it('task-done has retry loop (3 attempts) for rebase+push', () => {
+    expect(script).toContain('for ATTEMPT in 1 2 3')
+    expect(script).toContain('sleep 3')
+    expect(script).toContain('PUSH_OK=false')
+    expect(script).toContain('after 3 attempts')
+  })
+
+  it('task-done retries curl to dispatcher', () => {
+    // Second retry loop for the HTTP call
+    const matches = script.match(/for ATTEMPT in 1 2 3/g)
+    expect(matches!.length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('task-done returns structured error JSON on failure', () => {
+    expect(script).toContain('REBASE_CONFLICT')
+    expect(script).toContain('PUSH_FAILED')
+    expect(script).toContain('ok')
+    expect(script).toContain('false')
   })
 })

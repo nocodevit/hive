@@ -16,6 +16,16 @@ declare global {
         load: () => Promise<Record<string, unknown>>
         save: (data: Record<string, unknown>) => Promise<boolean>
       }
+      tasks: {
+        list: (projectId: string) => Promise<any[]>
+      }
+      dispatcher: {
+        loadLog: () => Promise<any[]>
+        clearLog: (keepAfter?: string) => Promise<any[]>
+      }
+      inbox: {
+        list: (projectId: string) => Promise<{ agentId: string; messages: any[] }[]>
+      }
       fs: {
         hasGit: (path: string) => Promise<boolean>
         scanFiles: (dirPath: string, limit?: number) => Promise<{ path: string; mtime: number; size: number }[]>
@@ -24,6 +34,9 @@ declare global {
         writeFile: (filePath: string, content: string) => Promise<boolean>
       }
       git: {
+        currentBranch: (cwd: string) => Promise<string>
+        commitHistory: (cwd: string, days: number) => Promise<Record<string, number>>
+        createTargetBranch: (repoPath: string, branch: string) => Promise<{ ok: boolean; existed?: boolean; error?: string }>
         worktreeAdd: (repoPath: string, agentId: string, agentName: string) =>
           Promise<{ ok: boolean; path?: string; branch?: string; error?: string }>
         worktreeRemove: (repoPath: string, worktreePath: string) =>
