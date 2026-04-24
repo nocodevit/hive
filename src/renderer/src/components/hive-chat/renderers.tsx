@@ -434,6 +434,7 @@ function MultiEditHeader({ input }: { input: Record<string, unknown> }) {
  * know the file-global line numbers — Claude's Edit input doesn't carry
  * them; would need to read the file to locate old_string). */
 function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
+  const [expanded, setExpanded] = useState(false)
   if (!oldStr && !newStr) return null
   const oldLines = oldStr.split('\n')
   const newLines = newStr.split('\n')
@@ -452,6 +453,21 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
     userSelect: 'none'
   }
 
+  // Build the list of visible rows (old lines first, then added-only new
+  // lines) so we can cap large diffs to DEFAULT_EXPANDED_LINES like
+  // ToolResult / ReadResultPanel do. Edits on large files otherwise dump
+  // hundreds of lines into the DOM on one render.
+  type Row =
+    | { kind: 'old'; line: string; idx: number; unchanged: boolean }
+    | { kind: 'new'; line: string; idx: number }
+  const rows: Row[] = []
+  oldLines.forEach((ln, i) => rows.push({ kind: 'old', line: ln, idx: i, unchanged: newSet.has(ln) }))
+  newLines.forEach((ln, i) => { if (!oldSet.has(ln)) rows.push({ kind: 'new', line: ln, idx: i }) })
+
+  const truncated = rows.length > DEFAULT_EXPANDED_LINES
+  const visibleRows = expanded || !truncated ? rows : rows.slice(0, DEFAULT_EXPANDED_LINES)
+  const hidden = rows.length - DEFAULT_EXPANDED_LINES
+
   return (
     <div style={{
       margin: '6px 0 2px',
@@ -461,36 +477,47 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
       padding: '4px 0',
       overflow: 'auto'
     }}>
-      {oldLines.map((ln, i) => {
-        const unchanged = newSet.has(ln)
+      {visibleRows.map((r, k) => {
+        if (r.kind === 'old') {
+          return (
+            <div key={`o${r.idx}-${k}`} style={{
+              display: 'flex', padding: '0 10px',
+              background: r.unchanged ? 'transparent' : 'rgba(235,66,104,0.08)',
+              color: r.unchanged ? CRUSH.Squid : CRUSH.Sriracha,
+              whiteSpace: 'pre', lineHeight: 1.5
+            }}>
+              <span style={gutterStyle}>{r.idx + 1}</span>
+              <span style={{ width: 16, flexShrink: 0, color: r.unchanged ? CRUSH.Oyster : CRUSH.Sriracha }}>{r.unchanged ? ' ' : '-'}</span>
+              <span>{redact(r.line)}</span>
+            </div>
+          )
+        }
         return (
-          <div key={`o${i}`} style={{
-            display: 'flex', padding: '0 10px',
-            background: unchanged ? 'transparent' : 'rgba(235,66,104,0.08)',
-            color: unchanged ? CRUSH.Squid : CRUSH.Sriracha,
-            whiteSpace: 'pre', lineHeight: 1.5
-          }}>
-            <span style={gutterStyle}>{i + 1}</span>
-            <span style={{ width: 16, flexShrink: 0, color: unchanged ? CRUSH.Oyster : CRUSH.Sriracha }}>{unchanged ? ' ' : '-'}</span>
-            <span>{redact(ln)}</span>
-          </div>
-        )
-      })}
-      {newLines.map((ln, i) => {
-        if (oldSet.has(ln)) return null
-        return (
-          <div key={`n${i}`} style={{
+          <div key={`n${r.idx}-${k}`} style={{
             display: 'flex', padding: '0 10px',
             background: 'rgba(0,255,178,0.08)',
             color: CRUSH.Julep,
             whiteSpace: 'pre', lineHeight: 1.5
           }}>
-            <span style={gutterStyle}>{i + 1}</span>
+            <span style={gutterStyle}>{r.idx + 1}</span>
             <span style={{ width: 16, flexShrink: 0 }}>+</span>
-            <span>{redact(ln)}</span>
+            <span>{redact(r.line)}</span>
           </div>
         )
       })}
+      {truncated && (
+        <button
+          onClick={() => setExpanded(v => !v)}
+          style={{
+            display: 'block', margin: '4px 10px 0',
+            background: 'transparent', border: 'none',
+            color: expanded ? CRUSH.Squid : CRUSH.Charple,
+            cursor: 'pointer',
+            padding: 0, fontFamily: FONT_MONO, fontSize: 11,
+            textDecoration: 'underline'
+          }}
+        >{expanded ? '▴ Collapse' : `▾ Show ${hidden} more lines`}</button>
+      )}
     </div>
   )
 }
