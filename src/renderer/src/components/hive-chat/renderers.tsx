@@ -43,7 +43,39 @@ const MD_COMPONENTS: Record<string, any> = {
   h2: ({ children }: any) => <h4 style={{ color: CRUSH.Butter, fontSize: 14, margin: '6px 0 4px' }}>{children}</h4>,
   h3: ({ children }: any) => <h5 style={{ color: CRUSH.Butter, fontSize: 13, margin: '6px 0 4px' }}>{children}</h5>,
   blockquote: ({ children }: any) => <blockquote style={{ borderLeft: `2px solid ${CRUSH.Charple}`, paddingLeft: 10, margin: '4px 0', color: CRUSH.Squid }}>{children}</blockquote>,
-  hr: () => <hr style={{ border: 'none', borderTop: `1px solid ${CRUSH.Charcoal}`, margin: '6px 0' }} />
+  hr: () => <hr style={{ border: 'none', borderTop: `1px solid ${CRUSH.Charcoal}`, margin: '6px 0' }} />,
+  table: ({ children }: any) => (
+    <div style={{ margin: '8px 0', overflowX: 'auto' }}>
+      <table style={{
+        borderCollapse: 'collapse',
+        fontFamily: FONT_MONO, fontSize: 12,
+        border: `1px solid ${CRUSH.Charcoal}`,
+        borderRadius: 4,
+        overflow: 'hidden'
+      }}>{children}</table>
+    </div>
+  ),
+  thead: ({ children }: any) => <thead style={{ background: CRUSH.BBQ }}>{children}</thead>,
+  tbody: ({ children }: any) => <tbody>{children}</tbody>,
+  tr: ({ children }: any) => <tr style={{ borderBottom: `1px solid ${CRUSH.Charcoal}` }}>{children}</tr>,
+  th: ({ children }: any) => (
+    <th style={{
+      padding: '6px 12px',
+      textAlign: 'left',
+      color: CRUSH.Butter,
+      fontWeight: 700,
+      borderRight: `1px solid ${CRUSH.Charcoal}`,
+      whiteSpace: 'nowrap'
+    }}>{children}</th>
+  ),
+  td: ({ children }: any) => (
+    <td style={{
+      padding: '6px 12px',
+      color: CRUSH.Ash,
+      borderRight: `1px solid ${CRUSH.Charcoal}`,
+      verticalAlign: 'top'
+    }}>{children}</td>
+  )
 }
 
 function CrushMarkdown({ text }: { text: string }) {
@@ -277,14 +309,28 @@ function MultiEditHeader({ input }: { input: Record<string, unknown> }) {
 
 /** Simple side-by-side-ish diff: each line of old_string prefixed with -,
  * each of new_string with +. Lines that are identical in both stay neutral.
- * Not a real LCS — Claude's old_string is usually a short unique anchor so
- * the trivial per-line rendering reads fine. */
+ * Left gutter shows 1-based row indices within the diff chunk (we don't
+ * know the file-global line numbers — Claude's Edit input doesn't carry
+ * them; would need to read the file to locate old_string). */
 function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
   if (!oldStr && !newStr) return null
   const oldLines = oldStr.split('\n')
   const newLines = newStr.split('\n')
   const oldSet = new Set(oldLines)
   const newSet = new Set(newLines)
+  // Gutter width scales to the larger line count
+  const maxLineNo = Math.max(oldLines.length, newLines.length)
+  const gutterChars = String(maxLineNo).length
+  const gutterStyle: React.CSSProperties = {
+    display: 'inline-block',
+    width: `${gutterChars + 1}ch`,
+    flexShrink: 0,
+    color: CRUSH.Oyster,
+    textAlign: 'right',
+    paddingRight: 8,
+    userSelect: 'none'
+  }
+
   return (
     <div style={{
       margin: '6px 0 2px',
@@ -303,13 +349,14 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
             color: unchanged ? CRUSH.Squid : CRUSH.Sriracha,
             whiteSpace: 'pre', lineHeight: 1.5
           }}>
+            <span style={gutterStyle}>{i + 1}</span>
             <span style={{ width: 16, flexShrink: 0, color: unchanged ? CRUSH.Oyster : CRUSH.Sriracha }}>{unchanged ? ' ' : '-'}</span>
             <span>{ln}</span>
           </div>
         )
       })}
       {newLines.map((ln, i) => {
-        if (oldSet.has(ln)) return null // already shown above
+        if (oldSet.has(ln)) return null
         return (
           <div key={`n${i}`} style={{
             display: 'flex', padding: '0 10px',
@@ -317,6 +364,7 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
             color: CRUSH.Julep,
             whiteSpace: 'pre', lineHeight: 1.5
           }}>
+            <span style={gutterStyle}>{i + 1}</span>
             <span style={{ width: 16, flexShrink: 0 }}>+</span>
             <span>{ln}</span>
           </div>
