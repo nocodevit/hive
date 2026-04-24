@@ -53,6 +53,14 @@ declare global {
         stop: () => Promise<{ ok: boolean }>
         onTranscript: (cb: (line: string) => void) => () => void
       }
+      chat: {
+        start: (id: string, opts: { cwd?: string; agent?: string; name?: string }) => Promise<{ ok: boolean }>
+        send: (id: string, text: string) => Promise<{ ok: boolean; error?: string }>
+        stop: (id: string) => Promise<{ ok: boolean }>
+        onEvent: (id: string, cb: (ev: any) => void) => () => void
+        onStderr: (id: string, cb: (line: string) => void) => () => void
+        onExit: (id: string, cb: (code: number) => void) => () => void
+      }
       getFilePath: (file: File) => string | null
       project: {
         scan: (zones: { path: string; type: string }[]) => Promise<{ projectStage: string; todos: any[] }>

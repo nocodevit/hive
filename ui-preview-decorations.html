@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hive Pretty — Element-by-Element Mapping</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'JetBrains Mono', Menlo, monospace;
+  background: #0a0a0a; color: #DFDBDD;
+  padding: 24px 32px; line-height: 1.5;
+}
+h1 {
+  font-family: 'Space Grotesk'; font-weight: 700; font-size: 20px;
+  text-align: center; color: #FF60FF; margin-bottom: 6px;
+}
+.subtitle {
+  text-align: center; font-size: 11px; color: #858392; margin-bottom: 30px;
+}
+.subtitle code { background: #2D2C35; padding: 1px 6px; border-radius: 3px; color: #68FFD6; }
+
+.container { max-width: 1400px; margin: 0 auto; }
+
+/* Table-of-elements */
+.element {
+  display: grid;
+  grid-template-columns: 180px 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+  margin-bottom: 18px;
+  border: 1px solid #2D2C35;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.element > .label {
+  background: #201F26;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  border-right: 1px solid #2D2C35;
+}
+.element > .label .name {
+  font-family: 'Space Grotesk'; font-weight: 700; font-size: 13px; color: #DFDBDD;
+}
+.element > .label .desc {
+  font-size: 10px; color: #858392; line-height: 1.4;
+}
+
+.pane {
+  padding: 12px 16px;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pane.raw { background: #0a0a0a; border-right: 1px solid #2D2C35; }
+.pane.pretty { background: #201F26; }
+
+.pane-head {
+  position: absolute; top: 6px; right: 8px;
+  font-family: 'Space Grotesk';
+  font-size: 9px; font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  opacity: 0.5;
+}
+
+.element { position: relative; }
+.element::before {
+  content: 'RAW'; position: absolute;
+  top: 8px; left: 196px;
+  font-family: 'Space Grotesk';
+  font-size: 9px; font-weight: 700; color: #858392;
+  letter-spacing: 0.12em;
+}
+.element::after {
+  content: 'CRUSH'; position: absolute;
+  top: 8px; left: calc(50% + 104px);
+  font-family: 'Space Grotesk';
+  font-size: 9px; font-weight: 700; color: #FF60FF;
+  letter-spacing: 0.12em;
+}
+
+/* ═══════ RAW CLAUDE CODE COLORS (what Claude emits natively) ═══════ */
+.r-gray { color: #858585; }
+.r-dim  { color: #555; }
+.r-mid  { color: #999; }
+.r-lite { color: #bbb; }
+.r-orange { color: #d77757; }
+.r-muted-purple { color: #a07fc8; }
+.r-muted-blue   { color: #6a90c0; }
+.r-muted-green  { color: #7fbf8f; }
+.r-muted-pink   { color: #c87f9f; }
+.r-muted-yellow { color: #c8b47f; }
+.r-white { color: #fff; }
+
+/* ═══════ CRUSH PALETTE (full saturation, no alpha unless design-approved) ═══════ */
+.c-pepper    { color: #201F26; }
+.c-bbq       { color: #2D2C35; }
+.c-charcoal  { color: #3A3943; }
+.c-oyster    { color: #605F6B; }
+.c-squid     { color: #858392; }
+.c-ash       { color: #DFDBDD; }
+.c-butter    { color: #FFFAF1; }
+
+.c-sriracha  { color: #EB4268; }
+.c-julep     { color: #00FFB2; }
+.c-zest      { color: #E8FE96; }
+.c-malibu    { color: #00A4FF; }
+.c-dolly     { color: #FF60FF; }
+.c-bok       { color: #68FFD6; }
+.c-charple   { color: #6B50FF; }
+.c-violet    { color: #C259FF; }
+.c-mochi     { color: #EB5DFF; }
+.c-blush     { color: #FF84FF; }
+.c-guac      { color: #12C78F; }
+.c-salmon    { color: #FF7F90; }
+.c-cumin     { color: #BF976F; }
+
+.bold { font-weight: 700; }
+.muted { color: #858392; }
+.dim { color: #605F6B; }
+
+/* ══════ COMPONENT STYLES (identical to runtime CSS in Terminal.tsx) ══════ */
+
+/* 1. User input row — solid Dolly bg, Charple left border, Butter text, Julep ❯ */
+.cmp-input {
+  background: #FF60FF;
+  border-left: 2px solid #6B50FF;
+  padding: 2px 6px;
+  display: flex; align-items: center; gap: 6px;
+  color: #FFFAF1; font-weight: 500;
+}
+.cmp-input .prompt { color: #00FFB2; font-weight: 700; }
+
+/* 2. Assistant message — Charple ⏺ + Ash text */
+.cmp-assistant {
+  display: flex; gap: 8px;
+  color: #DFDBDD;
+}
+.cmp-assistant .bullet { color: #6B50FF; font-weight: 700; }
+
+/* 3. Tool call card — Charple left border, tool-colored ● and name, dim args */
+.cmp-tool {
+  display: flex; align-items: center; gap: 8px;
+  padding: 2px 8px;
+  border-left: 3px solid #6B50FF;
+  background: #201F26;
+  min-height: 24px;
+}
+.cmp-tool .bullet { font-weight: 700; }
+.cmp-tool .name { font-weight: 700; }
+.cmp-tool .args { color: #DFDBDD; opacity: 0.75; }
+
+.tool-read  .bullet, .tool-read  .name { color: #68FFD6; }  /* Bok */
+.tool-edit  .bullet, .tool-edit  .name { color: #00FFB2; }  /* Julep */
+.tool-write .bullet, .tool-write .name { color: #00FFB2; }
+.tool-bash  .bullet, .tool-bash  .name { color: #00A4FF; }  /* Malibu */
+.tool-grep  .bullet, .tool-grep  .name { color: #E8FE96; }  /* Zest */
+.tool-glob  .bullet, .tool-glob  .name { color: #E8FE96; }
+.tool-agent .bullet, .tool-agent .name { color: #FF60FF; }  /* Dolly */
+.tool-todo  .bullet, .tool-todo  .name { color: #6B50FF; }  /* Charple */
+.tool-web   .bullet, .tool-web   .name { color: #C259FF; }  /* Violet */
+.tool-skill .bullet, .tool-skill .name { color: #EB5DFF; }  /* Mochi */
+
+/* 4. Tool result — Squid ⎿ */
+.cmp-tool-result {
+  padding-left: 14px;
+  color: #858392;
+  display: flex; gap: 8px;
+}
+.cmp-tool-result .corner { color: #858392; }
+
+/* 5. Code block — BBQ bg, syntax-highlighted */
+.cmp-code {
+  background: #2D2C35;
+  border: 1px solid #3A3943;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.cmp-code .kw { color: #00A4FF; }
+.cmp-code .fn { color: #12C78F; }
+.cmp-code .str { color: #BF976F; }
+.cmp-code .op { color: #FF7F90; }
+.cmp-code .punc { color: #E8FE96; }
+.cmp-code .comment { color: #605F6B; }
+
+/* 6. Diff — approved rgba values from ui-preview-crush-elements.html */
+.cmp-diff-add { background: rgba(0,255,178,0.08); color: #00FFB2; padding: 0 8px; }
+.cmp-diff-del { background: rgba(235,66,104,0.08); color: #EB4268; padding: 0 8px; }
+
+/* 7. File link — Malibu underlined */
+.cmp-file-link { color: #00A4FF; text-decoration: underline; }
+
+/* 8. Spinner / thinking — Sriracha glyph + Squid label */
+.cmp-spinner .glyph { color: #EB4268; font-weight: 700; }
+.cmp-spinner .label { color: #858392; }
+
+/* 9. Menu — approved values from crush preview */
+.cmp-menu .opt {
+  padding: 6px 12px;
+  border-radius: 6px;
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; margin: 2px 0;
+}
+.cmp-menu .opt.selected {
+  background: rgba(255,96,255,0.1);
+  border: 1px solid #FF60FF;
+  color: #FFFAF1;
+}
+.cmp-menu .opt.unselected {
+  border: 1px solid #3A3943;
+  color: #DFDBDD;
+}
+.cmp-menu .num { font-weight: 700; font-size: 15px; min-width: 16px; }
+.cmp-menu .opt.selected .num { color: #FF60FF; }
+.cmp-menu .opt.unselected .num { color: #858392; }
+.cmp-menu .rec { margin-left: auto; font-size: 10px; color: #858392; }
+
+/* 10. Status bar */
+.cmp-status {
+  background: #2D2C35;
+  padding: 4px 12px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  border-top: 1px solid #3A3943;
+}
+.cmp-status .model { color: #6B50FF; font-weight: 700; }
+.cmp-status .mode { color: #FF60FF; }
+.cmp-status .cost { color: #858392; }
+
+/* 11. Limit warning — Zest */
+.cmp-warn { color: #E8FE96; }
+
+/* 12. Agent tag — inverted Zinc ~ */
+.cmp-agent-tag {
+  background: #0891B2;
+  color: #000; font-weight: 700;
+  padding: 2px 10px; font-size: 12px;
+  display: inline-block;
+}
+
+/* 13. Todo list — per-state icons */
+.cmp-todo-done    { color: #00FFB2; } /* Julep ✓ */
+.cmp-todo-active  { color: #FF60FF; } /* Dolly → */
+.cmp-todo-pending { color: #858392; } /* Squid • */
+
+/* 14. Header box — Charple ╭─╮ frame */
+.cmp-header {
+  color: #6B50FF;
+}
+.cmp-header .title { color: #DFDBDD; font-weight: 700; }
+.cmp-header .version { color: #858392; }
+
+/* Footer palette reference */
+.footer {
+  margin: 40px auto 0; max-width: 1400px;
+  padding: 20px; background: #141418; border-radius: 8px;
+  border: 1px solid #2a2a2a;
+}
+.footer h2 {
+  font-family: 'Space Grotesk'; font-size: 12px; color: #FF60FF;
+  margin-bottom: 14px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+}
+.swatches { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; font-size: 11px; }
+.sw {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px; background: #0a0a0a; border-radius: 4px;
+}
+.sw .chip { width: 18px; height: 18px; border-radius: 3px; border: 1px solid rgba(255,255,255,0.06); }
+.sw .name { color: #DFDBDD; font-weight: 500; }
+.sw .hex { color: #605F6B; margin-left: auto; }
+
+.rule-banner {
+  max-width: 1400px; margin: 0 auto 24px;
+  background: rgba(235,66,104,0.08);
+  border: 1px solid #EB4268;
+  border-radius: 6px;
+  padding: 10px 16px;
+  font-size: 11px; color: #DFDBDD;
+}
+.rule-banner strong { color: #EB4268; }
+</style>
+</head>
+<body>
+
+<h1>Hive Pretty Mode — Every Claude Code Element → Crush Component</h1>
+<div class="subtitle">
+  Left: how Claude Code emits it.
+  Right: how Pretty mode renders it (xterm + decoration overlays / structured-event renderer).
+  Source of truth: <code>.claude/CLAUDE.md § UI color contract</code>
+</div>
+
+<div class="rule-banner">
+  <strong>Color contract:</strong> all Crush colors render at their published hex. No unilateral alpha reduction. Alpha values below (e.g. 0.08 on diffs, 0.10 on menu selected) are design-approved from <code>ui-preview-crush-elements.html</code>. Dolly-bg input is <strong>solid #FF60FF</strong>, no alpha.
+</div>
+
+<div class="container">
+
+  <!-- 1. USER INPUT -->
+  <div class="element">
+    <div class="label">
+      <div class="name">1. User input</div>
+      <div class="desc">Row that begins with <code>❯</code>. Active prompt plus all history prompts persist.</div>
+    </div>
+    <div class="pane raw"><span class="r-muted-purple">❯</span> <span class="r-white">fix the login page responsive layout</span></div>
+    <div class="pane pretty">
+      <div class="cmp-input"><span class="prompt">❯</span><span>fix the login page responsive layout</span></div>
+    </div>
+  </div>
+
+  <!-- 2. ASSISTANT MESSAGE -->
+  <div class="element">
+    <div class="label">
+      <div class="name">2. Assistant message</div>
+      <div class="desc">Claude's text reply. Leading <code>⏺</code> bullet.</div>
+    </div>
+    <div class="pane raw"><span class="r-dim">⏺</span> <span class="r-lite">I'll search for the login page and fix the responsive layout.</span></div>
+    <div class="pane pretty">
+      <div class="cmp-assistant"><span class="bullet">⏺</span><span>I'll search for the login page and fix the responsive layout.</span></div>
+    </div>
+  </div>
+
+  <!-- 3. TOOL CALL: Read -->
+  <div class="element">
+    <div class="label">
+      <div class="name">3. Tool call — Read</div>
+      <div class="desc">File view / read. Bok (<code>#68FFD6</code>) accent.</div>
+    </div>
+    <div class="pane raw">  <span class="r-dim">●</span> <span class="r-mid">Read</span> <span class="r-gray">src/components/Header.tsx</span></div>
+    <div class="pane pretty">
+      <div class="cmp-tool tool-read"><span class="bullet">●</span><span class="name">Read</span><span class="args">src/components/Header.tsx</span></div>
+    </div>
+  </div>
+
+  <!-- 4. TOOL CALL: Edit -->
+  <div class="element">
+    <div class="label">
+      <div class="name">4. Tool call — Edit / Write</div>
+      <div class="desc">Modifications. Julep (<code>#00FFB2</code>) accent.</div>
+    </div>
+    <div class="pane raw">  <span class="r-dim">●</span> <span class="r-mid">Edit</span> <span class="r-gray">src/components/Header.tsx</span></div>
+    <div class="pane pretty">
+      <div class="cmp-tool tool-edit"><span class="bullet">●</span><span class="name">Edit</span><span class="args">src/components/Header.tsx</span></div>
+    </div>
+  </div>
+
+  <!-- 5. TOOL CALL: Bash -->
+  <div class="element">
+    <div class="label">
+      <div class="name">5. Tool call — Bash</div>
+      <div class="desc">Shell commands. Malibu (<code>#00A4FF</code>) accent.</div>
+    </div>
+    <div class="pane raw">  <span class="r-dim">●</span> <span class="r-mid">Bash</span> <span class="r-gray">npm run build</span></div>
+    <div class="pane pretty">
+      <div class="cmp-tool tool-bash"><span class="bullet">●</span><span class="name">Bash</span><span class="args">npm run build</span></div>
+    </div>
+  </div>
+
+  <!-- 6. TOOL CALL: Grep / Glob -->
+  <div class="element">
+    <div class="label">
+      <div class="name">6. Tool call — Grep / Glob</div>
+      <div class="desc">Pattern matching. Zest (<code>#E8FE96</code>) accent.</div>
+    </div>
+    <div class="pane raw">  <span class="r-dim">●</span> <span class="r-mid">Grep</span> <span class="r-gray">"homepage|home.*button"</span></div>
+    <div class="pane pretty">
+      <div class="cmp-tool tool-grep"><span class="bullet">●</span><span class="name">Grep</span><span class="args">"homepage|home.*button"</span></div>
+    </div>
+  </div>
+
+  <!-- 7. TOOL CALL: Agent / Task -->
+  <div class="element">
+    <div class="label">
+      <div class="name">7. Tool call — Agent / Task</div>
+      <div class="desc">Subagent spawn. Dolly (<code>#FF60FF</code>) accent.</div>
+    </div>
+    <div class="pane raw">  <span class="r-dim">●</span> <span class="r-mid">Agent</span> <span class="r-gray">Explore ·  find auth middleware</span></div>
+    <div class="pane pretty">
+      <div class="cmp-tool tool-agent"><span class="bullet">●</span><span class="name">Agent</span><span class="args">Explore · find auth middleware</span></div>
+    </div>
+  </div>
+
+  <!-- 8. TOOL CALL: TodoWrite -->
+  <div class="element">
+    <div class="label">
+      <div class="name">8. Tool call — TodoWrite</div>
+      <div class="desc">Todo updates. Charple (<code>#6B50FF</code>) accent.</div>
+    </div>
+    <div class="pane raw">  <span class="r-dim">●</span> <span class="r-mid">TodoWrite</span> <span class="r-gray">[3 updates]</span></div>
+    <div class="pane pretty">
+      <div class="cmp-tool tool-todo"><span class="bullet">●</span><span class="name">TodoWrite</span><span class="args">[3 updates]</span></div>
+    </div>
+  </div>
+
+  <!-- 9. TOOL CALL: WebFetch / WebSearch -->
+  <div class="element">
+    <div class="label">
+      <div class="name">9. Tool call — WebFetch / WebSearch</div>
+      <div class="desc">External. Violet (<code>#C259FF</code>) accent.</div>
+    </div>
+    <div class="pane raw">  <span class="r-dim">●</span> <span class="r-mid">WebFetch</span> <span class="r-gray">https://example.com</span></div>
+    <div class="pane pretty">
+      <div class="cmp-tool tool-web"><span class="bullet">●</span><span class="name">WebFetch</span><span class="args">https://example.com</span></div>
+    </div>
+  </div>
+
+  <!-- 10. TOOL RESULT -->
+  <div class="element">
+    <div class="label">
+      <div class="name">10. Tool result</div>
+      <div class="desc">Attached to its call. Squid-dim (<code>#858392</code>).</div>
+    </div>
+    <div class="pane raw">  <span class="r-gray">⎿  18 matches</span></div>
+    <div class="pane pretty">
+      <div class="cmp-tool-result"><span class="corner">⎿</span><span>18 matches</span></div>
+    </div>
+  </div>
+
+  <!-- 11. CODE BLOCK -->
+  <div class="element">
+    <div class="label">
+      <div class="name">11. Code block</div>
+      <div class="desc">Syntax-highlighted on BBQ (<code>#2D2C35</code>).</div>
+    </div>
+    <div class="pane raw"><span class="r-gray">const</span> <span class="r-mid">Header</span> <span class="r-gray">=</span> <span class="r-gray">()</span> <span class="r-gray">=></span> <span class="r-gray">{...}</span></div>
+    <div class="pane pretty">
+      <div class="cmp-code"><span class="kw">const</span> <span class="fn">Header</span> <span class="op">=</span> <span class="punc">()</span> <span class="op">=&gt;</span> <span class="punc">{</span>…<span class="punc">}</span></div>
+    </div>
+  </div>
+
+  <!-- 12. DIFF -->
+  <div class="element">
+    <div class="label">
+      <div class="name">12. Diff</div>
+      <div class="desc">Julep-add (<code>#00FFB2</code>) / Sriracha-del (<code>#EB4268</code>) · 8% bg approved.</div>
+    </div>
+    <div class="pane raw"><span class="r-gray">- className="text-gray-600"</span>
+<span class="r-gray">+ className="text-blue-600"</span></div>
+    <div class="pane pretty">
+      <div class="cmp-diff-del">- className="text-gray-600"</div>
+      <div class="cmp-diff-add">+ className="text-blue-600"</div>
+    </div>
+  </div>
+
+  <!-- 13. FILE LINK -->
+  <div class="element">
+    <div class="label">
+      <div class="name">13. File link</div>
+      <div class="desc">Malibu (<code>#00A4FF</code>) underlined · reveal on click.</div>
+    </div>
+    <div class="pane raw">  Modified: <span class="r-lite">src/components/Header.tsx</span></div>
+    <div class="pane pretty">
+      Modified: <span class="cmp-file-link">src/components/Header.tsx</span>
+    </div>
+  </div>
+
+  <!-- 14. SPINNER / THINKING -->
+  <div class="element">
+    <div class="label">
+      <div class="name">14. Spinner / thinking</div>
+      <div class="desc">Sriracha glyph + Squid label · in-place repaint (no scroll).</div>
+    </div>
+    <div class="pane raw"><span class="r-orange">✶ Blanching…</span> <span class="r-gray">(12s · ↓ 421 tokens)</span></div>
+    <div class="pane pretty">
+      <div class="cmp-spinner"><span class="glyph">✶ Blanching…</span> <span class="label">(12s · ↓ 421 tokens)</span></div>
+    </div>
+  </div>
+
+  <!-- 15. INTERACTIVE MENU -->
+  <div class="element">
+    <div class="label">
+      <div class="name">15. Interactive menu</div>
+      <div class="desc">Dolly border on selected, Charcoal on others · 10% bg approved.</div>
+    </div>
+    <div class="pane raw"><span class="r-lite">1. Resume from summary (recommended)</span>
+<span class="r-gray">2. Resume full session</span>
+<span class="r-gray">3. Don't ask me again</span></div>
+    <div class="pane pretty">
+      <div class="cmp-menu">
+        <div class="opt selected"><span class="num">1</span><span>Resume from summary</span><span class="rec">recommended</span></div>
+        <div class="opt unselected"><span class="num">2</span><span>Resume full session</span></div>
+        <div class="opt unselected"><span class="num">3</span><span>Don't ask me again</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 16. STATUS BAR -->
+  <div class="element">
+    <div class="label">
+      <div class="name">16. Status bar</div>
+      <div class="desc">Bottom. Model Charple, mode Dolly, cost Squid.</div>
+    </div>
+    <div class="pane raw"><span class="r-mid">opus-4 · agent</span> <span class="r-gray">39,413 tokens · $0.29</span></div>
+    <div class="pane pretty">
+      <div class="cmp-status">
+        <span><span class="model">opus-4</span> · <span class="mode">agent</span></span>
+        <span class="cost">39,413 tokens · $0.29</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 17. LIMIT WARNING -->
+  <div class="element">
+    <div class="label">
+      <div class="name">17. Limit warning</div>
+      <div class="desc">Zest (<code>#E8FE96</code>).</div>
+    </div>
+    <div class="pane raw"><span class="r-muted-yellow">⚠ You've used 87% of your weekly limit</span></div>
+    <div class="pane pretty">
+      <div class="cmp-warn">⚠ You've used 87% of your weekly limit</div>
+    </div>
+  </div>
+
+  <!-- 18. AGENT TAG -->
+  <div class="element">
+    <div class="label">
+      <div class="name">18. Agent identifier tag</div>
+      <div class="desc">Inverted high-visibility tag in top-right of each agent's pane.</div>
+    </div>
+    <div class="pane raw"><span class="r-mid">Tracy(Website)</span></div>
+    <div class="pane pretty">
+      <span class="cmp-agent-tag">Tracy(Website)</span>
+    </div>
+  </div>
+
+  <!-- 19. TODO LIST -->
+  <div class="element">
+    <div class="label">
+      <div class="name">19. Todo list</div>
+      <div class="desc">✓ Julep done, → Dolly active, • Squid pending.</div>
+    </div>
+    <div class="pane raw"><span class="r-gray">[x] Find auth middleware</span>
+<span class="r-gray">[-] Refactor session storage</span>
+<span class="r-gray">[ ] Add tests</span></div>
+    <div class="pane pretty">
+      <div><span class="cmp-todo-done">✓</span> Find auth middleware</div>
+      <div><span class="cmp-todo-active">→</span> Refactor session storage</div>
+      <div><span class="cmp-todo-pending">•</span> Add tests</div>
+    </div>
+  </div>
+
+  <!-- 20. HEADER BOX -->
+  <div class="element">
+    <div class="label">
+      <div class="name">20. Header box</div>
+      <div class="desc">Charple frame, Ash title, Squid version.</div>
+    </div>
+    <div class="pane raw"><span class="r-gray">╭─────────────────────────────╮
+│ Claude Code v2.1.110        │
+╰─────────────────────────────╯</span></div>
+    <div class="pane pretty">
+      <div class="cmp-header">╭─────────────────────────────╮</div>
+      <div class="cmp-header">│ <span class="title">Claude Code</span> <span class="version">v2.1.110</span>        │</div>
+      <div class="cmp-header">╰─────────────────────────────╯</div>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <h2>Crush Palette (the only approved colors)</h2>
+  <div class="swatches">
+    <div class="sw"><span class="chip" style="background:#201F26;border-color:#444"></span><span class="name">Pepper</span><span class="hex">#201F26</span></div>
+    <div class="sw"><span class="chip" style="background:#2D2C35"></span><span class="name">BBQ</span><span class="hex">#2D2C35</span></div>
+    <div class="sw"><span class="chip" style="background:#3A3943"></span><span class="name">Charcoal</span><span class="hex">#3A3943</span></div>
+    <div class="sw"><span class="chip" style="background:#605F6B"></span><span class="name">Oyster</span><span class="hex">#605F6B</span></div>
+    <div class="sw"><span class="chip" style="background:#858392"></span><span class="name">Squid</span><span class="hex">#858392</span></div>
+
+    <div class="sw"><span class="chip" style="background:#DFDBDD"></span><span class="name">Ash</span><span class="hex">#DFDBDD</span></div>
+    <div class="sw"><span class="chip" style="background:#FFFAF1"></span><span class="name">Butter</span><span class="hex">#FFFAF1</span></div>
+    <div class="sw"><span class="chip" style="background:#EB4268"></span><span class="name">Sriracha</span><span class="hex">#EB4268</span></div>
+    <div class="sw"><span class="chip" style="background:#00FFB2"></span><span class="name">Julep</span><span class="hex">#00FFB2</span></div>
+    <div class="sw"><span class="chip" style="background:#E8FE96"></span><span class="name">Zest</span><span class="hex">#E8FE96</span></div>
+
+    <div class="sw"><span class="chip" style="background:#00A4FF"></span><span class="name">Malibu</span><span class="hex">#00A4FF</span></div>
+    <div class="sw"><span class="chip" style="background:#FF60FF"></span><span class="name">Dolly</span><span class="hex">#FF60FF</span></div>
+    <div class="sw"><span class="chip" style="background:#68FFD6"></span><span class="name">Bok</span><span class="hex">#68FFD6</span></div>
+    <div class="sw"><span class="chip" style="background:#6B50FF"></span><span class="name">Charple</span><span class="hex">#6B50FF</span></div>
+    <div class="sw"><span class="chip" style="background:#C259FF"></span><span class="name">Violet</span><span class="hex">#C259FF</span></div>
+
+    <div class="sw"><span class="chip" style="background:#EB5DFF"></span><span class="name">Mochi</span><span class="hex">#EB5DFF</span></div>
+    <div class="sw"><span class="chip" style="background:#FF84FF"></span><span class="name">Blush</span><span class="hex">#FF84FF</span></div>
+    <div class="sw"><span class="chip" style="background:#12C78F"></span><span class="name">Guac</span><span class="hex">#12C78F</span></div>
+    <div class="sw"><span class="chip" style="background:#FF7F90"></span><span class="name">Salmon</span><span class="hex">#FF7F90</span></div>
+    <div class="sw"><span class="chip" style="background:#BF976F"></span><span class="name">Cumin</span><span class="hex">#BF976F</span></div>
+  </div>
+</div>
+
+</body>
+</html>

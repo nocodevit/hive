@@ -5,6 +5,7 @@ import { Unicode11Addon } from '@xterm/addon-unicode11'
 import '@xterm/xterm/css/xterm.css'
 import RichTerminal from './RichTerminal'
 import { crushifyColors } from '../lib/crushify-colors'
+import HiveChat from './hive-chat'
 
 type ViewMode = 'raw' | 'pretty'
 
@@ -30,10 +31,14 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   const visibleRef = useRef(visible)
   const [showScrollDown, setShowScrollDown] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
-  const [mode, setMode] = useState<ViewMode>('pretty')
-  const prettyMode = mode === 'pretty'
-  const prettyModeRef = useRef(prettyMode)
-  prettyModeRef.current = prettyMode
+  // Pretty-mode decoration path is suspended — runtime stays on Raw xterm.
+  // See pretty-term/SUSPENDED.md for history. The decoration code below
+  // remains compiled so it's trivial to re-enable, but the Pretty button
+  // is removed from the UI and prettyModeRef is hard-wired false.
+  const [mode, setMode] = useState<ViewMode>('raw')
+  const [chatMode, setChatMode] = useState(false)
+  const prettyMode = false
+  const prettyModeRef = useRef(false)
   const richMode = false
   const compareMode = false
   const [richLines, setRichLines] = useState<string[]>([])
@@ -42,6 +47,9 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   // scrolled-up input lines stay visibly highlighted in scrollback.
   interface InputDeco { marker: IMarker; bg: IDecoration | undefined; prompt: IDecoration | undefined }
   const inputDecosRef = useRef<InputDeco[]>([])
+  // Tool-call lines (⏺  ● Tool ...) get a Crush-style card overlay per row.
+  interface ToolDeco { marker: IMarker; card: IDecoration | undefined }
+  const toolDecosRef = useRef<ToolDeco[]>([])
   const updateDecorationsRef = useRef<() => void>(() => {})
   const [interactivePrompt, setInteractivePrompt] = useState<{ type: 'menu' | 'confirm' | 'input'; title: string; options: { label: string; value: string }[] } | null>(null)
   const ptyBufferRef = useRef('')
@@ -109,6 +117,59 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
       inputDecosRef.current = []
     }
 
+    const decorateInputLine = (absY: number, promptCol: number) => {
+      if (!termRef.current) return
+      const t = termRef.current
+      const cursorAbs = t.buffer.active.baseY + t.buffer.active.cursorY
+      const offset = absY - cursorAbs
+      const marker = t.registerMarker(offset)
+      if (!marker) return
+
+      // Single top-layer decoration that fully covers the prompt row from
+      // column `promptCol` through end. Solid Dolly bg occludes whatever
+      // xterm drew beneath, and we re-render the row's content on top
+      // (green ❯, then the user-typed text in Butter). onRender fires
+      // whenever xterm re-draws this region, so the content stays live.
+      const bg = t.registerDecoration({
+        marker,
+        x: promptCol,
+        width: Math.max(1, t.cols - promptCol),
+        height: 1,
+        layer: 'top'
+      })
+      bg?.onRender((el: HTMLElement) => {
+        // Re-read the line's current text so typing reflects live.
+        const line = t.buffer.active.getLine(marker.line)
+        const text = line?.translateToString(true) ?? ''
+        const afterPrompt = text.slice(promptCol + 1).replace(/^\s+/, '') // skip ❯ + the space
+
+        el.style.background = '#FF60FF'       // Solid Dolly
+        el.style.borderLeft = '2px solid #6B50FF' // Charple accent
+        el.style.boxSizing = 'border-box'
+        el.style.padding = '0 4px'
+        el.style.pointerEvents = 'none'
+        el.style.display = 'flex'
+        el.style.alignItems = 'center'
+        el.style.gap = '6px'
+        el.style.fontFamily = t.options.fontFamily || 'monospace'
+        el.style.fontSize = `${t.options.fontSize ?? 13}px`
+        el.style.overflow = 'hidden'
+        el.style.whiteSpace = 'nowrap'
+        el.innerHTML = `
+          <span style="color:#00FFB2;font-weight:700;background:transparent;">❯</span>
+          <span style="color:#FFFAF1;font-weight:500;">${escapeHtml(afterPrompt)}</span>
+        `
+      })
+
+      inputDecosRef.current.push({ marker, bg, prompt: undefined })
+    }
+
+    /**
+     * Decorate the *current* active prompt line only. We debounce so we only
+     * look when the cursor rests — while Claude is streaming output its
+     * cursor tears through many lines including ones that happen to contain
+     * `❯`, and we don't want to decorate those transient positions.
+     */
     const updateInputDecorations = () => {
       if (!termRef.current) return
       if (!prettyModeRef.current) {
@@ -119,66 +180,132 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
       const buf = t.buffer.active
       const absY = buf.baseY + buf.cursorY
 
-      // Drop markers whose lines have been evicted from scrollback.
       inputDecosRef.current = inputDecosRef.current.filter(d => !d.marker.isDisposed)
-      // Already decorated this line? skip.
       if (inputDecosRef.current.some(d => d.marker.line === absY)) return
 
       const line = buf.getLine(absY)
       const text = line?.translateToString(false) ?? ''
-      // Find ❯ anywhere in the first handful of cols (Claude Code sometimes
-      // indents the prompt behind a frame character or padding).
       let promptCol = -1
       for (let c = 0; c < Math.min(text.length, 10); c++) {
         if (text[c] === '❯') { promptCol = c; break }
       }
       if (promptCol < 0) return
+      // Only decorate if cursor is past `❯ ` — filters out streams just
+      // passing through ❯-containing output lines.
+      if (buf.cursorX <= promptCol + 1) return
 
-      const marker = t.registerMarker(0)
+      decorateInputLine(absY, promptCol)
+    }
+
+    // ─── Tool-call card decorations ─────────────────────────────────────
+    // Crush colors keyed by tool name. Anything not listed falls back to
+    // Charple accent.
+    const TOOL_COLORS: Record<string, string> = {
+      Read: '#68FFD6',       // Bok
+      Edit: '#00FFB2',       // Julep
+      Write: '#00FFB2',
+      MultiEdit: '#00FFB2',
+      Bash: '#00A4FF',       // Malibu
+      BashOutput: '#00A4FF',
+      Grep: '#E8FE96',       // Zest
+      Glob: '#E8FE96',
+      Agent: '#FF60FF',      // Dolly
+      Task: '#FF60FF',
+      TodoWrite: '#6B50FF',  // Charple
+      WebFetch: '#C259FF',
+      WebSearch: '#C259FF'
+    }
+    const escapeHtml = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+    const disposeAllToolDecorations = () => {
+      for (const d of toolDecosRef.current) {
+        d.card?.dispose()
+        d.marker.dispose()
+      }
+      toolDecosRef.current = []
+    }
+
+    const decorateToolLine = (absY: number, tool: string, args: string) => {
+      if (!termRef.current) return
+      const t = termRef.current
+      const cursorAbs = t.buffer.active.baseY + t.buffer.active.cursorY
+      const offset = absY - cursorAbs
+      const marker = t.registerMarker(offset)
       if (!marker) return
 
-      // Dolly-tinted background from just after `❯ ` to end of row.
-      const bg = t.registerDecoration({
+      const card = t.registerDecoration({
         marker,
-        x: promptCol + 2,
-        width: Math.max(1, t.cols - (promptCol + 2)),
-        height: 1,
-        layer: 'bottom'
-      })
-      bg?.onRender((el: HTMLElement) => {
-        el.style.background = 'rgba(255,96,255,0.38)'
-        el.style.borderLeft = '2px solid #FF60FF'
-        el.style.borderBottom = '1px solid rgba(255,96,255,0.45)'
-        el.style.pointerEvents = 'none'
-        el.style.boxSizing = 'border-box'
-      })
-
-      // Green ❯ overlay — cover whatever gray glyph Claude drew.
-      const prompt = t.registerDecoration({
-        marker,
-        x: promptCol,
-        width: 1,
+        x: 0,
+        width: t.cols,
         height: 1,
         layer: 'top'
       })
-      prompt?.onRender((el: HTMLElement) => {
-        el.textContent = '❯'
-        el.style.color = '#00FFB2'
-        el.style.fontWeight = '700'
+      card?.onRender((el: HTMLElement) => {
+        const color = TOOL_COLORS[tool] || '#6B50FF'
         el.style.background = '#201F26'
-        el.style.textAlign = 'center'
+        el.style.borderLeft = '3px solid #6B50FF'
+        el.style.boxSizing = 'border-box'
+        el.style.padding = '0 6px'
         el.style.pointerEvents = 'none'
-        el.style.lineHeight = el.style.height || `${t.options.fontSize ?? 13}px`
+        el.style.display = 'flex'
+        el.style.alignItems = 'center'
+        el.style.gap = '8px'
         el.style.fontFamily = t.options.fontFamily || 'monospace'
+        el.style.fontSize = `${t.options.fontSize ?? 13}px`
+        el.style.whiteSpace = 'nowrap'
+        el.style.overflow = 'hidden'
+        el.innerHTML = `
+          <span style="color:${color};font-weight:700;">●</span>
+          <span style="color:${color};font-weight:700;">${escapeHtml(tool)}</span>
+          <span style="color:#DFDBDD;opacity:0.75;">${escapeHtml(args)}</span>
+        `
       })
 
-      inputDecosRef.current.push({ marker, bg, prompt })
+      toolDecosRef.current.push({ marker, card })
     }
 
-    updateDecorationsRef.current = updateInputDecorations
-    // Recompute decorations whenever cursor moves (a render tick) or new data arrives.
-    const offCursor = term.onCursorMove(updateInputDecorations)
-    const offWriteParsed = term.onWriteParsed(updateInputDecorations)
+    const scanForToolCalls = () => {
+      if (!termRef.current) return
+      if (!prettyModeRef.current) { disposeAllToolDecorations(); return }
+      const t = termRef.current
+      const buf = t.buffer.active
+
+      toolDecosRef.current = toolDecosRef.current.filter(d => !d.marker.isDisposed)
+      const decorated = new Set(toolDecosRef.current.map(d => d.marker.line))
+
+      // Scan current viewport. Tool lines match `  ● ToolName args...`
+      const scanStart = buf.baseY
+      const scanEnd = buf.baseY + t.rows
+      for (let y = scanStart; y < scanEnd; y++) {
+        if (decorated.has(y)) continue
+        const line = buf.getLine(y)
+        if (!line) continue
+        const text = line.translateToString(true) ?? ''
+        const m = text.match(/^\s*●\s+(\w+)(?:\s+(.*))?$/)
+        if (!m) continue
+        decorateToolLine(y, m[1], (m[2] ?? '').trim())
+      }
+    }
+
+    let restTimer: number | null = null
+    const scheduleUpdate = () => {
+      if (restTimer != null) window.clearTimeout(restTimer)
+      restTimer = window.setTimeout(() => {
+        updateInputDecorations()
+        scanForToolCalls()
+      }, 120)
+    }
+
+    updateDecorationsRef.current = () => {
+      updateInputDecorations()
+      if (prettyModeRef.current) scanForToolCalls()
+      else { disposeAllInputDecorations(); disposeAllToolDecorations() }
+    }
+    // Debounced — only fire after the cursor has settled for ~120ms so we
+    // skip streaming movement through output lines.
+    const offCursor = term.onCursorMove(scheduleUpdate)
+    const offWriteParsed = term.onWriteParsed(scheduleUpdate)
 
     // Intercept paste: convert file paste to path instead of image (capture phase to beat xterm)
     const pasteHandler = (ev: Event) => {
@@ -232,10 +359,8 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
         window.api.pty.create(id, cwd)
           .then(() => {
             window.api.pty.onData(id, (data) => {
-              // In Pretty mode, remap Claude Code's muted 24-bit colors to the
-              // Crush palette on the way in. Raw mode gets the original bytes.
-              const rendered = prettyModeRef.current ? crushifyColors(data) : data
-              term.write(rendered)
+              // Pretty path suspended — raw PTY bytes only.
+              term.write(data)
               if (visibleRef.current && isAtBottom.current) term.scrollToBottom()
               // Capture lines for Rich mode
               const newLines = data.split('\n')
@@ -319,7 +444,8 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
       observer.disconnect()
       offCursor.dispose()
       offWriteParsed.dispose()
-      disposeInputDecorations()
+      disposeAllInputDecorations()
+      disposeAllToolDecorations()
     }
   }, [id, cwd])
 
@@ -378,21 +504,39 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
 
   return (
     <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'visible' }}>
-      {/* Mode toggle — Pretty = xterm + Crush overlays (default), Raw = bare xterm */}
+      {/* Term / Chat toggle */}
       {visible && (
         <div className="absolute top-2 right-2 z-[9999] flex items-center gap-0">
           <button
-            onClick={() => setMode('raw')}
+            onClick={() => setChatMode(false)}
             className={`px-2 py-1 rounded-l-md text-[10px] font-mono cursor-pointer transition-colors border ${
-              mode === 'raw' ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
+              !chatMode ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
             }`}
-          >Raw</button>
+          >Term</button>
           <button
-            onClick={() => setMode('pretty')}
+            onClick={() => setChatMode(true)}
             className={`px-2 py-1 rounded-r-md text-[10px] font-mono cursor-pointer transition-colors border -ml-px ${
-              mode === 'pretty' ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
+              chatMode ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
             }`}
-          >Pretty</button>
+          >Chat</button>
+        </div>
+      )}
+
+      {/* Hive Chat — structured JSON chat UI. Only mounted when Chat tab active. */}
+      {chatMode && visible && (
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 100,
+          background: '#201F26'
+        }}>
+          <HiveChat
+            id={`chat-${id}`}
+            cwd={cwd}
+            agent={agentName ? `hive-${agentId}` : undefined}
+            agentName={agentName}
+            visible={visible && chatMode}
+          />
         </div>
       )}
       {/* xterm.js — the one and only renderer. Pretty mode layers decorations on top. */}
