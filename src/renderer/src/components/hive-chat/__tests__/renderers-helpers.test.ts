@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { langFromPath, stripReadPrefix, extractTrailingChoices } from '../renderers'
+import {
+  langFromPath, stripReadPrefix, extractTrailingChoices,
+  pickVerb, glyphAt, elapsedSec, THINKING_VERBS, THINKING_GLYPHS
+} from '../renderers'
 
 describe('langFromPath', () => {
   it('maps TS/TSX/JS/JSX correctly', () => {
@@ -108,5 +111,42 @@ describe('extractTrailingChoices', () => {
     const text = 'Hello\n\n\n1. A\n2. B'
     const out = extractTrailingChoices(text)
     expect(out!.body).toBe('Hello')
+  })
+})
+
+describe('thinking spinner helpers', () => {
+  it('pickVerb returns a value from THINKING_VERBS and is deterministic', () => {
+    for (let i = 0; i < 50; i++) {
+      expect(THINKING_VERBS).toContain(pickVerb(i))
+    }
+    expect(pickVerb(0)).toBe(pickVerb(THINKING_VERBS.length))
+  })
+
+  it('pickVerb handles negative seeds', () => {
+    expect(THINKING_VERBS).toContain(pickVerb(-1))
+    expect(THINKING_VERBS).toContain(pickVerb(-100))
+  })
+
+  it('glyphAt cycles through THINKING_GLYPHS', () => {
+    for (let t = 0; t < THINKING_GLYPHS.length * 3; t++) {
+      expect(THINKING_GLYPHS).toContain(glyphAt(t))
+    }
+    expect(glyphAt(0)).toBe(glyphAt(THINKING_GLYPHS.length))
+  })
+
+  it('glyphAt handles negative ticks', () => {
+    expect(THINKING_GLYPHS).toContain(glyphAt(-1))
+    expect(THINKING_GLYPHS).toContain(glyphAt(-50))
+  })
+
+  it('elapsedSec computes whole seconds since the epoch value', () => {
+    expect(elapsedSec(1000, 1500)).toBe(0)    // <1s
+    expect(elapsedSec(1000, 2000)).toBe(1)
+    expect(elapsedSec(1000, 5400)).toBe(4)
+    expect(elapsedSec(1000, 61000)).toBe(60)
+  })
+
+  it('elapsedSec clamps negatives to 0', () => {
+    expect(elapsedSec(5000, 1000)).toBe(0)
   })
 })

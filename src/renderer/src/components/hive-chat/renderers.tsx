@@ -757,6 +757,53 @@ function TodoInline({ input }: { input: Record<string, unknown> }) {
 /* ────────────────────────────────────────────────────────────
  *  SYSTEM — Squid dim line
  * ──────────────────────────────────────────────────────────── */
+/* ────────────────────────────────────────────────────────────
+ *  Thinking spinner — Crush-style "✳ Blanching… 3s" animation
+ *  rendered while a message is in-flight but hasn't started
+ *  surfacing visible text yet.
+ * ──────────────────────────────────────────────────────────── */
+export const THINKING_VERBS = [
+  'Blanching', 'Brewing', 'Crafting', 'Simmering', 'Thinking',
+  'Whisking', 'Marinating', 'Sautéing', 'Kneading', 'Seasoning'
+]
+export const THINKING_GLYPHS = ['·', '✢', '✶', '✳', '✻', '✽']
+
+/** Pure helpers — exported for vitest coverage. */
+export function pickVerb(seed: number): string {
+  return THINKING_VERBS[((seed % THINKING_VERBS.length) + THINKING_VERBS.length) % THINKING_VERBS.length]
+}
+export function glyphAt(tick: number): string {
+  return THINKING_GLYPHS[((tick % THINKING_GLYPHS.length) + THINKING_GLYPHS.length) % THINKING_GLYPHS.length]
+}
+export function elapsedSec(since: number, now: number): number {
+  return Math.max(0, Math.floor((now - since) / 1000))
+}
+
+export function ThinkingSpinner({ since }: { since: number }) {
+  const [tick, setTick] = useState(0)
+  const [, forceSec] = useState(0)
+  React.useEffect(() => {
+    const glyphIv = setInterval(() => setTick(t => t + 1), 150)
+    const secIv = setInterval(() => forceSec(n => n + 1), 1000)
+    return () => { clearInterval(glyphIv); clearInterval(secIv) }
+  }, [])
+  const verb = pickVerb(Math.floor(since / 1000))
+  const glyph = glyphAt(tick)
+  const secs = elapsedSec(since, Date.now())
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 4px',
+      color: CRUSH.Squid,
+      fontFamily: FONT_MONO, fontSize: 13
+    }}>
+      <span style={{ color: CRUSH.Sriracha, fontWeight: 700, width: 14, textAlign: 'center' }}>{glyph}</span>
+      <span style={{ color: CRUSH.Sriracha, fontWeight: 600 }}>{verb}…</span>
+      <span style={{ color: CRUSH.Oyster, fontSize: 11 }}>{secs}s</span>
+    </div>
+  )
+}
+
 export function SystemLine({ text }: { text: string }) {
   return (
     <div style={{ color: CRUSH.Oyster, fontSize: 11, fontFamily: FONT_MONO, padding: '2px 0' }}>
