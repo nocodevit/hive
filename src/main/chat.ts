@@ -1,6 +1,7 @@
 import { spawn, ChildProcessWithoutNullStreams, execSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { homedir } from 'node:os'
 import { ipcMain, BrowserWindow, app } from 'electron'
 import * as pty from 'node-pty'
 import { Terminal as HeadlessTerm } from '@xterm/headless'
@@ -66,6 +67,59 @@ function parseJsonLines(buf: string, sessionId: string): { events: any[]; rest: 
   return { events, rest }
 }
 
+/**
+ * Replay the most-recent session history from Claude Code's own persistence
+ * at ~/.claude/projects/<cwd-slug>/<session-id>.jsonl. Each line is an event
+ * in the same shape we stream to the renderer, so we just forward them as
+ * `historical: true` chat events. Enables the Chat timeline to show prior
+ * messages when `continueSession` is set — without this, `claude -c`
+ * loads the model context but never re-emits past messages to stdout.
+ */
+function replaySessionHistory(sessionId: string, cwd: string | undefined) {
+  try {
+    const slug = (cwd || '').replace(/\//g, '-')
+    const dir = join(homedir(), '.claude', 'projects', slug)
+    if (!existsSync(dir)) return
+    const files = readdirSync(dir)
+      .filter(f => f.endsWith('.jsonl'))
+      .map(f => ({ f, m: statSync(join(dir, f)).mtimeMs }))
+      .sort((a, b) => b.m - a.m)
+    if (!files.length) return
+    const latest = join(dir, files[0].f)
+    const lines = readFileSync(latest, 'utf8').split('\n').filter(Boolean)
+    for (const line of lines) {
+      try {
+        const ev = JSON.parse(line)
+        // Reshape Claude Code's local persistence into the stream-json
+        // event shape the renderer already handles.
+        if (ev.type === 'user' && ev.message?.content) {
+          broadcast(`chat:event:${sessionId}`, {
+            type: 'user',
+            message: ev.message,
+            session_id: ev.sessionId,
+            _historical: true
+          })
+        } else if (ev.type === 'assistant' && ev.message) {
+          broadcast(`chat:event:${sessionId}`, {
+            type: 'assistant',
+            message: ev.message,
+            session_id: ev.sessionId,
+            _historical: true
+          })
+        }
+        // file-history-snapshot, summary, etc. are skipped — not user-visible.
+      } catch {}
+    }
+    broadcast(`chat:event:${sessionId}`, {
+      type: 'system',
+      subtype: 'history_replayed',
+      session_id: sessionId,
+      file: latest,
+      count: lines.length
+    })
+  } catch {}
+}
+
 export function startChat(id: string, opts: {
   cwd?: string
   agent?: string
@@ -111,6 +165,12 @@ export function startChat(id: string, opts: {
   const logPath = join(logDir(), `${id}-${Date.now()}.jsonl`)
   const session: ChatSession = { id, child, buffer: '', startedAt: Date.now(), logPath, cwd: opts.cwd }
   sessions.set(id, session)
+
+  // When resuming, replay the most-recent local session file so the UI
+  // shows the conversation history, not just the live stream from here.
+  if (opts.continueSession) {
+    setTimeout(() => replaySessionHistory(id, opts.cwd), 100)
+  }
 
   // Usage snapshot. Two parallel data sources:
   //  1. ccusage (local, reads ~/.claude/sessions/) — gives costUSD / burn /
