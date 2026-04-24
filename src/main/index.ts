@@ -10,6 +10,7 @@ import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
 import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './helpers'
 import { generateReportScript } from './utils'
+import { registerChatIpc } from './chat'
 
 // Data persistence — HIVE_DATA_DIR env allows E2E tests to use isolated directory
 const DATA_DIR = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
@@ -804,7 +805,6 @@ ipcMain.handle('dialog:selectFolder', async (_event, { title }) => {
 })
 
 // Data persistence
-})
 
 ipcMain.handle('inbox:list', (_event, { projectId }) => {
   const inboxDir = join(DATA_DIR, 'comms', projectId, 'inbox')
@@ -1245,6 +1245,7 @@ ipcMain.handle('skills:scan', () => {
 app.whenReady().then(() => {
   app.setName('Hive')
   electronApp.setAppUserModelId('com.hive.app')
+  registerChatIpc()
   // Write port lock file — single source of truth for hive-report.sh
   const portLockFile = join(DATA_DIR, 'port.lock')
   const existingLock = existsSync(portLockFile) ? readFileSync(portLockFile, 'utf-8').trim().split('\n') : []
