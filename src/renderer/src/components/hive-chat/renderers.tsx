@@ -179,8 +179,7 @@ export function UserMessage({ text }: { text: string }) {
     return (
       <div style={{
         display: 'inline-flex', alignItems: 'center', gap: 6,
-        background: 'rgba(255,96,255,0.08)',
-        border: `1px solid ${CRUSH.Dolly}`,
+        background: CRUSH.Dolly,
         borderRadius: 999,
         padding: '3px 12px',
         margin: '6px 0',
@@ -188,16 +187,15 @@ export function UserMessage({ text }: { text: string }) {
         fontSize: 12,
         color: CRUSH.Butter
       }}>
-        <span style={{ color: CRUSH.Dolly, fontWeight: 700 }}>⚡</span>
-        <span style={{ color: CRUSH.Dolly, fontWeight: 700 }}>/{redact(parsed.command)}</span>
-        {parsed.args && <span style={{ color: CRUSH.Squid, opacity: 0.8 }}>{redact(parsed.args)}</span>}
+        <span style={{ color: CRUSH.Butter, fontWeight: 700 }}>⚡</span>
+        <span style={{ color: CRUSH.Butter, fontWeight: 700 }}>/{redact(parsed.command)}</span>
+        {parsed.args && <span style={{ color: CRUSH.Butter, opacity: 0.85 }}>{redact(parsed.args)}</span>}
       </div>
     )
   }
   return (
     <div style={{
-      background: 'rgba(255,96,255,0.08)',
-      border: `1px solid ${CRUSH.Dolly}`,
+      background: CRUSH.Dolly,
       borderRadius: 8,
       padding: '8px 12px',
       margin: '6px 0',
@@ -206,7 +204,7 @@ export function UserMessage({ text }: { text: string }) {
       gap: 8,
       fontFamily: FONT_MONO
     }}>
-      <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
+      <span style={{ color: CRUSH.Butter, fontWeight: 700, fontSize: 16 }}>❯</span>
       <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(parsed.text)}</span>
     </div>
   )
