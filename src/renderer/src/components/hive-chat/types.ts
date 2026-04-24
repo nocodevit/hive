@@ -71,6 +71,6 @@ export type StreamEvent =
 export type TimelineEntry =
   | { kind: 'user'; id: string; text: string }
   | { kind: 'assistant'; id: string; text: string }
-  | { kind: 'tool_call'; id: string; name: string; input: Record<string, unknown> }
+  | { kind: 'tool_call'; id: string; toolUseId: string; name: string; input: Record<string, unknown> }
   | { kind: 'tool_result'; id: string; toolUseId: string; content: string; isError?: boolean }
   | { kind: 'system'; id: string; text: string }
