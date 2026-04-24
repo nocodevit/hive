@@ -519,7 +519,7 @@ function PctBar({ pct }: { pct?: number }) {
   return (
     <span style={{
       position: 'relative', display: 'inline-block',
-      width: 60, height: 8,
+      width: 36, height: 7,
       background: CRUSH.Charcoal, borderRadius: 2, overflow: 'hidden'
     }}>
       {typeof pct === 'number' && (
@@ -581,7 +581,7 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
       {eta && (
         <>
           <span style={{ color: CRUSH.Oyster }}>·</span>
-          <span>{eta} left in 5h block</span>
+          <span>{eta} left</span>
         </>
       )}
       <span style={{ marginLeft: 'auto' }} />
