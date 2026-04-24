@@ -1,5 +1,5 @@
 import { spawn, ChildProcessWithoutNullStreams, execSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { ipcMain, BrowserWindow, app } from 'electron'
@@ -40,6 +40,38 @@ function logDir(): string {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return dir
 }
+
+/**
+ * Retention sweep for ~/.hive/chat-logs. Deletes .jsonl files whose mtime
+ * is older than 30 days. Runs once per main-process startup — cheap; no
+ * timer needed since app lifetime rarely spans >30d, and the next launch
+ * will catch whatever this one missed. Never touches ~/.claude/projects
+ * (that's Claude Code's own persistence, not ours to prune).
+ */
+const LOG_RETENTION_DAYS = 30
+function sweepOldLogs() {
+  try {
+    const dir = logDir()
+    const cutoff = Date.now() - LOG_RETENTION_DAYS * 24 * 3600 * 1000
+    let removed = 0
+    for (const f of readdirSync(dir)) {
+      if (!f.endsWith('.jsonl')) continue
+      const path = join(dir, f)
+      try {
+        const m = statSync(path).mtimeMs
+        if (m < cutoff) {
+          unlinkSync(path)
+          removed++
+        }
+      } catch {}
+    }
+    if (removed > 0) console.log(`[chat] retention: removed ${removed} log(s) older than ${LOG_RETENTION_DAYS}d`)
+  } catch (e) {
+    console.warn('[chat] retention sweep failed:', e)
+  }
+}
+// Fire once when this module is first imported (main process startup).
+sweepOldLogs()
 
 function broadcast(event: string, payload: unknown) {
   for (const win of BrowserWindow.getAllWindows()) {
