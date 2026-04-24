@@ -14,6 +14,48 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.30] — 2026-04-25
+
+### Added
+- **⏹ Close session button** in the bottom status bar — kills the
+  `claude --print` subprocess while keeping the full timeline visible,
+  so the user can step away without burning API.
+- **⊕ Start new session panel** appears in place of the input area when
+  the subprocess has exited (user-initiated or natural). Spawns a fresh
+  session with the same agent (no `-c`, no `--resume`); adds a `── new
+  session ──` divider to the timeline so the context boundary is clear.
+- Close button hidden when not applicable (already closed / in remote-
+  control mode) so it never does the wrong thing.
+
+---
+
+## [1.7.29] — 2026-04-25
+
+### Added
+- **`/remote-control` round-trip.** Typing `/remote-control` in HiveChat
+  triggers a session-scoped slash-command handler that:
+  1. Kills the current `--print` subprocess
+  2. Spawns node-pty `claude --resume <claude_sid>` (interactive TUI)
+  3. Writes `/remote-control\r` after the prompt settles
+  4. Forwards PTY stdout to the renderer so pairing URL / QR are visible
+  5. Shows a Dolly-bordered pairing panel with a **"↺ Resume session
+     here"** button in place of the textarea
+  6. Click → kills PTY, re-spawns `--print --resume <sid>`, replay
+     picks up any mobile-driven turns
+- Backend plumbing generalizes to other session-scoped slashes
+  (`/clear`, `/compact`, `/model`) — just add them to the renderer's
+  intercept list with the right PTY input.
+
+### Changed
+- `ChatSession` gained `mode: 'print' | 'rc'`, `rcPty?`, `claudeSid`,
+  `startOpts` fields.
+- `sendUserMessage` / `respondPermission` now refuse when
+  `mode !== 'print'`.
+- `startChat` accepts a new `resumeSid` opt for explicit
+  `--resume <sid>` semantics.
+
+---
+
 ## [1.7.28] — 2026-04-25
 
 ### Added
@@ -433,7 +475,9 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.28...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.30...HEAD
+[1.7.30]: https://github.com/nocodevit/hive/compare/v1.7.29...v1.7.30
+[1.7.29]: https://github.com/nocodevit/hive/compare/v1.7.28...v1.7.29
 [1.7.28]: https://github.com/nocodevit/hive/compare/v1.7.27...v1.7.28
 [1.7.27]: https://github.com/nocodevit/hive/compare/v1.7.26...v1.7.27
 [1.7.26]: https://github.com/nocodevit/hive/compare/v1.7.25...v1.7.26
