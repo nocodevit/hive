@@ -3,9 +3,9 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import RichTerminal from './RichTerminal'
-import ClaudeTerm from './ClaudeTerm'
+import PrettyTerm from './PrettyTerm'
 
-type ViewMode = 'raw' | 'rich' | 'compare'
+type ViewMode = 'raw' | 'pretty' | 'rich' | 'compare'
 
 interface TerminalProps {
   id: string
@@ -32,6 +32,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   const [mode, setMode] = useState<ViewMode>('raw')
   const richMode = mode === 'rich'
   const compareMode = mode === 'compare'
+  const prettyMode = mode === 'pretty'
   const [richLines, setRichLines] = useState<string[]>([])
   const richLinesRef = useRef<string[]>([])
   const [interactivePrompt, setInteractivePrompt] = useState<{ type: 'menu' | 'confirm' | 'input'; title: string; options: { label: string; value: string }[] } | null>(null)
@@ -274,11 +275,11 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
             }`}
           >Raw</button>
           <button
-            onClick={() => setMode('rich')}
+            onClick={() => setMode('pretty')}
             className={`px-2 py-1 text-[10px] font-mono cursor-pointer transition-colors border -ml-px ${
-              mode === 'rich' ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
+              mode === 'pretty' ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
             }`}
-          >Rich</button>
+          >Pretty</button>
           <button
             onClick={() => setMode('compare')}
             className={`px-2 py-1 rounded-r-md text-[10px] font-mono cursor-pointer transition-colors border -ml-px ${
@@ -287,7 +288,8 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
           >Compare</button>
         </div>
       )}
-      {/* xterm.js — full width normally, half width in compare mode */}
+      {/* xterm.js — stays mounted in every mode (PTY consumer + Raw/Compare renderer).
+          In Pretty mode it's hidden offscreen so the session isn't torn down. */}
       <div
         ref={containerRef}
         data-terminal-id={id}
@@ -296,35 +298,34 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
         style={{
           width: compareMode ? '50%' : '100%',
           height: '100%', minHeight: '200px',
-          visibility: visible ? 'visible' : 'hidden',
-          position: visible ? 'relative' : 'absolute',
-          pointerEvents: visible ? 'auto' : 'none',
+          visibility: visible && !prettyMode ? 'visible' : 'hidden',
+          position: visible && !prettyMode ? 'relative' : 'absolute',
+          pointerEvents: visible && !prettyMode ? 'auto' : 'none',
           borderRight: compareMode ? '1px solid #3A3943' : 'none',
-          transition: 'width 0.15s ease'
+          transition: 'width 0.15s ease',
+          top: prettyMode ? -9999 : 0,
+          left: prettyMode ? -9999 : 0
         }}
       />
-      {/* ClaudeTerm — right half in compare mode */}
-      {compareMode && visible && (
+      {/* PrettyTerm — full viewport in pretty mode, right half in compare mode */}
+      {(prettyMode || compareMode) && visible && (
         <div style={{
           position: 'absolute',
-          top: 0, right: 0, bottom: 0,
-          width: '50%',
+          top: 0, bottom: 0,
+          right: 0,
+          width: compareMode ? '50%' : '100%',
           background: '#201F26',
           overflow: 'hidden'
         }}>
-          <div style={{
-            position: 'absolute', top: 6, left: 10,
-            fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
-            color: '#858392', letterSpacing: '0.08em',
-            textTransform: 'uppercase', zIndex: 5, pointerEvents: 'none'
-          }}>ClaudeTerm (ours)</div>
-          <div style={{
-            position: 'absolute', top: 6, right: 80,
-            fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
-            color: '#858392', letterSpacing: '0.08em',
-            textTransform: 'uppercase', zIndex: 5, pointerEvents: 'none'
-          }}></div>
-          <ClaudeTerm id={id} visible={visible} />
+          {compareMode && (
+            <div style={{
+              position: 'absolute', top: 6, left: 10,
+              fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
+              color: '#858392', letterSpacing: '0.08em',
+              textTransform: 'uppercase', zIndex: 5, pointerEvents: 'none'
+            }}>Pretty (ours)</div>
+          )}
+          <PrettyTerm id={id} visible={visible} active={prettyMode || compareMode} />
         </div>
       )}
       {compareMode && visible && (
