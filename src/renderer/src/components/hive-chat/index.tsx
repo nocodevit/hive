@@ -36,6 +36,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     projectedUSD?: number
     remainingMinutes?: number
     totalTokens?: number
+    fiveHour?: number   // % of subscription limit — scraped from /usage TUI
+    sevenDay?: number
   }>({})
   const [sessionId, setSessionId] = useState<string>('')
   // Per-(msgId × blockIdx) accumulator for live stream_event text_delta /
