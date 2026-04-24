@@ -820,6 +820,23 @@ ipcMain.handle('inbox:list', (_event, { projectId }) => {
 })
 
 ipcMain.handle('data:load', () => loadData())
+
+// Privacy / streaming-mode: expose OS username (so renderer can redact
+// it in display without hardcoding any real name) + a persistent boolean
+// in data.settings.streamingMode.
+ipcMain.handle('system:username', () => {
+  try { return require('os').userInfo().username } catch { return '' }
+})
+ipcMain.handle('settings:get', (_event, { key }: { key: string }) => {
+  const data = loadData() as any
+  return data.settings?.[key]
+})
+ipcMain.handle('settings:set', (_event, { key, value }: { key: string; value: unknown }) => {
+  const data = loadData() as any
+  data.settings = { ...(data.settings || {}), [key]: value }
+  saveData(data)
+  return true
+})
 ipcMain.handle('dispatcher:loadLog', () => loadDispatchLog())
 ipcMain.handle('dispatcher:clearLog', (_event, { keepAfter }: { keepAfter?: string }) => {
   if (keepAfter) {
