@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CRUSH, FONT_MONO } from './crush-styles'
+import { CRUSH, FONT_MONO, redact } from './crush-styles'
 import { TimelineRow } from './renderers'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
 
@@ -199,9 +199,25 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         const content = msg?.content as ContentBlock[] | undefined
         const msgId = msg?.id
         if (!Array.isArray(content) || !msgId) return
+
+        // Live assistant events are CUMULATIVE SNAPSHOTS whose content
+        // array drops thinking blocks, so the JS `forEach idx` no longer
+        // matches the `content_block_delta.index` that stream_event used
+        // to key the same entries. Trusting assistant events here creates
+        // duplicates (same text appears twice on screen). stream_event
+        // already produces the live entries incrementally, so we skip the
+        // cumulative snapshot entirely — UNLESS the event is coming from
+        // replaySessionHistory (jsonl replay has no stream_event
+        // counterpart, so that path still needs to process assistant).
+        const isHistorical = (ev as any)._historical === true
+        if (!isHistorical) return
+
         content.forEach((block: any, idx: number) => {
           if (block.type === 'thinking' || block.type === 'redacted_thinking') return
-          const entryId = `msg:${msgId}:${idx}`
+          // For historical replay we key by tool id when available, else msg+idx.
+          const entryId = block.type === 'tool_use' && block.id
+            ? `tool:${block.id}`
+            : `msg:${msgId}:${idx}`
           if (block.type === 'text') {
             replaceEntry(entryId, { kind: 'assistant', text: block.text, id: entryId })
           } else if (block.type === 'tool_use') {

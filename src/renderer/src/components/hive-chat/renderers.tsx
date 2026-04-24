@@ -2,7 +2,7 @@ import React, { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Highlight, themes } from 'prism-react-renderer'
-import { CRUSH, FONT_MONO, TOOL_COLORS } from './crush-styles'
+import { CRUSH, FONT_MONO, TOOL_COLORS, redact } from './crush-styles'
 import type { TimelineEntry } from './types'
 
 const DEFAULT_EXPANDED_LINES = 12
@@ -140,7 +140,7 @@ const MD_COMPONENTS: Record<string, any> = {
 function CrushMarkdown({ text }: { text: string }) {
   return (
     <div style={{ fontFamily: FONT_MONO, fontSize: 13, lineHeight: 1.55 }}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{text}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{redact(text)}</ReactMarkdown>
     </div>
   )
 }
@@ -163,7 +163,7 @@ export function UserMessage({ text }: { text: string }) {
       fontFamily: FONT_MONO
     }}>
       <span style={{ color: CRUSH.Charple, fontWeight: 700, fontSize: 16 }}>❯</span>
-      <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{text}</span>
+      <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(text)}</span>
     </div>
   )
 }
@@ -413,7 +413,7 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
           }}>
             <span style={gutterStyle}>{i + 1}</span>
             <span style={{ width: 16, flexShrink: 0, color: unchanged ? CRUSH.Oyster : CRUSH.Sriracha }}>{unchanged ? ' ' : '-'}</span>
-            <span>{ln}</span>
+            <span>{redact(ln)}</span>
           </div>
         )
       })}
@@ -428,7 +428,7 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
           }}>
             <span style={gutterStyle}>{i + 1}</span>
             <span style={{ width: 16, flexShrink: 0 }}>+</span>
-            <span>{ln}</span>
+            <span>{redact(ln)}</span>
           </div>
         )
       })}
@@ -437,9 +437,11 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
 }
 
 function HeaderLine({ tool, color, tail, tailStyle }: { tool: string; color: string; tail: string; tailStyle: 'ash' | 'link' }) {
+  // Keep the real path for reveal-in-Finder; only the shown string is redacted.
   const onClick = tailStyle === 'link' && tail && tail.startsWith('/')
     ? () => { window.api.fs.revealInFinder(tail) }
     : undefined
+  const displayTail = redact(tail)
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
@@ -459,7 +461,7 @@ function HeaderLine({ tool, color, tail, tailStyle }: { tool: string; color: str
           flex: 1, minWidth: 0,
           cursor: onClick ? 'pointer' : 'default'
         }}
-      >{tail}</span>
+      >{displayTail}</span>
     </div>
   )
 }
@@ -534,7 +536,7 @@ function InlineResult({ content, isError, tool, input }: {
       <div style={{ display: 'flex', gap: 8 }}>
         <span>{isError ? '⚠' : '⎿'}</span>
         <div style={{ whiteSpace: 'pre-wrap', flex: 1, wordBreak: 'break-word' }}>
-          {visibleContent}
+          {redact(visibleContent)}
           {truncated && !expanded && (
             <button onClick={() => setExpanded(true)} style={expandBtnStyle(CRUSH.Charple)}>
               ▾ Show {hiddenLabel}
@@ -568,7 +570,7 @@ function ReadResultPanel({ code, startLine, isError, filePath }: {
   const lastLineNo = startLine + visible.length - 1
   const gutterW = String(lastLineNo).length
   const language = langFromPath(filePath)
-  const displayCode = visible.join('\n')
+  const displayCode = redact(visible.join('\n'))
 
   return (
     <div style={{
@@ -617,7 +619,7 @@ function ReadResultPanel({ code, startLine, isError, filePath }: {
           </button>
           {filePath && (
             <span style={{ color: CRUSH.Oyster, fontSize: 11, marginLeft: 12 }}>
-              {filePath.split('/').slice(-2).join('/')} · {language}
+              {redact(filePath.split('/').slice(-2).join('/'))} · {language}
             </span>
           )}
         </div>
@@ -688,7 +690,7 @@ function TodoInline({ input }: { input: Record<string, unknown> }) {
 export function SystemLine({ text }: { text: string }) {
   return (
     <div style={{ color: CRUSH.Oyster, fontSize: 11, fontFamily: FONT_MONO, padding: '2px 0' }}>
-      {text}
+      {redact(text)}
     </div>
   )
 }
