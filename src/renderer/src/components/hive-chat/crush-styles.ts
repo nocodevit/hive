@@ -47,3 +47,12 @@ export const TOOL_COLORS: Record<string, string> = {
 
 export const FONT_MONO = '"JetBrains Mono", "Noto Mono for Powerline", Menlo, Monaco, monospace'
 export const FONT_UI = '"Space Grotesk", sans-serif'
+
+/** Screen-only PII redaction. Masks the user's macOS username so it
+ *  doesn't surface in rendered tool output, paths, or assistant text.
+ *  Applied at display time — underlying paths, stored logs, and
+ *  clickable reveal-in-Finder calls still use the true username. */
+export function redact(s: string): string {
+  if (!s) return s
+  return s.replace(/meiyang/gi, 'm**g')
+}
