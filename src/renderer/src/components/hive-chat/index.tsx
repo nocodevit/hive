@@ -424,7 +424,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setTimeline(prev => prev.map(e => ({ ...e } as TimelineEntry)))
   }
 
-  if (!visible) return null
+  // Intentionally NOT returning null when !visible: keep the component
+  // (and its claude --print subprocess) alive across agent/tab switches.
+  // Parent controls visibility via CSS. The `visible` prop is still
+  // threaded in for any future "skip expensive paint when hidden"
+  // optimizations, but mount/unmount must NOT be tied to visibility.
 
   return (
     <div style={{
