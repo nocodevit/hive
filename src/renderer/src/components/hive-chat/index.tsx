@@ -338,9 +338,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       <div ref={scrollRef} style={{
         flex: '0 1 auto',          // no grow, can shrink
         minHeight: 0,              // enables shrinking inside flex parent
-        overflow: 'auto',
+        overflowY: 'auto',
+        overflowX: 'hidden',       // wide content scrolls inside its own block, not the whole timeline
         padding: '12px 16px',
-        scrollBehavior: 'smooth'
+        scrollBehavior: 'smooth',
+        minWidth: 0
       }}>
         {timeline.length === 0 && (
           <div style={{ color: CRUSH.Squid, fontSize: 12, padding: 4 }}>
@@ -530,7 +532,6 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
   streamingMode: boolean
   onToggleStreaming: () => void
 }) {
-  if (!modelName) return null
   const mins = usage.remainingMinutes
   const eta = mins != null ? (mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`) : ''
   return (
@@ -542,9 +543,15 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
       display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
       color: CRUSH.Squid
     }}>
-      <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{modelName}</span>
-      {contextSize && <span style={{ color: CRUSH.Squid }}>({contextSize})</span>}
-      <span style={{ color: CRUSH.Oyster }}>|</span>
+      {modelName ? (
+        <>
+          <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{modelName}</span>
+          {contextSize && <span style={{ color: CRUSH.Squid }}>({contextSize})</span>}
+          <span style={{ color: CRUSH.Oyster }}>|</span>
+        </>
+      ) : (
+        <span style={{ color: CRUSH.Oyster }}>waiting for first message…</span>
+      )}
       {/* Subscription tier %% (scraped from /usage TUI) */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <span style={{ color: CRUSH.Squid }}>5h</span>
