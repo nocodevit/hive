@@ -58,6 +58,28 @@ const api = {
     createIntegration: (repoPath: string, batchNum: number, workerBranches: string[]) =>
       ipcRenderer.invoke('git:createIntegration', { repoPath, batchNum, workerBranches })
   },
+  chat: {
+    start: (id: string, opts: { cwd?: string; agent?: string; name?: string }) =>
+      ipcRenderer.invoke('chat:start', { id, ...opts }) as Promise<{ ok: boolean }>,
+    send: (id: string, text: string) =>
+      ipcRenderer.invoke('chat:send', { id, text }) as Promise<{ ok: boolean; error?: string }>,
+    stop: (id: string) => ipcRenderer.invoke('chat:stop', { id }) as Promise<{ ok: boolean }>,
+    onEvent: (id: string, cb: (ev: any) => void) => {
+      const handler = (_e: any, data: any) => cb(data)
+      ipcRenderer.on(`chat:event:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:event:${id}`, handler)
+    },
+    onStderr: (id: string, cb: (line: string) => void) => {
+      const handler = (_e: any, data: string) => cb(data)
+      ipcRenderer.on(`chat:stderr:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:stderr:${id}`, handler)
+    },
+    onExit: (id: string, cb: (code: number) => void) => {
+      const handler = (_e: any, code: number) => cb(code)
+      ipcRenderer.on(`chat:exit:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:exit:${id}`, handler)
+    }
+  },
   speech: {
     start: () => ipcRenderer.invoke('speech:start') as Promise<{ ok: boolean; error?: string }>,
     stop: () => ipcRenderer.invoke('speech:stop') as Promise<{ ok: boolean }>,
