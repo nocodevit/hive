@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { CRUSH, FONT_MONO, redact } from './crush-styles'
+import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { TimelineRow } from './renderers'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
 
@@ -64,6 +64,22 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     sevenDay?: number
   }>({})
   const [sessionId, setSessionId] = useState<string>('')
+  const [streamingMode, setStreamingMode] = useState<boolean>(true)
+  const [username, setUsername] = useState<string>('')
+  // Fetch OS username + persisted streamingMode once; configure the
+  // screen-only redactor accordingly. Default is ON so new installs
+  // don't leak the username in screenshots.
+  useEffect(() => {
+    (async () => {
+      const u = await window.api.system.username().catch(() => '')
+      const raw = await window.api.settings.get('streamingMode').catch(() => undefined)
+      const on = raw === undefined ? true : !!raw
+      setUsername(u)
+      setStreamingMode(on)
+      configureRedact({ enabled: on, tokens: u ? [u] : [] })
+    })()
+  }, [])
+
   // Per-(msgId × blockIdx) accumulator for live stream_event text_delta /
   // input_json_delta chunks. Lets the UI render assistant text char-by-
   // char as Claude types rather than snap the whole block at once.
@@ -292,6 +308,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     window.api.chat.send(id, pick)
   }, [id])
 
+  const toggleStreamingMode = () => {
+    const next = !streamingMode
+    setStreamingMode(next)
+    configureRedact({ enabled: next, tokens: username ? [username] : [] })
+    window.api.settings.set('streamingMode', next)
+    // Force re-render of every timeline row: rebuild each entry's
+    // reference so React.memo's prev.entry !== next.entry triggers.
+    setTimeline(prev => prev.map(e => ({ ...e } as TimelineEntry)))
+  }
+
   if (!visible) return null
 
   return (
@@ -319,7 +345,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         {timeline.length === 0 && (
           <div style={{ color: CRUSH.Squid, fontSize: 12, padding: 4 }}>
             {continueSession
-              ? `Resuming most recent session in ${shortenPath(cwd)}…`
+              ? `Resuming most recent session in ${redact(shortenPath(cwd))}…`
               : 'New chat. Type below to begin.'}
             {sessionId && (
               <span style={{ color: CRUSH.Oyster, marginLeft: 8 }}>
@@ -387,7 +413,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       </div>
 
       {/* Model / usage line — stays under input */}
-      <ModelUsageBar modelName={modelName} contextSize={contextSize} usage={usage} rateLimit={rateLimit} />
+      <ModelUsageBar
+        modelName={modelName} contextSize={contextSize} usage={usage} rateLimit={rateLimit}
+        streamingMode={streamingMode} onToggleStreaming={toggleStreamingMode}
+      />
     </div>
   )
 }
@@ -490,7 +519,7 @@ function PctBar({ pct }: { pct?: number }) {
   )
 }
 
-function ModelUsageBar({ modelName, contextSize, usage, rateLimit }: {
+function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode, onToggleStreaming }: {
   modelName: string
   contextSize: string
   usage: {
@@ -498,6 +527,8 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit }: {
     totalTokens?: number; fiveHour?: number; sevenDay?: number
   }
   rateLimit: any
+  streamingMode: boolean
+  onToggleStreaming: () => void
 }) {
   if (!modelName) return null
   const mins = usage.remainingMinutes
@@ -548,6 +579,24 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit }: {
           <span>{eta} left</span>
         </>
       )}
+      <span style={{ marginLeft: 'auto' }} />
+      <button
+        onClick={onToggleStreaming}
+        title={streamingMode
+          ? 'Streaming mode ON — username + secrets masked in display'
+          : 'Streaming mode OFF — real values shown'}
+        style={{
+          background: streamingMode ? 'rgba(255,96,255,0.14)' : 'transparent',
+          border: `1px solid ${streamingMode ? CRUSH.Dolly : CRUSH.Charcoal}`,
+          color: streamingMode ? CRUSH.Dolly : CRUSH.Squid,
+          padding: '2px 8px',
+          borderRadius: 4,
+          fontFamily: FONT_MONO, fontSize: 10,
+          cursor: 'pointer'
+        }}
+      >
+        {streamingMode ? '● streaming mode' : '○ streaming mode'}
+      </button>
     </div>
   )
 }
