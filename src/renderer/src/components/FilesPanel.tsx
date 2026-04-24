@@ -1,5 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { Project, Zone } from '../types'
+import { shortenPath } from '../lib/path-display'
+import { redact, isRedactEnabled, onRedactChange } from './hive-chat/crush-styles'
 
 interface Props {
   project: Project
@@ -185,6 +187,11 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
   const [search, setSearch] = useState('')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [branch, setBranch] = useState('')
+  // Re-render when HiveChat toggles streaming mode (crush-styles is the
+  // source of truth; it emits to onRedactChange listeners).
+  const [, forceTick] = useState(0)
+  useEffect(() => onRedactChange(() => forceTick(t => t + 1)), [])
+  const displayCwd = isRedactEnabled() ? redact(shortenPath(agentCwd)) : agentCwd
 
   useEffect(() => {
     if (!agentCwd) { setBranch(''); return }
@@ -330,9 +337,13 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
         ))}
       </div>
 
-      {/* Footer */}
+      {/* Footer — cwd is redacted (username masked, deep paths elided) when
+         streamingMode is on so the real /Users/<name>/… doesn't leak in
+         screenshots or live streams. Hover to see the full path. */}
       <div className="px-3 py-2 border-t border-border">
-        <p className="text-[11px] text-text-muted truncate">{files.length} files · {agentCwd}</p>
+        <p className="text-[11px] text-text-muted truncate" title={agentCwd}>
+          {files.length} files · {displayCwd}
+        </p>
       </div>
     </div>
   )

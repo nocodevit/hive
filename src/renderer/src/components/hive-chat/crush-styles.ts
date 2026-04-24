@@ -69,6 +69,13 @@ function maskToken(s: string): string {
   return s[0] + '**' + s[s.length - 1]
 }
 
+const listeners = new Set<() => void>()
+/** Subscribe to redact-config changes. Returns an unsubscribe fn. */
+export function onRedactChange(cb: () => void): () => void {
+  listeners.add(cb)
+  return () => { listeners.delete(cb) }
+}
+
 export function configureRedact(opts: { enabled: boolean; tokens: string[] }) {
   CONFIG.enabled = opts.enabled
   CONFIG.patterns = opts.tokens
@@ -81,6 +88,7 @@ export function configureRedact(opts: { enabled: boolean; tokens: string[] }) {
       re: new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'),
       mask: (_m: string) => maskToken(t)
     }))
+  listeners.forEach(l => { try { l() } catch {} })
 }
 
 /** Common secret-looking env/assignment patterns. We keep the key
