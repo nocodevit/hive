@@ -19,6 +19,8 @@ interface ChatSession {
   buffer: string
   startedAt: number
   logPath: string
+  cwd?: string
+  usageTimer?: NodeJS.Timeout
 }
 
 const sessions = new Map<string, ChatSession>()
@@ -103,8 +105,14 @@ export function startChat(id: string, opts: {
   })
 
   const logPath = join(logDir(), `${id}-${Date.now()}.jsonl`)
-  const session: ChatSession = { id, child, buffer: '', startedAt: Date.now(), logPath }
+  const session: ChatSession = { id, child, buffer: '', startedAt: Date.now(), logPath, cwd: opts.cwd }
   sessions.set(id, session)
+
+  // Fire an immediate /usage query so the status bar populates early, then
+  // refresh every 30 min. Cheap (one message round-trip), subsidized by the
+  // user's Claude subscription. See path A in the journey doc.
+  refreshUsage(session)
+  session.usageTimer = setInterval(() => refreshUsage(session), 30 * 60 * 1000)
 
   child.stdout.on('data', (chunk: Buffer) => {
     session.buffer += chunk.toString('utf8')
@@ -155,7 +163,77 @@ export function stopChat(id: string) {
   const session = sessions.get(id)
   if (!session) return
   try { session.child.kill() } catch {}
+  if (session.usageTimer) clearInterval(session.usageTimer)
   sessions.delete(id)
+}
+
+/**
+ * Query Claude Code's /usage slash command in a throwaway --print process
+ * and extract 5h / 7d rolling-limit percentages. The slash command's
+ * output isn't a formal schema — we regex-scrape the assistant text for
+ * any "5h/5-hour ...X%" and "7d/7-day ...Y%" patterns. Falls back to
+ * undefined if Claude didn't give a number (API-key users, early versions).
+ * Non-blocking; resolves to null on any failure.
+ */
+async function queryUsage(cwd?: string): Promise<{ fiveHour?: number; sevenDay?: number } | null> {
+  return new Promise(resolve => {
+    let done = false
+    const finish = (value: { fiveHour?: number; sevenDay?: number } | null) => {
+      if (done) return
+      done = true
+      resolve(value)
+    }
+    try {
+      const child = spawn('claude', [
+        '--print', '/usage',
+        '--output-format', 'stream-json',
+        '--verbose'
+      ], { cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] })
+
+      let out = ''
+      child.stdout.on('data', (c: Buffer) => { out += c.toString('utf8') })
+      child.on('error', () => finish(null))
+      child.on('exit', () => {
+        const lines = out.split('\n').filter(Boolean)
+        let text = ''
+        for (const line of lines) {
+          try {
+            const ev = JSON.parse(line)
+            if (ev.type === 'assistant' && Array.isArray(ev.message?.content)) {
+              for (const block of ev.message.content) {
+                if (block.type === 'text') text += block.text + '\n'
+              }
+            } else if (ev.type === 'result' && typeof ev.result === 'string') {
+              text += ev.result + '\n'
+            }
+          } catch {}
+        }
+        const fiveMatch = text.match(/5[\s-]?h(?:our)?[^%]*?(\d+(?:\.\d+)?)\s*%/i)
+        const sevenMatch = text.match(/7[\s-]?d(?:ay)?[^%]*?(\d+(?:\.\d+)?)\s*%/i)
+        const weeklyMatch = text.match(/weekly[^%]*?(\d+(?:\.\d+)?)\s*%/i)
+        finish({
+          fiveHour: fiveMatch ? Math.round(parseFloat(fiveMatch[1])) : undefined,
+          sevenDay: sevenMatch ? Math.round(parseFloat(sevenMatch[1]))
+                  : weeklyMatch ? Math.round(parseFloat(weeklyMatch[1]))
+                  : undefined
+        })
+      })
+
+      // Safety timeout: /usage should come back within ~15s on a good network.
+      setTimeout(() => {
+        try { child.kill() } catch {}
+        finish(null)
+      }, 30000)
+    } catch {
+      finish(null)
+    }
+  })
+}
+
+function refreshUsage(session: ChatSession) {
+  queryUsage(session.cwd).then(usage => {
+    if (usage) broadcast(`chat:usage:${session.id}`, usage)
+  }).catch(() => {})
 }
 
 export function registerChatIpc() {
