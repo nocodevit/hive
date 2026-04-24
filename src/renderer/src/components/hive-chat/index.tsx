@@ -34,21 +34,47 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
 
   useEffect(() => {
     window.api.chat.start(id, { cwd, agent, name: agentName })
+
+    /**
+     * Timeline integration rules (validated against /tmp/claude-json.log):
+     *
+     * - `assistant` events deliver a CUMULATIVE snapshot of
+     *   message.content as Claude streams. Same message.id may appear 3+
+     *   times. We key entries by `msg:<id>:<blockIdx>` so later snapshots
+     *   replace earlier ones in place instead of piling up duplicates.
+     * - `thinking` blocks (type=thinking) are Claude's internal reasoning
+     *   with encrypted signatures. We drop them.
+     * - `user` events carry `tool_result` blocks coming back; keyed by
+     *   `result:<tool_use_id>`.
+     * - `system.init` / `system.status` / `stream_event` / `rate_limit_event`
+     *   are housekeeping and suppressed. Only `system` subtypes other than
+     *   init/status surface, plus the final `result` with cost.
+     */
+    const replaceEntry = (id: string, entry: TimelineEntry) => {
+      setTimeline(prev => {
+        const idx = prev.findIndex(e => e.id === id)
+        if (idx < 0) return [...prev, entry]
+        const copy = prev.slice()
+        copy[idx] = entry
+        return copy
+      })
+    }
+
     const offEv = window.api.chat.onEvent(id, (ev: StreamEvent) => {
-      // Extract timeline entries from each event. Live events like
-      // `stream_event` / `content_block_delta` are absorbed silently for
-      // now — the POC focuses on complete message / tool_use / tool_result
-      // events. Once we see real /tmp/claude-json.log we refine.
       if (ev.type === 'assistant' && 'message' in ev) {
-        const content = (ev as any).message?.content as ContentBlock[] | undefined
-        if (!Array.isArray(content)) return
-        for (const block of content) {
+        const msg = (ev as any).message
+        const content = msg?.content as ContentBlock[] | undefined
+        const msgId = msg?.id
+        if (!Array.isArray(content) || !msgId) return
+        content.forEach((block: any, idx: number) => {
+          if (block.type === 'thinking' || block.type === 'redacted_thinking') return
+          const entryId = `msg:${msgId}:${idx}`
           if (block.type === 'text') {
-            addEntry({ kind: 'assistant', text: block.text, id: `a${entryIdRef.current++}` })
+            replaceEntry(entryId, { kind: 'assistant', text: block.text, id: entryId })
           } else if (block.type === 'tool_use') {
-            addEntry({ kind: 'tool_call', name: block.name, input: block.input, id: block.id })
+            replaceEntry(entryId, { kind: 'tool_call', name: block.name, input: block.input, id: entryId })
           }
-        }
+        })
       } else if (ev.type === 'user' && 'message' in ev) {
         const content = (ev as any).message?.content
         if (typeof content === 'string') {
@@ -60,17 +86,27 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
               const text = Array.isArray(block.content)
                 ? block.content.map((c: any) => c.text ?? '').join('\n')
                 : String(block.content)
-              addEntry({ kind: 'tool_result', toolUseId: block.tool_use_id, content: text, isError: block.is_error })
+              const entryId = `result:${block.tool_use_id}`
+              replaceEntry(entryId, {
+                kind: 'tool_result',
+                toolUseId: block.tool_use_id,
+                content: text,
+                isError: block.is_error,
+                id: entryId
+              })
             }
           }
         }
-      } else if (ev.type === 'system') {
-        const sub = (ev as any).subtype
-        if (sub && sub !== 'init') addEntry({ kind: 'system', text: `system: ${sub}` })
       } else if (ev.type === 'result') {
         const cost = (ev as any).total_cost_usd
-        addEntry({ kind: 'system', text: cost != null ? `result · $${cost.toFixed(4)}` : `result` })
+        const dur = (ev as any).duration_ms
+        const parts = ['result']
+        if (cost != null) parts.push(`$${cost.toFixed(4)}`)
+        if (dur != null) parts.push(`${(dur / 1000).toFixed(1)}s`)
+        addEntry({ kind: 'system', text: parts.join(' · ') })
       }
+      // stream_event / system.init / system.status / rate_limit_event are
+      // intentionally suppressed — they're protocol housekeeping, not content.
     })
     const offErr = window.api.chat.onStderr(id, (line: string) => {
       setStderr(prev => [...prev.slice(-20), line])
