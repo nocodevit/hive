@@ -3,7 +3,7 @@ import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import RichTerminal from './RichTerminal'
-import PrettyTerm from './PrettyTerm'
+import PrettyTerm from './pretty-term'
 
 type ViewMode = 'raw' | 'pretty' | 'rich' | 'compare'
 
