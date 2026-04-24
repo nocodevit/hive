@@ -9,7 +9,7 @@ const DEFAULT_EXPANDED_LINES = 12
 const LONG_ASSISTANT_THRESHOLD = 30
 
 /** Map common file extensions to Prism language IDs. Falls back to "markup". */
-function langFromPath(path?: string): string {
+export function langFromPath(path?: string): string {
   if (!path) return 'markup'
   const m = path.match(/\.([a-zA-Z0-9]+)$/)
   if (!m) return 'markup'
@@ -226,10 +226,10 @@ function PlainAssistantText({ text }: { text: string }) {
   )
 }
 
-interface Choice { num: number; label: string; raw: string }
+export interface Choice { num: number; label: string; raw: string }
 
 /** If the tail of a message is a run of `N. ...` lines, peel them off. */
-function extractTrailingChoices(text: string): { body: string; choices: Choice[] } | null {
+export function extractTrailingChoices(text: string): { body: string; choices: Choice[] } | null {
   const lines = text.split('\n')
   const tail: Choice[] = []
   let i = lines.length - 1
@@ -468,7 +468,7 @@ function HeaderLine({ tool, color, tail, tailStyle }: { tool: string; color: str
 
 /** Strip Claude Code's "N\t" line-number prefixes that appear in Read
  *  tool results, returning the raw file content + start line number. */
-function stripReadPrefix(s: string): { content: string; startLine: number } {
+export function stripReadPrefix(s: string): { content: string; startLine: number } {
   const lines = s.split('\n')
   let startLine = 1
   const stripped: string[] = []

@@ -94,6 +94,9 @@ const SECRET_KEY_PATTERN = /\b(?:api[_-]?key|secret(?:_key)?|access[_-]?key|priv
 
 function redactSecrets(s: string): string {
   return s
+    // Bearer <token> / Basic <token>  —  handle first so the subsequent
+    // key:value regex doesn't mangle "Authorization: Bearer xxx".
+    .replace(/\b(Bearer|Basic)\s+([A-Za-z0-9._\-+/=]{6,})/g, (_full, scheme) => `${scheme} ***`)
     // KEY=value  or  KEY="value"  or  KEY='value'  (env / dotenv / shell)
     .replace(/(\b\w+\b)\s*=\s*(["']?)([^"'\s\n]+)\2/g, (full, k, quote, v) => {
       if (!SECRET_KEY_PATTERN.test(k)) return full
@@ -105,13 +108,18 @@ function redactSecrets(s: string): string {
       if (!SECRET_KEY_PATTERN.test(keyOnly)) return full
       return `${kStr}: ${quote}${'*'.repeat(Math.min(v.length, 6))}${quote}`
     })
-    // KEY: value  (YAML-ish)
+    // KEY: value  (YAML / Authorization: …)  — skip if value was already
+    // masked by the Bearer pass above.
     .replace(/(\b\w+\b)\s*:\s*([^"'\s,}{[\]]+)/g, (full, k, v) => {
-      if (!SECRET_KEY_PATTERN.test(k) || v.length < 6) return full
+      if (!SECRET_KEY_PATTERN.test(k)) return full
+      if (v === '***' || /^\*+$/.test(v)) return full
+      // If the value is "Bearer" or "Basic", the real secret comes next
+      // and has already been masked by the Bearer/Basic pass above. Leave
+      // this line alone so "Authorization: Bearer ***" stays as-is.
+      if (v === 'Bearer' || v === 'Basic') return full
+      if (v.length < 6) return full
       return `${k}: ${'*'.repeat(Math.min(v.length, 6))}`
     })
-    // Bearer <token>
-    .replace(/\b(Bearer|Basic)\s+([A-Za-z0-9._\-+/=]{10,})/g, (_full, scheme) => `${scheme} ***`)
 }
 
 export function redact(s: string): string {
