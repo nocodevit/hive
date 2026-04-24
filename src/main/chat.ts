@@ -129,14 +129,22 @@ export function startChat(id: string, opts: {
   refresh()
   session.usageTimer = setInterval(refresh, 5 * 60 * 1000)
 
+  let lastMessageStopRefresh = 0
   child.stdout.on('data', (chunk: Buffer) => {
     session.buffer += chunk.toString('utf8')
     const { events, rest } = parseJsonLines(session.buffer, id)
     session.buffer = rest
+    let sawMessageStop = false
     for (const ev of events) {
       broadcast(`chat:event:${id}`, ev)
-      // Tee raw event to disk for offline replay / renderer development.
       try { appendFileSync(session.logPath, JSON.stringify(ev) + '\n') } catch {}
+      if (ev?.type === 'stream_event' && ev.event?.type === 'message_stop') sawMessageStop = true
+    }
+    // On every message_stop, refresh usage (but at most once per 30s to avoid
+    // churn during quick back-and-forth). Complements the 5-min idle timer.
+    if (sawMessageStop && Date.now() - lastMessageStopRefresh > 30000) {
+      lastMessageStopRefresh = Date.now()
+      setTimeout(() => refresh(), 1500) // short debounce for claude's own rate_limit update
     }
   })
   child.stderr.on('data', (chunk: Buffer) => {

@@ -55,6 +55,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   }>({ currentMsgId: '', blocks: {} })
   const scrollRef = useRef<HTMLDivElement>(null)
   const entryIdRef = useRef(0)
+  // True while IME is composing (e.g. pinyin selection). Enter during
+  // composition confirms the candidate, not sends the message.
+  const composingRef = useRef(false)
 
   const addEntry = (entry: Omit<TimelineEntry, 'id'> & { id?: string }) => {
     const id = entry.id || `e${entryIdRef.current++}`
@@ -327,7 +330,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
+            onCompositionStart={() => { composingRef.current = true }}
+            onCompositionEnd={() => { composingRef.current = false }}
             onKeyDown={e => {
+              // Skip Enter while IME is composing (pinyin/kana confirm).
+              // e.nativeEvent.isComposing is the modern signal; composingRef
+              // is the belt-and-suspenders backup.
+              if (composingRef.current || (e.nativeEvent as any).isComposing) return
               if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
             }}
             disabled={sending || exited !== null}
@@ -414,10 +423,32 @@ function BurnBar({ cost, projected }: { cost?: number; projected?: number }) {
   )
 }
 
+function PctBar({ pct }: { pct?: number }) {
+  return (
+    <span style={{
+      position: 'relative', display: 'inline-block',
+      width: 60, height: 8,
+      background: CRUSH.Charcoal, borderRadius: 2, overflow: 'hidden'
+    }}>
+      {typeof pct === 'number' && (
+        <span style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: `${Math.max(0, Math.min(100, pct))}%`,
+          background: CRUSH.Dolly,
+          transition: 'width 0.3s ease'
+        }} />
+      )}
+    </span>
+  )
+}
+
 function ModelUsageBar({ modelName, contextSize, usage, rateLimit }: {
   modelName: string
   contextSize: string
-  usage: { costUSD?: number; burnPerHour?: number; projectedUSD?: number; remainingMinutes?: number; totalTokens?: number }
+  usage: {
+    costUSD?: number; burnPerHour?: number; projectedUSD?: number; remainingMinutes?: number
+    totalTokens?: number; fiveHour?: number; sevenDay?: number
+  }
   rateLimit: any
 }) {
   if (!modelName) return null
@@ -429,27 +460,44 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit }: {
       borderTop: `1px solid ${CRUSH.Charcoal}`,
       background: CRUSH.BBQ,
       fontFamily: FONT_MONO, fontSize: 11,
-      display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap',
+      display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
       color: CRUSH.Squid
     }}>
       <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{modelName}</span>
       {contextSize && <span style={{ color: CRUSH.Squid }}>({contextSize})</span>}
       <span style={{ color: CRUSH.Oyster }}>|</span>
+      {/* Subscription tier %% (scraped from /usage TUI) */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <span style={{ color: CRUSH.Squid }}>5h</span>
-        <BurnBar cost={usage.costUSD} projected={usage.projectedUSD} />
-        <span style={{ color: CRUSH.Butter, minWidth: 34 }}>{fmtUsd(usage.costUSD)}</span>
+        <PctBar pct={usage.fiveHour} />
+        <span style={{ color: CRUSH.Butter, minWidth: 28 }}>
+          {usage.fiveHour != null ? `${usage.fiveHour}%` : '—'}
+        </span>
       </span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ color: CRUSH.Squid }}>7d</span>
+        <PctBar pct={usage.sevenDay} />
+        <span style={{ color: CRUSH.Butter, minWidth: 28 }}>
+          {usage.sevenDay != null ? `${usage.sevenDay}%` : '—'}
+        </span>
+      </span>
+      {/* Cost/burn (from ccusage) — secondary info */}
+      {usage.costUSD != null && (
+        <>
+          <span style={{ color: CRUSH.Oyster }}>|</span>
+          <span>{fmtUsd(usage.costUSD)}</span>
+        </>
+      )}
       {usage.burnPerHour != null && (
         <>
           <span style={{ color: CRUSH.Oyster }}>·</span>
-          <span>burn {fmtUsd(usage.burnPerHour)}/hr</span>
+          <span>{fmtUsd(usage.burnPerHour)}/hr</span>
         </>
       )}
-      {usage.projectedUSD != null && (
+      {usage.projectedUSD != null && eta && (
         <>
           <span style={{ color: CRUSH.Oyster }}>·</span>
-          <span>proj {fmtUsd(usage.projectedUSD)}{eta ? ` · ${eta} left` : ''}</span>
+          <span>{eta} left</span>
         </>
       )}
     </div>
