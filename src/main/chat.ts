@@ -16,9 +16,18 @@ import { Terminal as HeadlessTerm } from '@xterm/headless'
  * shapes once they're confirmed empirically.
  */
 
+interface StartOpts {
+  cwd?: string
+  agent?: string
+  name?: string
+  continueSession?: boolean
+  rebaseOnStart?: boolean
+  resumeSid?: string  // when present, uses --resume <sid> instead of a fresh session
+}
+
 interface ChatSession {
   id: string
-  child: ChildProcessWithoutNullStreams
+  child: ChildProcessWithoutNullStreams | null
   buffer: string
   startedAt: number
   logPath: string
@@ -29,6 +38,14 @@ interface ChatSession {
   // cursor back a batch and emits earlier events with _prepend:true.
   replayFile?: string
   replayedFrom?: number
+  // session_id captured from the system/init event so we can --resume
+  // after round-tripping through the interactive TUI (/remote-control).
+  claudeSid?: string
+  // Original opts from startChat, preserved so we can re-spawn on resume.
+  startOpts?: StartOpts
+  // Interactive TUI handle while /remote-control is active. null when idle.
+  rcPty?: pty.IPty
+  mode: 'print' | 'rc'
 }
 
 const sessions = new Map<string, ChatSession>()
@@ -198,13 +215,7 @@ export function loadOlderHistory(sessionId: string, batch = DEFAULT_REPLAY_LIMIT
   }
 }
 
-export function startChat(id: string, opts: {
-  cwd?: string
-  agent?: string
-  name?: string
-  continueSession?: boolean   // mirror of the Term `-c` flag
-  rebaseOnStart?: boolean     // mirror Term behavior: rebase onto origin/<base> before Claude
-} = {}) {
+export function startChat(id: string, opts: StartOpts = {}) {
   if (sessions.has(id)) return
   const args = [
     '--print',
@@ -217,7 +228,11 @@ export function startChat(id: string, opts: {
   ]
   if (opts.agent) args.push('--agent', opts.agent)
   if (opts.name) args.push('-n', opts.name)
-  if (opts.continueSession) args.push('-c')
+  // `-c` = continue most recent session; `--resume <sid>` = resume a
+  // specific session id (used by resumeFromRemoteControl after the
+  // interactive TUI round-trip). `--resume` wins if both are set.
+  if (opts.resumeSid) args.push('--resume', opts.resumeSid)
+  else if (opts.continueSession) args.push('-c')
 
   // Mirror Term's rebase-on-start: fetch + rebase onto first of
   // develop/main/master that the remote has. Only if explicitly enabled
@@ -241,12 +256,16 @@ export function startChat(id: string, opts: {
   })
 
   const logPath = join(logDir(), `${id}-${Date.now()}.jsonl`)
-  const session: ChatSession = { id, child, buffer: '', startedAt: Date.now(), logPath, cwd: opts.cwd }
+  const session: ChatSession = {
+    id, child, buffer: '', startedAt: Date.now(), logPath, cwd: opts.cwd,
+    mode: 'print', startOpts: opts, claudeSid: opts.resumeSid
+  }
   sessions.set(id, session)
 
-  // When resuming, replay the most-recent local session file so the UI
-  // shows the conversation history, not just the live stream from here.
-  if (opts.continueSession) {
+  // When resuming (either -c or --resume <sid>), replay the most-recent
+  // local session file so the UI shows the conversation history, not just
+  // the live stream from here.
+  if (opts.continueSession || opts.resumeSid) {
     setTimeout(() => replaySessionHistory(id, opts.cwd), 100)
   }
 
@@ -280,6 +299,11 @@ export function startChat(id: string, opts: {
       broadcast(`chat:event:${id}`, ev)
       try { appendFileSync(session.logPath, JSON.stringify(ev) + '\n') } catch {}
       if (ev?.type === 'stream_event' && ev.event?.type === 'message_stop') sawMessageStop = true
+      // Stash the claude session_id from system/init so remote-control
+      // can --resume exactly this session after the TUI round-trip.
+      if (ev?.type === 'system' && ev?.subtype === 'init' && ev?.session_id && !session.claudeSid) {
+        session.claudeSid = ev.session_id
+      }
     }
     // message_stop is our only refresh trigger now. One user turn may
     // produce many rate_limit_events (multiple tool calls) but only one
@@ -323,6 +347,7 @@ export function respondPermission(
 ) {
   const session = sessions.get(id)
   if (!session) return { ok: false, error: 'no_session' }
+  if (!session.child || session.mode !== 'print') return { ok: false, error: 'not_in_print_mode' }
   const inner = decision === 'allow'
     ? { updatedInput: input || {} }
     : { behavior: 'deny', message: denyMessage || 'Denied by user' }
@@ -346,6 +371,7 @@ export function respondPermission(
 export function sendUserMessage(id: string, text: string) {
   const session = sessions.get(id)
   if (!session) return { ok: false, error: 'no_session' }
+  if (!session.child || session.mode !== 'print') return { ok: false, error: 'not_in_print_mode' }
   // stream-json expects {"type":"user","message":{"role":"user","content":[{"type":"text","text":"..."}]}}
   const frame = {
     type: 'user',
@@ -368,9 +394,83 @@ export function sendUserMessage(id: string, text: string) {
 export function stopChat(id: string) {
   const session = sessions.get(id)
   if (!session) return
-  try { session.child.kill() } catch {}
+  try { session.child?.kill() } catch {}
+  try { session.rcPty?.kill() } catch {}
   if (session.usageTimer) clearInterval(session.usageTimer)
   sessions.delete(id)
+}
+
+/**
+ * Round-trip through the interactive TUI to run a session-scoped slash
+ * command (currently only /remote-control; the plumbing generalizes).
+ *
+ *   --print session ──[kill]──►  (nothing)
+ *                                     │
+ *                          node-pty ──┴──► claude --resume <sid>
+ *                                              │
+ *                                              ├─ stdout → chat:rc_output:<id>
+ *                                              │     (so the UI can surface
+ *                                              │      pairing URLs, QR, etc.)
+ *                                              └─ we write `/remote-control\r`
+ *                                                 after a short settle.
+ *
+ * The PTY stays alive until resumeFromRemoteControl is called, at which
+ * point we kill it and spawn a fresh --print --resume <sid> that picks
+ * up any turns the user drove from their phone while PTY was open.
+ */
+export function startRemoteControl(id: string) {
+  const session = sessions.get(id)
+  if (!session) return { ok: false, error: 'no_session' }
+  if (session.mode === 'rc') return { ok: false, error: 'already_in_rc' }
+  if (!session.claudeSid) return { ok: false, error: 'no_sid_yet' }
+  const sid = session.claudeSid
+  try { session.child?.kill() } catch {}
+  session.child = null
+  session.mode = 'rc'
+  const rcPty = pty.spawn('claude', ['--resume', sid], {
+    name: 'xterm-color',
+    cols: 120, rows: 30,
+    cwd: session.cwd || process.env.HOME || '/',
+    env: { ...process.env, LC_ALL: 'en_US.UTF-8', LANG: 'en_US.UTF-8' }
+  })
+  session.rcPty = rcPty
+  rcPty.onData((data: string) => {
+    broadcast(`chat:rc_output:${id}`, data)
+    try { appendFileSync(session.logPath, JSON.stringify({ _direction: 'rc_stdout', data }) + '\n') } catch {}
+  })
+  // Wait for prompt to be ready, then fire /remote-control.
+  setTimeout(() => { try { rcPty.write('/remote-control\r') } catch {} }, 1000)
+  rcPty.onExit((_e) => {
+    broadcast(`chat:rc_exit:${id}`, {})
+  })
+  broadcast(`chat:event:${id}`, {
+    type: 'system',
+    subtype: 'rc_started',
+    session_id: id,
+    claude_sid: sid
+  })
+  return { ok: true, sid }
+}
+
+/**
+ * Leave remote-control mode: kill the PTY, re-spawn --print with the
+ * same session-id. The renderer's Load Older / replay machinery
+ * automatically picks up any new turns that were driven from the phone
+ * during the PTY phase (they live in the same JSONL file).
+ */
+export function resumeFromRemoteControl(id: string) {
+  const session = sessions.get(id)
+  if (!session) return { ok: false, error: 'no_session' }
+  if (session.mode !== 'rc') return { ok: false, error: 'not_in_rc' }
+  if (!session.claudeSid || !session.startOpts) return { ok: false, error: 'missing_state' }
+  try { session.rcPty?.kill() } catch {}
+  const opts = session.startOpts
+  const sid = session.claudeSid
+  // Drop the session entry so startChat's "if (sessions.has(id)) return"
+  // doesn't short-circuit. startChat recreates with --resume.
+  sessions.delete(id)
+  startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
+  return { ok: true, sid }
 }
 
 /**
@@ -575,4 +675,6 @@ export function registerChatIpc() {
   )
   ipcMain.handle('chat:stop', (_e, { id }) => { stopChat(id); return { ok: true } })
   ipcMain.handle('chat:loadOlder', (_e, { id, batch }) => loadOlderHistory(id, batch))
+  ipcMain.handle('chat:startRemoteControl', (_e, { id }) => startRemoteControl(id))
+  ipcMain.handle('chat:resumeFromRemoteControl', (_e, { id }) => resumeFromRemoteControl(id))
 }

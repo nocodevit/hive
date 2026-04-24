@@ -77,6 +77,20 @@ const api = {
     stop: (id: string) => ipcRenderer.invoke('chat:stop', { id }) as Promise<{ ok: boolean }>,
     loadOlder: (id: string, batch?: number) =>
       ipcRenderer.invoke('chat:loadOlder', { id, batch }) as Promise<{ loaded: number; hasOlder: boolean; error?: string }>,
+    startRemoteControl: (id: string) =>
+      ipcRenderer.invoke('chat:startRemoteControl', { id }) as Promise<{ ok: boolean; sid?: string; error?: string }>,
+    resumeFromRemoteControl: (id: string) =>
+      ipcRenderer.invoke('chat:resumeFromRemoteControl', { id }) as Promise<{ ok: boolean; sid?: string; error?: string }>,
+    onRcOutput: (id: string, cb: (data: string) => void) => {
+      const handler = (_e: any, data: string) => cb(data)
+      ipcRenderer.on(`chat:rc_output:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:rc_output:${id}`, handler)
+    },
+    onRcExit: (id: string, cb: () => void) => {
+      const handler = () => cb()
+      ipcRenderer.on(`chat:rc_exit:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:rc_exit:${id}`, handler)
+    },
     onEvent: (id: string, cb: (ev: any) => void) => {
       const handler = (_e: any, data: any) => cb(data)
       ipcRenderer.on(`chat:event:${id}`, handler)

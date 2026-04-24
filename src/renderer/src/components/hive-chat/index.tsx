@@ -142,6 +142,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // has more lines than the replay limit. Drives the "Load older" button.
   const [hasOlderOnDisk, setHasOlderOnDisk] = useState(false)
   const [loadingOlder, setLoadingOlder] = useState(false)
+  // Remote-control mode — when 'active', the --print subprocess is gone
+  // and an interactive PTY is bridging the session to the mobile app.
+  // User clicks the Resume button to re-enter 'idle' mode (spawns a
+  // fresh --print --resume <sid> that picks up mobile-driven turns).
+  const [rcState, setRcState] = useState<'idle' | 'active'>('idle')
+  const [rcOutput, setRcOutput] = useState<string>('')
 
   useEffect(() => {
     window.api.chat.start(id, { cwd, agent, name: agentName, continueSession, rebaseOnStart })
@@ -374,12 +380,29 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       setLoadingOlder(false)
     })
 
+    // Remote-control PTY output — accumulate last ~4KB so the pairing
+    // panel can show whatever claude's TUI drew (URL, QR, confirmation).
+    const offRcOutput = window.api.chat.onRcOutput(id, (data: string) => {
+      setRcOutput(prev => {
+        const next = prev + data
+        return next.length > 4000 ? next.slice(next.length - 4000) : next
+      })
+    })
+    const offRcExit = window.api.chat.onRcExit(id, () => {
+      // PTY died unexpectedly (not via user clicking Resume here). Flip
+      // back to idle; the --print child is already dead, user can send
+      // /remote-control again or Resume to respawn.
+      setRcState('idle')
+    })
+
     return () => {
       offEv()
       offErr()
       offExit()
       offUsage()
       offPrepend()
+      offRcOutput()
+      offRcExit()
       window.api.chat.stop(id)
     }
   }, [id, cwd, agent, agentName, continueSession, rebaseOnStart])
@@ -392,6 +415,24 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const send = async () => {
     const text = input.trim()
     if (!text || sending) return
+    // Intercept session-scoped slash commands that don't work in --print
+    // mode. Today: just /remote-control. The handler takes over the UI;
+    // no stream-json frame goes out.
+    if (text === '/remote-control') {
+      setInput('')
+      const { history, state } = pushAfterSend(sentHistoryRef.current, text, HISTORY_CAP)
+      sentHistoryRef.current = history
+      recallStateRef.current = state
+      addEntry({ kind: 'system', text: 'Starting remote control…' })
+      setRcOutput('')
+      const res = await window.api.chat.startRemoteControl(id)
+      if (res.ok) {
+        setRcState('active')
+      } else {
+        addEntry({ kind: 'system', text: `Remote control failed: ${res.error}` })
+      }
+      return
+    }
     setSending(true)
     addEntry({ kind: 'user', text })
     setInput('')
@@ -400,6 +441,17 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     recallStateRef.current = state
     await window.api.chat.send(id, text)
     setSending(false)
+  }
+
+  const resumeFromRc = async () => {
+    addEntry({ kind: 'system', text: 'Resuming session — picking up any mobile turns…' })
+    const res = await window.api.chat.resumeFromRemoteControl(id)
+    if (res.ok) {
+      setRcState('idle')
+      setRcOutput('')
+    } else {
+      addEntry({ kind: 'system', text: `Resume failed: ${res.error}` })
+    }
   }
 
   const tryRecallUp = (ta: HTMLTextAreaElement): boolean => {
@@ -535,48 +587,104 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }}>waiting for first message…</div>
       ) : null}
 
-      {/* Input box */}
-      <div style={{
-        borderTop: `1px solid ${CRUSH.Charcoal}`,
-        background: CRUSH.BBQ,
-        padding: 8
-      }}>
+      {/* Input area — either the textarea (idle) or the remote-control
+          panel (active). When RC is active the --print subprocess is
+          gone and typing doesn't make sense; we show the PTY's live
+          output (pairing URL / QR / confirmation) and a Resume button
+          that re-spawns --print --resume <sid>. */}
+      {rcState === 'active' ? (
         <div style={{
-          display: 'flex', alignItems: 'center', gap: 8,
-          background: 'rgba(255,96,255,0.08)',
-          border: `1px solid ${CRUSH.Dolly}`,
-          borderRadius: 8,
-          padding: '8px 12px'
+          borderTop: `1px solid ${CRUSH.Charcoal}`,
+          background: CRUSH.BBQ,
+          padding: 8
         }}>
-          <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
-          <textarea
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onCompositionStart={() => { composingRef.current = true }}
-            onCompositionEnd={() => { composingRef.current = false }}
-            onKeyDown={e => {
-              // Skip while IME is composing (pinyin/kana confirm).
-              // e.nativeEvent.isComposing is the modern signal; composingRef
-              // is the belt-and-suspenders backup.
-              if (composingRef.current || (e.nativeEvent as any).isComposing) return
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); return }
-              if (e.key === 'ArrowUp' && tryRecallUp(e.currentTarget)) { e.preventDefault(); return }
-              if (e.key === 'ArrowDown' && tryRecallDown()) { e.preventDefault(); return }
-            }}
-            disabled={sending || exited !== null}
-            placeholder="Message Claude… (Enter to send, Shift+Enter for newline)"
-            style={{
-              flex: 1, resize: 'none',
-              background: 'transparent', color: CRUSH.Butter,
-              border: 'none', outline: 'none',
-              fontFamily: FONT_MONO, fontSize: 13,
-              minHeight: 20, maxHeight: 200,
-              padding: 0
-            }}
-            rows={1}
-          />
+          <div style={{
+            border: `1px solid ${CRUSH.Dolly}`,
+            borderRadius: 8,
+            padding: 10,
+            background: 'rgba(255,96,255,0.06)'
+          }}>
+            <div style={{
+              color: CRUSH.Dolly, fontWeight: 700, fontSize: 12,
+              textTransform: 'uppercase' as const, letterSpacing: '0.08em',
+              marginBottom: 6
+            }}>● Remote control active</div>
+            <div style={{
+              color: CRUSH.Squid, fontSize: 11, marginBottom: 8
+            }}>
+              This session is bridged to the Claude mobile app and claude.ai/code.
+              Drive it from elsewhere, then click below to resume here.
+            </div>
+            {rcOutput && (
+              <pre style={{
+                background: CRUSH.Pepper,
+                color: CRUSH.Ash,
+                padding: '6px 10px',
+                borderRadius: 4,
+                fontFamily: FONT_MONO, fontSize: 11,
+                margin: '6px 0 10px',
+                maxHeight: 160, overflow: 'auto' as const,
+                whiteSpace: 'pre-wrap'
+              }}>{rcOutput.replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')}</pre>
+            )}
+            <button
+              onClick={resumeFromRc}
+              style={{
+                background: CRUSH.Dolly,
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 16px',
+                color: CRUSH.Butter,
+                fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700,
+                cursor: 'pointer',
+                width: '100%'
+              }}
+            >↺ Resume session here</button>
+          </div>
         </div>
-      </div>
+      ) : (
+        <div style={{
+          borderTop: `1px solid ${CRUSH.Charcoal}`,
+          background: CRUSH.BBQ,
+          padding: 8
+        }}>
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(255,96,255,0.08)',
+            border: `1px solid ${CRUSH.Dolly}`,
+            borderRadius: 8,
+            padding: '8px 12px'
+          }}>
+            <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
+            <textarea
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onCompositionStart={() => { composingRef.current = true }}
+              onCompositionEnd={() => { composingRef.current = false }}
+              onKeyDown={e => {
+                // Skip while IME is composing (pinyin/kana confirm).
+                // e.nativeEvent.isComposing is the modern signal; composingRef
+                // is the belt-and-suspenders backup.
+                if (composingRef.current || (e.nativeEvent as any).isComposing) return
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); return }
+                if (e.key === 'ArrowUp' && tryRecallUp(e.currentTarget)) { e.preventDefault(); return }
+                if (e.key === 'ArrowDown' && tryRecallDown()) { e.preventDefault(); return }
+              }}
+              disabled={sending || exited !== null}
+              placeholder="Message Claude… (Enter to send, Shift+Enter for newline)"
+              style={{
+                flex: 1, resize: 'none',
+                background: 'transparent', color: CRUSH.Butter,
+                border: 'none', outline: 'none',
+                fontFamily: FONT_MONO, fontSize: 13,
+                minHeight: 20, maxHeight: 200,
+                padding: 0
+              }}
+              rows={1}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Model / usage line — stays under input */}
       <ModelUsageBar
