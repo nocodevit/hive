@@ -119,10 +119,24 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const historyIdxRef = useRef<number>(-1)  // -1 = not browsing; 0 = most recent, N = Nth-from-latest
   const draftRef = useRef<string>('')
 
+  // Cap in-memory timeline so very long sessions don't accumulate
+  // unbounded React state. Entries fall off the top; JSONL on disk
+  // remains the source of truth for archeology (see ~/.hive/chat-logs/
+  // and ~/.claude/projects/<cwd>/<sid>.jsonl).
+  const MAX_LIVE_ENTRIES = 500
   const addEntry = (entry: Omit<TimelineEntry, 'id'> & { id?: string }) => {
     const id = entry.id || `e${entryIdRef.current++}`
-    setTimeline(prev => [...prev, { ...entry, id } as TimelineEntry])
+    setTimeline(prev => {
+      const next = [...prev, { ...entry, id } as TimelineEntry]
+      if (next.length > MAX_LIVE_ENTRIES) {
+        const drop = next.length - MAX_LIVE_ENTRIES
+        setTrimmedCount(c => c + drop)
+        return next.slice(drop)
+      }
+      return next
+    })
   }
+  const [trimmedCount, setTrimmedCount] = useState(0)
 
   useEffect(() => {
     window.api.chat.start(id, { cwd, agent, name: agentName, continueSession, rebaseOnStart })
@@ -145,7 +159,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     const replaceEntry = (id: string, entry: TimelineEntry) => {
       setTimeline(prev => {
         const idx = prev.findIndex(e => e.id === id)
-        if (idx < 0) return [...prev, entry]
+        if (idx < 0) {
+          // Append + apply the same MAX_LIVE_ENTRIES cap as addEntry.
+          const next = [...prev, entry]
+          if (next.length > MAX_LIVE_ENTRIES) {
+            const drop = next.length - MAX_LIVE_ENTRIES
+            setTrimmedCount(c => c + drop)
+            return next.slice(drop)
+          }
+          return next
+        }
         const copy = prev.slice()
         copy[idx] = entry
         return copy
@@ -437,6 +460,18 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 · session {sessionId.slice(0, 8)}
               </span>
             )}
+          </div>
+        )}
+        {trimmedCount > 0 && (
+          <div style={{
+            color: CRUSH.Oyster, fontSize: 11, padding: '4px 6px',
+            margin: '2px 0 8px',
+            borderLeft: `2px solid ${CRUSH.Charcoal}`,
+            fontStyle: 'italic' as const
+          }}>
+            ⌃ {trimmedCount} earlier {trimmedCount === 1 ? 'message' : 'messages'} trimmed from view
+            {' · '}
+            <span style={{ color: CRUSH.Squid }}>full log on disk at ~/.claude/projects</span>
           </div>
         )}
         <TimelineList timeline={timeline} onChoose={handleChoose} />
