@@ -63,6 +63,7 @@ declare global {
       chat: {
         start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean }) => Promise<{ ok: boolean }>
         send: (id: string, text: string) => Promise<{ ok: boolean; error?: string }>
+        respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny') => Promise<{ ok: boolean; error?: string }>
         stop: (id: string) => Promise<{ ok: boolean }>
         onEvent: (id: string, cb: (ev: any) => void) => () => void
         onStderr: (id: string, cb: (line: string) => void) => () => void

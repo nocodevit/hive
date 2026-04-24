@@ -70,6 +70,8 @@ const api = {
       ipcRenderer.invoke('chat:start', { id, ...opts }) as Promise<{ ok: boolean }>,
     send: (id: string, text: string) =>
       ipcRenderer.invoke('chat:send', { id, text }) as Promise<{ ok: boolean; error?: string }>,
+    respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny') =>
+      ipcRenderer.invoke('chat:respondPermission', { id, requestId, decision }) as Promise<{ ok: boolean; error?: string }>,
     stop: (id: string) => ipcRenderer.invoke('chat:stop', { id }) as Promise<{ ok: boolean }>,
     onEvent: (id: string, cb: (ev: any) => void) => {
       const handler = (_e: any, data: any) => cb(data)
