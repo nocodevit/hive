@@ -37,6 +37,14 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   // is removed from the UI and prettyModeRef is hard-wired false.
   const [mode, setMode] = useState<ViewMode>('raw')
   const [chatMode, setChatMode] = useState(true) // Chat is the default experience; Term stays as fallback.
+  // Once HiveChat has been opened for this Terminal, keep it MOUNTED for the
+  // rest of the Terminal's lifetime so its claude --print subprocess survives
+  // agent switches and Term/Chat toggles. Visibility is CSS-driven below.
+  // Without this, switching away kills the subprocess and coming back burns
+  // an API turn on resume — which wrecks multi-agent orchestration where
+  // the user flips between chats to direct work.
+  const [chatEverOpened, setChatEverOpened] = useState(chatMode)
+  useEffect(() => { if (chatMode) setChatEverOpened(true) }, [chatMode])
   const prettyMode = false
   const prettyModeRef = useRef(false)
   const richMode = false
@@ -522,13 +530,17 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
         </div>
       )}
 
-      {/* Hive Chat — structured JSON chat UI. Only mounted when Chat tab active. */}
-      {chatMode && visible && (
+      {/* Hive Chat — sticky mount. Once opened for this Terminal, stays
+          mounted so the underlying `claude --print` subprocess survives
+          Term↔Chat toggles and agent switches. Shown/hidden via CSS. */}
+      {chatEverOpened && (
         <div style={{
           position: 'absolute',
           inset: 0,
           zIndex: 100,
-          background: 'var(--bg-primary)'
+          background: 'var(--bg-primary)',
+          visibility: (chatMode && visible) ? 'visible' : 'hidden',
+          pointerEvents: (chatMode && visible) ? 'auto' : 'none'
         }}>
           <HiveChat
             id={`chat-${id}`}
@@ -537,7 +549,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
             agentName={agentName}
             continueSession={continueSession}
             rebaseOnStart={rebaseOnStart}
-            visible={visible && chatMode}
+            visible={chatMode && visible}
           />
         </div>
       )}
