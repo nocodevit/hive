@@ -59,6 +59,7 @@ declare global {
       settings: {
         get: (key: string) => Promise<any>
         set: (key: string, value: unknown) => Promise<boolean>
+        addClaudeAllowRule: (rules: { toolName: string; ruleContent: string }[]) => Promise<{ ok: boolean; added?: number; error?: string }>
       }
       chat: {
         start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean }) => Promise<{ ok: boolean }>

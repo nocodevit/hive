@@ -149,7 +149,51 @@ function CrushMarkdown({ text }: { text: string }) {
  *  USER MESSAGE — rgba(107,80,255,0.08) bg + Charple left border
  *  (per ui-preview-crush-elements.html .input-area, approved alpha)
  * ──────────────────────────────────────────────────────────── */
+/** Strip Claude Code's XML-tagged slash-command markup out of user
+ *  messages. A `/clear` invocation comes in as:
+ *    <command-name>/clear</command-name>
+ *    <command-message>clear</command-message>
+ *    <command-args></command-args>
+ *  Returns either a plain string (normal user text) OR a structured
+ *  `{ command, args }` when the whole message is a slash-command.
+ */
+function parseUserCommand(raw: string): { kind: 'command'; command: string; args: string } | { kind: 'text'; text: string } {
+  const nameMatch = raw.match(/<command-name>([^<]*)<\/command-name>/)
+  const argsMatch = raw.match(/<command-args>([^<]*)<\/command-args>/)
+  if (nameMatch) {
+    const command = nameMatch[1].trim().replace(/^\/+/, '')
+    const args = (argsMatch?.[1] ?? '').trim()
+    // If the only content is the tags, it's a pure slash-command invocation.
+    const stripped = raw
+      .replace(/<command-(?:name|message|args)>[^<]*<\/command-(?:name|message|args)>/g, '')
+      .replace(/<local-command-stdout>[\s\S]*?<\/local-command-stdout>/g, '')
+      .trim()
+    if (!stripped) return { kind: 'command', command, args }
+  }
+  return { kind: 'text', text: raw }
+}
+
 export function UserMessage({ text }: { text: string }) {
+  const parsed = parseUserCommand(text)
+  if (parsed.kind === 'command') {
+    return (
+      <div style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6,
+        background: 'rgba(255,96,255,0.08)',
+        border: `1px solid ${CRUSH.Dolly}`,
+        borderRadius: 999,
+        padding: '3px 12px',
+        margin: '6px 0',
+        fontFamily: FONT_MONO,
+        fontSize: 12,
+        color: CRUSH.Butter
+      }}>
+        <span style={{ color: CRUSH.Dolly, fontWeight: 700 }}>⚡</span>
+        <span style={{ color: CRUSH.Dolly, fontWeight: 700 }}>/{redact(parsed.command)}</span>
+        {parsed.args && <span style={{ color: CRUSH.Squid, opacity: 0.8 }}>{redact(parsed.args)}</span>}
+      </div>
+    )
+  }
   return (
     <div style={{
       background: 'rgba(255,96,255,0.08)',
@@ -163,7 +207,7 @@ export function UserMessage({ text }: { text: string }) {
       fontFamily: FONT_MONO
     }}>
       <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
-      <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(text)}</span>
+      <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(parsed.text)}</span>
     </div>
   )
 }
@@ -327,6 +371,14 @@ export function ToolBlock({ name, input, result }: {
 }
 
 function ToolHeader({ name, input }: { name: string; input: Record<string, unknown> }) {
+  // MCP tools arrive as `mcp__<server>__<function>`. Split for display
+  // so "mcp__stargate__eagle_cost_by_service" → `Stargate · eagle_cost_by_service`.
+  if (name.startsWith('mcp__')) {
+    const parts = name.slice(5).split('__')
+    const server = parts[0] || 'mcp'
+    const fn = parts.slice(1).join('__') || '?'
+    return <McpHeader server={server} fn={fn} input={input} />
+  }
   if (name === 'TodoWrite') return <TodoInline input={input} />
   if (name === 'Bash') return <HeaderLine tool={name} color={CRUSH.Malibu} tail={String(input.command ?? '').replace(/\n/g, ' ').slice(0, 200)} tailStyle="ash" />
   if (name === 'Read' || name === 'View') return <HeaderLine tool="Read" color={CRUSH.Bok} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
@@ -432,6 +484,24 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+function McpHeader({ server, fn, input }: { server: string; fn: string; input: Record<string, unknown> }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT_MONO }}>
+      <span style={{ color: CRUSH.Mochi, fontWeight: 700 }}>●</span>
+      <span style={{
+        color: CRUSH.Pepper, background: CRUSH.Mochi,
+        padding: '1px 8px', borderRadius: 4, fontWeight: 700, fontSize: 11, letterSpacing: '0.04em'
+      }}>{server.toUpperCase()}</span>
+      <span style={{ color: CRUSH.Violet, fontWeight: 700 }}>{fn}</span>
+      <span style={{
+        color: CRUSH.Squid, fontSize: 12,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        flex: 1, minWidth: 0
+      }}>{argSummary(input)}</span>
     </div>
   )
 }
@@ -695,6 +765,70 @@ export function SystemLine({ text }: { text: string }) {
   )
 }
 
+function fmtMs(ms?: number): string {
+  if (ms == null) return ''
+  if (ms < 1000) return `${ms}ms`
+  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
+  return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`
+}
+function fmtK(n?: number): string {
+  if (n == null) return '—'
+  if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
+  return String(n)
+}
+
+export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, outputTokens, cacheReadTokens }: {
+  costUSD?: number; durationMs?: number; numTurns?: number
+  inputTokens?: number; outputTokens?: number; cacheReadTokens?: number
+}) {
+  return (
+    <div style={{
+      margin: '8px 0',
+      borderLeft: `3px solid ${CRUSH.Charple}`,
+      background: CRUSH.BBQ,
+      borderRadius: 4,
+      padding: '6px 12px',
+      fontFamily: FONT_MONO, fontSize: 11,
+      color: CRUSH.Squid,
+      display: 'flex', flexWrap: 'wrap', gap: '4px 14px', alignItems: 'center'
+    }}>
+      <span style={{ color: CRUSH.Charple, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: 10 }}>turn complete</span>
+      {costUSD != null && (
+        <span>
+          <span style={{ color: CRUSH.Oyster }}>cost </span>
+          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>${costUSD.toFixed(4)}</span>
+        </span>
+      )}
+      {durationMs != null && (
+        <span>
+          <span style={{ color: CRUSH.Oyster }}>dur </span>
+          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>{fmtMs(durationMs)}</span>
+        </span>
+      )}
+      {numTurns != null && (
+        <span>
+          <span style={{ color: CRUSH.Oyster }}>turns </span>
+          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>{numTurns}</span>
+        </span>
+      )}
+      {(inputTokens != null || outputTokens != null) && (
+        <span>
+          <span style={{ color: CRUSH.Oyster }}>tokens </span>
+          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>↓{fmtK(inputTokens)}</span>
+          <span style={{ color: CRUSH.Oyster }}> / </span>
+          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>↑{fmtK(outputTokens)}</span>
+          {cacheReadTokens != null && cacheReadTokens > 0 && (
+            <>
+              <span style={{ color: CRUSH.Oyster }}> · cache </span>
+              <span style={{ color: CRUSH.Bok, fontWeight: 600 }}>{fmtK(cacheReadTokens)}</span>
+            </>
+          )}
+        </span>
+      )}
+    </div>
+  )
+}
+
 /* Render a whole timeline entry. tool_call entries consume their matching
  * tool_result from the map (keyed by toolUseId) and render as one combined
  * block — the Dolly left-border spans header + result. */
@@ -713,6 +847,11 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
       return <ToolBlock name={entry.name} input={entry.input} result={result} />
     case 'tool_result': return null
     case 'system': return <SystemLine text={entry.text} />
+    case 'result': return <ResultSummaryCard
+      costUSD={entry.costUSD} durationMs={entry.durationMs} numTurns={entry.numTurns}
+      inputTokens={entry.inputTokens} outputTokens={entry.outputTokens}
+      cacheReadTokens={entry.cacheReadTokens}
+    />
   }
 }, (prev, next) => {
   if (prev.onChoose !== next.onChoose) return false

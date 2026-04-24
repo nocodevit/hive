@@ -837,6 +837,36 @@ ipcMain.handle('settings:set', (_event, { key, value }: { key: string; value: un
   saveData(data)
   return true
 })
+
+/** Append a rule to ~/.claude/settings.json permissions.allow so future
+ *  identical permission prompts auto-approve. Rules come from Claude's
+ *  own permission_suggestions, shape `{toolName, ruleContent}`. We
+ *  write the claude-native `ToolName(content)` format. */
+ipcMain.handle('settings:addClaudeAllowRule', (_event, { rules }: {
+  rules: { toolName: string; ruleContent: string }[]
+}) => {
+  try {
+    const home = require('os').userInfo().homedir || process.env.HOME || ''
+    const path = require('path').join(home, '.claude', 'settings.json')
+    const fs = require('fs')
+    let settings: any = {}
+    if (fs.existsSync(path)) {
+      settings = JSON.parse(fs.readFileSync(path, 'utf8'))
+    }
+    if (!settings.permissions) settings.permissions = {}
+    if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = []
+    for (const r of rules) {
+      const pattern = `${r.toolName}(${r.ruleContent})`
+      if (!settings.permissions.allow.includes(pattern)) {
+        settings.permissions.allow.push(pattern)
+      }
+    }
+    fs.writeFileSync(path, JSON.stringify(settings, null, 2))
+    return { ok: true, added: rules.length }
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message || e) }
+  }
+})
 ipcMain.handle('dispatcher:loadLog', () => loadDispatchLog())
 ipcMain.handle('dispatcher:clearLog', (_event, { keepAfter }: { keepAfter?: string }) => {
   if (keepAfter) {

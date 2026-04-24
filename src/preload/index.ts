@@ -63,7 +63,9 @@ const api = {
   },
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', { key }) as Promise<any>,
-    set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', { key, value }) as Promise<boolean>
+    set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', { key, value }) as Promise<boolean>,
+    addClaudeAllowRule: (rules: { toolName: string; ruleContent: string }[]) =>
+      ipcRenderer.invoke('settings:addClaudeAllowRule', { rules }) as Promise<{ ok: boolean; added?: number; error?: string }>
   },
   chat: {
     start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean }) =>
