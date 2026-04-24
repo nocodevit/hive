@@ -59,7 +59,7 @@ const api = {
       ipcRenderer.invoke('git:createIntegration', { repoPath, batchNum, workerBranches })
   },
   chat: {
-    start: (id: string, opts: { cwd?: string; agent?: string; name?: string }) =>
+    start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean }) =>
       ipcRenderer.invoke('chat:start', { id, ...opts }) as Promise<{ ok: boolean }>,
     send: (id: string, text: string) =>
       ipcRenderer.invoke('chat:send', { id, text }) as Promise<{ ok: boolean; error?: string }>,
