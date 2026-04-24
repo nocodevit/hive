@@ -2,6 +2,8 @@ import { spawn, ChildProcessWithoutNullStreams, execSync } from 'node:child_proc
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { ipcMain, BrowserWindow, app } from 'electron'
+import * as pty from 'node-pty'
+import { Terminal as HeadlessTerm } from '@xterm/headless'
 
 /**
  * Spawn a `claude --print --input-format stream-json --output-format stream-json`
@@ -110,12 +112,19 @@ export function startChat(id: string, opts: {
   const session: ChatSession = { id, child, buffer: '', startedAt: Date.now(), logPath, cwd: opts.cwd }
   sessions.set(id, session)
 
-  // Usage via ccusage (reads ~/.claude/sessions/ directly, zero API calls).
-  // Fires at startup + every 5 min so the status bar tracks burn in near-real-time.
-  const refresh = () => {
-    queryUsageViaCcusage().then(usage => {
-      if (usage) broadcast(`chat:usage:${session.id}`, usage)
-    }).catch(() => {})
+  // Usage snapshot. Two parallel data sources:
+  //  1. ccusage (local, reads ~/.claude/sessions/) — gives costUSD / burn /
+  //     projected for the current 5h block. Zero API cost.
+  //  2. Headless interactive claude + /usage TUI scrape — gives the real
+  //     subscription %% (what `/usage` shows). ~1 API turn per call.
+  // Both merged into one chat:usage broadcast; UI renders whichever fields
+  // are present.
+  const refresh = async () => {
+    const [cc, pct] = await Promise.all([
+      queryUsageViaCcusage(),
+      queryUsagePctViaPty(opts.cwd)
+    ])
+    if (cc || pct) broadcast(`chat:usage:${session.id}`, { ...(cc || {}), ...(pct || {}) })
   }
   refresh()
   session.usageTimer = setInterval(refresh, 5 * 60 * 1000)
@@ -211,6 +220,91 @@ async function queryUsageViaCcusage(): Promise<{
     } catch {
       resolve(null)
     }
+  })
+}
+
+/**
+ * Spawn a headless interactive `claude` under a PTY, pipe every byte
+ * into `@xterm/headless` so the terminal state machine handles ANSI
+ * cursor moves / erase / scroll correctly, then read the TUI's grid as
+ * clean text and extract "Current session … NN% used" and
+ * "Current week … NN% used" lines.
+ *
+ * This is the only way to surface the real subscription-tier %% that
+ * /usage shows — stream-json doesn't carry them, and --print /usage is
+ * short-circuited to a synthetic canned reply. Uses xterm-headless so
+ * TUI redraws don't break the regex.
+ */
+async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: number; sevenDay?: number } | null> {
+  return new Promise(resolve => {
+    let done = false
+    let child: pty.IPty | null = null
+    const finish = (v: { fiveHour?: number; sevenDay?: number } | null) => {
+      if (done) return
+      done = true
+      try { child?.kill() } catch {}
+      resolve(v)
+    }
+
+    try {
+      child = pty.spawn('claude', [], {
+        name: 'xterm-256color',
+        cols: 160, rows: 50,
+        cwd: cwd || process.env.HOME || '/',
+        env: process.env as any
+      })
+    } catch {
+      return finish(null)
+    }
+
+    const term = new HeadlessTerm({ cols: 160, rows: 50, scrollback: 1000, allowProposedApi: true })
+    let sent = false
+    let promptSeenAt = 0
+    let scrapeTimer: NodeJS.Timeout | null = null
+
+    const dumpGrid = (): string => {
+      const buf = term.buffer.active
+      const lines: string[] = []
+      for (let y = 0; y < buf.length; y++) {
+        const line = buf.getLine(y)
+        if (line) lines.push(line.translateToString(true))
+      }
+      return lines.join('\n')
+    }
+
+    const tryScrape = () => {
+      const text = dumpGrid()
+      const session = text.match(/Current session[\s\S]{0,300}?(\d+)\s*%\s*used/)
+      const week = text.match(/Current week[\s\S]{0,300}?(\d+)\s*%\s*used/)
+      if (session || week) {
+        finish({
+          fiveHour: session ? parseInt(session[1], 10) : undefined,
+          sevenDay: week ? parseInt(week[1], 10) : undefined
+        })
+      }
+    }
+
+    child.onData((d: string) => {
+      term.write(d, () => {
+        // Stage 1: wait for prompt glyph → send /usage.
+        if (!sent) {
+          const firstTen = dumpGrid().split('\n').slice(0, 20).join('\n')
+          if (firstTen.includes('❯') || /^\s*>\s/m.test(firstTen)) {
+            sent = true
+            promptSeenAt = Date.now()
+            setTimeout(() => { try { child?.write('/usage\r') } catch {} }, 500)
+          }
+          return
+        }
+        // Stage 2: after /usage, let the TUI settle a moment then scrape.
+        if (Date.now() - promptSeenAt < 700) return
+        if (scrapeTimer) clearTimeout(scrapeTimer)
+        scrapeTimer = setTimeout(tryScrape, 300)
+      })
+    })
+    child.onExit(() => finish(null))
+
+    setTimeout(() => finish(null), 25000)
   })
 }
 
