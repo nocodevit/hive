@@ -112,6 +112,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // composition confirms the candidate, not sends the message.
   const composingRef = useRef(false)
 
+  // Bash-style recall for sent user messages. ↑ steps back through past
+  // sent turns, ↓ steps forward. Draft (what user was typing) is saved
+  // on entry to history mode and restored when they ↓ past the newest.
+  const sentHistoryRef = useRef<string[]>([])
+  const historyIdxRef = useRef<number>(-1)  // -1 = not browsing; 0 = most recent, N = Nth-from-latest
+  const draftRef = useRef<string>('')
+
   const addEntry = (entry: Omit<TimelineEntry, 'id'> & { id?: string }) => {
     const id = entry.id || `e${entryIdRef.current++}`
     setTimeline(prev => [...prev, { ...entry, id } as TimelineEntry])
@@ -343,8 +350,40 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setSending(true)
     addEntry({ kind: 'user', text })
     setInput('')
+    // Record for ↑ recall; cap at 100 to avoid unbounded growth.
+    sentHistoryRef.current.push(text)
+    if (sentHistoryRef.current.length > 100) sentHistoryRef.current.shift()
+    historyIdxRef.current = -1
+    draftRef.current = ''
     await window.api.chat.send(id, text)
     setSending(false)
+  }
+
+  // ↑ recall: cursor must be on first visible line of the textarea (or we
+  // must already be navigating history). Otherwise ↑ is normal cursor-up.
+  // ↓ recall: only active while navigating; restores draft past the newest.
+  const tryRecallUp = (ta: HTMLTextAreaElement): boolean => {
+    const cursorAtTop = ta.selectionStart === 0 || !input.slice(0, ta.selectionStart).includes('\n')
+    if (!cursorAtTop && historyIdxRef.current === -1) return false
+    const hist = sentHistoryRef.current
+    if (!hist.length) return false
+    if (historyIdxRef.current + 1 >= hist.length) return false
+    if (historyIdxRef.current === -1) draftRef.current = input
+    historyIdxRef.current += 1
+    setInput(hist[hist.length - 1 - historyIdxRef.current])
+    return true
+  }
+  const tryRecallDown = (): boolean => {
+    if (historyIdxRef.current === -1) return false
+    const hist = sentHistoryRef.current
+    if (historyIdxRef.current === 0) {
+      historyIdxRef.current = -1
+      setInput(draftRef.current)
+    } else {
+      historyIdxRef.current -= 1
+      setInput(hist[hist.length - 1 - historyIdxRef.current])
+    }
+    return true
   }
 
   const handleChoose = useCallback((pick: string) => {
@@ -446,11 +485,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             onCompositionStart={() => { composingRef.current = true }}
             onCompositionEnd={() => { composingRef.current = false }}
             onKeyDown={e => {
-              // Skip Enter while IME is composing (pinyin/kana confirm).
+              // Skip while IME is composing (pinyin/kana confirm).
               // e.nativeEvent.isComposing is the modern signal; composingRef
               // is the belt-and-suspenders backup.
               if (composingRef.current || (e.nativeEvent as any).isComposing) return
-              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+              if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); return }
+              if (e.key === 'ArrowUp' && tryRecallUp(e.currentTarget)) { e.preventDefault(); return }
+              if (e.key === 'ArrowDown' && tryRecallDown()) { e.preventDefault(); return }
             }}
             disabled={sending || exited !== null}
             placeholder="Message Claude… (Enter to send, Shift+Enter for newline)"
