@@ -36,7 +36,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   // remains compiled so it's trivial to re-enable, but the Pretty button
   // is removed from the UI and prettyModeRef is hard-wired false.
   const [mode, setMode] = useState<ViewMode>('raw')
-  const [chatMode, setChatMode] = useState(false)
+  const [chatMode, setChatMode] = useState(true) // Chat is the default experience; Term stays as fallback.
   const prettyMode = false
   const prettyModeRef = useRef(false)
   const richMode = false
@@ -528,13 +528,15 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
           position: 'absolute',
           inset: 0,
           zIndex: 100,
-          background: '#201F26'
+          background: 'var(--bg-primary)'
         }}>
           <HiveChat
             id={`chat-${id}`}
             cwd={cwd}
             agent={agentName ? `hive-${agentId}` : undefined}
             agentName={agentName}
+            continueSession={continueSession}
+            rebaseOnStart={rebaseOnStart}
             visible={visible && chatMode}
           />
         </div>
