@@ -1,4 +1,4 @@
-import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process'
+import { spawn, ChildProcessWithoutNullStreams, execSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { ipcMain, BrowserWindow, app } from 'electron'
@@ -62,7 +62,13 @@ function parseJsonLines(buf: string, sessionId: string): { events: any[]; rest: 
   return { events, rest }
 }
 
-export function startChat(id: string, opts: { cwd?: string; agent?: string; name?: string } = {}) {
+export function startChat(id: string, opts: {
+  cwd?: string
+  agent?: string
+  name?: string
+  continueSession?: boolean   // mirror of the Term `-c` flag
+  rebaseOnStart?: boolean     // mirror Term behavior: rebase onto origin/<base> before Claude
+} = {}) {
   if (sessions.has(id)) return
   const args = [
     '--print',
@@ -73,6 +79,22 @@ export function startChat(id: string, opts: { cwd?: string; agent?: string; name
   ]
   if (opts.agent) args.push('--agent', opts.agent)
   if (opts.name) args.push('-n', opts.name)
+  if (opts.continueSession) args.push('-c')
+
+  // Mirror Term's rebase-on-start: fetch + rebase onto first of
+  // develop/main/master that the remote has. Only if explicitly enabled
+  // and a cwd is given. Runs synchronously before spawning claude; its
+  // output goes to the renderer via the stderr channel so the user sees
+  // what happened.
+  if (opts.rebaseOnStart && opts.cwd) {
+    try {
+      const cmd = `git fetch origin 2>&1 && BASE=$(for b in develop main master; do git rev-parse --verify origin/$b >/dev/null 2>&1 && echo $b && break; done) && [ -n "$BASE" ] && echo "⏳ Rebasing onto origin/$BASE" && git rebase origin/$BASE && echo "✅ Rebase done" || echo "⏭️ Rebase skipped"`
+      const out = execSync(cmd, { cwd: opts.cwd, encoding: 'utf8', shell: '/bin/bash' })
+      broadcast(`chat:stderr:${id}`, out)
+    } catch (e: any) {
+      broadcast(`chat:stderr:${id}`, `Rebase failed: ${e.stdout ?? ''}${e.stderr ?? ''}\n`)
+    }
+  }
 
   const child = spawn('claude', args, {
     cwd: opts.cwd,
@@ -137,8 +159,8 @@ export function stopChat(id: string) {
 }
 
 export function registerChatIpc() {
-  ipcMain.handle('chat:start', (_e, { id, cwd, agent, name }) => {
-    startChat(id, { cwd, agent, name })
+  ipcMain.handle('chat:start', (_e, { id, cwd, agent, name, continueSession, rebaseOnStart }) => {
+    startChat(id, { cwd, agent, name, continueSession, rebaseOnStart })
     return { ok: true }
   })
   ipcMain.handle('chat:send', (_e, { id, text }) => sendUserMessage(id, text))

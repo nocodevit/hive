@@ -8,6 +8,8 @@ interface Props {
   cwd?: string
   agent?: string
   agentName?: string
+  continueSession?: boolean
+  rebaseOnStart?: boolean
   visible: boolean
 }
 
@@ -18,7 +20,7 @@ interface Props {
  * We flatten those into a TimelineEntry list and render each entry with
  * a Crush-styled component.
  */
-export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) {
+export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible }: Props) {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -38,7 +40,7 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
   }
 
   useEffect(() => {
-    window.api.chat.start(id, { cwd, agent, name: agentName })
+    window.api.chat.start(id, { cwd, agent, name: agentName, continueSession, rebaseOnStart })
 
     /**
      * Timeline integration rules (validated against /tmp/claude-json.log):
@@ -152,7 +154,7 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
       offExit()
       window.api.chat.stop(id)
     }
-  }, [id, cwd, agent, agentName])
+  }, [id, cwd, agent, agentName, continueSession, rebaseOnStart])
 
   useEffect(() => {
     const el = scrollRef.current
@@ -174,7 +176,8 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
   return (
     <div style={{
       width: '100%', height: '100%',
-      background: CRUSH.Pepper, color: CRUSH.Ash,
+      background: 'var(--bg-primary)',  // Hive's native deep-purple bg — matches the rest of the app
+      color: CRUSH.Ash,
       fontFamily: FONT_MONO, fontSize: 13,
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden'
