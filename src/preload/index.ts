@@ -75,10 +75,17 @@ const api = {
     respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny', input?: Record<string, unknown>, denyMessage?: string) =>
       ipcRenderer.invoke('chat:respondPermission', { id, requestId, decision, input, denyMessage }) as Promise<{ ok: boolean; error?: string }>,
     stop: (id: string) => ipcRenderer.invoke('chat:stop', { id }) as Promise<{ ok: boolean }>,
+    loadOlder: (id: string, batch?: number) =>
+      ipcRenderer.invoke('chat:loadOlder', { id, batch }) as Promise<{ loaded: number; hasOlder: boolean; error?: string }>,
     onEvent: (id: string, cb: (ev: any) => void) => {
       const handler = (_e: any, data: any) => cb(data)
       ipcRenderer.on(`chat:event:${id}`, handler)
       return () => ipcRenderer.removeListener(`chat:event:${id}`, handler)
+    },
+    onPrepend: (id: string, cb: (payload: { events: any[]; hasOlder: boolean }) => void) => {
+      const handler = (_e: any, data: any) => cb(data)
+      ipcRenderer.on(`chat:prepend:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:prepend:${id}`, handler)
     },
     onStderr: (id: string, cb: (line: string) => void) => {
       const handler = (_e: any, data: string) => cb(data)
