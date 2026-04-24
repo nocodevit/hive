@@ -78,8 +78,8 @@ describe('extractTrailingChoices', () => {
     expect(out).not.toBeNull()
     expect(out!.body).toBe('Where do you want to pick up?')
     expect(out!.choices).toHaveLength(3)
-    expect(out!.choices[0]).toMatchObject({ num: 1, label: 'Resume from summary' })
-    expect(out!.choices[2]).toMatchObject({ num: 3, label: 'Something else' })
+    expect(out!.choices[0]).toMatchObject({ num: '1', label: 'Resume from summary' })
+    expect(out!.choices[2]).toMatchObject({ num: '3', label: 'Something else' })
   })
 
   it('returns null when fewer than 2 numbered lines at tail', () => {
@@ -111,6 +111,40 @@ describe('extractTrailingChoices', () => {
     const text = 'Hello\n\n\n1. A\n2. B'
     const out = extractTrailingChoices(text)
     expect(out!.body).toBe('Hello')
+  })
+
+  it('detects letter-prefixed choices with close paren', () => {
+    const text = 'Which?\n\nA) First option\nB) Second option'
+    const out = extractTrailingChoices(text)
+    expect(out).not.toBeNull()
+    expect(out!.choices).toEqual([
+      expect.objectContaining({ num: 'A', label: 'First option' }),
+      expect.objectContaining({ num: 'B', label: 'Second option' })
+    ])
+  })
+
+  it('detects choices with fullwidth paren `）`', () => {
+    const text = '选哪个？\nA）不修 docs\nB）先修再开 PR'
+    const out = extractTrailingChoices(text)
+    expect(out).not.toBeNull()
+    expect(out!.choices).toHaveLength(2)
+    expect(out!.choices[0].num).toBe('A')
+    expect(out!.choices[0].label).toBe('不修 docs')
+  })
+
+  it('strips markdown bold from the marker', () => {
+    // Claude sometimes emits `**A)** label` or `- **A)** label`
+    const text = 'Pick:\n- **1)** Option X\n- **2)** Option Y'
+    const out = extractTrailingChoices(text)
+    expect(out).not.toBeNull()
+    expect(out!.choices).toHaveLength(2)
+    expect(out!.choices[0].num).toBe('1')
+  })
+
+  it('allows letter with period `A. Foo`', () => {
+    const text = 'Q:\nA. First\nB. Second'
+    const out = extractTrailingChoices(text)
+    expect(out!.choices).toHaveLength(2)
   })
 })
 

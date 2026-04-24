@@ -226,19 +226,34 @@ export function startChat(id: string, opts: {
 }
 
 /**
- * Respond to a pending control_request (permission prompt). `decision` is
- * 'allow' (once) or 'deny'. Writes a control_response JSON line to the
- * claude subprocess's stdin so it unblocks.
+ * Respond to a pending control_request (permission prompt). Claude's
+ * schema expects one of (confirmed via live ZodError):
+ *
+ *   allow:  { updatedInput: <original or modified tool input record> }
+ *   deny:   { behavior: "deny", message: "<human reason>" }
+ *
+ * Writes a control_response JSON frame to the subprocess's stdin so it
+ * unblocks. Caller must pass the original tool input so we can echo it
+ * in updatedInput for the allow path.
  */
-export function respondPermission(id: string, requestId: string, decision: 'allow' | 'deny') {
+export function respondPermission(
+  id: string,
+  requestId: string,
+  decision: 'allow' | 'deny',
+  input?: Record<string, unknown>,
+  denyMessage?: string
+) {
   const session = sessions.get(id)
   if (!session) return { ok: false, error: 'no_session' }
+  const inner = decision === 'allow'
+    ? { updatedInput: input || {} }
+    : { behavior: 'deny', message: denyMessage || 'Denied by user' }
   const frame = {
     type: 'control_response',
     response: {
       subtype: 'success',
       request_id: requestId,
-      response: { behavior: decision }
+      response: inner
     }
   }
   try {
@@ -477,8 +492,8 @@ export function registerChatIpc() {
     return { ok: true }
   })
   ipcMain.handle('chat:send', (_e, { id, text }) => sendUserMessage(id, text))
-  ipcMain.handle('chat:respondPermission', (_e, { id, requestId, decision }) =>
-    respondPermission(id, requestId, decision)
+  ipcMain.handle('chat:respondPermission', (_e, { id, requestId, decision, input, denyMessage }) =>
+    respondPermission(id, requestId, decision, input, denyMessage)
   )
   ipcMain.handle('chat:stop', (_e, { id }) => { stopChat(id); return { ok: true } })
 }

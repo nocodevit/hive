@@ -157,7 +157,7 @@ function CrushMarkdown({ text }: { text: string }) {
  *  Returns either a plain string (normal user text) OR a structured
  *  `{ command, args }` when the whole message is a slash-command.
  */
-function parseUserCommand(raw: string): { kind: 'command'; command: string; args: string } | { kind: 'text'; text: string } {
+export function parseUserCommand(raw: string): { kind: 'command'; command: string; args: string } | { kind: 'text'; text: string } {
   const nameMatch = raw.match(/<command-name>([^<]*)<\/command-name>/)
   const argsMatch = raw.match(/<command-args>([^<]*)<\/command-args>/)
   if (nameMatch) {
@@ -270,21 +270,29 @@ function PlainAssistantText({ text }: { text: string }) {
   )
 }
 
-export interface Choice { num: number; label: string; raw: string }
+export interface Choice { num: string; label: string; raw: string }
 
-/** If the tail of a message is a run of `N. ...` lines, peel them off. */
+/** Matches a "choice line":
+ *    `1. Foo` / `1) Foo` / `1） Foo`          numbered, ascii or fullwidth paren
+ *    `A. Foo` / `A) Foo` / `A） Foo`          uppercase letter
+ *    `a. Foo` / etc                            lowercase letter
+ *  Captures the marker (digits or single letter) and the label body.
+ *  Also strips common leading markdown markers like `- ` / `**`. */
+const CHOICE_LINE = /^\s*(?:[-*]\s+)?\*{0,2}(\d+|[A-Za-z])\s*[.)）]\*{0,2}\s*(.+?)\s*$/
+
+/** If the tail of a message is a run of choice lines, peel them off.
+ *  Returns null unless at least 2 consecutive tail lines match. */
 export function extractTrailingChoices(text: string): { body: string; choices: Choice[] } | null {
   const lines = text.split('\n')
   const tail: Choice[] = []
   let i = lines.length - 1
   while (i >= 0) {
-    const m = lines[i].match(/^\s*(\d+)\.\s+(.+)$/)
+    const m = lines[i].match(CHOICE_LINE)
     if (!m) break
-    tail.unshift({ num: Number(m[1]), label: m[2], raw: lines[i].trim() })
+    tail.unshift({ num: m[1], label: m[2], raw: lines[i].trim() })
     i--
   }
   if (tail.length < 2) return null
-  // Trim trailing blank lines off the body.
   while (i >= 0 && lines[i].trim() === '') i--
   return { body: lines.slice(0, i + 1).join('\n'), choices: tail }
 }
@@ -381,14 +389,14 @@ function ToolHeader({ name, input }: { name: string; input: Record<string, unkno
   }
   if (name === 'TodoWrite') return <TodoInline input={input} />
   if (name === 'Bash') return <HeaderLine tool={name} color={CRUSH.Malibu} tail={String(input.command ?? '').replace(/\n/g, ' ').slice(0, 200)} tailStyle="ash" />
-  if (name === 'Read' || name === 'View') return <HeaderLine tool="Read" color={CRUSH.Bok} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
+  if (name === 'Read' || name === 'View') return <HeaderLine tool="Read" color={CRUSH.Julep} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
   if (name === 'Edit') return <EditHeader input={input} />
   if (name === 'MultiEdit') return <MultiEditHeader input={input} />
   if (name === 'Write') return <HeaderLine tool="Write" color={CRUSH.Julep} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
   if (name === 'Grep' || name === 'Glob') {
     const pattern = String(input.pattern ?? input.query ?? '')
     const glob = String(input.glob ?? input.include ?? '')
-    return <HeaderLine tool={name} color={CRUSH.Zest} tail={`"${pattern}"${glob ? ` ${glob}` : ''}`} tailStyle="ash" />
+    return <HeaderLine tool={name} color={CRUSH.Julep} tail={`"${pattern}"${glob ? ` ${glob}` : ''}`} tailStyle="ash" />
   }
   if (name === 'Task' || name === 'Agent') return <HeaderLine tool={name} color={CRUSH.Dolly} tail={argSummary(input)} tailStyle="ash" />
   if (name === 'WebFetch' || name === 'WebSearch') return <HeaderLine tool={name} color={CRUSH.Violet} tail={String(input.url ?? input.query ?? '')} tailStyle="link" />
@@ -716,7 +724,7 @@ function toolColor(name: string) {
   return TOOL_COLORS[name] || CRUSH.Dolly
 }
 
-function argSummary(input: Record<string, unknown>): string {
+export function argSummary(input: Record<string, unknown>): string {
   // Prefer common field names — command / file_path / pattern / path / url.
   const preferred = ['command', 'file_path', 'path', 'pattern', 'url', 'prompt', 'description']
   for (const k of preferred) {
@@ -812,13 +820,13 @@ export function SystemLine({ text }: { text: string }) {
   )
 }
 
-function fmtMs(ms?: number): string {
+export function fmtMs(ms?: number): string {
   if (ms == null) return ''
   if (ms < 1000) return `${ms}ms`
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`
   return `${Math.floor(ms / 60000)}m ${Math.round((ms % 60000) / 1000)}s`
 }
-function fmtK(n?: number): string {
+export function fmtK(n?: number): string {
   if (n == null) return '—'
   if (n >= 1000) return `${(n / 1000).toFixed(1)}k`
   return String(n)
