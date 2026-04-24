@@ -77,6 +77,8 @@ export function startChat(id: string, opts: {
     '--input-format', 'stream-json',
     '--output-format', 'stream-json',
     '--include-partial-messages',
+    '--include-hook-events',          // surface permission_request + lifecycle events
+    '--permission-prompt-tool', 'stdio', // let Claude ask us over stdio instead of assuming TTY
     '--verbose'
   ]
   if (opts.agent) args.push('--agent', opts.agent)
@@ -108,10 +110,15 @@ export function startChat(id: string, opts: {
   const session: ChatSession = { id, child, buffer: '', startedAt: Date.now(), logPath, cwd: opts.cwd }
   sessions.set(id, session)
 
-  // NOTE: `/usage` slash command cannot be invoked via --print — claude
-  // short-circuits it with a canned synthetic response. Leaving
-  // refreshUsage wired up for ccusage integration later. No timer yet.
-  void refreshUsage
+  // Usage via ccusage (reads ~/.claude/sessions/ directly, zero API calls).
+  // Fires at startup + every 5 min so the status bar tracks burn in near-real-time.
+  const refresh = () => {
+    queryUsageViaCcusage().then(usage => {
+      if (usage) broadcast(`chat:usage:${session.id}`, usage)
+    }).catch(() => {})
+  }
+  refresh()
+  session.usageTimer = setInterval(refresh, 5 * 60 * 1000)
 
   child.stdout.on('data', (chunk: Buffer) => {
     session.buffer += chunk.toString('utf8')
@@ -167,13 +174,47 @@ export function stopChat(id: string) {
 }
 
 /**
- * Query Claude Code's /usage slash command in a throwaway --print process
- * and extract 5h / 7d rolling-limit percentages. The slash command's
- * output isn't a formal schema — we regex-scrape the assistant text for
- * any "5h/5-hour ...X%" and "7d/7-day ...Y%" patterns. Falls back to
- * undefined if Claude didn't give a number (API-key users, early versions).
- * Non-blocking; resolves to null on any failure.
+ * Query usage via `ccusage blocks --json`. Reads ~/.claude/sessions/* and
+ * aggregates into 5-hour billing windows, so no extra API traffic.
+ * Returns the active block's cost, burn rate, and projection.
  */
+async function queryUsageViaCcusage(): Promise<{
+  costUSD?: number
+  burnPerHour?: number
+  projectedUSD?: number
+  remainingMinutes?: number
+  totalTokens?: number
+} | null> {
+  return new Promise(resolve => {
+    try {
+      const child = spawn('ccusage', ['blocks', '--json'], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] })
+      let out = ''
+      child.stdout.on('data', (c: Buffer) => { out += c.toString('utf8') })
+      child.on('error', () => resolve(null))
+      child.on('exit', () => {
+        try {
+          const data = JSON.parse(out)
+          const active = (data.blocks || []).find((b: any) => b.isActive)
+          if (!active) return resolve(null)
+          resolve({
+            costUSD: active.costUSD,
+            burnPerHour: active.burnRate?.costPerHour,
+            projectedUSD: active.projection?.totalCost,
+            remainingMinutes: active.projection?.remainingMinutes,
+            totalTokens: active.totalTokens
+          })
+        } catch {
+          resolve(null)
+        }
+      })
+      setTimeout(() => { try { child.kill() } catch {}; resolve(null) }, 10000)
+    } catch {
+      resolve(null)
+    }
+  })
+}
+
+/** Legacy /usage path — slash command short-circuits in --print mode. Kept for reference. */
 async function queryUsage(cwd?: string): Promise<{ fiveHour?: number; sevenDay?: number } | null> {
   return new Promise(resolve => {
     let done = false
