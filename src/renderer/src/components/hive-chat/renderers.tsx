@@ -249,17 +249,20 @@ export function ToolBlock({ name, input, result }: {
   input: Record<string, unknown>
   result?: { content: string; isError?: boolean }
 }) {
+  const isError = result?.isError
   return (
     <div style={{
-      borderLeft: `3px solid ${CRUSH.Dolly}`,
+      borderLeft: `3px solid ${isError ? CRUSH.Sriracha : CRUSH.Dolly}`,
       paddingLeft: 12,
       paddingTop: 4,
       paddingBottom: 4,
       margin: '6px 0',
-      fontFamily: FONT_MONO
+      fontFamily: FONT_MONO,
+      background: isError ? 'rgba(235,66,104,0.06)' : 'transparent',
+      borderRadius: isError ? 4 : 0
     }}>
       <ToolHeader name={name} input={input} />
-      {result && <InlineResult content={result.content} isError={result.isError} />}
+      {result && <InlineResult content={result.content} isError={result.isError} tool={name} input={input} />}
     </div>
   )
 }
@@ -375,6 +378,9 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
 }
 
 function HeaderLine({ tool, color, tail, tailStyle }: { tool: string; color: string; tail: string; tailStyle: 'ash' | 'link' }) {
+  const onClick = tailStyle === 'link' && tail && tail.startsWith('/')
+    ? () => { window.api.fs.revealInFinder(tail) }
+    : undefined
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 8,
@@ -382,20 +388,60 @@ function HeaderLine({ tool, color, tail, tailStyle }: { tool: string; color: str
     }}>
       <span style={{ color, fontWeight: 700 }}>●</span>
       <span style={{ color, fontWeight: 700 }}>{tool}</span>
-      <span style={{
-        color: tailStyle === 'link' ? CRUSH.Malibu : CRUSH.Ash,
-        textDecoration: tailStyle === 'link' ? 'underline' : 'none',
-        opacity: tailStyle === 'ash' ? 0.85 : 1,
-        fontSize: 12,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-        flex: 1, minWidth: 0
-      }}>{tail}</span>
+      <span
+        onClick={onClick}
+        title={onClick ? 'Click to reveal in Finder' : undefined}
+        style={{
+          color: tailStyle === 'link' ? CRUSH.Malibu : CRUSH.Ash,
+          textDecoration: tailStyle === 'link' ? 'underline' : 'none',
+          opacity: tailStyle === 'ash' ? 0.85 : 1,
+          fontSize: 12,
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          flex: 1, minWidth: 0,
+          cursor: onClick ? 'pointer' : 'default'
+        }}
+      >{tail}</span>
     </div>
   )
 }
 
-function InlineResult({ content, isError }: { content: string; isError?: boolean }) {
+/** Strip Claude Code's "N\t" line-number prefixes that appear in Read
+ *  tool results, returning the raw file content + start line number. */
+function stripReadPrefix(s: string): { content: string; startLine: number } {
+  const lines = s.split('\n')
+  let startLine = 1
+  const stripped: string[] = []
+  let anyPrefixed = false
+  for (const ln of lines) {
+    const m = ln.match(/^(\d+)\t(.*)$/)
+    if (m) {
+      anyPrefixed = true
+      if (stripped.length === 0) startLine = parseInt(m[1], 10)
+      stripped.push(m[2])
+    } else {
+      stripped.push(ln)
+    }
+  }
+  return anyPrefixed
+    ? { content: stripped.join('\n'), startLine }
+    : { content: s, startLine: 1 }
+}
+
+function InlineResult({ content, isError, tool, input }: {
+  content: string
+  isError?: boolean
+  tool?: string
+  input?: Record<string, unknown>
+}) {
   const [expanded, setExpanded] = useState(false)
+
+  // Read results come prefixed with "N\t" per line. Render as a code
+  // panel with a proper gutter so it reads like a file, not log output.
+  if (tool === 'Read' || tool === 'View') {
+    const { content: code, startLine } = stripReadPrefix(content)
+    return <ReadResultPanel code={code} startLine={startLine} isError={isError} filePath={input?.file_path as string | undefined} />
+  }
+
   const allLines = content.split('\n')
   const truncated = allLines.length > DEFAULT_EXPANDED_LINES
   const visible = expanded || !truncated ? allLines : allLines.slice(0, DEFAULT_EXPANDED_LINES)
@@ -409,7 +455,7 @@ function InlineResult({ content, isError }: { content: string; isError?: boolean
       lineHeight: 1.5
     }}>
       <div style={{ display: 'flex', gap: 8 }}>
-        <span>⎿</span>
+        <span>{isError ? '⚠' : '⎿'}</span>
         <div style={{ whiteSpace: 'pre-wrap', flex: 1 }}>
           {visible.join('\n')}
           {truncated && !expanded && (
@@ -424,6 +470,63 @@ function InlineResult({ content, isError }: { content: string; isError?: boolean
           )}
         </div>
       </div>
+    </div>
+  )
+}
+
+/** BBQ-backed code panel for Read results: gutter with 1-based file line
+ *  numbers (starts from startLine, supports Claude's offset= feature). */
+function ReadResultPanel({ code, startLine, isError, filePath }: {
+  code: string
+  startLine: number
+  isError?: boolean
+  filePath?: string
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const lines = code.split('\n')
+  const truncated = lines.length > DEFAULT_EXPANDED_LINES
+  const visible = expanded || !truncated ? lines : lines.slice(0, DEFAULT_EXPANDED_LINES)
+  const hidden = lines.length - DEFAULT_EXPANDED_LINES
+  const lastLineNo = startLine + visible.length - 1
+  const gutterW = String(lastLineNo).length
+  return (
+    <div style={{
+      marginTop: 4,
+      background: CRUSH.BBQ,
+      border: `1px solid ${CRUSH.Charcoal}`,
+      borderRadius: 4,
+      padding: '6px 0',
+      fontFamily: FONT_MONO, fontSize: 12,
+      color: isError ? CRUSH.Sriracha : CRUSH.Ash,
+      overflow: 'auto'
+    }}>
+      {visible.map((ln, i) => (
+        <div key={i} style={{ display: 'flex', lineHeight: 1.55, whiteSpace: 'pre' }}>
+          <span style={{
+            display: 'inline-block',
+            width: `${gutterW + 2}ch`,
+            flexShrink: 0,
+            color: CRUSH.Oyster,
+            textAlign: 'right',
+            paddingRight: 8,
+            paddingLeft: 6,
+            userSelect: 'none'
+          }}>{startLine + i}</span>
+          <span style={{ flex: 1, paddingRight: 10 }}>{ln}</span>
+        </div>
+      ))}
+      {truncated && (
+        <div style={{ padding: '4px 12px' }}>
+          <button onClick={() => setExpanded(v => !v)} style={expandBtnStyle(CRUSH.Charple)}>
+            {expanded ? '▴ Collapse' : `▾ Show ${hidden} more lines`}
+          </button>
+          {filePath && (
+            <span style={{ color: CRUSH.Oyster, fontSize: 11, marginLeft: 12 }}>
+              {filePath.split('/').slice(-2).join('/')}
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 }
