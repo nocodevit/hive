@@ -73,6 +73,28 @@ Configure global default skills for R&D and Non-R&D agents in Project Settings. 
 ### Template Editor
 Edit any template (built-in or custom) from Project Settings. Modify sections, skills, model, effort with live preview. "Save + Sync Agents" updates all agents using that role.
 
+### HiveChat — Crush-styled React chat ✨ *new in v1.7*
+
+After three dead-end pivots (handrolled ANSI parser → `@xterm/headless` → xterm decoration overlays), we finally found the right door — **`claude --print --output-format stream-json`**. Same idea [Crush](https://github.com/charmbracelet/crush) uses in Go, now in React.
+
+Each agent's chat is a structured event stream, rendered as typed components:
+
+- **Streaming typewriter** via `content_block_delta` — live token-by-token rendering
+- **Colored ToolBlocks** — Bash (Malibu blue) · Read/Edit/Grep (Julep green) · Task/Agent (Dolly pink) · Todo (Charple) · MCP (Mochi) · Web (Violet)
+- **Edit diff panel** — before/after in Julep-plus / Sriracha-minus split with gutter line numbers
+- **Syntax-highlighted Read results** via prism-react-renderer, Crush theme
+- **Markdown tables** rendered in Crush style, with code-fence highlighting
+- **Clickable choices** — numbered *and* letter (`A) ...`, `B) ...`), fullwidth parens supported
+- **Permission modal** — deny / allow-once / allow-and-remember, wired through `control_request` ⇄ `control_response` stdio handshake
+- **Real subscription %%** — scraped from interactive `/usage` TUI via node-pty, no guessing
+- **Session resume** — full JSONL replay from `~/.claude/projects/<cwd>/<sid>.jsonl`
+- **Runtime redaction** — masks `meiyang` → `m****g`, bearer tokens, common secrets
+- **Thinking spinner** — Charple → Dolly scrolling gradient, verified against Crush's `makeGradientRamp` source
+- **IME-safe enter** — no accidental send mid-pinyin composition
+- **371 tests passing** — every pure helper covered
+
+The ride was not graceful. The lessons live in `docs/slides-hivechat-journey.html` (14-slide journey deck) — 4 pivots, 40+ commits, one lost afternoon to a Zod schema we had to recover from a captured log.
+
 ### Multiple Agent Terminals
 Run N Claude Code sessions side by side. Click to switch. Each terminal persists — switch between agents without losing state. Auto-run Claude on terminal open.
 
@@ -295,9 +317,11 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [x] **File Explorer branch tag** — Shows path + 🌿 branch under File Explorer title
 - [x] **Project drag-and-drop** — Reorder projects in sidebar
 - [x] **Port lock isolation** — Dispatcher writes port.lock, dev server fully isolated
+- [x] **HiveChat — Crush-styled React chat** — `claude --print --output-format stream-json` parsed into typed ToolBlocks (Bash/Read/Edit/Grep/Todo/Web/MCP), streaming typewriter, Edit diff panel, syntax highlighting, markdown tables, clickable choices (numbered + letter), permission modal with `control_response` handshake, thinking spinner, session resume, secret redaction ([journey](docs/slides-hivechat-journey.html))
+- [x] **Real subscription %%** — node-pty scrape of interactive `/usage` TUI, event-driven refresh on `message_stop`
+- [ ] **Session-scoped slash commands in HiveChat** — `/clear`, `/compact`, `/model`, `/remote-control` via round-trip: pause `--print` → headless PTY `--resume <sid>` → drive TUI → close → re-resume in `--print`
 - [ ] **Multi-agent communication** — PTY injection + filesystem mailbox + shared task list ([plan](docs/agent-comms-plan.md))
 - [ ] **Terminal UI customization** — React overlays on xterm: task cards, diff preview, progress bars, agent messages ([plan](docs/terminal-ui-customization-plan.md))
-- [ ] **Claude Code usage/limit bar** — Estimated 4-hour usage progress bar below terminal (self-count via hooks)
 - [ ] **MCP Server** — Auto-reporting without soul instructions
 - [ ] **GNU Screen session persistence** — Terminal sessions survive app restart
 - [ ] **Notification integrations** — Slack, Telegram, WhatsApp, macOS

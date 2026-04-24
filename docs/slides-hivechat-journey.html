@@ -268,11 +268,12 @@ ul.x-list li::before { content: '✗'; color: var(--sriracha); }
 <!-- ═══════════════ SLIDE 1 · TITLE ═══════════════ -->
 <div class="slide active" id="s1">
   <div>
-    <div class="subtle">Hive · v1.0.0 → v1.6.5 · April 2026</div>
+    <div class="subtle">Hive · v1.0.0 → v1.7.23 · April 2026</div>
     <h1>The Path to <span class="accent">Pretty</span></h1>
     <h1 style="font-size:32px;color:var(--squid);font-weight:500;">How we tried every wrong way<br>to make Claude Code look like <span class="accent2">Crush</span></h1>
     <p style="margin-top:30px;color:var(--oyster);font-size:14px;">
-      10+ commits, 3 dead ends, 1 insight hiding in <code>--help</code>.
+      40+ commits, 3 dead ends, 1 insight hiding in <code>--help</code>,<br>
+      and a Zod schema that cost us one lost afternoon.
     </p>
   </div>
 </div>
@@ -509,99 +510,127 @@ directly</div>
 
 <!-- ═══════════════ SLIDE 10 · WHAT SHIPPED ═══════════════ -->
 <div class="slide" id="s10">
-  <h2>What's shipped today <span class="tag tag-ver">v1.6.5</span></h2>
+  <h2>What's shipped today <span class="tag tag-ver">v1.7.23</span></h2>
   <div class="three-col">
     <div class="card win">
       <h3>Main-process bridge</h3>
       <p><code>src/main/chat.ts</code></p>
       <ul style="font-size:12px;">
-        <li>Spawn per-agent claude subprocess</li>
-        <li>JSONL parse + IPC broadcast</li>
-        <li>Tee to <code>~/.hive/chat-logs/</code></li>
-        <li>Rebase pre-step, <code>-c</code> continue</li>
+        <li>Per-agent claude subprocess</li>
+        <li>stream-json parse + IPC broadcast</li>
+        <li><code>control_request</code> ⇄ <code>control_response</code> permission handshake</li>
+        <li>node-pty <code>/usage</code> TUI scrape → real %%</li>
+        <li>Session history replay on resume</li>
+        <li>Runtime-configurable redaction + secret masking</li>
       </ul>
     </div>
     <div class="card win">
       <h3>Renderers</h3>
       <p><code>components/hive-chat/renderers.tsx</code></p>
       <ul style="font-size:12px;">
-        <li>UserMessage · AssistantMessage</li>
-        <li>ToolBlock (Bash/Read/Edit/Grep/Todo/Web)</li>
-        <li>Inline result w/ expand-on-click</li>
-        <li>Clickable numbered choices</li>
-        <li>Markdown via <code>react-markdown</code></li>
+        <li>UserMessage (solid Dolly) · AssistantMessage · MCP cards</li>
+        <li>ToolBlock for Bash / Read / Edit / Grep / Todo / Web / MCP</li>
+        <li>Diff panel (Julep + / Sriracha −) + gutter line numbers</li>
+        <li>Syntax highlighting via prism-react-renderer</li>
+        <li>Clickable numbered <em>and</em> letter choices (A, B, 1, 2)</li>
+        <li>Thinking spinner · Charple→Dolly scroll gradient</li>
       </ul>
     </div>
     <div class="card win">
       <h3>UX polish</h3>
       <ul style="font-size:12px;">
-        <li>Dolly bar wraps call + result</li>
-        <li>Input box floats w/ content</li>
-        <li>Chat is default mode</li>
-        <li>Hive-native <code>#0f0a1a</code> deep-purple bg</li>
-        <li>Rate-limit + model status bars</li>
-        <li>Color contract in <code>CLAUDE.md</code></li>
+        <li>Streaming typewriter on <code>content_block_delta</code></li>
+        <li>Streaming-mode toggle in status bar</li>
+        <li>Permission modal · allow-once / allow-remember / deny</li>
+        <li>IME-safe enter (no accidental send mid-pinyin)</li>
+        <li>Slash-command pill · result summary card</li>
+        <li>Rate-limit + usage bars · deep-purple <code>#0f0a1a</code></li>
       </ul>
     </div>
   </div>
   <p style="margin-top:28px;color:var(--ash);">
-    <strong style="color:var(--butter)">236/236 tests pass.</strong>
+    <strong style="color:var(--butter)">371/371 tests pass.</strong>
     Term still works as fallback (suspended Pretty decoration path preserved for reference).
   </p>
 </div>
 
 <!-- ═══════════════ SLIDE 11 · VERSION TIMELINE ═══════════════ -->
 <div class="slide" id="s11">
-  <h2>Ten commits, three pivots</h2>
-  <div class="timeline">
+  <h2>Forty commits, four pivots</h2>
+  <div class="timeline" style="gap:6px;">
     <div class="row v-fail">
-      <div class="ver">v1.2.0</div><div class="date">pivot 1</div>
-      <div class="summary">Handrolled ANSI parser + React grid renderer</div>
-      <div><span class="tag tag-fail">dead end</span></div>
-    </div>
-    <div class="row v-fail">
-      <div class="ver">v1.3.x</div><div class="date">+1 day</div>
-      <div class="summary">Scrollback, CJK, IME textarea — still too slow, input broken</div>
+      <div class="ver">v1.2 → 1.3</div><div class="date">pivot 1</div>
+      <div class="summary">Handrolled ANSI parser + React grid — perf, CJK drift, IME broken</div>
       <div><span class="tag tag-fail">dead end</span></div>
     </div>
     <div class="row v-fail">
       <div class="ver">v1.4.0</div><div class="date">pivot 2</div>
-      <div class="summary">Drop handroll, use <code>@xterm/headless</code></div>
+      <div class="summary">Drop handroll, use <code>@xterm/headless</code> — still fighting pixels</div>
       <div><span class="tag tag-fail">dead end</span></div>
     </div>
     <div class="row v-fail">
-      <div class="ver">v1.5.0</div><div class="date">pivot 3</div>
-      <div class="summary">xterm.js + decoration overlays + crushify color remap</div>
+      <div class="ver">v1.5.x</div><div class="date">pivot 3</div>
+      <div class="summary">xterm + decoration overlays + crushify color remap — can't build real cards</div>
       <div><span class="tag tag-fail">dead end</span></div>
     </div>
     <div class="row v-win">
-      <div class="ver">v1.6.0</div><div class="date">pivot 4 · the real one</div>
+      <div class="ver">v1.6.0</div><div class="date">pivot 4 · real</div>
       <div class="summary"><code>claude --print --output-format stream-json</code> — HiveChat POC in ~40 min</div>
       <div><span class="tag tag-win">right path</span></div>
     </div>
     <div class="row v-win">
-      <div class="ver">v1.6.1</div><div class="date">+schema fix</div>
-      <div class="summary">Real <code>/tmp/claude-json.log</code> → dedup by msg.id, drop thinking blocks</div>
+      <div class="ver">v1.6.1–5</div><div class="date">polish</div>
+      <div class="summary">Dedup by msg.id, Dolly-bordered ToolBlock, react-markdown, clickable choices, chat = default</div>
       <div><span class="tag tag-win">polish</span></div>
     </div>
     <div class="row v-win">
-      <div class="ver">v1.6.2</div><div class="date">+status</div>
-      <div class="summary">rate-limit + model/usage bars above/below input</div>
+      <div class="ver">v1.6.6</div><div class="date">+bars</div>
+      <div class="summary">Usage % via <code>/usage</code>, Dolly progress bars, resume indicator</div>
       <div><span class="tag tag-win">polish</span></div>
     </div>
     <div class="row v-win">
-      <div class="ver">v1.6.3</div><div class="date">+cohesion</div>
-      <div class="summary">Dolly border wraps ToolBlock's call + result together</div>
+      <div class="ver">v1.7.0</div><div class="date">+stream</div>
+      <div class="summary">Streaming typewriter from <code>content_block_delta</code>, Edit diff panel</div>
+      <div><span class="tag tag-win">feature</span></div>
+    </div>
+    <div class="row v-win">
+      <div class="ver">v1.7.1–2</div><div class="date">+usage</div>
+      <div class="summary">Hook events, stdio perm, real subscription %% via node-pty TUI scrape</div>
+      <div><span class="tag tag-win">feature</span></div>
+    </div>
+    <div class="row v-win">
+      <div class="ver">v1.7.3–4</div><div class="date">+IME · tables</div>
+      <div class="summary">IME-safe enter, event-driven usage refresh, Crush markdown tables, diff gutter nums</div>
       <div><span class="tag tag-win">polish</span></div>
     </div>
     <div class="row v-win">
-      <div class="ver">v1.6.4</div><div class="date">+markdown</div>
-      <div class="summary"><code>react-markdown</code>; clickable <code>1. 2. 3.</code> inline choices</div>
-      <div><span class="tag tag-win">polish</span></div>
+      <div class="ver">v1.7.5–7</div><div class="date">+resume · syntax</div>
+      <div class="summary">Session JSONL replay, error tool results, prism highlighting, React.memo perf</div>
+      <div><span class="tag tag-win">feature</span></div>
     </div>
     <div class="row v-win">
-      <div class="ver">v1.6.5</div><div class="date">today</div>
-      <div class="summary">Chat = default mode; Term startup flags mirrored; deep-purple bg</div>
+      <div class="ver">v1.7.8–10</div><div class="date">+redact</div>
+      <div class="summary">Screen redaction, secret masking, streaming-mode toggle, scrollbar axis fix</div>
+      <div><span class="tag tag-win">feature</span></div>
+    </div>
+    <div class="row v-win">
+      <div class="ver">v1.7.11–15</div><div class="date">+refine</div>
+      <div class="summary">Status-bar cleanup, Charple↔Dolly swap, shared <code>shortenPath</code>, vitest suites grow</div>
+      <div><span class="tag tag-win">polish</span></div>
+    </div>
+    <div class="row v-fail">
+      <div class="ver">v1.7.18</div><div class="date">blood</div>
+      <div class="summary"><code>--permission-prompt-tool stdio</code> added without <code>control_response</code> — Tracy hangs 💀</div>
+      <div><span class="tag tag-fail">lost day</span></div>
+    </div>
+    <div class="row v-win">
+      <div class="ver">v1.7.19–21</div><div class="date">+fix</div>
+      <div class="summary">Zod schema recovered from captured log: <code>{updatedInput}</code> / <code>{behavior,message}</code>. Letter choices (A/B). MCP cards.</div>
+      <div><span class="tag tag-win">recovered</span></div>
+    </div>
+    <div class="row v-win">
+      <div class="ver">v1.7.20–23</div><div class="date">today</div>
+      <div class="summary">Thinking spinner · solid-Dolly user msg · Charple→Dolly scroll gradient (verified vs Crush source)</div>
       <div><span class="tag tag-win">you are here</span></div>
     </div>
   </div>
@@ -630,6 +659,10 @@ directly</div>
     <div class="what">5. <span style="color:var(--dolly)">Keep dead paths, but label them.</span></div>
     <div class="why"><code>pretty-term/SUSPENDED.md</code> explains what it was, why it didn't ship, and what's salvageable. Future-you (or a new teammate) doesn't have to read ten commits to learn the same lesson.</div>
   </div>
+  <div class="lesson">
+    <div class="what">6. <span style="color:var(--dolly)">If the subprocess blocks silently, it's waiting for a reply you didn't send.</span></div>
+    <div class="why">v1.7.18: we wired <code>--permission-prompt-tool stdio</code> without implementing <code>control_response</code>. Tracy hung mid-session with zero errors. A whole afternoon lost. The fix was a Zod schema (<code>{updatedInput}</code> / <code>{behavior,message}</code>) we eventually recovered from a captured log. When a handshake is opt-in, the silent-hang mode is always on by default.</div>
+  </div>
 </div>
 
 <!-- ═══════════════ SLIDE 13 · WHAT'S NEXT ═══════════════ -->
@@ -639,21 +672,20 @@ directly</div>
     <div>
       <h3 style="color:var(--julep)">Near term</h3>
       <ul>
-        <li><strong>Permission modal</strong> — Bash/Write approval via <code>permission_request</code> hook events</li>
-        <li><strong>Diff viewer</strong> — Edit tool's before/after in Julep/Sriracha split pane</li>
-        <li><strong>Code syntax highlighting</strong> — Read results via chroma/highlight.js</li>
-        <li><strong><code>/usage</code> on startup</strong> → 5h/7d % filled in the status bar</li>
-        <li><strong>File-link click</strong> → <code>fs.revealInFinder</code></li>
+        <li><strong>Session-scoped slash commands</strong> — <code>/clear</code>, <code>/compact</code>, <code>/model</code>, <code>/remote-control</code>. Plan: pause <code>--print</code>, spawn headless PTY with <code>--resume &lt;sid&gt;</code>, drive the TUI, close, re-resume in <code>--print</code></li>
+        <li><strong>File-link click</strong> → <code>fs.revealInFinder</code> / open in editor</li>
+        <li><strong>Copy / regenerate / edit</strong> user messages</li>
+        <li><strong>Desktop notification</strong> on response complete</li>
       </ul>
     </div>
     <div>
       <h3 style="color:var(--zest)">Medium term</h3>
       <ul>
-        <li><strong>Streaming typewriter</strong> — hook into <code>content_block_delta</code> for live typing</li>
-        <li><strong>Session management</strong> — list <code>~/.hive/chat-logs/</code>, resume any session</li>
+        <li><strong>Session browser</strong> — list <code>~/.claude/projects/&lt;cwd&gt;/*.jsonl</code>, one-click resume</li>
         <li><strong>Search history</strong> across all captured chats</li>
-        <li><strong>Copy / regenerate / edit</strong> user messages</li>
-        <li><strong>Desktop notification</strong> on response complete</li>
+        <li><strong>Multi-agent chat view</strong> — HiveChat per Worker, side-by-side</li>
+        <li><strong>Plan mode / thinking budget</strong> — UI to pick reasoning depth per turn</li>
+        <li><strong>Custom slash-command dropdown</strong> — read <code>~/.claude/commands/*.md</code>, expand to prompt client-side</li>
       </ul>
     </div>
   </div>
@@ -682,7 +714,7 @@ directly</div>
       so far so right.
     </p>
     <div style="margin-top:40px;color:var(--oyster);font-size:11px;">
-      Hive v1.6.5 · integration/batch-1 · April 2026
+      Hive v1.7.23 · integration/batch-1 · April 2026
     </div>
   </div>
 </div>
