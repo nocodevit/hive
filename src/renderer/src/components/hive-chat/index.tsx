@@ -370,8 +370,21 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         )}
       </div>
 
-      {/* Rate-limit status line — sits just above input, updates live */}
-      <RateLimitBar info={rateLimit} />
+      {/* Rate-limit status line — sits just above input, updates live.
+         When no rate_limit_event has arrived yet, shows a subdued
+         "waiting for first message…" so the user knows Chat is live
+         but nothing's happened yet. */}
+      {rateLimit ? (
+        <RateLimitBar info={rateLimit} />
+      ) : !modelName ? (
+        <div style={{
+          padding: '4px 12px',
+          borderTop: `1px solid ${CRUSH.Charcoal}`,
+          background: CRUSH.BBQ,
+          fontFamily: FONT_MONO, fontSize: 11,
+          color: CRUSH.Oyster
+        }}>waiting for first message…</div>
+      ) : null}
 
       {/* Input box */}
       <div style={{
@@ -543,14 +556,12 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
       display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
       color: CRUSH.Squid
     }}>
-      {modelName ? (
+      {modelName && (
         <>
           <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{modelName}</span>
           {contextSize && <span style={{ color: CRUSH.Squid }}>({contextSize})</span>}
           <span style={{ color: CRUSH.Oyster }}>|</span>
         </>
-      ) : (
-        <span style={{ color: CRUSH.Oyster }}>waiting for first message…</span>
       )}
       {/* Subscription tier %% (scraped from /usage TUI) */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -567,23 +578,10 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
           {usage.sevenDay != null ? `${usage.sevenDay}%` : '—'}
         </span>
       </span>
-      {/* Cost/burn (from ccusage) — secondary info */}
-      {usage.costUSD != null && (
-        <>
-          <span style={{ color: CRUSH.Oyster }}>|</span>
-          <span>{fmtUsd(usage.costUSD)}</span>
-        </>
-      )}
-      {usage.burnPerHour != null && (
+      {eta && (
         <>
           <span style={{ color: CRUSH.Oyster }}>·</span>
-          <span>{fmtUsd(usage.burnPerHour)}/hr</span>
-        </>
-      )}
-      {usage.projectedUSD != null && eta && (
-        <>
-          <span style={{ color: CRUSH.Oyster }}>·</span>
-          <span>{eta} left</span>
+          <span>{eta} left in 5h block</span>
         </>
       )}
       <span style={{ marginLeft: 'auto' }} />
