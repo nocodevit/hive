@@ -10,9 +10,30 @@ const DEFAULT_EXPANDED_LINES = 12
 const MD_COMPONENTS: Record<string, any> = {
   strong: ({ children }: any) => <strong style={{ color: CRUSH.Butter, fontWeight: 700 }}>{children}</strong>,
   em: ({ children }: any) => <em style={{ color: CRUSH.Ash, fontStyle: 'italic' }}>{children}</em>,
-  code: ({ inline, children }: any) => inline
-    ? <code style={{ color: CRUSH.Bok, background: CRUSH.BBQ, padding: '0 4px', borderRadius: 3, fontFamily: FONT_MONO }}>{children}</code>
-    : <pre style={{ background: CRUSH.BBQ, border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 4, padding: '8px 12px', fontSize: 12, overflow: 'auto', color: CRUSH.Ash, margin: '4px 0' }}><code style={{ fontFamily: FONT_MONO }}>{children}</code></pre>,
+  // react-markdown v10 dropped the `inline` prop — we detect inline vs block by
+  // className (fenced blocks get `language-*`) or newline presence. Inline
+  // gets the little Bok chip; block gets a BBQ panel with left Charple bar.
+  code: ({ className, children }: any) => {
+    const text = React.Children.toArray(children).map(String).join('')
+    const isBlock = !!className || text.includes('\n')
+    if (isBlock) {
+      return <code style={{ fontFamily: FONT_MONO, color: CRUSH.Ash, display: 'block' }}>{children}</code>
+    }
+    return <code style={{ color: CRUSH.Bok, background: CRUSH.BBQ, padding: '0 4px', borderRadius: 3, fontFamily: FONT_MONO, fontSize: 12 }}>{children}</code>
+  },
+  pre: ({ children }: any) => (
+    <pre style={{
+      background: CRUSH.BBQ,
+      borderLeft: `3px solid ${CRUSH.Charple}`,
+      borderRadius: 4,
+      padding: '8px 12px',
+      fontSize: 12,
+      overflow: 'auto',
+      color: CRUSH.Ash,
+      margin: '4px 0',
+      fontFamily: FONT_MONO
+    }}>{children}</pre>
+  ),
   ul: ({ children }: any) => <ul style={{ paddingLeft: 18, margin: '4px 0' }}>{children}</ul>,
   ol: ({ children }: any) => <ol style={{ paddingLeft: 18, margin: '4px 0' }}>{children}</ol>,
   li: ({ children }: any) => <li style={{ color: CRUSH.Ash, marginBottom: 2 }}>{children}</li>,
@@ -215,7 +236,9 @@ function ToolHeader({ name, input }: { name: string; input: Record<string, unkno
   if (name === 'TodoWrite') return <TodoInline input={input} />
   if (name === 'Bash') return <HeaderLine tool={name} color={CRUSH.Malibu} tail={String(input.command ?? '').replace(/\n/g, ' ').slice(0, 200)} tailStyle="ash" />
   if (name === 'Read' || name === 'View') return <HeaderLine tool="Read" color={CRUSH.Bok} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
-  if (name === 'Edit' || name === 'Write' || name === 'MultiEdit') return <HeaderLine tool={name} color={CRUSH.Julep} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
+  if (name === 'Edit') return <EditHeader input={input} />
+  if (name === 'MultiEdit') return <MultiEditHeader input={input} />
+  if (name === 'Write') return <HeaderLine tool="Write" color={CRUSH.Julep} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
   if (name === 'Grep' || name === 'Glob') {
     const pattern = String(input.pattern ?? input.query ?? '')
     const glob = String(input.glob ?? input.include ?? '')
@@ -224,6 +247,83 @@ function ToolHeader({ name, input }: { name: string; input: Record<string, unkno
   if (name === 'Task' || name === 'Agent') return <HeaderLine tool={name} color={CRUSH.Dolly} tail={argSummary(input)} tailStyle="ash" />
   if (name === 'WebFetch' || name === 'WebSearch') return <HeaderLine tool={name} color={CRUSH.Violet} tail={String(input.url ?? input.query ?? '')} tailStyle="link" />
   return <HeaderLine tool={name} color={toolColor(name)} tail={argSummary(input)} tailStyle="ash" />
+}
+
+/* Edit tool — header + side-by-side old/new diff from input.old_string / input.new_string */
+function EditHeader({ input }: { input: Record<string, unknown> }) {
+  const file = String(input.file_path ?? input.path ?? '')
+  const oldStr = String(input.old_string ?? '')
+  const newStr = String(input.new_string ?? '')
+  return (
+    <div>
+      <HeaderLine tool="Edit" color={CRUSH.Julep} tail={file} tailStyle="link" />
+      {(oldStr || newStr) && <DiffPanel oldStr={oldStr} newStr={newStr} />}
+    </div>
+  )
+}
+
+function MultiEditHeader({ input }: { input: Record<string, unknown> }) {
+  const file = String(input.file_path ?? input.path ?? '')
+  const edits = Array.isArray(input.edits) ? (input.edits as Array<{ old_string?: string; new_string?: string }>) : []
+  return (
+    <div>
+      <HeaderLine tool="MultiEdit" color={CRUSH.Julep} tail={`${file} · ${edits.length} edit${edits.length === 1 ? '' : 's'}`} tailStyle="link" />
+      {edits.map((e, i) => (
+        <DiffPanel key={i} oldStr={String(e.old_string ?? '')} newStr={String(e.new_string ?? '')} />
+      ))}
+    </div>
+  )
+}
+
+/** Simple side-by-side-ish diff: each line of old_string prefixed with -,
+ * each of new_string with +. Lines that are identical in both stay neutral.
+ * Not a real LCS — Claude's old_string is usually a short unique anchor so
+ * the trivial per-line rendering reads fine. */
+function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
+  if (!oldStr && !newStr) return null
+  const oldLines = oldStr.split('\n')
+  const newLines = newStr.split('\n')
+  const oldSet = new Set(oldLines)
+  const newSet = new Set(newLines)
+  return (
+    <div style={{
+      margin: '6px 0 2px',
+      fontFamily: FONT_MONO, fontSize: 12,
+      background: CRUSH.BBQ,
+      borderRadius: 4,
+      padding: '4px 0',
+      overflow: 'auto'
+    }}>
+      {oldLines.map((ln, i) => {
+        const unchanged = newSet.has(ln)
+        return (
+          <div key={`o${i}`} style={{
+            display: 'flex', padding: '0 10px',
+            background: unchanged ? 'transparent' : 'rgba(235,66,104,0.08)',
+            color: unchanged ? CRUSH.Squid : CRUSH.Sriracha,
+            whiteSpace: 'pre', lineHeight: 1.5
+          }}>
+            <span style={{ width: 16, flexShrink: 0, color: unchanged ? CRUSH.Oyster : CRUSH.Sriracha }}>{unchanged ? ' ' : '-'}</span>
+            <span>{ln}</span>
+          </div>
+        )
+      })}
+      {newLines.map((ln, i) => {
+        if (oldSet.has(ln)) return null // already shown above
+        return (
+          <div key={`n${i}`} style={{
+            display: 'flex', padding: '0 10px',
+            background: 'rgba(0,255,178,0.08)',
+            color: CRUSH.Julep,
+            whiteSpace: 'pre', lineHeight: 1.5
+          }}>
+            <span style={{ width: 16, flexShrink: 0 }}>+</span>
+            <span>{ln}</span>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function HeaderLine({ tool, color, tail, tailStyle }: { tool: string; color: string; tail: string; tailStyle: 'ash' | 'link' }) {
