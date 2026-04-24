@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-
-interface Cell {
+export interface Cell {
   char: string
   fg?: string
   bg?: string
@@ -11,7 +9,7 @@ interface Cell {
   inverse?: boolean
 }
 
-interface Attrs {
+export interface Attrs {
   fg?: string
   bg?: string
   bold: boolean
@@ -21,17 +19,17 @@ interface Attrs {
   inverse: boolean
 }
 
-const BASE_COLORS = [
+export const CRUSH_BASE_COLORS = [
   '#201F26', '#EB4268', '#00FFB2', '#E8FE96',
   '#00A4FF', '#FF60FF', '#68FFD6', '#DFDBDD'
 ]
-const BRIGHT_COLORS = [
+export const CRUSH_BRIGHT_COLORS = [
   '#605F6B', '#FF577D', '#68FFD6', '#FFFAF1',
   '#4FBEFE', '#FF84FF', '#5CDFEA', '#F1EFEF'
 ]
 
-function color256(n: number): string {
-  if (n < 16) return (n < 8 ? BASE_COLORS : BRIGHT_COLORS)[n % 8]
+export function color256(n: number): string {
+  if (n < 16) return (n < 8 ? CRUSH_BASE_COLORS : CRUSH_BRIGHT_COLORS)[n % 8]
   if (n >= 232) {
     const g = 8 + (n - 232) * 10
     return `rgb(${g},${g},${g})`
@@ -44,43 +42,71 @@ function color256(n: number): string {
   return `rgb(${to(r)},${to(g)},${to(b)})`
 }
 
-class AnsiParser {
+function emptyCell(): Cell {
+  return { char: ' ' }
+}
+
+function emptyAttrs(): Attrs {
+  return { bold: false, dim: false, italic: false, underline: false, inverse: false }
+}
+
+/**
+ * VT100-ish ANSI parser that maintains a viewport grid (rows x cols) plus a
+ * scrollback ring buffer of lines that have scrolled off the top.
+ *
+ * Supports the subset Claude Code actually emits: SGR (16/256/RGB colors +
+ * bold/dim/italic/underline/inverse), cursor moves (A/B/C/D/E/F/G/H/f/d),
+ * erase (J/K/X), insert/delete lines/chars, scroll up/down, save/restore,
+ * OSC (ignored through ST/BEL). Drops alternate screen and mouse tracking.
+ */
+export class AnsiParser {
   rows: number
   cols: number
+  scrollbackLimit: number
+
   buffer: Cell[][] = []
+  scrollback: Cell[][] = []
   cursor = { row: 0, col: 0 }
-  attrs: Attrs = { bold: false, dim: false, italic: false, underline: false, inverse: false }
+  attrs: Attrs = emptyAttrs()
+
   private state: 'ground' | 'esc' | 'csi' | 'osc' = 'ground'
   private params = ''
   private savedCursor: { row: number; col: number } | null = null
 
-  constructor(rows: number, cols: number) {
+  constructor(rows = 24, cols = 80, scrollbackLimit = 5000) {
     this.rows = rows
     this.cols = cols
+    this.scrollbackLimit = scrollbackLimit
     this.resetBuffer()
   }
 
   resize(rows: number, cols: number) {
+    if (rows === this.rows && cols === this.cols) return
+    // Preserve existing content by reflowing row-by-row (simple approach: pad/truncate).
+    const oldRows = this.buffer
     this.rows = rows
     this.cols = cols
-    while (this.buffer.length < rows) this.buffer.push(this.blankRow())
-    this.buffer.length = rows
-    for (const row of this.buffer) {
-      while (row.length < cols) row.push(this.blank())
-      row.length = cols
-    }
+    this.buffer = Array.from({ length: rows }, (_, r) => {
+      const src = oldRows[r]
+      if (!src) return this.blankRow()
+      const row = src.slice(0, cols)
+      while (row.length < cols) row.push(emptyCell())
+      return row
+    })
     this.cursor.row = Math.min(this.cursor.row, rows - 1)
     this.cursor.col = Math.min(this.cursor.col, cols - 1)
   }
 
-  private blank(): Cell { return { char: ' ' } }
   private blankRow(): Cell[] {
-    return Array.from({ length: this.cols }, () => this.blank())
-  }
-  private resetBuffer() {
-    this.buffer = Array.from({ length: this.rows }, () => this.blankRow())
+    return Array.from({ length: this.cols }, () => emptyCell())
   }
 
+  private resetBuffer() {
+    this.buffer = Array.from({ length: this.rows }, () => this.blankRow())
+    this.cursor = { row: 0, col: 0 }
+  }
+
+  /** Feed bytes. Safe to call with any string chunk size. */
   feed(data: string) {
     for (let i = 0; i < data.length; i++) {
       const c = data[i]
@@ -105,6 +131,7 @@ class AnsiParser {
           if (this.savedCursor) this.cursor = { ...this.savedCursor }
           this.state = 'ground'; continue
         }
+        // Character set designators (() * +), DECPAM/DECPNM (= >), RIS (c) — ignore.
         this.state = 'ground'
       } else if (this.state === 'csi') {
         if (code >= 0x30 && code <= 0x3F) { this.params += c; continue }
@@ -113,10 +140,12 @@ class AnsiParser {
           this.state = 'ground'
           continue
         }
+        // Out of spec — bail.
         this.state = 'ground'
       } else if (this.state === 'osc') {
         if (c === '\x07') { this.state = 'ground'; continue }
         if (c === '\x1b' && data[i + 1] === '\\') { i++; this.state = 'ground'; continue }
+        // swallow
       }
     }
   }
@@ -142,7 +171,11 @@ class AnsiParser {
     if (this.cursor.row < this.rows - 1) {
       this.cursor.row++
     } else {
-      this.buffer.shift()
+      const evicted = this.buffer.shift()
+      if (evicted) {
+        this.scrollback.push(evicted)
+        if (this.scrollback.length > this.scrollbackLimit) this.scrollback.shift()
+      }
       this.buffer.push(this.blankRow())
     }
   }
@@ -203,11 +236,11 @@ class AnsiParser {
     const row = this.buffer[this.cursor.row]
     if (!row) return
     if (mode === 0) {
-      for (let c = this.cursor.col; c < this.cols; c++) row[c] = this.blank()
+      for (let c = this.cursor.col; c < this.cols; c++) row[c] = emptyCell()
     } else if (mode === 1) {
-      for (let c = 0; c <= this.cursor.col; c++) row[c] = this.blank()
+      for (let c = 0; c <= this.cursor.col; c++) row[c] = emptyCell()
     } else if (mode === 2) {
-      for (let c = 0; c < this.cols; c++) row[c] = this.blank()
+      for (let c = 0; c < this.cols; c++) row[c] = emptyCell()
     }
   }
 
@@ -215,14 +248,14 @@ class AnsiParser {
     const row = this.buffer[this.cursor.row]
     if (!row) return
     const end = Math.min(this.cols, this.cursor.col + n)
-    for (let c = this.cursor.col; c < end; c++) row[c] = this.blank()
+    for (let c = this.cursor.col; c < end; c++) row[c] = emptyCell()
   }
 
   private deleteChars(n: number) {
     const row = this.buffer[this.cursor.row]
     if (!row) return
     row.splice(this.cursor.col, n)
-    while (row.length < this.cols) row.push(this.blank())
+    while (row.length < this.cols) row.push(emptyCell())
   }
 
   private insertLines(n: number) {
@@ -241,7 +274,11 @@ class AnsiParser {
 
   private scrollUp(n: number) {
     for (let k = 0; k < n; k++) {
-      this.buffer.shift()
+      const evicted = this.buffer.shift()
+      if (evicted) {
+        this.scrollback.push(evicted)
+        if (this.scrollback.length > this.scrollbackLimit) this.scrollback.shift()
+      }
       this.buffer.push(this.blankRow())
     }
   }
@@ -259,9 +296,8 @@ class AnsiParser {
     let i = 0
     while (i < params.length) {
       const v = params[i] ?? 0
-      if (v === 0) {
-        this.attrs = { bold: false, dim: false, italic: false, underline: false, inverse: false }
-      } else if (v === 1) this.attrs.bold = true
+      if (v === 0) this.attrs = emptyAttrs()
+      else if (v === 1) this.attrs.bold = true
       else if (v === 2) this.attrs.dim = true
       else if (v === 3) this.attrs.italic = true
       else if (v === 4) this.attrs.underline = true
@@ -270,7 +306,7 @@ class AnsiParser {
       else if (v === 23) this.attrs.italic = false
       else if (v === 24) this.attrs.underline = false
       else if (v === 27) this.attrs.inverse = false
-      else if (v >= 30 && v <= 37) this.attrs.fg = BASE_COLORS[v - 30]
+      else if (v >= 30 && v <= 37) this.attrs.fg = CRUSH_BASE_COLORS[v - 30]
       else if (v === 38) {
         if (params[i + 1] === 5) {
           this.attrs.fg = color256(params[i + 2] ?? 0)
@@ -281,7 +317,7 @@ class AnsiParser {
           i += 4
         }
       } else if (v === 39) this.attrs.fg = undefined
-      else if (v >= 40 && v <= 47) this.attrs.bg = BASE_COLORS[v - 40]
+      else if (v >= 40 && v <= 47) this.attrs.bg = CRUSH_BASE_COLORS[v - 40]
       else if (v === 48) {
         if (params[i + 1] === 5) {
           this.attrs.bg = color256(params[i + 2] ?? 0)
@@ -292,137 +328,19 @@ class AnsiParser {
           i += 4
         }
       } else if (v === 49) this.attrs.bg = undefined
-      else if (v >= 90 && v <= 97) this.attrs.fg = BRIGHT_COLORS[v - 90]
-      else if (v >= 100 && v <= 107) this.attrs.bg = BRIGHT_COLORS[v - 100]
+      else if (v >= 90 && v <= 97) this.attrs.fg = CRUSH_BRIGHT_COLORS[v - 90]
+      else if (v >= 100 && v <= 107) this.attrs.bg = CRUSH_BRIGHT_COLORS[v - 100]
       i++
     }
   }
-}
 
-function cellKey(cell: Cell): string {
-  return [
-    cell.fg || '',
-    cell.bg || '',
-    cell.bold ? 'b' : '',
-    cell.dim ? 'd' : '',
-    cell.italic ? 'i' : '',
-    cell.underline ? 'u' : '',
-    cell.inverse ? 'v' : ''
-  ].join('|')
-}
-
-function styleFromKey(key: string): React.CSSProperties {
-  const [fg, bg, b, d, it, u, v] = key.split('|')
-  const s: React.CSSProperties = {}
-  let foreground = fg || undefined
-  let background = bg || undefined
-  if (v) {
-    const tmp = foreground
-    foreground = background || '#201F26'
-    background = tmp || '#DFDBDD'
+  /** All visible + scrollback rows, in order. Each row is cloned. */
+  allRows(): Cell[][] {
+    return [...this.scrollback, ...this.buffer].map(r => r.slice())
   }
-  if (foreground) s.color = foreground
-  if (background) s.background = background
-  if (b) s.fontWeight = 700
-  if (d) s.opacity = 0.6
-  if (it) s.fontStyle = 'italic'
-  if (u) s.textDecoration = 'underline'
-  return s
-}
 
-export default function ClaudeTerm({
-  id,
-  visible,
-  rows = 24,
-  cols = 80
-}: {
-  id: string
-  visible: boolean
-  rows?: number
-  cols?: number
-}) {
-  const parserRef = useRef<AnsiParser | null>(null)
-  const pendingRef = useRef<string>('')
-  const rafRef = useRef<number | null>(null)
-  const [, setTick] = useState(0)
-
-  if (!parserRef.current) parserRef.current = new AnsiParser(rows, cols)
-
-  useEffect(() => {
-    const parser = parserRef.current!
-    if (parser.rows !== rows || parser.cols !== cols) parser.resize(rows, cols)
-  }, [rows, cols])
-
-  useEffect(() => {
-    const scheduleFlush = () => {
-      if (rafRef.current != null) return
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = null
-        if (pendingRef.current) {
-          parserRef.current!.feed(pendingRef.current)
-          pendingRef.current = ''
-          setTick(t => t + 1)
-        }
-      })
-    }
-
-    const unsubscribe = window.api.pty.onData(id, (data: string) => {
-      pendingRef.current += data
-      scheduleFlush()
-    })
-
-    return () => {
-      unsubscribe()
-      if (rafRef.current != null) cancelAnimationFrame(rafRef.current)
-    }
-  }, [id])
-
-  const parser = parserRef.current!
-
-  const rendered = useMemo(() => {
-    return parser.buffer.map((row, r) => {
-      const segments: { key: string; text: string }[] = []
-      let currentKey = ''
-      let currentText = ''
-      for (const cell of row) {
-        const k = cellKey(cell)
-        if (k === currentKey) {
-          currentText += cell.char
-        } else {
-          if (currentText) segments.push({ key: currentKey, text: currentText })
-          currentKey = k
-          currentText = cell.char
-        }
-      }
-      if (currentText) segments.push({ key: currentKey, text: currentText })
-      return { r, segments }
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [parser.buffer, parser.cursor.row, parser.cursor.col, visible])
-
-  return (
-    <div
-      style={{
-        width: '100%',
-        height: '100%',
-        background: '#201F26',
-        color: '#DFDBDD',
-        fontFamily: '"JetBrains Mono", "Noto Mono for Powerline", Menlo, Monaco, monospace',
-        fontSize: 13,
-        lineHeight: 1.3,
-        overflow: 'auto',
-        padding: '8px 12px',
-        whiteSpace: 'pre',
-        fontVariantLigatures: 'none'
-      }}
-    >
-      {rendered.map(({ r, segments }) => (
-        <div key={r} style={{ minHeight: '1.3em' }}>
-          {segments.map((seg, i) => (
-            <span key={i} style={styleFromKey(seg.key)}>{seg.text}</span>
-          ))}
-        </div>
-      ))}
-    </div>
-  )
+  /** Row as plain text (trimmed trailing spaces). */
+  rowToText(row: Cell[]): string {
+    return row.map(c => c.char).join('').replace(/\s+$/, '')
+  }
 }
