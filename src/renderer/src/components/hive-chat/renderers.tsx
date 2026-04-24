@@ -796,15 +796,30 @@ export function ThinkingSpinner({ since }: { since: number }) {
   const verb = pickVerb(Math.floor(since / 1000))
   const glyph = glyphAt(tick)
   const secs = elapsedSec(since, Date.now())
+  // Charple → Dolly → Charple → Dolly ramp scrolling horizontally —
+  // matches Crush's anim GradColorA/GradColorB + CycleColors=true (see
+  // /tmp/crush/internal/ui/anim/anim.go makeGradientRamp width*3 A→B→A→B).
+  // Pure CSS via background-clip:text so the glyph + verb share the
+  // same moving gradient without per-char JS work.
+  const gradStyle: React.CSSProperties = {
+    background: `linear-gradient(90deg, ${CRUSH.Charple}, ${CRUSH.Dolly}, ${CRUSH.Charple}, ${CRUSH.Dolly})`,
+    backgroundSize: '400% 100%',
+    WebkitBackgroundClip: 'text',
+    backgroundClip: 'text',
+    color: 'transparent',
+    WebkitTextFillColor: 'transparent',
+    animation: 'thinking-grad 2s linear infinite',
+    fontWeight: 700
+  }
   return (
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
       padding: '8px 4px',
-      color: CRUSH.Squid,
       fontFamily: FONT_MONO, fontSize: 13
     }}>
-      <span style={{ color: CRUSH.Sriracha, fontWeight: 700, width: 14, textAlign: 'center' }}>{glyph}</span>
-      <span style={{ color: CRUSH.Sriracha, fontWeight: 600 }}>{verb}…</span>
+      <style>{`@keyframes thinking-grad { 0% { background-position: 0% 50%; } 100% { background-position: 400% 50%; } }`}</style>
+      <span style={{ ...gradStyle, width: 14, textAlign: 'center', display: 'inline-block' }}>{glyph}</span>
+      <span style={gradStyle}>{verb}…</span>
       <span style={{ color: CRUSH.Oyster, fontSize: 11 }}>{secs}s</span>
     </div>
   )
