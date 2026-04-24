@@ -1,7 +1,31 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO } from './crush-styles'
 import { TimelineRow } from './renderers'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
+
+/** Isolated subtree so the timeline doesn't re-render on every keystroke
+ *  in the input box — only when the timeline array itself or `onChoose`
+ *  reference change. */
+const TimelineList = React.memo(function TimelineList({ timeline, onChoose }: {
+  timeline: TimelineEntry[]
+  onChoose: (pick: string) => void
+}) {
+  const resultsByToolUseId = useMemo(() => {
+    const m = new Map<string, { content: string; isError?: boolean }>()
+    for (const e of timeline) {
+      if (e.kind === 'tool_result') m.set(e.toolUseId, { content: e.content, isError: e.isError })
+    }
+    return m
+  }, [timeline])
+  return (
+    <>
+      {timeline.map(entry => {
+        const result = entry.kind === 'tool_call' ? resultsByToolUseId.get(entry.toolUseId) : undefined
+        return <TimelineRow key={entry.id} entry={entry} result={result} onChoose={onChoose} />
+      })}
+    </>
+  )
+})
 
 interface Props {
   id: string
@@ -247,6 +271,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setSending(false)
   }
 
+  const handleChoose = useCallback((pick: string) => {
+    addEntry({ kind: 'user', text: pick })
+    window.api.chat.send(id, pick)
+  }, [id])
+
   if (!visible) return null
 
   return (
@@ -283,20 +312,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             )}
           </div>
         )}
-        {(() => {
-          const resultsByToolUseId = new Map<string, { content: string; isError?: boolean }>()
-          for (const e of timeline) {
-            if (e.kind === 'tool_result') resultsByToolUseId.set(e.toolUseId, { content: e.content, isError: e.isError })
-          }
-          const handleChoose = (pick: string) => {
-            // Clicking a numbered choice sends the full line as the next user message.
-            addEntry({ kind: 'user', text: pick })
-            window.api.chat.send(id, pick)
-          }
-          return timeline.map(entry => (
-            <TimelineRow key={entry.id} entry={entry} resultsByToolUseId={resultsByToolUseId} onChoose={handleChoose} />
-          ))
-        })()}
+        <TimelineList timeline={timeline} onChoose={handleChoose} />
         {exited !== null && (
           <div style={{ color: CRUSH.Sriracha, fontSize: 11, marginTop: 12, padding: 4 }}>
             claude exited (code {exited})

@@ -1,23 +1,82 @@
 import React, { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { Highlight, themes } from 'prism-react-renderer'
 import { CRUSH, FONT_MONO, TOOL_COLORS } from './crush-styles'
 import type { TimelineEntry } from './types'
 
 const DEFAULT_EXPANDED_LINES = 12
+const LONG_ASSISTANT_THRESHOLD = 30
+
+/** Map common file extensions to Prism language IDs. Falls back to "markup". */
+function langFromPath(path?: string): string {
+  if (!path) return 'markup'
+  const m = path.match(/\.([a-zA-Z0-9]+)$/)
+  if (!m) return 'markup'
+  const ext = m[1].toLowerCase()
+  const map: Record<string, string> = {
+    ts: 'tsx', tsx: 'tsx', js: 'jsx', jsx: 'jsx', mjs: 'jsx', cjs: 'jsx',
+    py: 'python', rb: 'ruby', go: 'go', rs: 'rust',
+    java: 'java', kt: 'kotlin', swift: 'swift', scala: 'scala',
+    c: 'c', cpp: 'cpp', cc: 'cpp', h: 'c', hpp: 'cpp',
+    cs: 'csharp', php: 'php',
+    sql: 'sql', sh: 'bash', bash: 'bash', zsh: 'bash',
+    yaml: 'yaml', yml: 'yaml', json: 'json', toml: 'toml',
+    html: 'markup', xml: 'markup', svg: 'markup', vue: 'markup',
+    css: 'css', scss: 'scss', less: 'less',
+    md: 'markdown', markdown: 'markdown',
+    dockerfile: 'docker'
+  }
+  return map[ext] || 'markup'
+}
+
+/** Crush-palette syntax theme for prism-react-renderer. */
+const CRUSH_PRISM_THEME = {
+  plain: { color: CRUSH.Ash, backgroundColor: 'transparent' },
+  styles: [
+    { types: ['comment', 'prolog', 'doctype', 'cdata'], style: { color: CRUSH.Oyster, fontStyle: 'italic' } },
+    { types: ['punctuation'], style: { color: CRUSH.Zest } },
+    { types: ['property', 'tag', 'boolean', 'number', 'constant', 'symbol', 'deleted'], style: { color: CRUSH.Blush } },
+    { types: ['selector', 'attr-name', 'string', 'char', 'inserted'], style: { color: CRUSH.Cumin } },
+    { types: ['operator', 'entity', 'url'], style: { color: CRUSH.Salmon } },
+    { types: ['atrule', 'attr-value', 'keyword'], style: { color: CRUSH.Malibu } },
+    { types: ['function', 'class-name'], style: { color: CRUSH.Guac } },
+    { types: ['regex', 'important', 'variable'], style: { color: CRUSH.Zest } },
+    { types: ['important', 'bold'], style: { fontWeight: 'bold' as const } },
+    { types: ['italic'], style: { fontStyle: 'italic' as const } }
+  ]
+}
 
 /** Crush-styled markdown renderer shared by user + assistant messages. */
 const MD_COMPONENTS: Record<string, any> = {
   strong: ({ children }: any) => <strong style={{ color: CRUSH.Butter, fontWeight: 700 }}>{children}</strong>,
   em: ({ children }: any) => <em style={{ color: CRUSH.Ash, fontStyle: 'italic' }}>{children}</em>,
-  // react-markdown v10 dropped the `inline` prop — we detect inline vs block by
-  // className (fenced blocks get `language-*`) or newline presence. Inline
-  // gets the little Bok chip; block gets a BBQ panel with left Charple bar.
   code: ({ className, children }: any) => {
     const text = React.Children.toArray(children).map(String).join('')
     const isBlock = !!className || text.includes('\n')
     if (isBlock) {
-      return <code style={{ fontFamily: FONT_MONO, color: CRUSH.Ash, display: 'block' }}>{children}</code>
+      // Syntax-highlight the block using the className's "language-xxx" hint.
+      const lang = className?.match(/language-(\S+)/)?.[1] || 'markup'
+      const code = text.replace(/\n$/, '')
+      return (
+        <Highlight code={code} language={lang as any} theme={CRUSH_PRISM_THEME as any}>
+          {({ tokens, getLineProps, getTokenProps }) => (
+            <code style={{ fontFamily: FONT_MONO, display: 'block' }}>
+              {tokens.map((line, i) => {
+                const { key: lineKey, ...lineRest } = getLineProps({ line })
+                return (
+                  <div key={i} {...lineRest}>
+                    {line.map((token, j) => {
+                      const { key: tokenKey, ...tokenRest } = getTokenProps({ token })
+                      return <span key={j} {...tokenRest} />
+                    })}
+                  </div>
+                )
+              })}
+            </code>
+          )}
+        </Highlight>
+      )
     }
     return <code style={{ color: CRUSH.Bok, background: CRUSH.BBQ, padding: '0 4px', borderRadius: 3, fontFamily: FONT_MONO, fontSize: 12 }}>{children}</code>
   },
@@ -443,9 +502,27 @@ function InlineResult({ content, isError, tool, input }: {
   }
 
   const allLines = content.split('\n')
-  const truncated = allLines.length > DEFAULT_EXPANDED_LINES
-  const visible = expanded || !truncated ? allLines : allLines.slice(0, DEFAULT_EXPANDED_LINES)
-  const hidden = allLines.length - DEFAULT_EXPANDED_LINES
+  // Collapse if either the line count OR the raw character length is large.
+  // Bash results like `ps aux` often have only ~4 logical lines but each is
+  // 400+ chars — they wrap visually and dominate the screen.
+  const MAX_CHARS = 1200
+  const byLines = allLines.length > DEFAULT_EXPANDED_LINES
+  const byChars = content.length > MAX_CHARS
+  const truncated = byLines || byChars
+  let visibleContent: string
+  let hidden = 0
+  if (!truncated || expanded) {
+    visibleContent = content
+  } else if (byChars) {
+    visibleContent = content.slice(0, MAX_CHARS)
+    hidden = content.length - MAX_CHARS
+  } else {
+    visibleContent = allLines.slice(0, DEFAULT_EXPANDED_LINES).join('\n')
+    hidden = allLines.length - DEFAULT_EXPANDED_LINES
+  }
+  const hiddenLabel = byLines && !byChars
+    ? `${hidden} more lines`
+    : `${hidden} more chars`
   return (
     <div style={{
       marginTop: 2,
@@ -456,11 +533,11 @@ function InlineResult({ content, isError, tool, input }: {
     }}>
       <div style={{ display: 'flex', gap: 8 }}>
         <span>{isError ? '⚠' : '⎿'}</span>
-        <div style={{ whiteSpace: 'pre-wrap', flex: 1 }}>
-          {visible.join('\n')}
+        <div style={{ whiteSpace: 'pre-wrap', flex: 1, wordBreak: 'break-word' }}>
+          {visibleContent}
           {truncated && !expanded && (
             <button onClick={() => setExpanded(true)} style={expandBtnStyle(CRUSH.Charple)}>
-              ▾ Show {hidden} more lines
+              ▾ Show {hiddenLabel}
             </button>
           )}
           {truncated && expanded && (
@@ -475,7 +552,8 @@ function InlineResult({ content, isError, tool, input }: {
 }
 
 /** BBQ-backed code panel for Read results: gutter with 1-based file line
- *  numbers (starts from startLine, supports Claude's offset= feature). */
+ *  numbers (starts from startLine, supports Claude's offset= feature) +
+ *  Prism syntax highlighting keyed off the file extension. */
 function ReadResultPanel({ code, startLine, isError, filePath }: {
   code: string
   startLine: number
@@ -489,6 +567,9 @@ function ReadResultPanel({ code, startLine, isError, filePath }: {
   const hidden = lines.length - DEFAULT_EXPANDED_LINES
   const lastLineNo = startLine + visible.length - 1
   const gutterW = String(lastLineNo).length
+  const language = langFromPath(filePath)
+  const displayCode = visible.join('\n')
+
   return (
     <div style={{
       marginTop: 4,
@@ -500,21 +581,35 @@ function ReadResultPanel({ code, startLine, isError, filePath }: {
       color: isError ? CRUSH.Sriracha : CRUSH.Ash,
       overflow: 'auto'
     }}>
-      {visible.map((ln, i) => (
-        <div key={i} style={{ display: 'flex', lineHeight: 1.55, whiteSpace: 'pre' }}>
-          <span style={{
-            display: 'inline-block',
-            width: `${gutterW + 2}ch`,
-            flexShrink: 0,
-            color: CRUSH.Oyster,
-            textAlign: 'right',
-            paddingRight: 8,
-            paddingLeft: 6,
-            userSelect: 'none'
-          }}>{startLine + i}</span>
-          <span style={{ flex: 1, paddingRight: 10 }}>{ln}</span>
-        </div>
-      ))}
+      <Highlight code={displayCode} language={language as any} theme={CRUSH_PRISM_THEME as any}>
+        {({ tokens, getLineProps, getTokenProps }) => (
+          <div>
+            {tokens.map((line, i) => {
+              const { key: lineKey, ...lineRest } = getLineProps({ line })
+              return (
+                <div key={i} {...lineRest} style={{ display: 'flex', lineHeight: 1.55, whiteSpace: 'pre' }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: `${gutterW + 2}ch`,
+                    flexShrink: 0,
+                    color: CRUSH.Oyster,
+                    textAlign: 'right',
+                    paddingRight: 8,
+                    paddingLeft: 6,
+                    userSelect: 'none'
+                  }}>{startLine + i}</span>
+                  <span style={{ flex: 1, paddingRight: 10 }}>
+                    {line.map((token, j) => {
+                      const { key: tokenKey, ...tokenRest } = getTokenProps({ token })
+                      return <span key={j} {...tokenRest} />
+                    })}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Highlight>
       {truncated && (
         <div style={{ padding: '4px 12px' }}>
           <button onClick={() => setExpanded(v => !v)} style={expandBtnStyle(CRUSH.Charple)}>
@@ -522,7 +617,7 @@ function ReadResultPanel({ code, startLine, isError, filePath }: {
           </button>
           {filePath && (
             <span style={{ color: CRUSH.Oyster, fontSize: 11, marginLeft: 12 }}>
-              {filePath.split('/').slice(-2).join('/')}
+              {filePath.split('/').slice(-2).join('/')} · {language}
             </span>
           )}
         </div>
@@ -601,19 +696,28 @@ export function SystemLine({ text }: { text: string }) {
 /* Render a whole timeline entry. tool_call entries consume their matching
  * tool_result from the map (keyed by toolUseId) and render as one combined
  * block — the Dolly left-border spans header + result. */
-export function TimelineRow({ entry, resultsByToolUseId, onChoose }: {
+/** React.memo-wrapped row: skips re-render when entry / result / onChoose
+ *  references are stable. Without this, typing in the input box re-renders
+ *  every row (including any large Read panels) on every keystroke. */
+export const TimelineRow = React.memo(function TimelineRow({ entry, result, onChoose }: {
   entry: TimelineEntry
-  resultsByToolUseId: Map<string, { content: string; isError?: boolean }>
+  result?: { content: string; isError?: boolean }
   onChoose?: (pick: string) => void
 }) {
   switch (entry.kind) {
     case 'user': return <UserMessage text={entry.text} />
     case 'assistant': return <AssistantMessage text={entry.text} onChoose={onChoose} />
-    case 'tool_call': {
-      const result = resultsByToolUseId.get(entry.toolUseId)
+    case 'tool_call':
       return <ToolBlock name={entry.name} input={entry.input} result={result} />
-    }
     case 'tool_result': return null
     case 'system': return <SystemLine text={entry.text} />
   }
-}
+}, (prev, next) => {
+  if (prev.onChoose !== next.onChoose) return false
+  if (prev.entry !== next.entry) return false
+  // Result content stability — reference OR deep equal for the 2 fields.
+  const pr = prev.result, nr = next.result
+  if (pr === nr) return true
+  if (!pr || !nr) return false
+  return pr.content === nr.content && pr.isError === nr.isError
+})
