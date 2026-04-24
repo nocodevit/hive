@@ -7,6 +7,31 @@ export interface Cell {
   italic?: boolean
   underline?: boolean
   inverse?: boolean
+  /** Continuation half of a double-width CJK/emoji glyph; width=0 for rendering. */
+  cont?: boolean
+}
+
+/** Display cell width for a Unicode code point — 2 for CJK / fullwidth / most emoji, 1 otherwise. */
+export function charWidth(codePoint: number): number {
+  if (codePoint === 0) return 0
+  if (codePoint < 0x20) return 0
+  if (
+    (codePoint >= 0x1100 && codePoint <= 0x115F) || // Hangul Jamo
+    (codePoint >= 0x2E80 && codePoint <= 0x303E) || // CJK Radicals / Kangxi
+    (codePoint >= 0x3041 && codePoint <= 0x33FF) || // Hiragana / Katakana / Bopomofo / Hangul Compat
+    (codePoint >= 0x3400 && codePoint <= 0x4DBF) || // CJK Ext A
+    (codePoint >= 0x4E00 && codePoint <= 0x9FFF) || // CJK Unified
+    (codePoint >= 0xA000 && codePoint <= 0xA4CF) || // Yi
+    (codePoint >= 0xAC00 && codePoint <= 0xD7A3) || // Hangul Syllables
+    (codePoint >= 0xF900 && codePoint <= 0xFAFF) || // CJK Compat Ideographs
+    (codePoint >= 0xFE30 && codePoint <= 0xFE4F) || // CJK Compat Forms
+    (codePoint >= 0xFF00 && codePoint <= 0xFF60) || // Fullwidth Forms
+    (codePoint >= 0xFFE0 && codePoint <= 0xFFE6) || // Fullwidth currency
+    (codePoint >= 0x1F300 && codePoint <= 0x1FAFF) || // Emoji + Pictographs
+    (codePoint >= 0x20000 && codePoint <= 0x2FFFD) || // CJK Ext B–F
+    (codePoint >= 0x30000 && codePoint <= 0x3FFFD) // CJK Ext G
+  ) return 2
+  return 1
 }
 
 export interface Attrs {
@@ -151,7 +176,9 @@ export class AnsiParser {
   }
 
   private putChar(c: string) {
-    if (this.cursor.col >= this.cols) {
+    const cp = c.codePointAt(0) ?? 0
+    const w = charWidth(cp) || 1
+    if (this.cursor.col + w > this.cols) {
       this.cursor.col = 0
       this.lineFeed()
     }
@@ -164,7 +191,15 @@ export class AnsiParser {
     if (this.attrs.underline) cell.underline = true
     if (this.attrs.inverse) cell.inverse = true
     this.buffer[this.cursor.row][this.cursor.col] = cell
-    this.cursor.col++
+    if (w === 2) {
+      // Mark the next cell as a continuation slot so cursor math lines up with
+      // what the terminal-emitting app thinks about column widths.
+      const cont: Cell = { char: '', cont: true }
+      if (this.cursor.col + 1 < this.cols) {
+        this.buffer[this.cursor.row][this.cursor.col + 1] = cont
+      }
+    }
+    this.cursor.col += w
   }
 
   private lineFeed() {
@@ -339,8 +374,13 @@ export class AnsiParser {
     return [...this.scrollback, ...this.buffer].map(r => r.slice())
   }
 
-  /** Row as plain text (trimmed trailing spaces). */
+  /** Row as plain text (trimmed trailing spaces). Skips continuation cells. */
   rowToText(row: Cell[]): string {
-    return row.map(c => c.char).join('').replace(/\s+$/, '')
+    let s = ''
+    for (const c of row) {
+      if (c.cont) continue
+      s += c.char
+    }
+    return s.replace(/\s+$/, '')
   }
 }

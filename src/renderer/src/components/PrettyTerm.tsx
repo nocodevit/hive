@@ -89,6 +89,7 @@ export default function PrettyTerm({ id, visible, active = true }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null)
   const viewRef = useRef<HTMLDivElement>(null)
   const measureRef = useRef<HTMLSpanElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const parserRef = useRef<AnsiParser | null>(null)
   const pendingRef = useRef<string>('')
   const rafRef = useRef<number | null>(null)
@@ -164,29 +165,7 @@ export default function PrettyTerm({ id, visible, active = true }: Props) {
     }
   }, [id])
 
-  // Keyboard: attach globally while focused so we don't miss keys
-  useEffect(() => {
-    if (!focused || !visible) return
-    const onKey = (e: KeyboardEvent) => {
-      if (composingRef.current) return
-      // Cmd+C / Ctrl+C with selection → copy
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'c' && selection) {
-        const text = selectionText(parserRef.current!, selection)
-        if (text) {
-          navigator.clipboard.writeText(text)
-          e.preventDefault()
-          return
-        }
-      }
-      const bytes = keyToBytes(e)
-      if (bytes != null) {
-        e.preventDefault()
-        window.api.pty.write(id, bytes)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [focused, visible, id, selection])
+  // Keyboard + IME are handled via the hidden <textarea> below (xterm-helper-textarea pattern).
 
   // Paste
   useEffect(() => {
@@ -307,15 +286,12 @@ export default function PrettyTerm({ id, visible, active = true }: Props) {
   return (
     <div
       ref={wrapRef}
-      tabIndex={0}
-      onFocus={() => setFocused(true)}
-      onBlur={() => setFocused(false)}
       onMouseDown={e => {
         const p = posFromEvent(e)
         if (!p) return
         dragAnchor.current = p
         setSelection({ start: p, end: p })
-          ; (wrapRef.current as any)?.focus?.()
+        textareaRef.current?.focus()
       }}
       onMouseMove={e => {
         if (!dragAnchor.current) return
@@ -323,15 +299,7 @@ export default function PrettyTerm({ id, visible, active = true }: Props) {
         if (!p) return
         setSelection({ start: dragAnchor.current, end: p })
       }}
-      onMouseUp={() => {
-        dragAnchor.current = null
-      }}
-      onCompositionStart={() => { composingRef.current = true }}
-      onCompositionEnd={(e) => {
-        composingRef.current = false
-        const text = (e.nativeEvent as CompositionEvent).data
-        if (text) window.api.pty.write(id, text)
-      }}
+      onMouseUp={() => { dragAnchor.current = null }}
       style={{
         position: 'relative',
         width: '100%',
@@ -348,6 +316,69 @@ export default function PrettyTerm({ id, visible, active = true }: Props) {
         userSelect: 'none'
       }}
     >
+      {/* Hidden helper textarea — captures keyboard & IME composition. Anchored
+          at the cursor so macOS IME candidate window pops up there. */}
+      <textarea
+        ref={textareaRef}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+        onKeyDown={e => {
+          if (composingRef.current) return
+          const k = e.key
+          const ctrl = e.ctrlKey || e.metaKey
+          // Let printable chars fall through to onInput so IME / composition works.
+          if (k.length === 1 && !ctrl) return
+          if (ctrl && k.toLowerCase() === 'c' && selection) {
+            const text = selectionText(parserRef.current!, selection)
+            if (text) { navigator.clipboard.writeText(text); e.preventDefault(); return }
+          }
+          const bytes = keyToBytes(e.nativeEvent)
+          if (bytes != null) {
+            e.preventDefault()
+            window.api.pty.write(id, bytes)
+          }
+        }}
+        onInput={e => {
+          if (composingRef.current) return
+          const el = e.currentTarget
+          const text = el.value
+          if (text) window.api.pty.write(id, text)
+          el.value = ''
+        }}
+        onCompositionStart={() => { composingRef.current = true }}
+        onCompositionEnd={e => {
+          composingRef.current = false
+          const el = e.currentTarget
+          const text = el.value
+          if (text) window.api.pty.write(id, text)
+          el.value = ''
+        }}
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        spellCheck={false}
+        style={{
+          position: 'absolute',
+          left: cur && charMetrics ? 8 + cur.col * charMetrics.w : 0,
+          top: cur && charMetrics ? 8 + cur.row * charMetrics.h : 0,
+          width: charMetrics ? charMetrics.w : 1,
+          height: charMetrics ? charMetrics.h : 16,
+          opacity: 0,
+          background: 'transparent',
+          color: 'transparent',
+          caretColor: 'transparent',
+          border: 'none',
+          outline: 'none',
+          resize: 'none',
+          padding: 0,
+          margin: 0,
+          overflow: 'hidden',
+          zIndex: 20,
+          // IME candidate window anchors here; keep it interactive for focus
+          // but below the click-through view so cursor shows as text.
+          pointerEvents: 'none'
+        }}
+      />
       {/* Invisible measurer for char metrics */}
       <span
         ref={measureRef}
@@ -379,6 +410,7 @@ export default function PrettyTerm({ id, visible, active = true }: Props) {
           let startCol = 0
           for (let c = 0; c < row.length; c++) {
             const cell = row[c]
+            if (cell.cont) continue // continuation of a wide char — already covered by its primary cell
             const k = cellKey(cell)
             if (k === currentKey) {
               currentText += cell.char

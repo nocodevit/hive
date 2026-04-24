@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { AnsiParser } from '../ansi-parser'
+import { AnsiParser, charWidth } from '../ansi-parser'
 
 function rowText(parser: AnsiParser, row: number): string {
   return parser.rowToText(parser.buffer[row])
@@ -143,6 +143,43 @@ describe('AnsiParser — scrollback', () => {
     const p = new AnsiParser(3, 10, 5)
     for (let i = 0; i < 20; i++) p.feed(`line${i}\r\n`)
     expect(p.scrollback.length).toBeLessThanOrEqual(5)
+  })
+})
+
+describe('AnsiParser — CJK / double-width', () => {
+  it('charWidth: CJK is 2, ASCII is 1', () => {
+    expect(charWidth('你'.codePointAt(0)!)).toBe(2)
+    expect(charWidth('好'.codePointAt(0)!)).toBe(2)
+    expect(charWidth('a'.codePointAt(0)!)).toBe(1)
+    expect(charWidth(' '.codePointAt(0)!)).toBe(1)
+    expect(charWidth('❯'.codePointAt(0)!)).toBe(1) // Dingbat, NOT wide
+  })
+
+  it('CJK char occupies 2 cells; cursor advances by 2', () => {
+    const p = new AnsiParser(3, 10)
+    p.feed('a你b')
+    expect(p.buffer[0][0].char).toBe('a')
+    expect(p.buffer[0][1].char).toBe('你')
+    expect(p.buffer[0][1].cont).toBeUndefined()
+    expect(p.buffer[0][2].cont).toBe(true)
+    expect(p.buffer[0][3].char).toBe('b')
+    expect(p.cursor.col).toBe(4)
+  })
+
+  it('rowToText returns original chars (continuation cells skipped)', () => {
+    const p = new AnsiParser(3, 10)
+    p.feed('❯ 你好')
+    expect(p.rowToText(p.buffer[0])).toBe('❯ 你好')
+    // But logical cursor column is 6 (1 + 1 + 2 + 2)
+    expect(p.cursor.col).toBe(6)
+  })
+
+  it('mixed Chinese + ASCII drift stays zero across many writes', () => {
+    const p = new AnsiParser(10, 40)
+    p.feed('❯ 你好 world\r\n')
+    p.feed('答复：继续 work 完成了\r\n')
+    expect(p.rowToText(p.buffer[0])).toBe('❯ 你好 world')
+    expect(p.rowToText(p.buffer[1])).toBe('答复：继续 work 完成了')
   })
 })
 
