@@ -4,6 +4,7 @@ import { FitAddon } from '@xterm/addon-fit'
 import { Unicode11Addon } from '@xterm/addon-unicode11'
 import '@xterm/xterm/css/xterm.css'
 import RichTerminal from './RichTerminal'
+import { crushifyColors } from '../lib/crushify-colors'
 
 type ViewMode = 'raw' | 'pretty'
 
@@ -37,11 +38,10 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   const compareMode = false
   const [richLines, setRichLines] = useState<string[]>([])
   const richLinesRef = useRef<string[]>([])
-  // Decoration state for Pretty-mode overlays (user-input row highlight, green ❯)
-  const inputMarkerRef = useRef<IMarker | null>(null)
-  const inputBgDecoRef = useRef<IDecoration | null>(null)
-  const promptDecoRef = useRef<IDecoration | null>(null)
-  const currentInputLineRef = useRef<number>(-1)
+  // All user-input lines get Dolly decorations and KEEP them as history —
+  // scrolled-up input lines stay visibly highlighted in scrollback.
+  interface InputDeco { marker: IMarker; bg: IDecoration | undefined; prompt: IDecoration | undefined }
+  const inputDecosRef = useRef<InputDeco[]>([])
   const updateDecorationsRef = useRef<() => void>(() => {})
   const [interactivePrompt, setInteractivePrompt] = useState<{ type: 'menu' | 'confirm' | 'input'; title: string; options: { label: string; value: string }[] } | null>(null)
   const ptyBufferRef = useRef('')
@@ -91,81 +91,88 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
     fitRef.current = fit
 
     /**
-     * Pretty-mode overlays: we keep xterm as the renderer and layer React-
-     * flavored Crush decorations on top via registerMarker/registerDecoration.
-     * Markers track a specific buffer line through scrollback.
+     * Pretty-mode overlays: xterm does the rendering, we layer Crush
+     * decorations on top via registerMarker/registerDecoration. Markers
+     * follow their buffer line through scrollback automatically.
+     *
+     * Every line that begins with `❯` gets decorated exactly once. After
+     * the user hits Enter, the old input line keeps its highlight — this
+     * way the whole history of user prompts stays visibly pink in the
+     * scrollback, not just the active prompt.
      */
-    const disposeInputDecorations = () => {
-      inputBgDecoRef.current?.dispose()
-      promptDecoRef.current?.dispose()
-      inputMarkerRef.current?.dispose()
-      inputBgDecoRef.current = null
-      promptDecoRef.current = null
-      inputMarkerRef.current = null
-      currentInputLineRef.current = -1
+    const disposeAllInputDecorations = () => {
+      for (const d of inputDecosRef.current) {
+        d.bg?.dispose()
+        d.prompt?.dispose()
+        d.marker.dispose()
+      }
+      inputDecosRef.current = []
     }
 
     const updateInputDecorations = () => {
       if (!termRef.current) return
       if (!prettyModeRef.current) {
-        disposeInputDecorations()
+        disposeAllInputDecorations()
         return
       }
       const t = termRef.current
       const buf = t.buffer.active
       const absY = buf.baseY + buf.cursorY
-      if (absY === currentInputLineRef.current && inputBgDecoRef.current) return
+
+      // Drop markers whose lines have been evicted from scrollback.
+      inputDecosRef.current = inputDecosRef.current.filter(d => !d.marker.isDisposed)
+      // Already decorated this line? skip.
+      if (inputDecosRef.current.some(d => d.marker.line === absY)) return
+
       const line = buf.getLine(absY)
       const text = line?.translateToString(false) ?? ''
-      if (!text.trimStart().startsWith('❯')) {
-        disposeInputDecorations()
-        return
+      // Find ❯ anywhere in the first handful of cols (Claude Code sometimes
+      // indents the prompt behind a frame character or padding).
+      let promptCol = -1
+      for (let c = 0; c < Math.min(text.length, 10); c++) {
+        if (text[c] === '❯') { promptCol = c; break }
       }
-      disposeInputDecorations()
+      if (promptCol < 0) return
+
       const marker = t.registerMarker(0)
       if (!marker) return
-      inputMarkerRef.current = marker
-      currentInputLineRef.current = absY
 
-      // Dolly-tinted background overlay covering the typed-text region
+      // Dolly-tinted background from just after `❯ ` to end of row.
       const bg = t.registerDecoration({
         marker,
-        x: 2,
-        width: Math.max(1, t.cols - 2),
+        x: promptCol + 2,
+        width: Math.max(1, t.cols - (promptCol + 2)),
         height: 1,
         layer: 'bottom'
       })
-      if (bg) {
-        bg.onRender((el: HTMLElement) => {
-          el.style.background = 'rgba(255,96,255,0.22)'
-          el.style.borderLeft = '2px solid #FF60FF'
-          el.style.pointerEvents = 'none'
-          el.style.boxSizing = 'border-box'
-        })
-        inputBgDecoRef.current = bg
-      }
+      bg?.onRender((el: HTMLElement) => {
+        el.style.background = 'rgba(255,96,255,0.38)'
+        el.style.borderLeft = '2px solid #FF60FF'
+        el.style.borderBottom = '1px solid rgba(255,96,255,0.45)'
+        el.style.pointerEvents = 'none'
+        el.style.boxSizing = 'border-box'
+      })
 
-      // Green ❯ overlay on top of whatever color Claude Code drew
+      // Green ❯ overlay — cover whatever gray glyph Claude drew.
       const prompt = t.registerDecoration({
         marker,
-        x: 0,
+        x: promptCol,
         width: 1,
         height: 1,
         layer: 'top'
       })
-      if (prompt) {
-        prompt.onRender((el: HTMLElement) => {
-          el.textContent = '❯'
-          el.style.color = '#00FFB2'
-          el.style.fontWeight = '700'
-          el.style.background = '#201F26'
-          el.style.textAlign = 'center'
-          el.style.pointerEvents = 'none'
-          el.style.lineHeight = el.style.height || `${t.options.fontSize ?? 13}px`
-          el.style.fontFamily = t.options.fontFamily || 'monospace'
-        })
-        promptDecoRef.current = prompt
-      }
+      prompt?.onRender((el: HTMLElement) => {
+        el.textContent = '❯'
+        el.style.color = '#00FFB2'
+        el.style.fontWeight = '700'
+        el.style.background = '#201F26'
+        el.style.textAlign = 'center'
+        el.style.pointerEvents = 'none'
+        el.style.lineHeight = el.style.height || `${t.options.fontSize ?? 13}px`
+        el.style.fontFamily = t.options.fontFamily || 'monospace'
+      })
+
+      inputDecosRef.current.push({ marker, bg, prompt })
     }
 
     updateDecorationsRef.current = updateInputDecorations
@@ -225,7 +232,10 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
         window.api.pty.create(id, cwd)
           .then(() => {
             window.api.pty.onData(id, (data) => {
-              term.write(data)
+              // In Pretty mode, remap Claude Code's muted 24-bit colors to the
+              // Crush palette on the way in. Raw mode gets the original bytes.
+              const rendered = prettyModeRef.current ? crushifyColors(data) : data
+              term.write(rendered)
               if (visibleRef.current && isAtBottom.current) term.scrollToBottom()
               // Capture lines for Rich mode
               const newLines = data.split('\n')
