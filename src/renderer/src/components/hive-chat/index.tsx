@@ -394,12 +394,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       }}>
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
-          background: 'rgba(107,80,255,0.08)',
-          border: `1px solid ${CRUSH.Charple}`,
+          background: 'rgba(255,96,255,0.08)',
+          border: `1px solid ${CRUSH.Dolly}`,
           borderRadius: 8,
           padding: '8px 12px'
         }}>
-          <span style={{ color: CRUSH.Charple, fontWeight: 700, fontSize: 16 }}>❯</span>
+          <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
           <textarea
             value={input}
             onChange={e => setInput(e.target.value)}
