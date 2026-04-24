@@ -133,8 +133,8 @@ export function startChat(id: string, opts: {
     '--input-format', 'stream-json',
     '--output-format', 'stream-json',
     '--include-partial-messages',
-    '--include-hook-events',          // surface permission_request + lifecycle events
-    '--permission-prompt-tool', 'stdio', // let Claude ask us over stdio instead of assuming TTY
+    '--include-hook-events',
+    '--permission-prompt-tool', 'stdio', // claude emits control_request on stdout; we must reply with control_response on stdin (handled below)
     '--verbose'
   ]
   if (opts.agent) args.push('--agent', opts.agent)
@@ -177,8 +177,10 @@ export function startChat(id: string, opts: {
   //     projected for the current 5h block. Zero API cost.
   //  2. Headless interactive claude + /usage TUI scrape — gives the real
   //     subscription %% (what `/usage` shows). ~1 API turn per call.
-  // Both merged into one chat:usage broadcast; UI renders whichever fields
-  // are present.
+  //
+  // Triggered ONLY on each assistant message_stop (see child.stdout.on
+  // below, debounced 30s). No idle timer — avoids burning /usage turns
+  // while the user stares at the UI without talking to Claude.
   const refresh = async () => {
     const [cc, pct] = await Promise.all([
       queryUsageViaCcusage(),
@@ -186,8 +188,9 @@ export function startChat(id: string, opts: {
     ])
     if (cc || pct) broadcast(`chat:usage:${session.id}`, { ...(cc || {}), ...(pct || {}) })
   }
+  // One snapshot at startup so the status bar isn't blank until the
+  // first message lands.
   refresh()
-  session.usageTimer = setInterval(refresh, 5 * 60 * 1000)
 
   let lastMessageStopRefresh = 0
   child.stdout.on('data', (chunk: Buffer) => {
@@ -200,11 +203,13 @@ export function startChat(id: string, opts: {
       try { appendFileSync(session.logPath, JSON.stringify(ev) + '\n') } catch {}
       if (ev?.type === 'stream_event' && ev.event?.type === 'message_stop') sawMessageStop = true
     }
-    // On every message_stop, refresh usage (but at most once per 30s to avoid
-    // churn during quick back-and-forth). Complements the 5-min idle timer.
+    // message_stop is our only refresh trigger now. One user turn may
+    // produce many rate_limit_events (multiple tool calls) but only one
+    // message_stop at the end, so this is the right rate. Debounce
+    // 30s to cover consecutive quick exchanges.
     if (sawMessageStop && Date.now() - lastMessageStopRefresh > 30000) {
       lastMessageStopRefresh = Date.now()
-      setTimeout(() => refresh(), 1500) // short debounce for claude's own rate_limit update
+      setTimeout(() => refresh(), 1500) // give claude's internal rate_limits a moment to settle
     }
   })
   child.stderr.on('data', (chunk: Buffer) => {
@@ -218,6 +223,31 @@ export function startChat(id: string, opts: {
     broadcast(`chat:error:${id}`, String(err))
     sessions.delete(id)
   })
+}
+
+/**
+ * Respond to a pending control_request (permission prompt). `decision` is
+ * 'allow' (once) or 'deny'. Writes a control_response JSON line to the
+ * claude subprocess's stdin so it unblocks.
+ */
+export function respondPermission(id: string, requestId: string, decision: 'allow' | 'deny') {
+  const session = sessions.get(id)
+  if (!session) return { ok: false, error: 'no_session' }
+  const frame = {
+    type: 'control_response',
+    response: {
+      subtype: 'success',
+      request_id: requestId,
+      response: { behavior: decision }
+    }
+  }
+  try {
+    session.child.stdin.write(JSON.stringify(frame) + '\n')
+    try { appendFileSync(session.logPath, JSON.stringify({ _direction: 'stdin', ...frame }) + '\n') } catch {}
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
 }
 
 export function sendUserMessage(id: string, text: string) {
@@ -315,7 +345,10 @@ async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: number; s
     }
 
     try {
-      child = pty.spawn('claude', [], {
+      // Force a fresh session id so this PTY scrape can never accidentally
+      // attach to an agent's live session (especially Tracy's).
+      const freshSessionId = require('crypto').randomUUID()
+      child = pty.spawn('claude', ['--session-id', freshSessionId], {
         name: 'xterm-256color',
         cols: 160, rows: 50,
         cwd: cwd || process.env.HOME || '/',
@@ -444,5 +477,8 @@ export function registerChatIpc() {
     return { ok: true }
   })
   ipcMain.handle('chat:send', (_e, { id, text }) => sendUserMessage(id, text))
+  ipcMain.handle('chat:respondPermission', (_e, { id, requestId, decision }) =>
+    respondPermission(id, requestId, decision)
+  )
   ipcMain.handle('chat:stop', (_e, { id }) => { stopChat(id); return { ok: true } })
 }
