@@ -105,7 +105,7 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
           if (block.type === 'text') {
             replaceEntry(entryId, { kind: 'assistant', text: block.text, id: entryId })
           } else if (block.type === 'tool_use') {
-            replaceEntry(entryId, { kind: 'tool_call', name: block.name, input: block.input, id: entryId })
+            replaceEntry(entryId, { kind: 'tool_call', name: block.name, input: block.input, id: entryId, toolUseId: block.id })
           }
         })
       } else if (ev.type === 'user' && 'message' in ev) {
@@ -190,7 +190,16 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
             Chat session started. Type a message below to talk to Claude.
           </div>
         )}
-        {timeline.map(entry => <TimelineRow key={entry.id} entry={entry} />)}
+        {(() => {
+          // Build a tool_use_id → result lookup once per render. The
+          // TimelineRow folds each result into its matching tool_call so
+          // the Dolly left border wraps the whole pair.
+          const resultsByToolUseId = new Map<string, { content: string; isError?: boolean }>()
+          for (const e of timeline) {
+            if (e.kind === 'tool_result') resultsByToolUseId.set(e.toolUseId, { content: e.content, isError: e.isError })
+          }
+          return timeline.map(entry => <TimelineRow key={entry.id} entry={entry} resultsByToolUseId={resultsByToolUseId} />)
+        })()}
         {exited !== null && (
           <div style={{ color: CRUSH.Sriracha, fontSize: 11, marginTop: 12, padding: 4 }}>
             claude exited (code {exited})

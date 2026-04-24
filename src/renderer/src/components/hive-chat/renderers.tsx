@@ -100,21 +100,114 @@ export function ToolResult({ content, isError }: { content: string; isError?: bo
 }
 
 /* ────────────────────────────────────────────────────────────
- *  GENERIC TOOL CALL — Charple left border, tool-colored ● and name
- *  For specific tools (TodoWrite, Bash, Edit) we branch into
- *  dedicated renderers below.
+ *  TOOL BLOCK — tool_call header + (optional) matched tool_result
+ *  wrapped in a single Dolly-bordered container so the bar spans both.
  * ──────────────────────────────────────────────────────────── */
+export function ToolBlock({ name, input, result }: {
+  name: string
+  input: Record<string, unknown>
+  result?: { content: string; isError?: boolean }
+}) {
+  return (
+    <div style={{
+      borderLeft: `3px solid ${CRUSH.Dolly}`,
+      paddingLeft: 12,
+      paddingTop: 4,
+      paddingBottom: 4,
+      margin: '6px 0',
+      fontFamily: FONT_MONO
+    }}>
+      <ToolHeader name={name} input={input} />
+      {result && <InlineResult content={result.content} isError={result.isError} />}
+    </div>
+  )
+}
+
+function ToolHeader({ name, input }: { name: string; input: Record<string, unknown> }) {
+  if (name === 'TodoWrite') return <TodoInline input={input} />
+  if (name === 'Bash') return <HeaderLine tool={name} color={CRUSH.Malibu} tail={String(input.command ?? '').replace(/\n/g, ' ').slice(0, 200)} tailStyle="ash" />
+  if (name === 'Read' || name === 'View') return <HeaderLine tool="Read" color={CRUSH.Bok} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
+  if (name === 'Edit' || name === 'Write' || name === 'MultiEdit') return <HeaderLine tool={name} color={CRUSH.Julep} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
+  if (name === 'Grep' || name === 'Glob') {
+    const pattern = String(input.pattern ?? input.query ?? '')
+    const glob = String(input.glob ?? input.include ?? '')
+    return <HeaderLine tool={name} color={CRUSH.Zest} tail={`"${pattern}"${glob ? ` ${glob}` : ''}`} tailStyle="ash" />
+  }
+  if (name === 'Task' || name === 'Agent') return <HeaderLine tool={name} color={CRUSH.Dolly} tail={argSummary(input)} tailStyle="ash" />
+  if (name === 'WebFetch' || name === 'WebSearch') return <HeaderLine tool={name} color={CRUSH.Violet} tail={String(input.url ?? input.query ?? '')} tailStyle="link" />
+  return <HeaderLine tool={name} color={toolColor(name)} tail={argSummary(input)} tailStyle="ash" />
+}
+
+function HeaderLine({ tool, color, tail, tailStyle }: { tool: string; color: string; tail: string; tailStyle: 'ash' | 'link' }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      fontFamily: FONT_MONO
+    }}>
+      <span style={{ color, fontWeight: 700 }}>●</span>
+      <span style={{ color, fontWeight: 700 }}>{tool}</span>
+      <span style={{
+        color: tailStyle === 'link' ? CRUSH.Malibu : CRUSH.Ash,
+        textDecoration: tailStyle === 'link' ? 'underline' : 'none',
+        opacity: tailStyle === 'ash' ? 0.85 : 1,
+        fontSize: 12,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        flex: 1, minWidth: 0
+      }}>{tail}</span>
+    </div>
+  )
+}
+
+function InlineResult({ content, isError }: { content: string; isError?: boolean }) {
+  const [expanded, setExpanded] = useState(false)
+  const allLines = content.split('\n')
+  const truncated = allLines.length > DEFAULT_EXPANDED_LINES
+  const visible = expanded || !truncated ? allLines : allLines.slice(0, DEFAULT_EXPANDED_LINES)
+  const hidden = allLines.length - DEFAULT_EXPANDED_LINES
+  return (
+    <div style={{
+      marginTop: 2,
+      color: isError ? CRUSH.Sriracha : CRUSH.Squid,
+      fontFamily: FONT_MONO,
+      fontSize: 12,
+      lineHeight: 1.5
+    }}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <span>⎿</span>
+        <div style={{ whiteSpace: 'pre-wrap', flex: 1 }}>
+          {visible.join('\n')}
+          {truncated && !expanded && (
+            <button onClick={() => setExpanded(true)} style={expandBtnStyle(CRUSH.Charple)}>
+              ▾ Show {hidden} more lines
+            </button>
+          )}
+          {truncated && expanded && (
+            <button onClick={() => setExpanded(false)} style={expandBtnStyle(CRUSH.Squid)}>
+              ▴ Collapse
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function expandBtnStyle(color: string): React.CSSProperties {
+  return {
+    display: 'block', marginTop: 4,
+    background: 'transparent', border: 'none',
+    color, cursor: 'pointer', padding: 0,
+    fontFamily: FONT_MONO, fontSize: 11, textDecoration: 'underline'
+  }
+}
+
+/* Back-compat export for places that still call <ToolCall> directly. */
 export function ToolCall({ name, input }: { name: string; input: Record<string, unknown> }) {
-  if (name === 'TodoWrite') return <TodoCard input={input} />
-  if (name === 'Bash') return <BashCard input={input} />
-  if (name === 'Read' || name === 'View') return <ReadCard input={input} />
-  if (name === 'Edit' || name === 'Write' || name === 'MultiEdit') return <EditCard name={name} input={input} />
-  if (name === 'Grep' || name === 'Glob') return <SearchCard name={name} input={input} />
-  return <GenericToolCard name={name} input={input} />
+  return <ToolBlock name={name} input={input} />
 }
 
 function toolColor(name: string) {
-  return TOOL_COLORS[name] || CRUSH.Charple
+  return TOOL_COLORS[name] || CRUSH.Dolly
 }
 
 function argSummary(input: Record<string, unknown>): string {
@@ -127,125 +220,12 @@ function argSummary(input: Record<string, unknown>): string {
   try { return JSON.stringify(input).slice(0, 120) } catch { return '' }
 }
 
-function GenericToolCard({ name, input }: { name: string; input: Record<string, unknown> }) {
-  const color = toolColor(name)
-  return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 8,
-      padding: '4px 10px',
-      margin: '2px 0',
-      borderLeft: `3px solid ${CRUSH.Charple}`,
-      fontFamily: FONT_MONO
-    }}>
-      <span style={{ color, fontWeight: 700 }}>●</span>
-      <span style={{ color, fontWeight: 700 }}>{name}</span>
-      <span style={{ color: CRUSH.Squid, fontSize: 12, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
-        {argSummary(input)}
-      </span>
-    </div>
-  )
-}
-
-/* ────────────────────────────────────────────────────────────
- *  Bash — command in Malibu, single line preview
- * ──────────────────────────────────────────────────────────── */
-function BashCard({ input }: { input: Record<string, unknown> }) {
-  const cmd = typeof input.command === 'string' ? input.command : ''
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '4px 10px', margin: '2px 0',
-      borderLeft: `3px solid ${CRUSH.Charple}`,
-      fontFamily: FONT_MONO
-    }}>
-      <span style={{ color: CRUSH.Malibu, fontWeight: 700 }}>●</span>
-      <span style={{ color: CRUSH.Malibu, fontWeight: 700 }}>Bash</span>
-      <span style={{
-        color: CRUSH.Ash, opacity: 0.85, fontSize: 12,
-        fontFamily: FONT_MONO, whiteSpace: 'pre',
-        overflow: 'hidden', textOverflow: 'ellipsis', flex: 1, minWidth: 0
-      }}>{cmd.replace(/\n/g, ' ').slice(0, 200)}</span>
-    </div>
-  )
-}
-
-/* ────────────────────────────────────────────────────────────
- *  Read / View — Bok accent, file_path
- * ──────────────────────────────────────────────────────────── */
-function ReadCard({ input }: { input: Record<string, unknown> }) {
-  const file = (input.file_path || input.path || '') as string
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '4px 10px', margin: '2px 0',
-      borderLeft: `3px solid ${CRUSH.Charple}`,
-      fontFamily: FONT_MONO
-    }}>
-      <span style={{ color: CRUSH.Bok, fontWeight: 700 }}>●</span>
-      <span style={{ color: CRUSH.Bok, fontWeight: 700 }}>Read</span>
-      <span style={{ color: CRUSH.Malibu, textDecoration: 'underline', fontSize: 12 }}>{file}</span>
-    </div>
-  )
-}
-
-/* ────────────────────────────────────────────────────────────
- *  Edit / Write / MultiEdit — Julep accent
- * ──────────────────────────────────────────────────────────── */
-function EditCard({ name, input }: { name: string; input: Record<string, unknown> }) {
-  const file = (input.file_path || input.path || '') as string
-  const color = CRUSH.Julep
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '4px 10px', margin: '2px 0',
-      borderLeft: `3px solid ${CRUSH.Charple}`,
-      fontFamily: FONT_MONO
-    }}>
-      <span style={{ color, fontWeight: 700 }}>●</span>
-      <span style={{ color, fontWeight: 700 }}>{name}</span>
-      <span style={{ color: CRUSH.Malibu, textDecoration: 'underline', fontSize: 12 }}>{file}</span>
-    </div>
-  )
-}
-
-/* ────────────────────────────────────────────────────────────
- *  Grep / Glob — Zest accent, pattern text
- * ──────────────────────────────────────────────────────────── */
-function SearchCard({ name, input }: { name: string; input: Record<string, unknown> }) {
-  const pattern = (input.pattern || input.query || '') as string
-  const glob = (input.glob || input.include || '') as string
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 8,
-      padding: '4px 10px', margin: '2px 0',
-      borderLeft: `3px solid ${CRUSH.Charple}`,
-      fontFamily: FONT_MONO
-    }}>
-      <span style={{ color: CRUSH.Zest, fontWeight: 700 }}>●</span>
-      <span style={{ color: CRUSH.Zest, fontWeight: 700 }}>{name}</span>
-      <span style={{ color: CRUSH.Ash, opacity: 0.85, fontSize: 12 }}>
-        "{pattern}"{glob ? ` ${glob}` : ''}
-      </span>
-    </div>
-  )
-}
-
-/* ────────────────────────────────────────────────────────────
- *  TodoWrite — ✓/→/• per status
- * ──────────────────────────────────────────────────────────── */
+/* TodoWrite — rendered inside a ToolBlock so the Dolly bar frames the whole group */
 interface Todo { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }
-function TodoCard({ input }: { input: Record<string, unknown> }) {
+function TodoInline({ input }: { input: Record<string, unknown> }) {
   const todos = (input.todos as Todo[]) || []
   return (
-    <div style={{
-      padding: '6px 10px',
-      margin: '4px 0',
-      borderLeft: `3px solid ${CRUSH.Charple}`,
-      fontFamily: FONT_MONO,
-      background: CRUSH.Pepper
-    }}>
+    <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
         <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>●</span>
         <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>TodoWrite</span>
@@ -279,13 +259,21 @@ export function SystemLine({ text }: { text: string }) {
   )
 }
 
-/* Render a whole timeline entry */
-export function TimelineRow({ entry }: { entry: TimelineEntry }) {
+/* Render a whole timeline entry. tool_call entries consume their matching
+ * tool_result from the map (keyed by toolUseId) and render as one combined
+ * block — the Dolly left-border spans header + result. */
+export function TimelineRow({ entry, resultsByToolUseId }: {
+  entry: TimelineEntry
+  resultsByToolUseId: Map<string, { content: string; isError?: boolean }>
+}) {
   switch (entry.kind) {
     case 'user': return <UserMessage text={entry.text} />
     case 'assistant': return <AssistantMessage text={entry.text} />
-    case 'tool_call': return <ToolCall name={entry.name} input={entry.input} />
-    case 'tool_result': return <ToolResult content={entry.content} isError={entry.isError} />
+    case 'tool_call': {
+      const result = resultsByToolUseId.get(entry.toolUseId)
+      return <ToolBlock name={entry.name} input={entry.input} result={result} />
+    }
+    case 'tool_result': return null // rendered inline inside the matching tool_call
     case 'system': return <SystemLine text={entry.text} />
   }
 }
