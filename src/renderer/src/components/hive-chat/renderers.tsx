@@ -195,16 +195,17 @@ export function UserMessage({ text }: { text: string }) {
   }
   return (
     <div style={{
-      background: CRUSH.Dolly,
+      background: 'rgba(255, 96, 255, 0.14)',
+      border: `1px solid ${CRUSH.Dolly}`,
       borderRadius: 8,
-      padding: '8px 12px',
+      padding: '7px 11px',
       margin: '6px 0',
       display: 'flex',
       alignItems: 'center',
       gap: 8,
       fontFamily: FONT_MONO
     }}>
-      <span style={{ color: CRUSH.Butter, fontWeight: 700, fontSize: 16 }}>❯</span>
+      <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
       <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(parsed.text)}</span>
     </div>
   )
