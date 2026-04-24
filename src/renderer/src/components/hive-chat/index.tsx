@@ -481,7 +481,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             if (saveSuggestion) {
               await window.api.settings.addClaudeAllowRule(saveSuggestion.rules).catch(() => {})
             }
-            window.api.chat.respondPermission(id, pendingPermission.requestId, decision)
+            // For allow we must echo the original tool input back as
+            // updatedInput; for deny we include a human message. Schema
+            // is strict (Zod-validated on claude's side).
+            window.api.chat.respondPermission(
+              id,
+              pendingPermission.requestId,
+              decision,
+              decision === 'allow' ? pendingPermission.input : undefined,
+              decision === 'deny' ? 'Denied by user' : undefined
+            )
             setPendingPermission(null)
           }}
         />
