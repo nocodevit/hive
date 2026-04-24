@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { TimelineRow } from './renderers'
+import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
 
 /** Isolated subtree so the timeline doesn't re-render on every keystroke
@@ -434,22 +435,6 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       />
     </div>
   )
-}
-
-/** "/Users/meiyang/Front…/tracy-website" — ~ for home, and ellipsis any
- *  middle directories when the path gets too long. */
-function shortenPath(p?: string): string {
-  if (!p) return 'cwd'
-  const home = (window as any)?.process?.env?.HOME
-    || (p.match(/^\/Users\/[^/]+/)?.[0])
-    || ''
-  let s = home && p.startsWith(home) ? '~' + p.slice(home.length) : p
-  // If still too long, keep first dir after ~ and last two segments.
-  const parts = s.split('/')
-  if (parts.length > 5) {
-    return [parts[0], parts[1], '…', ...parts.slice(-2)].join('/')
-  }
-  return s
 }
 
 function humanEta(resetsAt: number | undefined): string {
