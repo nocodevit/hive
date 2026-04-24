@@ -454,6 +454,34 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
   }
 
+  const closeSession = async () => {
+    addEntry({ kind: 'system', text: 'Session closed by user. Timeline kept; click Start new session below to continue with the same agent.' })
+    await window.api.chat.stop(id)
+    // main's stopChat fires chat:exit which flips `exited` state; no need
+    // to set it manually. The input area picks up the new-session UI off
+    // `exited !== null`.
+  }
+
+  const startNewSession = async () => {
+    // Fresh session with the same agent — no -c, no --resume. System/init
+    // will emit a new session_id; timeline is preserved and a divider is
+    // added to make the boundary visible.
+    addEntry({ kind: 'system', text: '── new session ──' })
+    setExited(null)
+    setSessionId('')
+    setRateLimit(null)
+    setUsage({})
+    setThinking(null)
+    setPendingPermission(null)
+    setHasOlderOnDisk(false)
+    setTrimmedCount(0)
+    await window.api.chat.start(id, {
+      cwd, agent, name: agentName,
+      continueSession: false,
+      rebaseOnStart: false
+    })
+  }
+
   const tryRecallUp = (ta: HTMLTextAreaElement): boolean => {
     const cursorAtTop = ta.selectionStart === 0 || !input.slice(0, ta.selectionStart).includes('\n')
     const r = recallUp(sentHistoryRef.current, recallStateRef.current, input, cursorAtTop)
@@ -587,12 +615,52 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }}>waiting for first message…</div>
       ) : null}
 
-      {/* Input area — either the textarea (idle) or the remote-control
-          panel (active). When RC is active the --print subprocess is
-          gone and typing doesn't make sense; we show the PTY's live
-          output (pairing URL / QR / confirmation) and a Resume button
-          that re-spawns --print --resume <sid>. */}
-      {rcState === 'active' ? (
+      {/* Input area — three variants:
+          - rcState === 'active'    → RC pairing panel
+          - exited !== null          → "session closed, start new" panel
+          - else                     → normal textarea
+          Precedence matches real priority (RC ends when user clicks
+          Resume; a closed session can't be in RC at the same time). */}
+      {exited !== null && rcState !== 'active' ? (
+        <div style={{
+          borderTop: `1px solid ${CRUSH.Charcoal}`,
+          background: CRUSH.BBQ,
+          padding: 8
+        }}>
+          <div style={{
+            border: `1px solid ${CRUSH.Charcoal}`,
+            borderRadius: 8,
+            padding: 10,
+            background: 'rgba(235,66,104,0.04)'
+          }}>
+            <div style={{
+              color: CRUSH.Sriracha, fontWeight: 700, fontSize: 12,
+              textTransform: 'uppercase' as const, letterSpacing: '0.08em',
+              marginBottom: 6
+            }}>● session closed (exit {exited})</div>
+            <div style={{
+              color: CRUSH.Squid, fontSize: 11, marginBottom: 10
+            }}>
+              The claude subprocess is gone. History above is kept. Click
+              below to start a fresh session with the same agent — this
+              creates a new session-id and begins a clean context.
+            </div>
+            <button
+              onClick={startNewSession}
+              style={{
+                background: CRUSH.Julep,
+                border: 'none',
+                borderRadius: 6,
+                padding: '8px 16px',
+                color: CRUSH.Pepper,
+                fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700,
+                cursor: 'pointer',
+                width: '100%'
+              }}
+            >⊕ Start new session</button>
+          </div>
+        </div>
+      ) : rcState === 'active' ? (
         <div style={{
           borderTop: `1px solid ${CRUSH.Charcoal}`,
           background: CRUSH.BBQ,
@@ -690,6 +758,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       <ModelUsageBar
         modelName={modelName} contextSize={contextSize} usage={usage} rateLimit={rateLimit}
         streamingMode={streamingMode} onToggleStreaming={toggleStreamingMode}
+        onCloseSession={closeSession}
+        sessionActive={exited === null && rcState === 'idle'}
       />
 
       {/* Permission modal */}
@@ -876,7 +946,7 @@ function PctBar({ pct }: { pct?: number }) {
   )
 }
 
-function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode, onToggleStreaming }: {
+function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode, onToggleStreaming, onCloseSession, sessionActive }: {
   modelName: string
   contextSize: string
   usage: {
@@ -886,6 +956,8 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
   rateLimit: any
   streamingMode: boolean
   onToggleStreaming: () => void
+  onCloseSession: () => void
+  sessionActive: boolean
 }) {
   const mins = usage.remainingMinutes
   const eta = mins != null ? (mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`) : ''
@@ -944,6 +1016,29 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
       >
         {streamingMode ? '● streaming mode' : '○ streaming mode'}
       </button>
+      {sessionActive && (
+        <button
+          onClick={onCloseSession}
+          title="End this claude session. Timeline is kept; click Start new session to spawn a fresh one with the same agent."
+          style={{
+            background: 'transparent',
+            border: `1px solid ${CRUSH.Charcoal}`,
+            color: CRUSH.Squid,
+            padding: '2px 8px',
+            borderRadius: 4,
+            fontFamily: FONT_MONO, fontSize: 10,
+            cursor: 'pointer'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = CRUSH.Sriracha
+            e.currentTarget.style.color = CRUSH.Sriracha
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = CRUSH.Charcoal
+            e.currentTarget.style.color = CRUSH.Squid
+          }}
+        >⏹ close session</button>
+      )}
     </div>
   )
 }
