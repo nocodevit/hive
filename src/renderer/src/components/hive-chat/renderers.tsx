@@ -152,8 +152,8 @@ function CrushMarkdown({ text }: { text: string }) {
 export function UserMessage({ text }: { text: string }) {
   return (
     <div style={{
-      background: 'rgba(107,80,255,0.08)',
-      border: `1px solid ${CRUSH.Charple}`,
+      background: 'rgba(255,96,255,0.08)',
+      border: `1px solid ${CRUSH.Dolly}`,
       borderRadius: 8,
       padding: '8px 12px',
       margin: '6px 0',
@@ -162,7 +162,7 @@ export function UserMessage({ text }: { text: string }) {
       gap: 8,
       fontFamily: FONT_MONO
     }}>
-      <span style={{ color: CRUSH.Charple, fontWeight: 700, fontSize: 16 }}>❯</span>
+      <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
       <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(text)}</span>
     </div>
   )
@@ -311,7 +311,7 @@ export function ToolBlock({ name, input, result }: {
   const isError = result?.isError
   return (
     <div style={{
-      borderLeft: `3px solid ${isError ? CRUSH.Sriracha : CRUSH.Dolly}`,
+      borderLeft: `3px solid ${isError ? CRUSH.Sriracha : CRUSH.Charple}`,
       paddingLeft: 12,
       paddingTop: 4,
       paddingBottom: 4,
