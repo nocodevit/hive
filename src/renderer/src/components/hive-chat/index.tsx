@@ -71,6 +71,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     toolName: string
     displayName?: string
     input: Record<string, unknown>
+    suggestions?: Array<{ type: string; rules: { toolName: string; ruleContent: string }[]; behavior: string; destination: string }>
   } | null>(null)
   const [streamingMode, setStreamingMode] = useState<boolean>(true)
   const [username, setUsername] = useState<string>('')
@@ -271,12 +272,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           }
         }
       } else if (ev.type === 'result') {
-        const cost = (ev as any).total_cost_usd
-        const dur = (ev as any).duration_ms
-        const parts = ['result']
-        if (cost != null) parts.push(`$${cost.toFixed(4)}`)
-        if (dur != null) parts.push(`${(dur / 1000).toFixed(1)}s`)
-        addEntry({ kind: 'system', text: parts.join(' · ') })
+        const e = ev as any
+        addEntry({
+          kind: 'result',
+          costUSD: e.total_cost_usd,
+          durationMs: e.duration_ms,
+          numTurns: e.num_turns,
+          inputTokens: e.usage?.input_tokens,
+          outputTokens: e.usage?.output_tokens,
+          cacheReadTokens: e.usage?.cache_read_input_tokens
+        })
       }
       // control_request: claude is asking for permission to use a tool
       // (fires when --permission-prompt-tool stdio is set and the tool
@@ -290,7 +295,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             requestId,
             toolName: req.tool_name,
             displayName: req.display_name,
-            input: req.input || {}
+            input: req.input || {},
+            suggestions: req.permission_suggestions
           })
         }
         return
@@ -460,7 +466,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       {pendingPermission && (
         <PermissionModal
           req={pendingPermission}
-          onDecide={(decision) => {
+          onDecide={async (decision, saveSuggestion) => {
+            if (saveSuggestion) {
+              await window.api.settings.addClaudeAllowRule(saveSuggestion.rules).catch(() => {})
+            }
             window.api.chat.respondPermission(id, pendingPermission.requestId, decision)
             setPendingPermission(null)
           }}
@@ -470,9 +479,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   )
 }
 
+interface PermissionSuggestion { type: string; rules: { toolName: string; ruleContent: string }[]; behavior: string; destination: string }
 function PermissionModal({ req, onDecide }: {
-  req: { requestId: string; toolName: string; displayName?: string; input: Record<string, unknown> }
-  onDecide: (d: 'allow' | 'deny') => void
+  req: { requestId: string; toolName: string; displayName?: string; input: Record<string, unknown>; suggestions?: PermissionSuggestion[] }
+  onDecide: (d: 'allow' | 'deny', saveSuggestion?: PermissionSuggestion) => void
 }) {
   const summary = (() => {
     const i = req.input
@@ -518,18 +528,27 @@ function PermissionModal({ req, onDecide }: {
           maxHeight: 200, overflowY: 'auto',
           whiteSpace: 'pre-wrap'
         }}>{summary || '—'}</div>
-        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button onClick={() => onDecide('deny')} style={{
             background: 'transparent', color: CRUSH.Sriracha,
             border: `1px solid ${CRUSH.Sriracha}`, borderRadius: 6,
             padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
           }}>Deny</button>
           <button onClick={() => onDecide('allow')} style={{
-            background: CRUSH.Julep, color: CRUSH.Pepper,
-            border: 'none', borderRadius: 6,
-            padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO,
-            fontWeight: 700, cursor: 'pointer'
+            background: 'transparent', color: CRUSH.Julep,
+            border: `1px solid ${CRUSH.Julep}`, borderRadius: 6,
+            padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
           }}>Allow once</button>
+          {req.suggestions && req.suggestions[0] && (
+            <button onClick={() => onDecide('allow', req.suggestions![0])} style={{
+              background: CRUSH.Julep, color: CRUSH.Pepper,
+              border: 'none', borderRadius: 6,
+              padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO,
+              fontWeight: 700, cursor: 'pointer'
+            }} title={`Adds "${req.suggestions[0].rules.map(r => `${r.toolName}(${r.ruleContent})`).join(', ')}" to ~/.claude/settings.json`}>
+              Allow & remember
+            </button>
+          )}
         </div>
       </div>
     </div>
