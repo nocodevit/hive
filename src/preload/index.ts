@@ -78,6 +78,11 @@ const api = {
       const handler = (_e: any, code: number) => cb(code)
       ipcRenderer.on(`chat:exit:${id}`, handler)
       return () => ipcRenderer.removeListener(`chat:exit:${id}`, handler)
+    },
+    onUsage: (id: string, cb: (usage: { fiveHour?: number; sevenDay?: number }) => void) => {
+      const handler = (_e: any, data: any) => cb(data)
+      ipcRenderer.on(`chat:usage:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:usage:${id}`, handler)
     }
   },
   speech: {

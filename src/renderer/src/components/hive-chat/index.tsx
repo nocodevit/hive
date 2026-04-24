@@ -31,6 +31,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const [contextSize, setContextSize] = useState<string>('') // "1M"
   const [rateLimit, setRateLimit] = useState<{ status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null>(null)
   const [usagePct, setUsagePct] = useState<{ fiveHour?: number; sevenDay?: number }>({})
+  const [sessionId, setSessionId] = useState<string>('')
   const scrollRef = useRef<HTMLDivElement>(null)
   const entryIdRef = useRef(0)
 
@@ -80,6 +81,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             setModelName(rawModel)
           }
         }
+        const sid = (ev as any).session_id as string | undefined
+        if (sid) setSessionId(sid)
         return
       }
       if (ev.type === 'rate_limit_event') {
@@ -147,11 +150,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       setStderr(prev => [...prev.slice(-20), line])
     })
     const offExit = window.api.chat.onExit(id, (code: number) => { setExited(code) })
+    const offUsage = window.api.chat.onUsage(id, (usage) => { setUsagePct(usage) })
 
     return () => {
       offEv()
       offErr()
       offExit()
+      offUsage()
       window.api.chat.stop(id)
     }
   }, [id, cwd, agent, agentName, continueSession, rebaseOnStart])
@@ -197,7 +202,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       }}>
         {timeline.length === 0 && (
           <div style={{ color: CRUSH.Squid, fontSize: 12, padding: 4 }}>
-            Chat session started. Type a message below to talk to Claude.
+            {continueSession
+              ? `Resuming most recent session in ${cwd || 'cwd'}…`
+              : 'New chat. Type below to begin.'}
+            {sessionId && (
+              <span style={{ color: CRUSH.Oyster, marginLeft: 8 }}>
+                · session {sessionId.slice(0, 8)}
+              </span>
+            )}
           </div>
         )}
         {(() => {
@@ -303,25 +315,61 @@ function RateLimitBar({ info }: { info: { status?: string; rateLimitType?: strin
   )
 }
 
+function UsageBar({ pct }: { pct?: number }) {
+  const value = typeof pct === 'number' ? Math.max(0, Math.min(100, pct)) : undefined
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      fontFamily: 'JetBrains Mono, monospace', fontSize: 11
+    }}>
+      <span style={{
+        position: 'relative',
+        display: 'inline-block',
+        width: 80, height: 8,
+        background: CRUSH.Charcoal,
+        borderRadius: 2,
+        overflow: 'hidden'
+      }}>
+        {value != null && (
+          <span style={{
+            position: 'absolute', left: 0, top: 0, bottom: 0,
+            width: `${value}%`,
+            background: CRUSH.Dolly,
+            transition: 'width 0.3s ease'
+          }} />
+        )}
+      </span>
+      <span style={{ color: value != null ? CRUSH.Butter : CRUSH.Squid, minWidth: 30 }}>
+        {value != null ? `${value}%` : '—'}
+      </span>
+    </span>
+  )
+}
+
 function ModelUsageBar({ modelName, contextSize, usagePct, rateLimit }:
   { modelName: string; contextSize: string; usagePct: { fiveHour?: number; sevenDay?: number }; rateLimit: any }) {
   if (!modelName) return null
-  const contextStr = contextSize ? ` (${contextSize})` : ''
   return (
     <div style={{
-      padding: '4px 12px',
+      padding: '6px 12px',
       borderTop: `1px solid ${CRUSH.Charcoal}`,
       background: CRUSH.BBQ,
       fontFamily: FONT_MONO, fontSize: 11,
-      display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
+      display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap',
       color: CRUSH.Squid
     }}>
       <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{modelName}</span>
-      {contextStr && <span>{contextStr.replace(/[()]/g, '')}</span>}
+      {contextSize && <span style={{ color: CRUSH.Squid }}>({contextSize})</span>}
       <span style={{ color: CRUSH.Oyster }}>|</span>
-      <span>5h: <span style={{ color: CRUSH.Ash }}>{usagePct.fiveHour != null ? `${usagePct.fiveHour}%` : '—'}</span></span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ color: CRUSH.Squid }}>5h</span>
+        <UsageBar pct={usagePct.fiveHour} />
+      </span>
       <span style={{ color: CRUSH.Oyster }}>|</span>
-      <span>7d: <span style={{ color: CRUSH.Ash }}>{usagePct.sevenDay != null ? `${usagePct.sevenDay}%` : '—'}</span></span>
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ color: CRUSH.Squid }}>7d</span>
+        <UsageBar pct={usagePct.sevenDay} />
+      </span>
     </div>
   )
 }
