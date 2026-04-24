@@ -50,7 +50,6 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [exited, setExited] = useState<number | null>(null)
-  const [stderr, setStderr] = useState<string[]>([])
   // Status-bar state (above + below input)
   const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
   const [contextSize, setContextSize] = useState<string>('') // "1M"
@@ -275,7 +274,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       // intentionally suppressed — they're protocol housekeeping, not content.
     })
     const offErr = window.api.chat.onStderr(id, (line: string) => {
-      setStderr(prev => [...prev.slice(-20), line])
+      // Append as a one-time system timeline entry — scrolls away with
+      // conversation rather than lurking above the input forever.
+      const text = line.replace(/\s+$/, '')
+      if (text) addEntry({ kind: 'system', text })
     })
     const offExit = window.api.chat.onExit(id, (code: number) => { setExited(code) })
     const offUsage = window.api.chat.onUsage(id, (u) => { setUsage(u as any) })
@@ -363,12 +365,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             claude exited (code {exited})
           </div>
         )}
-        {stderr.length > 0 && (
-          <details style={{ fontSize: 11, color: CRUSH.Oyster, marginTop: 8 }}>
-            <summary style={{ cursor: 'pointer' }}>stderr ({stderr.length})</summary>
-            <pre style={{ whiteSpace: 'pre-wrap', color: CRUSH.Squid }}>{stderr.join('')}</pre>
-          </details>
-        )}
+        {/* stderr lines now flow into the timeline as system entries — no pinned box. */}
       </div>
 
       {/* Rate-limit status line — sits just above input, updates live.
