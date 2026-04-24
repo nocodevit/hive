@@ -179,26 +179,37 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden'
     }}>
-      {/* Timeline */}
+      {/* Timeline — grows naturally with content. When empty, height is
+         close to zero and the input box sits right below the (small)
+         welcome text near the top. As messages arrive the timeline
+         expands, pushing the input downward. Once the timeline's natural
+         height exceeds the viewport, it shrinks + scrolls internally and
+         the input pins to the viewport bottom. */}
       <div ref={scrollRef} style={{
-        flex: 1, overflow: 'auto',
+        flex: '0 1 auto',          // no grow, can shrink
+        minHeight: 0,              // enables shrinking inside flex parent
+        overflow: 'auto',
         padding: '12px 16px',
         scrollBehavior: 'smooth'
       }}>
         {timeline.length === 0 && (
-          <div style={{ color: CRUSH.Squid, fontSize: 12, padding: 12 }}>
+          <div style={{ color: CRUSH.Squid, fontSize: 12, padding: 4 }}>
             Chat session started. Type a message below to talk to Claude.
           </div>
         )}
         {(() => {
-          // Build a tool_use_id → result lookup once per render. The
-          // TimelineRow folds each result into its matching tool_call so
-          // the Dolly left border wraps the whole pair.
           const resultsByToolUseId = new Map<string, { content: string; isError?: boolean }>()
           for (const e of timeline) {
             if (e.kind === 'tool_result') resultsByToolUseId.set(e.toolUseId, { content: e.content, isError: e.isError })
           }
-          return timeline.map(entry => <TimelineRow key={entry.id} entry={entry} resultsByToolUseId={resultsByToolUseId} />)
+          const handleChoose = (pick: string) => {
+            // Clicking a numbered choice sends the full line as the next user message.
+            addEntry({ kind: 'user', text: pick })
+            window.api.chat.send(id, pick)
+          }
+          return timeline.map(entry => (
+            <TimelineRow key={entry.id} entry={entry} resultsByToolUseId={resultsByToolUseId} onChoose={handleChoose} />
+          ))
         })()}
         {exited !== null && (
           <div style={{ color: CRUSH.Sriracha, fontSize: 11, marginTop: 12, padding: 4 }}>

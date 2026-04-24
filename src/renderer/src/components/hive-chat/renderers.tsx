@@ -1,8 +1,37 @@
 import React, { useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { CRUSH, FONT_MONO, TOOL_COLORS } from './crush-styles'
 import type { TimelineEntry } from './types'
 
 const DEFAULT_EXPANDED_LINES = 12
+
+/** Crush-styled markdown renderer shared by user + assistant messages. */
+const MD_COMPONENTS: Record<string, any> = {
+  strong: ({ children }: any) => <strong style={{ color: CRUSH.Butter, fontWeight: 700 }}>{children}</strong>,
+  em: ({ children }: any) => <em style={{ color: CRUSH.Ash, fontStyle: 'italic' }}>{children}</em>,
+  code: ({ inline, children }: any) => inline
+    ? <code style={{ color: CRUSH.Bok, background: CRUSH.BBQ, padding: '0 4px', borderRadius: 3, fontFamily: FONT_MONO }}>{children}</code>
+    : <pre style={{ background: CRUSH.BBQ, border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 4, padding: '8px 12px', fontSize: 12, overflow: 'auto', color: CRUSH.Ash, margin: '4px 0' }}><code style={{ fontFamily: FONT_MONO }}>{children}</code></pre>,
+  ul: ({ children }: any) => <ul style={{ paddingLeft: 18, margin: '4px 0' }}>{children}</ul>,
+  ol: ({ children }: any) => <ol style={{ paddingLeft: 18, margin: '4px 0' }}>{children}</ol>,
+  li: ({ children }: any) => <li style={{ color: CRUSH.Ash, marginBottom: 2 }}>{children}</li>,
+  p: ({ children }: any) => <p style={{ margin: '4px 0', color: CRUSH.Ash }}>{children}</p>,
+  a: ({ href, children }: any) => <a href={href} style={{ color: CRUSH.Malibu, textDecoration: 'underline' }}>{children}</a>,
+  h1: ({ children }: any) => <h3 style={{ color: CRUSH.Butter, fontSize: 15, margin: '6px 0 4px' }}>{children}</h3>,
+  h2: ({ children }: any) => <h4 style={{ color: CRUSH.Butter, fontSize: 14, margin: '6px 0 4px' }}>{children}</h4>,
+  h3: ({ children }: any) => <h5 style={{ color: CRUSH.Butter, fontSize: 13, margin: '6px 0 4px' }}>{children}</h5>,
+  blockquote: ({ children }: any) => <blockquote style={{ borderLeft: `2px solid ${CRUSH.Charple}`, paddingLeft: 10, margin: '4px 0', color: CRUSH.Squid }}>{children}</blockquote>,
+  hr: () => <hr style={{ border: 'none', borderTop: `1px solid ${CRUSH.Charcoal}`, margin: '6px 0' }} />
+}
+
+function CrushMarkdown({ text }: { text: string }) {
+  return (
+    <div style={{ fontFamily: FONT_MONO, fontSize: 13, lineHeight: 1.55 }}>
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{text}</ReactMarkdown>
+    </div>
+  )
+}
 
 /* ────────────────────────────────────────────────────────────
  *  USER MESSAGE — rgba(107,80,255,0.08) bg + Charple left border
@@ -28,21 +57,80 @@ export function UserMessage({ text }: { text: string }) {
 }
 
 /* ────────────────────────────────────────────────────────────
- *  ASSISTANT MESSAGE — Ash text on Pepper, no frame
+ *  ASSISTANT MESSAGE — Ash text. If the message ends with a
+ *  numbered list (`1. … 2. … 3. …`), the list is split out and
+ *  rendered as clickable options below the body. Clicks pipe the
+ *  chosen text back as the next user message.
  * ──────────────────────────────────────────────────────────── */
-export function AssistantMessage({ text }: { text: string }) {
+export function AssistantMessage({ text, onChoose }: { text: string; onChoose?: (pick: string) => void }) {
+  const parsed = extractTrailingChoices(text)
+  if (!parsed) return <PlainAssistantText text={text} />
   return (
-    <div style={{
-      color: CRUSH.Ash,
-      margin: '6px 0',
-      padding: '2px 0',
-      fontFamily: FONT_MONO,
-      whiteSpace: 'pre-wrap',
-      lineHeight: 1.55
-    }}>
-      {text}
+    <>
+      <PlainAssistantText text={parsed.body} />
+      {parsed.choices.length > 0 && (
+        <div style={{ margin: '4px 0 10px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {parsed.choices.map(c => (
+            <button
+              key={c.num}
+              onClick={() => onChoose?.(c.raw)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '6px 12px',
+                border: `1px solid ${CRUSH.Charcoal}`,
+                borderRadius: 6,
+                background: 'transparent',
+                color: CRUSH.Ash,
+                fontFamily: FONT_MONO, fontSize: 13,
+                cursor: 'pointer',
+                textAlign: 'left' as const
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,96,255,0.1)'
+                e.currentTarget.style.borderColor = CRUSH.Dolly
+                e.currentTarget.style.color = CRUSH.Butter
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent'
+                e.currentTarget.style.borderColor = CRUSH.Charcoal
+                e.currentTarget.style.color = CRUSH.Ash
+              }}
+            >
+              <span style={{ color: CRUSH.Dolly, fontWeight: 700, minWidth: 16 }}>{c.num}</span>
+              <span style={{ flex: 1 }}><CrushMarkdown text={c.label} /></span>
+            </button>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+function PlainAssistantText({ text }: { text: string }) {
+  return (
+    <div style={{ color: CRUSH.Ash, margin: '6px 0', padding: '2px 0' }}>
+      <CrushMarkdown text={text} />
     </div>
   )
+}
+
+interface Choice { num: number; label: string; raw: string }
+
+/** If the tail of a message is a run of `N. ...` lines, peel them off. */
+function extractTrailingChoices(text: string): { body: string; choices: Choice[] } | null {
+  const lines = text.split('\n')
+  const tail: Choice[] = []
+  let i = lines.length - 1
+  while (i >= 0) {
+    const m = lines[i].match(/^\s*(\d+)\.\s+(.+)$/)
+    if (!m) break
+    tail.unshift({ num: Number(m[1]), label: m[2], raw: lines[i].trim() })
+    i--
+  }
+  if (tail.length < 2) return null
+  // Trim trailing blank lines off the body.
+  while (i >= 0 && lines[i].trim() === '') i--
+  return { body: lines.slice(0, i + 1).join('\n'), choices: tail }
 }
 
 /* ────────────────────────────────────────────────────────────
@@ -262,18 +350,19 @@ export function SystemLine({ text }: { text: string }) {
 /* Render a whole timeline entry. tool_call entries consume their matching
  * tool_result from the map (keyed by toolUseId) and render as one combined
  * block — the Dolly left-border spans header + result. */
-export function TimelineRow({ entry, resultsByToolUseId }: {
+export function TimelineRow({ entry, resultsByToolUseId, onChoose }: {
   entry: TimelineEntry
   resultsByToolUseId: Map<string, { content: string; isError?: boolean }>
+  onChoose?: (pick: string) => void
 }) {
   switch (entry.kind) {
     case 'user': return <UserMessage text={entry.text} />
-    case 'assistant': return <AssistantMessage text={entry.text} />
+    case 'assistant': return <AssistantMessage text={entry.text} onChoose={onChoose} />
     case 'tool_call': {
       const result = resultsByToolUseId.get(entry.toolUseId)
       return <ToolBlock name={entry.name} input={entry.input} result={result} />
     }
-    case 'tool_result': return null // rendered inline inside the matching tool_call
+    case 'tool_result': return null
     case 'system': return <SystemLine text={entry.text} />
   }
 }
