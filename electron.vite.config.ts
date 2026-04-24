@@ -18,7 +18,10 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@': resolve('src/renderer/src')
+        '@': resolve('src/renderer/src'),
+        // Upstream package.json sets "module": "lib/xterm.mjs" but the file actually
+        // lives in lib-headless/ — bypass the broken field by pointing directly at the ESM bundle.
+        '@xterm/headless': resolve('node_modules/@xterm/headless/lib-headless/xterm-headless.mjs')
       }
     },
     plugins: [react()]
