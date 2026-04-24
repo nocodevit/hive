@@ -1,5 +1,7 @@
 import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process'
-import { ipcMain, BrowserWindow } from 'electron'
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { ipcMain, BrowserWindow, app } from 'electron'
 
 /**
  * Spawn a `claude --print --input-format stream-json --output-format stream-json`
@@ -16,9 +18,23 @@ interface ChatSession {
   child: ChildProcessWithoutNullStreams
   buffer: string
   startedAt: number
+  logPath: string
 }
 
 const sessions = new Map<string, ChatSession>()
+
+/**
+ * Every chat session tees its raw JSON event stream to disk under
+ * ~/.hive/chat-logs/<session-id>-<timestamp>.jsonl. This gives us a real
+ * corpus of captured events for iterating on renderers without asking
+ * the user to manually run `claude --print` every time.
+ */
+function logDir(): string {
+  const base = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
+  const dir = join(base, 'chat-logs')
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+  return dir
+}
 
 function broadcast(event: string, payload: unknown) {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -64,7 +80,8 @@ export function startChat(id: string, opts: { cwd?: string; agent?: string; name
     stdio: ['pipe', 'pipe', 'pipe']
   })
 
-  const session: ChatSession = { id, child, buffer: '', startedAt: Date.now() }
+  const logPath = join(logDir(), `${id}-${Date.now()}.jsonl`)
+  const session: ChatSession = { id, child, buffer: '', startedAt: Date.now(), logPath }
   sessions.set(id, session)
 
   child.stdout.on('data', (chunk: Buffer) => {
@@ -73,6 +90,8 @@ export function startChat(id: string, opts: { cwd?: string; agent?: string; name
     session.buffer = rest
     for (const ev of events) {
       broadcast(`chat:event:${id}`, ev)
+      // Tee raw event to disk for offline replay / renderer development.
+      try { appendFileSync(session.logPath, JSON.stringify(ev) + '\n') } catch {}
     }
   })
   child.stderr.on('data', (chunk: Buffer) => {
@@ -100,7 +119,10 @@ export function sendUserMessage(id: string, text: string) {
     }
   }
   try {
-    session.child.stdin.write(JSON.stringify(frame) + '\n')
+    const line = JSON.stringify(frame) + '\n'
+    session.child.stdin.write(line)
+    // Log outbound too so replay has complete context.
+    try { appendFileSync(session.logPath, JSON.stringify({ _direction: 'stdin', ...frame }) + '\n') } catch {}
     return { ok: true }
   } catch (e) {
     return { ok: false, error: String(e) }
