@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
+import RichTerminal from './RichTerminal'
+import ClaudeTerm from './ClaudeTerm'
+
+type ViewMode = 'raw' | 'rich' | 'compare'
 
 interface TerminalProps {
   id: string
@@ -24,6 +28,14 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   const isAtBottom = useRef(true)
   const visibleRef = useRef(visible)
   const [showScrollDown, setShowScrollDown] = useState(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const [mode, setMode] = useState<ViewMode>('raw')
+  const richMode = mode === 'rich'
+  const compareMode = mode === 'compare'
+  const [richLines, setRichLines] = useState<string[]>([])
+  const richLinesRef = useRef<string[]>([])
+  const [interactivePrompt, setInteractivePrompt] = useState<{ type: 'menu' | 'confirm' | 'input'; title: string; options: { label: string; value: string }[] } | null>(null)
+  const ptyBufferRef = useRef('')
 
   useEffect(() => {
     const el = containerRef.current
@@ -34,10 +46,28 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
       fontSize: 13,
       fontFamily: '"Noto Mono for Powerline", "MesloLGS NF", Menlo, Monaco, monospace',
       theme: {
-        background: '#0a0a0a',
-        foreground: '#e4e4e7',
-        cursor: '#e4e4e7',
-        selectionBackground: '#3f3f46'
+        background: '#201F26',
+        foreground: '#DFDBDD',
+        cursor: '#FF60FF',
+        cursorAccent: '#201F26',
+        selectionBackground: 'rgba(107,80,255,0.3)',
+        selectionForeground: '#FFFAF1',
+        black: '#201F26',
+        red: '#EB4268',
+        green: '#00FFB2',
+        yellow: '#E8FE96',
+        blue: '#00A4FF',
+        magenta: '#FF60FF',
+        cyan: '#68FFD6',
+        white: '#DFDBDD',
+        brightBlack: '#605F6B',
+        brightRed: '#FF577D',
+        brightGreen: '#68FFD6',
+        brightYellow: '#FFFAF1',
+        brightBlue: '#4FBEFE',
+        brightMagenta: '#FF84FF',
+        brightCyan: '#5CDFEA',
+        brightWhite: '#F1EFEF'
       }
     })
 
@@ -101,6 +131,38 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
             window.api.pty.onData(id, (data) => {
               term.write(data)
               if (visibleRef.current && isAtBottom.current) term.scrollToBottom()
+              // Capture lines for Rich mode
+              const newLines = data.split('\n')
+              richLinesRef.current = [...richLinesRef.current.slice(-500), ...newLines]
+              setRichLines([...richLinesRef.current])
+              // Detect interactive prompts
+              ptyBufferRef.current = (ptyBufferRef.current + data).slice(-2000)
+              const buf = ptyBufferRef.current.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r/g, '')
+              // Menu: "❯ 1. Option A\n  2. Option B\n  3. Option C"
+              const menuMatch = buf.match(/(?:❯\s*)?(\d+)\.\s+(.+?)(?:\s*\(recommended\))?\n\s+(\d+)\.\s+(.+?)(?:\n\s+(\d+)\.\s+(.+?))?(?:\n|$)/)
+              if (menuMatch && !interactivePrompt) {
+                const options: { label: string; value: string }[] = []
+                if (menuMatch[1] && menuMatch[2]) options.push({ label: menuMatch[2].trim(), value: menuMatch[1] })
+                if (menuMatch[3] && menuMatch[4]) options.push({ label: menuMatch[4].trim(), value: menuMatch[3] })
+                if (menuMatch[5] && menuMatch[6]) options.push({ label: menuMatch[6].trim(), value: menuMatch[5] })
+                if (options.length >= 2) {
+                  // Extract title from lines before menu
+                  const lines = buf.split('\n')
+                  const menuIdx = lines.findIndex(l => /❯\s*\d+\./.test(l) || /^\s*1\./.test(l))
+                  const title = menuIdx > 0 ? lines.slice(Math.max(0, menuIdx - 3), menuIdx).join(' ').trim() : ''
+                  setInteractivePrompt({ type: 'menu', title, options })
+                  ptyBufferRef.current = ''
+                }
+              }
+              // Confirm: "Y/n" or "[Y/n]"
+              if (/\[?Y\/n\]?\s*[>❯]?\s*$/.test(buf) && !interactivePrompt) {
+                setInteractivePrompt({
+                  type: 'confirm',
+                  title: buf.split('\n').filter(l => l.trim()).slice(-3).join(' ').replace(/\[?Y\/n\]?\s*[>❯]?\s*$/, '').trim(),
+                  options: [{ label: 'Yes', value: 'Y' }, { label: 'No', value: 'N' }]
+                })
+                ptyBufferRef.current = ''
+              }
             })
 
             window.api.pty.onExit(id, () => {
@@ -161,6 +223,16 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
     }
   }, [visible])
 
+  // Speech transcript → write to PTY
+  useEffect(() => {
+    const remove = window.api.speech.onTranscript((line: string) => {
+      if (visible && line.trim()) {
+        window.api.pty.write(id, line.trim())
+      }
+    })
+    return remove
+  }, [id, visible])
+
   useEffect(() => {
     return () => {
       termRef.current?.dispose()
@@ -192,18 +264,119 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
 
   return (
     <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'visible' }}>
+      {/* Mode toggle */}
+      {visible && (
+        <div className="absolute top-2 right-2 z-[9999] flex items-center gap-0">
+          <button
+            onClick={() => setMode('raw')}
+            className={`px-2 py-1 rounded-l-md text-[10px] font-mono cursor-pointer transition-colors border ${
+              mode === 'raw' ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
+            }`}
+          >Raw</button>
+          <button
+            onClick={() => setMode('rich')}
+            className={`px-2 py-1 text-[10px] font-mono cursor-pointer transition-colors border -ml-px ${
+              mode === 'rich' ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
+            }`}
+          >Rich</button>
+          <button
+            onClick={() => setMode('compare')}
+            className={`px-2 py-1 rounded-r-md text-[10px] font-mono cursor-pointer transition-colors border -ml-px ${
+              mode === 'compare' ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
+            }`}
+          >Compare</button>
+        </div>
+      )}
+      {/* xterm.js — full width normally, half width in compare mode */}
       <div
         ref={containerRef}
         data-terminal-id={id}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         style={{
-          width: '100%', height: '100%', minHeight: '200px',
+          width: compareMode ? '50%' : '100%',
+          height: '100%', minHeight: '200px',
           visibility: visible ? 'visible' : 'hidden',
           position: visible ? 'relative' : 'absolute',
-          pointerEvents: visible ? 'auto' : 'none'
+          pointerEvents: visible ? 'auto' : 'none',
+          borderRight: compareMode ? '1px solid #3A3943' : 'none',
+          transition: 'width 0.15s ease'
         }}
       />
+      {/* ClaudeTerm — right half in compare mode */}
+      {compareMode && visible && (
+        <div style={{
+          position: 'absolute',
+          top: 0, right: 0, bottom: 0,
+          width: '50%',
+          background: '#201F26',
+          overflow: 'hidden'
+        }}>
+          <div style={{
+            position: 'absolute', top: 6, left: 10,
+            fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
+            color: '#858392', letterSpacing: '0.08em',
+            textTransform: 'uppercase', zIndex: 5, pointerEvents: 'none'
+          }}>ClaudeTerm (ours)</div>
+          <div style={{
+            position: 'absolute', top: 6, right: 80,
+            fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
+            color: '#858392', letterSpacing: '0.08em',
+            textTransform: 'uppercase', zIndex: 5, pointerEvents: 'none'
+          }}></div>
+          <ClaudeTerm id={id} visible={visible} />
+        </div>
+      )}
+      {compareMode && visible && (
+        <div style={{
+          position: 'absolute', top: 6, left: 10,
+          fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
+          color: '#858392', letterSpacing: '0.08em',
+          textTransform: 'uppercase', zIndex: 5, pointerEvents: 'none'
+        }}>xterm.js</div>
+      )}
+      {/* Rich overlay — floats above xterm, only covers scrollback history, not active input area */}
+      {richMode && visible && (
+        <div style={{
+          position: 'absolute', top: 0, left: 0, right: 0, bottom: 80,
+          pointerEvents: 'auto', zIndex: 10,
+          overflow: 'hidden'
+        }}>
+          <RichTerminal lines={richLines} visible={visible} />
+        </div>
+      )}
+      {/* Voice input button */}
+      {visible && (
+        <button
+          onClick={async () => {
+            if (isRecording) {
+              await window.api.speech.stop()
+              setIsRecording(false)
+            } else {
+              setIsRecording(true)
+              await window.api.speech.start()
+            }
+          }}
+          className={`absolute bottom-4 left-4 w-9 h-9 rounded-full flex items-center justify-center shadow-lg cursor-pointer transition-all ${
+            isRecording
+              ? 'bg-red-500 animate-pulse'
+              : 'bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover'
+          }`}
+          style={{ zIndex: 9999 }}
+          title={isRecording ? 'Stop recording' : 'Voice input'}
+        >
+          {isRecording ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+              <line x1="12" y1="19" x2="12" y2="23" />
+              <line x1="8" y1="23" x2="16" y2="23" />
+            </svg>
+          )}
+        </button>
+      )}
       {showScrollDown && visible && (
         <button
           onClick={scrollToBottom}
@@ -217,6 +390,71 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
           </svg>
           <span className="text-[12px] font-medium">Bottom</span>
         </button>
+      )}
+      {/* Interactive prompt popup — Crush-style */}
+      {interactivePrompt && visible && (
+        <div className="absolute inset-0 flex items-center justify-center" style={{ zIndex: 9999, background: 'rgba(32,31,38,0.85)', backdropFilter: 'blur(8px)' }}>
+          <div style={{
+            background: '#2D2C35',
+            border: '2px solid #FF60FF',
+            borderRadius: '16px',
+            padding: '20px 24px',
+            minWidth: '320px',
+            maxWidth: '480px',
+            boxShadow: '0 0 30px rgba(255,96,255,0.3), 0 0 60px rgba(107,80,255,0.2), 0 0 100px rgba(255,96,255,0.1)'
+          }}>
+            {interactivePrompt.title && (
+              <p style={{ color: '#DFDBDD', fontSize: '13px', marginBottom: '16px', lineHeight: 1.5 }}>
+                {interactivePrompt.title}
+              </p>
+            )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {interactivePrompt.options.map((opt, i) => (
+                <button
+                  key={i}
+                  onClick={() => {
+                    window.api.pty.write(id, opt.value + '\r')
+                    setInteractivePrompt(null)
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '12px',
+                    padding: '10px 16px',
+                    borderRadius: '10px',
+                    border: i === 0 ? '2px solid #FF60FF' : '1px solid #3A3943',
+                    background: i === 0 ? 'rgba(255,96,255,0.12)' : '#201F26',
+                    color: i === 0 ? '#FFFAF1' : '#DFDBDD',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    textAlign: 'left' as const,
+                    transition: 'all 0.15s',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = '#FF60FF'; e.currentTarget.style.background = 'rgba(255,96,255,0.15)' }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = i === 0 ? '#FF60FF' : '#3A3943'; e.currentTarget.style.background = i === 0 ? 'rgba(255,96,255,0.12)' : '#201F26' }}
+                >
+                  <span style={{ color: '#C259FF', fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: '14px' }}>{opt.value}</span>
+                  <span>{opt.label}</span>
+                  {i === 0 && <span style={{ marginLeft: 'auto', fontSize: '10px', color: '#858392' }}>recommended</span>}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setInteractivePrompt(null)}
+              style={{
+                marginTop: '12px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                border: '1px solid #3A3943',
+                background: 'transparent',
+                color: '#605F6B',
+                cursor: 'pointer',
+                fontSize: '11px',
+                width: '100%'
+              }}
+            >Dismiss (use terminal directly)</button>
+          </div>
+        </div>
       )}
     </div>
   )
