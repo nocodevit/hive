@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Terminal as XTerm } from '@xterm/xterm'
+import { Terminal as XTerm, IMarker, IDecoration } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { Unicode11Addon } from '@xterm/addon-unicode11'
 import '@xterm/xterm/css/xterm.css'
 import RichTerminal from './RichTerminal'
-import PrettyTerm from './pretty-term'
 
-type ViewMode = 'raw' | 'pretty' | 'rich' | 'compare'
+type ViewMode = 'raw' | 'pretty'
 
 interface TerminalProps {
   id: string
@@ -29,12 +29,20 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   const visibleRef = useRef(visible)
   const [showScrollDown, setShowScrollDown] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
-  const [mode, setMode] = useState<ViewMode>('raw')
-  const richMode = mode === 'rich'
-  const compareMode = mode === 'compare'
+  const [mode, setMode] = useState<ViewMode>('pretty')
   const prettyMode = mode === 'pretty'
+  const prettyModeRef = useRef(prettyMode)
+  prettyModeRef.current = prettyMode
+  const richMode = false
+  const compareMode = false
   const [richLines, setRichLines] = useState<string[]>([])
   const richLinesRef = useRef<string[]>([])
+  // Decoration state for Pretty-mode overlays (user-input row highlight, green ❯)
+  const inputMarkerRef = useRef<IMarker | null>(null)
+  const inputBgDecoRef = useRef<IDecoration | null>(null)
+  const promptDecoRef = useRef<IDecoration | null>(null)
+  const currentInputLineRef = useRef<number>(-1)
+  const updateDecorationsRef = useRef<() => void>(() => {})
   const [interactivePrompt, setInteractivePrompt] = useState<{ type: 'menu' | 'confirm' | 'input'; title: string; options: { label: string; value: string }[] } | null>(null)
   const ptyBufferRef = useRef('')
 
@@ -44,6 +52,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
 
     const term = new XTerm({
       cursorBlink: true,
+      allowProposedApi: true, // Unicode11Addon + decorations need this
       fontSize: 13,
       fontFamily: '"Noto Mono for Powerline", "MesloLGS NF", Menlo, Monaco, monospace',
       theme: {
@@ -74,9 +83,95 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
 
     const fit = new FitAddon()
     term.loadAddon(fit)
+    const unicode = new Unicode11Addon()
+    term.loadAddon(unicode)
+    term.unicode.activeVersion = '11'
     term.open(el)
     termRef.current = term
     fitRef.current = fit
+
+    /**
+     * Pretty-mode overlays: we keep xterm as the renderer and layer React-
+     * flavored Crush decorations on top via registerMarker/registerDecoration.
+     * Markers track a specific buffer line through scrollback.
+     */
+    const disposeInputDecorations = () => {
+      inputBgDecoRef.current?.dispose()
+      promptDecoRef.current?.dispose()
+      inputMarkerRef.current?.dispose()
+      inputBgDecoRef.current = null
+      promptDecoRef.current = null
+      inputMarkerRef.current = null
+      currentInputLineRef.current = -1
+    }
+
+    const updateInputDecorations = () => {
+      if (!termRef.current) return
+      if (!prettyModeRef.current) {
+        disposeInputDecorations()
+        return
+      }
+      const t = termRef.current
+      const buf = t.buffer.active
+      const absY = buf.baseY + buf.cursorY
+      if (absY === currentInputLineRef.current && inputBgDecoRef.current) return
+      const line = buf.getLine(absY)
+      const text = line?.translateToString(false) ?? ''
+      if (!text.trimStart().startsWith('❯')) {
+        disposeInputDecorations()
+        return
+      }
+      disposeInputDecorations()
+      const marker = t.registerMarker(0)
+      if (!marker) return
+      inputMarkerRef.current = marker
+      currentInputLineRef.current = absY
+
+      // Dolly-tinted background overlay covering the typed-text region
+      const bg = t.registerDecoration({
+        marker,
+        x: 2,
+        width: Math.max(1, t.cols - 2),
+        height: 1,
+        layer: 'bottom'
+      })
+      if (bg) {
+        bg.onRender((el: HTMLElement) => {
+          el.style.background = 'rgba(255,96,255,0.22)'
+          el.style.borderLeft = '2px solid #FF60FF'
+          el.style.pointerEvents = 'none'
+          el.style.boxSizing = 'border-box'
+        })
+        inputBgDecoRef.current = bg
+      }
+
+      // Green ❯ overlay on top of whatever color Claude Code drew
+      const prompt = t.registerDecoration({
+        marker,
+        x: 0,
+        width: 1,
+        height: 1,
+        layer: 'top'
+      })
+      if (prompt) {
+        prompt.onRender((el: HTMLElement) => {
+          el.textContent = '❯'
+          el.style.color = '#00FFB2'
+          el.style.fontWeight = '700'
+          el.style.background = '#201F26'
+          el.style.textAlign = 'center'
+          el.style.pointerEvents = 'none'
+          el.style.lineHeight = el.style.height || `${t.options.fontSize ?? 13}px`
+          el.style.fontFamily = t.options.fontFamily || 'monospace'
+        })
+        promptDecoRef.current = prompt
+      }
+    }
+
+    updateDecorationsRef.current = updateInputDecorations
+    // Recompute decorations whenever cursor moves (a render tick) or new data arrives.
+    const offCursor = term.onCursorMove(updateInputDecorations)
+    const offWriteParsed = term.onWriteParsed(updateInputDecorations)
 
     // Intercept paste: convert file paste to path instead of image (capture phase to beat xterm)
     const pasteHandler = (ev: Event) => {
@@ -212,8 +307,16 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
 
     return () => {
       observer.disconnect()
+      offCursor.dispose()
+      offWriteParsed.dispose()
+      disposeInputDecorations()
     }
   }, [id, cwd])
+
+  // Re-run decoration logic when the Pretty toggle flips.
+  useEffect(() => {
+    updateDecorationsRef.current()
+  }, [prettyMode])
 
   useEffect(() => {
     visibleRef.current = visible
@@ -265,7 +368,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
 
   return (
     <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'visible' }}>
-      {/* Mode toggle */}
+      {/* Mode toggle — Pretty = xterm + Crush overlays (default), Raw = bare xterm */}
       {visible && (
         <div className="absolute top-2 right-2 z-[9999] flex items-center gap-0">
           <button
@@ -276,66 +379,26 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
           >Raw</button>
           <button
             onClick={() => setMode('pretty')}
-            className={`px-2 py-1 text-[10px] font-mono cursor-pointer transition-colors border -ml-px ${
+            className={`px-2 py-1 rounded-r-md text-[10px] font-mono cursor-pointer transition-colors border -ml-px ${
               mode === 'pretty' ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
             }`}
           >Pretty</button>
-          <button
-            onClick={() => setMode('compare')}
-            className={`px-2 py-1 rounded-r-md text-[10px] font-mono cursor-pointer transition-colors border -ml-px ${
-              mode === 'compare' ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
-            }`}
-          >Compare</button>
         </div>
       )}
-      {/* xterm.js — stays mounted in every mode (PTY consumer + Raw/Compare renderer).
-          In Pretty mode it's hidden offscreen so the session isn't torn down. */}
+      {/* xterm.js — the one and only renderer. Pretty mode layers decorations on top. */}
       <div
         ref={containerRef}
         data-terminal-id={id}
         onDragOver={(e) => e.preventDefault()}
         onDrop={handleDrop}
         style={{
-          width: compareMode ? '50%' : '100%',
+          width: '100%',
           height: '100%', minHeight: '200px',
-          visibility: visible && !prettyMode ? 'visible' : 'hidden',
-          position: visible && !prettyMode ? 'relative' : 'absolute',
-          pointerEvents: visible && !prettyMode ? 'auto' : 'none',
-          borderRight: compareMode ? '1px solid #3A3943' : 'none',
-          transition: 'width 0.15s ease',
-          top: prettyMode ? -9999 : 0,
-          left: prettyMode ? -9999 : 0
+          visibility: visible ? 'visible' : 'hidden',
+          position: visible ? 'relative' : 'absolute',
+          pointerEvents: visible ? 'auto' : 'none'
         }}
       />
-      {/* PrettyTerm — full viewport in pretty mode, right half in compare mode */}
-      {(prettyMode || compareMode) && visible && (
-        <div style={{
-          position: 'absolute',
-          top: 0, bottom: 0,
-          right: 0,
-          width: compareMode ? '50%' : '100%',
-          background: '#201F26',
-          overflow: 'hidden'
-        }}>
-          {compareMode && (
-            <div style={{
-              position: 'absolute', top: 6, left: 10,
-              fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
-              color: '#858392', letterSpacing: '0.08em',
-              textTransform: 'uppercase', zIndex: 5, pointerEvents: 'none'
-            }}>Pretty (ours)</div>
-          )}
-          <PrettyTerm id={id} visible={visible} active={prettyMode || compareMode} />
-        </div>
-      )}
-      {compareMode && visible && (
-        <div style={{
-          position: 'absolute', top: 6, left: 10,
-          fontSize: 10, fontFamily: 'JetBrains Mono, monospace',
-          color: '#858392', letterSpacing: '0.08em',
-          textTransform: 'uppercase', zIndex: 5, pointerEvents: 'none'
-        }}>xterm.js</div>
-      )}
       {/* Rich overlay — floats above xterm, only covers scrollback history, not active input area */}
       {richMode && visible && (
         <div style={{
