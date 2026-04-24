@@ -274,7 +274,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         {timeline.length === 0 && (
           <div style={{ color: CRUSH.Squid, fontSize: 12, padding: 4 }}>
             {continueSession
-              ? `Resuming most recent session in ${cwd || 'cwd'}…`
+              ? `Resuming most recent session in ${shortenPath(cwd)}…`
               : 'New chat. Type below to begin.'}
             {sessionId && (
               <span style={{ color: CRUSH.Oyster, marginLeft: 8 }}>
@@ -358,6 +358,22 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       <ModelUsageBar modelName={modelName} contextSize={contextSize} usage={usage} rateLimit={rateLimit} />
     </div>
   )
+}
+
+/** "/Users/meiyang/Front…/tracy-website" — ~ for home, and ellipsis any
+ *  middle directories when the path gets too long. */
+function shortenPath(p?: string): string {
+  if (!p) return 'cwd'
+  const home = (window as any)?.process?.env?.HOME
+    || (p.match(/^\/Users\/[^/]+/)?.[0])
+    || ''
+  let s = home && p.startsWith(home) ? '~' + p.slice(home.length) : p
+  // If still too long, keep first dir after ~ and last two segments.
+  const parts = s.split('/')
+  if (parts.length > 5) {
+    return [parts[0], parts[1], '…', ...parts.slice(-2)].join('/')
+  }
+  return s
 }
 
 function humanEta(resetsAt: number | undefined): string {
