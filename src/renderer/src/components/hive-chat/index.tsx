@@ -64,6 +64,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     sevenDay?: number
   }>({})
   const [sessionId, setSessionId] = useState<string>('')
+  // Pending permission request — when present, a modal blocks Chat until
+  // the user picks allow / deny. See the `control_request` handler below.
+  const [pendingPermission, setPendingPermission] = useState<{
+    requestId: string
+    toolName: string
+    displayName?: string
+    input: Record<string, unknown>
+  } | null>(null)
   const [streamingMode, setStreamingMode] = useState<boolean>(true)
   const [username, setUsername] = useState<string>('')
   // Fetch OS username + persisted streamingMode once; configure the
@@ -270,6 +278,23 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         if (dur != null) parts.push(`${(dur / 1000).toFixed(1)}s`)
         addEntry({ kind: 'system', text: parts.join(' · ') })
       }
+      // control_request: claude is asking for permission to use a tool
+      // (fires when --permission-prompt-tool stdio is set and the tool
+      // isn't in settings.allow). Capture it and show a modal; claude
+      // is blocked on stdin until we reply via respondPermission.
+      if (ev.type === 'control_request') {
+        const req = (ev as any).request
+        const requestId = (ev as any).request_id
+        if (requestId && req?.subtype === 'can_use_tool') {
+          setPendingPermission({
+            requestId,
+            toolName: req.tool_name,
+            displayName: req.display_name,
+            input: req.input || {}
+          })
+        }
+        return
+      }
       // stream_event / system.init / system.status / rate_limit_event are
       // intentionally suppressed — they're protocol housekeeping, not content.
     })
@@ -430,6 +455,83 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         modelName={modelName} contextSize={contextSize} usage={usage} rateLimit={rateLimit}
         streamingMode={streamingMode} onToggleStreaming={toggleStreamingMode}
       />
+
+      {/* Permission modal */}
+      {pendingPermission && (
+        <PermissionModal
+          req={pendingPermission}
+          onDecide={(decision) => {
+            window.api.chat.respondPermission(id, pendingPermission.requestId, decision)
+            setPendingPermission(null)
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function PermissionModal({ req, onDecide }: {
+  req: { requestId: string; toolName: string; displayName?: string; input: Record<string, unknown> }
+  onDecide: (d: 'allow' | 'deny') => void
+}) {
+  const summary = (() => {
+    const i = req.input
+    if (typeof i.command === 'string') return i.command
+    if (typeof i.file_path === 'string') return i.file_path
+    if (typeof i.path === 'string') return i.path
+    if (typeof i.skill === 'string') return `${i.skill}${i.args ? ` ${i.args}` : ''}`
+    if (typeof i.url === 'string') return i.url
+    if (typeof i.pattern === 'string') return i.pattern
+    try { return JSON.stringify(i) } catch { return '' }
+  })()
+  return (
+    <div style={{
+      position: 'absolute', inset: 0,
+      background: 'rgba(15,10,26,0.7)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, fontFamily: FONT_MONO
+    }}>
+      <div style={{
+        background: CRUSH.BBQ,
+        border: `1px solid ${CRUSH.Charple}`,
+        borderRadius: 10,
+        padding: '18px 22px 16px',
+        width: 460, maxWidth: '80%',
+        boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+      }}>
+        <div style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
+          Permission required
+        </div>
+        <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 6 }}>
+          Claude wants to use <strong style={{ color: CRUSH.Charple }}>{req.displayName || req.toolName}</strong>
+        </div>
+        <div style={{
+          color: CRUSH.Ash,
+          background: CRUSH.Pepper,
+          border: `1px solid ${CRUSH.Charcoal}`,
+          borderRadius: 4,
+          padding: '8px 12px',
+          fontSize: 12,
+          marginBottom: 16,
+          fontFamily: FONT_MONO,
+          wordBreak: 'break-all',
+          maxHeight: 200, overflowY: 'auto',
+          whiteSpace: 'pre-wrap'
+        }}>{summary || '—'}</div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={() => onDecide('deny')} style={{
+            background: 'transparent', color: CRUSH.Sriracha,
+            border: `1px solid ${CRUSH.Sriracha}`, borderRadius: 6,
+            padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
+          }}>Deny</button>
+          <button onClick={() => onDecide('allow')} style={{
+            background: CRUSH.Julep, color: CRUSH.Pepper,
+            border: 'none', borderRadius: 6,
+            padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO,
+            fontWeight: 700, cursor: 'pointer'
+          }}>Allow once</button>
+        </div>
+      </div>
     </div>
   )
 }
