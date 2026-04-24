@@ -66,7 +66,9 @@ declare global {
         send: (id: string, text: string) => Promise<{ ok: boolean; error?: string }>
         respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny', input?: Record<string, unknown>, denyMessage?: string) => Promise<{ ok: boolean; error?: string }>
         stop: (id: string) => Promise<{ ok: boolean }>
+        loadOlder: (id: string, batch?: number) => Promise<{ loaded: number; hasOlder: boolean; error?: string }>
         onEvent: (id: string, cb: (ev: any) => void) => () => void
+        onPrepend: (id: string, cb: (payload: { events: any[]; hasOlder: boolean }) => void) => () => void
         onStderr: (id: string, cb: (line: string) => void) => () => void
         onExit: (id: string, cb: (code: number) => void) => () => void
         onUsage: (id: string, cb: (usage: {

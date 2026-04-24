@@ -24,6 +24,11 @@ interface ChatSession {
   logPath: string
   cwd?: string
   usageTimer?: NodeJS.Timeout
+  // Replay state for "Load older" — records the jsonl file we replayed
+  // from and the starting line index. Clicking the button walks the
+  // cursor back a batch and emits earlier events with _prepend:true.
+  replayFile?: string
+  replayedFrom?: number
 }
 
 const sessions = new Map<string, ChatSession>()
@@ -107,7 +112,9 @@ function parseJsonLines(buf: string, sessionId: string): { events: any[]; rest: 
  * messages when `continueSession` is set — without this, `claude -c`
  * loads the model context but never re-emits past messages to stdout.
  */
-function replaySessionHistory(sessionId: string, cwd: string | undefined) {
+const DEFAULT_REPLAY_LIMIT = 500
+
+function replaySessionHistory(sessionId: string, cwd: string | undefined, limit = DEFAULT_REPLAY_LIMIT) {
   try {
     const slug = (cwd || '').replace(/\//g, '-')
     const dir = join(homedir(), '.claude', 'projects', slug)
@@ -119,11 +126,11 @@ function replaySessionHistory(sessionId: string, cwd: string | undefined) {
     if (!files.length) return
     const latest = join(dir, files[0].f)
     const lines = readFileSync(latest, 'utf8').split('\n').filter(Boolean)
-    for (const line of lines) {
+    const startIdx = Math.max(0, lines.length - limit)
+    for (let i = startIdx; i < lines.length; i++) {
+      const line = lines[i]
       try {
         const ev = JSON.parse(line)
-        // Reshape Claude Code's local persistence into the stream-json
-        // event shape the renderer already handles.
         if (ev.type === 'user' && ev.message?.content) {
           broadcast(`chat:event:${sessionId}`, {
             type: 'user',
@@ -139,17 +146,56 @@ function replaySessionHistory(sessionId: string, cwd: string | undefined) {
             _historical: true
           })
         }
-        // file-history-snapshot, summary, etc. are skipped — not user-visible.
       } catch {}
+    }
+    // Record where we started so "Load older" can walk earlier.
+    const session = sessions.get(sessionId)
+    if (session) {
+      session.replayFile = latest
+      session.replayedFrom = startIdx
     }
     broadcast(`chat:event:${sessionId}`, {
       type: 'system',
       subtype: 'history_replayed',
       session_id: sessionId,
       file: latest,
-      count: lines.length
+      count: lines.length - startIdx,
+      total: lines.length,
+      hasOlder: startIdx > 0
     })
   } catch {}
+}
+
+/**
+ * Load the next batch of older events from the recorded replay file.
+ * Emits a single `chat:prepend:<id>` broadcast containing the raw events
+ * array (client flattens + prepends atomically to avoid reverse-scrolling
+ * flicker). Silently no-ops if no prior replay happened or cursor is 0.
+ */
+export function loadOlderHistory(sessionId: string, batch = DEFAULT_REPLAY_LIMIT) {
+  const session = sessions.get(sessionId)
+  if (!session?.replayFile || session.replayedFrom === undefined) return { loaded: 0, hasOlder: false }
+  if (session.replayedFrom === 0) return { loaded: 0, hasOlder: false }
+  try {
+    const lines = readFileSync(session.replayFile, 'utf8').split('\n').filter(Boolean)
+    const newStart = Math.max(0, session.replayedFrom - batch)
+    const events: any[] = []
+    for (let i = newStart; i < session.replayedFrom; i++) {
+      try {
+        const ev = JSON.parse(lines[i])
+        if (ev.type === 'user' && ev.message?.content) {
+          events.push({ type: 'user', message: ev.message, session_id: ev.sessionId, _historical: true })
+        } else if (ev.type === 'assistant' && ev.message) {
+          events.push({ type: 'assistant', message: ev.message, session_id: ev.sessionId, _historical: true })
+        }
+      } catch {}
+    }
+    session.replayedFrom = newStart
+    broadcast(`chat:prepend:${sessionId}`, { events, hasOlder: newStart > 0 })
+    return { loaded: events.length, hasOlder: newStart > 0 }
+  } catch (e) {
+    return { loaded: 0, hasOlder: false, error: String(e) }
+  }
 }
 
 export function startChat(id: string, opts: {
@@ -528,4 +574,5 @@ export function registerChatIpc() {
     respondPermission(id, requestId, decision, input, denyMessage)
   )
   ipcMain.handle('chat:stop', (_e, { id }) => { stopChat(id); return { ok: true } })
+  ipcMain.handle('chat:loadOlder', (_e, { id, batch }) => loadOlderHistory(id, batch))
 }

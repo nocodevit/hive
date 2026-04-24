@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { TimelineRow, ThinkingSpinner } from './renderers'
+import { flattenHistoricalEvents } from './flatten'
+import { EMPTY_RECALL, pushAfterSend, recallDown, recallUp, type RecallState } from './recall'
 import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
 
@@ -112,12 +114,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // composition confirms the candidate, not sends the message.
   const composingRef = useRef(false)
 
-  // Bash-style recall for sent user messages. ↑ steps back through past
-  // sent turns, ↓ steps forward. Draft (what user was typing) is saved
-  // on entry to history mode and restored when they ↓ past the newest.
+  // Bash-style recall for sent user messages. State transitions live in
+  // ./recall.ts as pure helpers so they're unit-tested without a DOM.
   const sentHistoryRef = useRef<string[]>([])
-  const historyIdxRef = useRef<number>(-1)  // -1 = not browsing; 0 = most recent, N = Nth-from-latest
-  const draftRef = useRef<string>('')
+  const recallStateRef = useRef<RecallState>(EMPTY_RECALL)
+  const HISTORY_CAP = 100
 
   // Cap in-memory timeline so very long sessions don't accumulate
   // unbounded React state. Entries fall off the top; JSONL on disk
@@ -137,6 +138,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     })
   }
   const [trimmedCount, setTrimmedCount] = useState(0)
+  // `hasOlderOnDisk` is set from the history_replayed event when the JSONL
+  // has more lines than the replay limit. Drives the "Load older" button.
+  const [hasOlderOnDisk, setHasOlderOnDisk] = useState(false)
+  const [loadingOlder, setLoadingOlder] = useState(false)
 
   useEffect(() => {
     window.api.chat.start(id, { cwd, agent, name: agentName, continueSession, rebaseOnStart })
@@ -190,6 +195,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }
         const sid = (ev as any).session_id as string | undefined
         if (sid) setSessionId(sid)
+        return
+      }
+      if (ev.type === 'system' && (ev as any).subtype === 'history_replayed') {
+        // JSONL replay capped at DEFAULT_REPLAY_LIMIT; the backend flags
+        // whether there are still older lines we can load on demand.
+        if ((ev as any).hasOlder) setHasOlderOnDisk(true)
         return
       }
       if (ev.type === 'rate_limit_event') {
@@ -353,11 +364,22 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     const offExit = window.api.chat.onExit(id, (code: number) => { setExited(code) })
     const offUsage = window.api.chat.onUsage(id, (u) => { setUsage(u as any) })
 
+    // Load-older: backend emits a batch of historical events to prepend.
+    // We flatten them into TimelineEntry[] mirroring the live handler and
+    // setTimeline atomically so scroll position doesn't jitter.
+    const offPrepend = window.api.chat.onPrepend(id, ({ events, hasOlder }) => {
+      const entries = flattenHistoricalEvents(events, () => `e${entryIdRef.current++}`)
+      if (entries.length) setTimeline(prev => [...entries, ...prev])
+      setHasOlderOnDisk(hasOlder)
+      setLoadingOlder(false)
+    })
+
     return () => {
       offEv()
       offErr()
       offExit()
       offUsage()
+      offPrepend()
       window.api.chat.stop(id)
     }
   }, [id, cwd, agent, agentName, continueSession, rebaseOnStart])
@@ -373,39 +395,26 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setSending(true)
     addEntry({ kind: 'user', text })
     setInput('')
-    // Record for ↑ recall; cap at 100 to avoid unbounded growth.
-    sentHistoryRef.current.push(text)
-    if (sentHistoryRef.current.length > 100) sentHistoryRef.current.shift()
-    historyIdxRef.current = -1
-    draftRef.current = ''
+    const { history, state } = pushAfterSend(sentHistoryRef.current, text, HISTORY_CAP)
+    sentHistoryRef.current = history
+    recallStateRef.current = state
     await window.api.chat.send(id, text)
     setSending(false)
   }
 
-  // ↑ recall: cursor must be on first visible line of the textarea (or we
-  // must already be navigating history). Otherwise ↑ is normal cursor-up.
-  // ↓ recall: only active while navigating; restores draft past the newest.
   const tryRecallUp = (ta: HTMLTextAreaElement): boolean => {
     const cursorAtTop = ta.selectionStart === 0 || !input.slice(0, ta.selectionStart).includes('\n')
-    if (!cursorAtTop && historyIdxRef.current === -1) return false
-    const hist = sentHistoryRef.current
-    if (!hist.length) return false
-    if (historyIdxRef.current + 1 >= hist.length) return false
-    if (historyIdxRef.current === -1) draftRef.current = input
-    historyIdxRef.current += 1
-    setInput(hist[hist.length - 1 - historyIdxRef.current])
+    const r = recallUp(sentHistoryRef.current, recallStateRef.current, input, cursorAtTop)
+    if (!r) return false
+    recallStateRef.current = r.state
+    setInput(r.input)
     return true
   }
   const tryRecallDown = (): boolean => {
-    if (historyIdxRef.current === -1) return false
-    const hist = sentHistoryRef.current
-    if (historyIdxRef.current === 0) {
-      historyIdxRef.current = -1
-      setInput(draftRef.current)
-    } else {
-      historyIdxRef.current -= 1
-      setInput(hist[hist.length - 1 - historyIdxRef.current])
-    }
+    const r = recallDown(sentHistoryRef.current, recallStateRef.current)
+    if (!r) return false
+    recallStateRef.current = r.state
+    setInput(r.input)
     return true
   }
 
@@ -466,16 +475,38 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             )}
           </div>
         )}
-        {trimmedCount > 0 && (
-          <div style={{
-            color: CRUSH.Oyster, fontSize: 11, padding: '4px 6px',
-            margin: '2px 0 8px',
-            borderLeft: `2px solid ${CRUSH.Charcoal}`,
-            fontStyle: 'italic' as const
-          }}>
-            ⌃ {trimmedCount} earlier {trimmedCount === 1 ? 'message' : 'messages'} trimmed from view
-            {' · '}
-            <span style={{ color: CRUSH.Squid }}>full log on disk at ~/.claude/projects</span>
+        {(hasOlderOnDisk || trimmedCount > 0) && (
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '4px 0 8px' }}>
+            <button
+              onClick={async () => {
+                if (loadingOlder) return
+                setLoadingOlder(true)
+                await window.api.chat.loadOlder(id).catch(() => {})
+                // setLoadingOlder(false) happens on onPrepend receipt;
+                // this fallback prevents a stuck spinner if no events flow.
+                setTimeout(() => setLoadingOlder(false), 3000)
+              }}
+              disabled={loadingOlder}
+              style={{
+                background: 'transparent',
+                border: `1px solid ${CRUSH.Charcoal}`,
+                borderRadius: 4,
+                padding: '4px 12px',
+                color: CRUSH.Squid,
+                fontFamily: FONT_MONO, fontSize: 11,
+                cursor: loadingOlder ? 'wait' : 'pointer'
+              }}
+              onMouseEnter={e => {
+                e.currentTarget.style.borderColor = CRUSH.Charple
+                e.currentTarget.style.color = CRUSH.Butter
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.borderColor = CRUSH.Charcoal
+                e.currentTarget.style.color = CRUSH.Squid
+              }}
+            >
+              {loadingOlder ? 'Loading…' : '⌃ Load earlier messages'}
+            </button>
           </div>
         )}
         <TimelineList timeline={timeline} onChoose={handleChoose} />
