@@ -108,11 +108,10 @@ export function startChat(id: string, opts: {
   const session: ChatSession = { id, child, buffer: '', startedAt: Date.now(), logPath, cwd: opts.cwd }
   sessions.set(id, session)
 
-  // Fire an immediate /usage query so the status bar populates early, then
-  // refresh every 30 min. Cheap (one message round-trip), subsidized by the
-  // user's Claude subscription. See path A in the journey doc.
-  refreshUsage(session)
-  session.usageTimer = setInterval(() => refreshUsage(session), 30 * 60 * 1000)
+  // NOTE: `/usage` slash command cannot be invoked via --print — claude
+  // short-circuits it with a canned synthetic response. Leaving
+  // refreshUsage wired up for ccusage integration later. No timer yet.
+  void refreshUsage
 
   child.stdout.on('data', (chunk: Buffer) => {
     session.buffer += chunk.toString('utf8')

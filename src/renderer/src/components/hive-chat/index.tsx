@@ -32,6 +32,19 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const [rateLimit, setRateLimit] = useState<{ status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null>(null)
   const [usagePct, setUsagePct] = useState<{ fiveHour?: number; sevenDay?: number }>({})
   const [sessionId, setSessionId] = useState<string>('')
+  // Per-(msgId × blockIdx) accumulator for live stream_event text_delta /
+  // input_json_delta chunks. Lets the UI render assistant text char-by-
+  // char as Claude types rather than snap the whole block at once.
+  const streamAccRef = useRef<{
+    currentMsgId: string
+    blocks: Record<string, {
+      kind: 'text' | 'tool_use' | 'thinking'
+      text?: string
+      toolUseId?: string
+      toolName?: string
+      inputJson?: string
+    }>
+  }>({ currentMsgId: '', blocks: {} })
   const scrollRef = useRef<HTMLDivElement>(null)
   const entryIdRef = useRef(0)
 
@@ -91,12 +104,59 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         return
       }
       if (ev.type === 'stream_event') {
-        // Pluck model from message_start if we didn't get it via init.
         const e = (ev as any).event
+        const acc = streamAccRef.current
+
         if (e?.type === 'message_start') {
           const m = e.message?.model as string | undefined
           if (m && !modelName) setModelName(m)
+          acc.currentMsgId = e.message?.id ?? ''
+          return
         }
+
+        if (e?.type === 'content_block_start') {
+          const idx = e.index
+          const block = e.content_block
+          if (!acc.currentMsgId) return
+          acc.blocks[`${acc.currentMsgId}:${idx}`] = {
+            kind: block.type,
+            text: '',
+            toolUseId: block.id,
+            toolName: block.name,
+            inputJson: ''
+          }
+          return
+        }
+
+        if (e?.type === 'content_block_delta') {
+          const idx = e.index
+          const key = `${acc.currentMsgId}:${idx}`
+          const block = acc.blocks[key]
+          if (!block) return
+
+          if (e.delta.type === 'text_delta' && block.kind === 'text') {
+            block.text = (block.text || '') + e.delta.text
+            const entryId = `msg:${acc.currentMsgId}:${idx}`
+            replaceEntry(entryId, { kind: 'assistant', text: block.text, id: entryId })
+          } else if (e.delta.type === 'input_json_delta' && block.kind === 'tool_use') {
+            block.inputJson = (block.inputJson || '') + e.delta.partial_json
+            // Try parsing on every delta — once it's valid JSON the tool
+            // call's arguments surface live in the timeline.
+            try {
+              const input = JSON.parse(block.inputJson)
+              const entryId = `msg:${acc.currentMsgId}:${idx}`
+              replaceEntry(entryId, {
+                kind: 'tool_call',
+                name: block.toolName || '',
+                toolUseId: block.toolUseId || '',
+                input,
+                id: entryId
+              })
+            } catch { /* still partial */ }
+          }
+          return
+        }
+
         return
       }
       if (ev.type === 'assistant' && 'message' in ev) {
