@@ -79,7 +79,7 @@ const api = {
       ipcRenderer.on(`chat:exit:${id}`, handler)
       return () => ipcRenderer.removeListener(`chat:exit:${id}`, handler)
     },
-    onUsage: (id: string, cb: (usage: { fiveHour?: number; sevenDay?: number }) => void) => {
+    onUsage: (id: string, cb: (usage: any) => void) => {
       const handler = (_e: any, data: any) => cb(data)
       ipcRenderer.on(`chat:usage:${id}`, handler)
       return () => ipcRenderer.removeListener(`chat:usage:${id}`, handler)

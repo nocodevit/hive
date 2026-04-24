@@ -30,7 +30,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
   const [contextSize, setContextSize] = useState<string>('') // "1M"
   const [rateLimit, setRateLimit] = useState<{ status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null>(null)
-  const [usagePct, setUsagePct] = useState<{ fiveHour?: number; sevenDay?: number }>({})
+  const [usage, setUsage] = useState<{
+    costUSD?: number
+    burnPerHour?: number
+    projectedUSD?: number
+    remainingMinutes?: number
+    totalTokens?: number
+  }>({})
   const [sessionId, setSessionId] = useState<string>('')
   // Per-(msgId × blockIdx) accumulator for live stream_event text_delta /
   // input_json_delta chunks. Lets the UI render assistant text char-by-
@@ -210,7 +216,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       setStderr(prev => [...prev.slice(-20), line])
     })
     const offExit = window.api.chat.onExit(id, (code: number) => { setExited(code) })
-    const offUsage = window.api.chat.onUsage(id, (usage) => { setUsagePct(usage) })
+    const offUsage = window.api.chat.onUsage(id, (u) => { setUsage(u as any) })
 
     return () => {
       offEv()
@@ -338,7 +344,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       </div>
 
       {/* Model / usage line — stays under input */}
-      <ModelUsageBar modelName={modelName} contextSize={contextSize} usagePct={usagePct} rateLimit={rateLimit} />
+      <ModelUsageBar modelName={modelName} contextSize={contextSize} usage={usage} rateLimit={rateLimit} />
     </div>
   )
 }
@@ -375,40 +381,46 @@ function RateLimitBar({ info }: { info: { status?: string; rateLimitType?: strin
   )
 }
 
-function UsageBar({ pct }: { pct?: number }) {
-  const value = typeof pct === 'number' ? Math.max(0, Math.min(100, pct)) : undefined
+/** USD or — */
+function fmtUsd(v?: number): string {
+  if (typeof v !== 'number') return '—'
+  if (v >= 100) return `$${v.toFixed(0)}`
+  if (v >= 10) return `$${v.toFixed(1)}`
+  return `$${v.toFixed(2)}`
+}
+
+/** Progress bar driven by projected vs actual cost within the current 5h
+ * block. Shows how much of the projected total has been spent so far. */
+function BurnBar({ cost, projected }: { cost?: number; projected?: number }) {
+  const pct = (cost != null && projected && projected > 0)
+    ? Math.max(0, Math.min(100, (cost / projected) * 100))
+    : undefined
   return (
     <span style={{
-      display: 'inline-flex', alignItems: 'center', gap: 6,
-      fontFamily: 'JetBrains Mono, monospace', fontSize: 11
+      position: 'relative', display: 'inline-block',
+      width: 80, height: 8,
+      background: CRUSH.Charcoal, borderRadius: 2, overflow: 'hidden'
     }}>
-      <span style={{
-        position: 'relative',
-        display: 'inline-block',
-        width: 80, height: 8,
-        background: CRUSH.Charcoal,
-        borderRadius: 2,
-        overflow: 'hidden'
-      }}>
-        {value != null && (
-          <span style={{
-            position: 'absolute', left: 0, top: 0, bottom: 0,
-            width: `${value}%`,
-            background: CRUSH.Dolly,
-            transition: 'width 0.3s ease'
-          }} />
-        )}
-      </span>
-      <span style={{ color: value != null ? CRUSH.Butter : CRUSH.Squid, minWidth: 30 }}>
-        {value != null ? `${value}%` : '—'}
-      </span>
+      {pct != null && (
+        <span style={{
+          position: 'absolute', left: 0, top: 0, bottom: 0,
+          width: `${pct}%`, background: CRUSH.Dolly,
+          transition: 'width 0.3s ease'
+        }} />
+      )}
     </span>
   )
 }
 
-function ModelUsageBar({ modelName, contextSize, usagePct, rateLimit }:
-  { modelName: string; contextSize: string; usagePct: { fiveHour?: number; sevenDay?: number }; rateLimit: any }) {
+function ModelUsageBar({ modelName, contextSize, usage, rateLimit }: {
+  modelName: string
+  contextSize: string
+  usage: { costUSD?: number; burnPerHour?: number; projectedUSD?: number; remainingMinutes?: number; totalTokens?: number }
+  rateLimit: any
+}) {
   if (!modelName) return null
+  const mins = usage.remainingMinutes
+  const eta = mins != null ? (mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`) : ''
   return (
     <div style={{
       padding: '6px 12px',
@@ -423,13 +435,21 @@ function ModelUsageBar({ modelName, contextSize, usagePct, rateLimit }:
       <span style={{ color: CRUSH.Oyster }}>|</span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <span style={{ color: CRUSH.Squid }}>5h</span>
-        <UsageBar pct={usagePct.fiveHour} />
+        <BurnBar cost={usage.costUSD} projected={usage.projectedUSD} />
+        <span style={{ color: CRUSH.Butter, minWidth: 34 }}>{fmtUsd(usage.costUSD)}</span>
       </span>
-      <span style={{ color: CRUSH.Oyster }}>|</span>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ color: CRUSH.Squid }}>7d</span>
-        <UsageBar pct={usagePct.sevenDay} />
-      </span>
+      {usage.burnPerHour != null && (
+        <>
+          <span style={{ color: CRUSH.Oyster }}>·</span>
+          <span>burn {fmtUsd(usage.burnPerHour)}/hr</span>
+        </>
+      )}
+      {usage.projectedUSD != null && (
+        <>
+          <span style={{ color: CRUSH.Oyster }}>·</span>
+          <span>proj {fmtUsd(usage.projectedUSD)}{eta ? ` · ${eta} left` : ''}</span>
+        </>
+      )}
     </div>
   )
 }

@@ -60,7 +60,13 @@ declare global {
         onEvent: (id: string, cb: (ev: any) => void) => () => void
         onStderr: (id: string, cb: (line: string) => void) => () => void
         onExit: (id: string, cb: (code: number) => void) => () => void
-        onUsage: (id: string, cb: (usage: { fiveHour?: number; sevenDay?: number }) => void) => () => void
+        onUsage: (id: string, cb: (usage: {
+          costUSD?: number
+          burnPerHour?: number
+          projectedUSD?: number
+          remainingMinutes?: number
+          totalTokens?: number
+        }) => void) => () => void
       }
       getFilePath: (file: File) => string | null
       project: {
