@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
-import { TimelineRow } from './renderers'
+import { TimelineRow, ThinkingSpinner } from './renderers'
 import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
 
@@ -66,6 +66,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const [sessionId, setSessionId] = useState<string>('')
   // Pending permission request — when present, a modal blocks Chat until
   // the user picks allow / deny. See the `control_request` handler below.
+  // Set when we see message_start and cleared when the first user-
+  // visible content_block_delta (text_delta) or message_stop arrives.
+  // Drives the bottom-of-timeline "✳ Blanching… 3s" spinner.
+  const [thinking, setThinking] = useState<{ since: number } | null>(null)
   const [pendingPermission, setPendingPermission] = useState<{
     requestId: string
     toolName: string
@@ -171,6 +175,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           const m = e.message?.model as string | undefined
           if (m && !modelName) setModelName(m)
           acc.currentMsgId = e.message?.id ?? ''
+          setThinking({ since: Date.now() })
+          return
+        }
+        if (e?.type === 'message_stop') {
+          setThinking(null)
           return
         }
 
@@ -198,6 +207,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             block.text = (block.text || '') + e.delta.text
             const entryId = `msg:${acc.currentMsgId}:${idx}`
             replaceEntry(entryId, { kind: 'assistant', text: block.text, id: entryId })
+            setThinking(null) // visible text started → hide spinner
           } else if (e.delta.type === 'input_json_delta' && block.kind === 'tool_use') {
             block.inputJson = (block.inputJson || '') + e.delta.partial_json
             // Try parsing on every delta — once it's valid JSON the tool
@@ -391,6 +401,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           </div>
         )}
         <TimelineList timeline={timeline} onChoose={handleChoose} />
+        {thinking && <ThinkingSpinner since={thinking.since} />}
         {exited !== null && (
           <div style={{ color: CRUSH.Sriracha, fontSize: 11, marginTop: 12, padding: 4 }}>
             claude exited (code {exited})
