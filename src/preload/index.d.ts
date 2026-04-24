@@ -53,6 +53,13 @@ declare global {
         stop: () => Promise<{ ok: boolean }>
         onTranscript: (cb: (line: string) => void) => () => void
       }
+      system: {
+        username: () => Promise<string>
+      }
+      settings: {
+        get: (key: string) => Promise<any>
+        set: (key: string, value: unknown) => Promise<boolean>
+      }
       chat: {
         start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean }) => Promise<{ ok: boolean }>
         send: (id: string, text: string) => Promise<{ ok: boolean; error?: string }>
