@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Crush Element → Color Mapping</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'JetBrains Mono', monospace; background: #111; color: #eee; padding: 24px; }
+h1 { font-family: 'Space Grotesk'; font-size: 18px; text-align: center; margin-bottom: 8px; color: #FF60FF; }
+.sub { text-align: center; font-size: 11px; color: #858392; margin-bottom: 32px; }
+
+.container { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 620px 1fr; gap: 32px; }
+
+/* ═══ FAKE CRUSH TERMINAL ═══ */
+.crush-term {
+  background: #201F26;
+  border-radius: 12px;
+  border: 1px solid #3A3943;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.crush-titlebar {
+  background: #2D2C35;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid #3A3943;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; }
+.dot-r { background: #EB4268; }
+.dot-y { background: #E8FE96; }
+.dot-g { background: #00FFB2; }
+.crush-titlebar .title { margin-left: 8px; color: #858392; font-size: 11px; }
+
+.crush-body { padding: 16px; position: relative; }
+
+/* Elements with annotation lines */
+.el { position: relative; margin: 6px 0; }
+.el::after {
+  position: absolute;
+  right: -28px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 0;
+  border-top: 1px dashed;
+  content: '';
+}
+
+/* ─── Specific elements ─── */
+
+/* 1. Prompt / Input area */
+.input-area {
+  background: rgba(107,80,255,0.08);
+  border: 1px solid #6B50FF;
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.input-area .prompt { color: #6B50FF; font-weight: 700; font-size: 16px; }
+.input-area .cursor { width: 2px; height: 16px; background: #FF60FF; animation: blink 1s step-end infinite; }
+.input-area .user-text { color: #FFFAF1; font-weight: 500; }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* 2. Status bar */
+.status-bar {
+  background: #2D2C35;
+  border-top: 1px solid #3A3943;
+  padding: 4px 12px;
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+}
+.status-bar .model { color: #6B50FF; font-weight: 700; }
+.status-bar .mode { color: #FF60FF; }
+.status-bar .keys { color: #605F6B; }
+.status-bar .cost { color: #858392; }
+
+/* 3. Agent name bar */
+.agent-bar {
+  background: #0891B2;
+  color: #000;
+  padding: 2px 12px;
+  font-weight: 700;
+  font-size: 12px;
+  display: inline-block;
+  border-radius: 0;
+}
+
+/* 4. Tool call */
+.tool-call {
+  border-left: 3px solid #FF60FF;
+  padding: 4px 0 4px 12px;
+}
+.tool-name { color: #00FFB2; font-weight: 700; } /* default: Julep (file-touching tools) */
+.tool-name.read { color: #00FFB2; }
+.tool-name.bash { color: #00A4FF; }
+.tool-name.edit { color: #00FFB2; }
+.tool-args { color: #858392; }
+.tool-result { color: #858392; font-size: 12px; }
+
+/* 5. Response text */
+.response { color: #DFDBDD; }
+
+/* 6. Code block */
+.code-block {
+  background: #2D2C35;
+  border: 1px solid #3A3943;
+  border-radius: 6px;
+  padding: 8px 12px;
+  font-size: 12px;
+  margin: 4px 0;
+}
+.code-block .kw { color: #00A4FF; }
+.code-block .str { color: #BF976F; }
+.code-block .fn { color: #12C78F; }
+.code-block .op { color: #FF7F90; }
+.code-block .punc { color: #E8FE96; }
+.code-block .comment { color: #605F6B; }
+
+/* 7. Diff */
+.diff-add { background: rgba(0,255,178,0.08); color: #00FFB2; padding: 1px 8px; }
+.diff-del { background: rgba(235,66,104,0.08); color: #EB4268; padding: 1px 8px; }
+
+/* 8. Usage bar */
+.usage { color: #605F6B; font-size: 11px; }
+.usage .pct { color: #858392; }
+.usage .bar-full { color: #00FFB2; }
+.usage .bar-empty { color: #3A3943; }
+
+/* 9. Limit warning */
+.limit-warn { color: #E8FE96; font-size: 12px; }
+
+/* 10. Interactive menu */
+.menu-opt {
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  font-size: 13px;
+}
+.menu-opt.selected { background: rgba(255,96,255,0.1); border: 1px solid #FF60FF; color: #FFFAF1; }
+.menu-opt.unselected { border: 1px solid #3A3943; color: #DFDBDD; }
+.menu-num { font-weight: 700; font-size: 15px; min-width: 16px; }
+.menu-opt.selected .menu-num { color: #FF60FF; }
+.menu-opt.unselected .menu-num { color: #858392; }
+
+/* 11. Highlighted line (accept edits prompt) */
+.highlight-line { color: #C259FF; }
+
+/* ═══ LEGEND TABLE ═══ */
+.legend {
+  font-size: 11px;
+}
+.legend table { width: 100%; border-collapse: collapse; }
+.legend th {
+  text-align: left; padding: 6px 8px; font-size: 9px; text-transform: uppercase;
+  letter-spacing: 0.08em; color: #605F6B; border-bottom: 1px solid #3A3943;
+  font-family: 'Space Grotesk';
+}
+.legend td { padding: 6px 8px; border-bottom: 1px solid #2D2C35; vertical-align: middle; }
+.legend .swatch {
+  width: 24px; height: 14px; border-radius: 3px; display: inline-block;
+  vertical-align: middle; margin-right: 6px; border: 1px solid rgba(255,255,255,0.05);
+}
+.legend .element { color: #DFDBDD; font-weight: 500; }
+.legend .hex { font-family: 'JetBrains Mono'; font-size: 10px; }
+.legend .name { color: #858392; font-size: 10px; }
+.legend .crush { color: #FF60FF; }
+.legend .hive { color: #858392; }
+.legend .section {
+  font-family: 'Space Grotesk';
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #FF60FF;
+  padding: 10px 8px 4px;
+  border: none;
+}
+</style>
+</head>
+<body>
+
+<h1>Crush Element → Color Map</h1>
+<div class="sub">Left: simulated Crush terminal with all elements · Right: color legend with hex codes</div>
+
+<div class="container">
+  <!-- ═══ SIMULATED TERMINAL ═══ -->
+  <div class="crush-term">
+    <div class="crush-titlebar">
+      <div class="dot dot-r"></div><div class="dot dot-y"></div><div class="dot dot-g"></div>
+      <span class="title">crush — ~/projects/hive</span>
+    </div>
+    <div class="crush-body">
+
+      <!-- Agent bar -->
+      <div style="display:flex;justify-content:flex-end;margin-bottom:8px;">
+        <span class="agent-bar">Tracy(Website)</span>
+      </div>
+
+      <!-- User input -->
+      <div class="input-area" style="margin-bottom:12px;">
+        <span class="prompt">❯</span>
+        <span class="user-text">fix the login page responsive layout</span>
+        <span class="cursor"></span>
+      </div>
+
+      <!-- Response text -->
+      <div class="response" style="margin-bottom:8px;">I'll search for the login page and fix the responsive layout.</div>
+
+      <!-- Tool calls -->
+      <div class="tool-call" style="margin-bottom:4px;">
+        <span class="tool-name read">Grep</span> <span class="tool-args">"login" **/*.tsx</span>
+        <div class="tool-result">Found 18 matches (ctrl+o to expand)</div>
+      </div>
+
+      <div class="tool-call" style="margin-bottom:4px;">
+        <span class="tool-name read">Read</span> <span class="tool-args">src/app/login/page.tsx</span>
+        <div class="tool-result">Read 1 file</div>
+      </div>
+
+      <div class="tool-call" style="margin-bottom:4px;">
+        <span class="tool-name edit">Edit</span> <span class="tool-args">src/app/login/page.tsx</span>
+        <div style="margin:4px 0;">
+          <div class="diff-del">- className="w-[400px] mx-auto"</div>
+          <div class="diff-add">+ className="w-full max-w-[400px] mx-auto px-4"</div>
+        </div>
+      </div>
+
+      <!-- Code block -->
+      <div class="code-block">
+        <span class="comment">// Updated responsive container</span><br>
+        <span class="kw">const</span> <span class="fn">LoginForm</span> <span class="op">=</span> <span class="punc">()</span> <span class="op">=></span> <span class="punc">{</span><br>
+        &nbsp;&nbsp;<span class="kw">return</span> <span class="punc">&lt;</span><span class="fn">div</span> <span class="str">className</span><span class="op">=</span><span class="str">"w-full max-w-md"</span><span class="punc">&gt;</span><br>
+        <span class="punc">}</span>
+      </div>
+
+      <div class="tool-call" style="margin-bottom:4px;">
+        <span class="tool-name bash">Bash</span> <span class="tool-args">npm run build</span>
+        <div class="tool-result">✓ Build completed in 1.2s</div>
+      </div>
+
+      <!-- Response -->
+      <div class="response" style="margin:8px 0;">Done! Fixed the responsive layout. Modified: <span style="color:#00A4FF;text-decoration:underline;">src/app/login/page.tsx</span></div>
+
+      <!-- Interactive menu -->
+      <div style="margin:12px 0;">
+        <div class="menu-opt selected"><span class="menu-num">1</span><span>Resume from summary</span><span style="margin-left:auto;font-size:10px;color:#858392;">recommended</span></div>
+        <div class="menu-opt unselected"><span class="menu-num">2</span><span>Resume full session</span></div>
+        <div class="menu-opt unselected"><span class="menu-num">3</span><span>Don't ask again</span></div>
+      </div>
+
+      <!-- Accept edits prompt -->
+      <div class="highlight-line" style="margin:8px 0;">⎈⎈ accept edits on <span style="color:#858392;">(shift+tab to cycle)</span></div>
+
+      <!-- Usage bar -->
+      <div class="usage" style="margin:8px 0;">[Opus 4.7] 5h: <span class="bar-full">███</span><span class="bar-empty">░░░░░░░</span> <span class="pct">30%</span> | 7d: <span class="pct">86%</span></div>
+
+      <!-- Limit warning -->
+      <div class="limit-warn">⚠ You've used 87% of your weekly limit · resets 8am (Asia/Singapore)</div>
+
+    </div>
+
+    <!-- Status bar -->
+    <div class="status-bar">
+      <span><span class="model">opus-4</span> · <span class="mode">agent</span></span>
+      <span class="cost">39,413 tokens · $0.29</span>
+      <span class="keys">esc interrupt · ctrl+t variants · tab agents</span>
+    </div>
+  </div>
+
+  <!-- ═══ LEGEND ═══ -->
+  <div class="legend">
+    <table>
+      <tr><th>Element</th><th>Crush Color</th><th>Hex</th></tr>
+
+      <tr><td colspan="3" class="section">Terminal Chrome</td></tr>
+      <tr><td class="element">Background</td><td><span class="swatch" style="background:#201F26;"></span><span class="name">Pepper</span></td><td class="hex">#201F26</td></tr>
+      <tr><td class="element">Panel / sidebar</td><td><span class="swatch" style="background:#2D2C35;"></span><span class="name">BBQ</span></td><td class="hex">#2D2C35</td></tr>
+      <tr><td class="element">Border</td><td><span class="swatch" style="background:#3A3943;"></span><span class="name">Charcoal</span></td><td class="hex">#3A3943</td></tr>
+      <tr><td class="element">Window dots (close)</td><td><span class="swatch" style="background:#EB4268;"></span><span class="name">Sriracha</span></td><td class="hex">#EB4268</td></tr>
+      <tr><td class="element">Window dots (min)</td><td><span class="swatch" style="background:#E8FE96;"></span><span class="name">Zest</span></td><td class="hex">#E8FE96</td></tr>
+      <tr><td class="element">Window dots (max)</td><td><span class="swatch" style="background:#00FFB2;"></span><span class="name">Julep</span></td><td class="hex">#00FFB2</td></tr>
+
+      <tr><td colspan="3" class="section">Text</td></tr>
+      <tr><td class="element">Primary text</td><td><span class="swatch" style="background:#DFDBDD;"></span><span class="name">Ash</span></td><td class="hex">#DFDBDD</td></tr>
+      <tr><td class="element">User input text</td><td><span class="swatch" style="background:#FFFAF1;"></span><span class="name">Butter</span></td><td class="hex">#FFFAF1</td></tr>
+      <tr><td class="element">Muted text</td><td><span class="swatch" style="background:#858392;"></span><span class="name">Squid</span></td><td class="hex">#858392</td></tr>
+      <tr><td class="element">Dim text</td><td><span class="swatch" style="background:#605F6B;"></span><span class="name">Oyster</span></td><td class="hex">#605F6B</td></tr>
+
+      <tr><td colspan="3" class="section">Interactive</td></tr>
+      <tr><td class="element">Prompt ❯</td><td><span class="swatch" style="background:#6B50FF;"></span><span class="name">Charple</span></td><td class="hex">#6B50FF</td></tr>
+      <tr><td class="element">Cursor</td><td><span class="swatch" style="background:#FF60FF;"></span><span class="name">Dolly</span></td><td class="hex">#FF60FF</td></tr>
+      <tr><td class="element">Input border</td><td><span class="swatch" style="background:#6B50FF;"></span><span class="name">Charple</span></td><td class="hex">#6B50FF</td></tr>
+      <tr><td class="element">Selection bg</td><td><span class="swatch" style="background:rgba(107,80,255,0.3);border-color:#6B50FF;"></span><span class="name">Charple 30%</span></td><td class="hex">rgba(6B50FF,0.3)</td></tr>
+      <tr><td class="element">Menu selected border</td><td><span class="swatch" style="background:#FF60FF;"></span><span class="name">Dolly</span></td><td class="hex">#FF60FF</td></tr>
+      <tr><td class="element">Menu number (selected)</td><td><span class="swatch" style="background:#FF60FF;"></span><span class="name">Dolly</span></td><td class="hex">#FF60FF</td></tr>
+      <tr><td class="element">Menu number (unselected)</td><td><span class="swatch" style="background:#858392;"></span><span class="name">Squid</span></td><td class="hex">#858392</td></tr>
+      <tr><td class="element">Highlight prompt</td><td><span class="swatch" style="background:#C259FF;"></span><span class="name">Violet</span></td><td class="hex">#C259FF</td></tr>
+
+      <tr><td colspan="3" class="section">Tool Calls</td></tr>
+      <tr><td class="element">Tool call border</td><td><span class="swatch" style="background:#FF60FF;"></span><span class="name">Dolly</span></td><td class="hex">#FF60FF</td></tr>
+      <tr><td class="element">Grep / Glob</td><td><span class="swatch" style="background:#00FFB2;"></span><span class="name">Julep</span></td><td class="hex">#00FFB2</td></tr>
+      <tr><td class="element">Read</td><td><span class="swatch" style="background:#00FFB2;"></span><span class="name">Julep</span></td><td class="hex">#00FFB2</td></tr>
+      <tr><td class="element">Edit / Write</td><td><span class="swatch" style="background:#00FFB2;"></span><span class="name">Julep</span></td><td class="hex">#00FFB2</td></tr>
+      <tr><td class="element">Bash</td><td><span class="swatch" style="background:#00A4FF;"></span><span class="name">Malibu</span></td><td class="hex">#00A4FF</td></tr>
+      <tr><td class="element">Tool args</td><td><span class="swatch" style="background:#858392;"></span><span class="name">Squid</span></td><td class="hex">#858392</td></tr>
+      <tr><td class="element">File link</td><td><span class="swatch" style="background:#00A4FF;"></span><span class="name">Malibu</span></td><td class="hex">#00A4FF</td></tr>
+
+      <tr><td colspan="3" class="section">Code & Diff</td></tr>
+      <tr><td class="element">Code bg</td><td><span class="swatch" style="background:#2D2C35;"></span><span class="name">BBQ</span></td><td class="hex">#2D2C35</td></tr>
+      <tr><td class="element">Keyword</td><td><span class="swatch" style="background:#00A4FF;"></span><span class="name">Malibu</span></td><td class="hex">#00A4FF</td></tr>
+      <tr><td class="element">Function</td><td><span class="swatch" style="background:#12C78F;"></span><span class="name">Guac</span></td><td class="hex">#12C78F</td></tr>
+      <tr><td class="element">String</td><td><span class="swatch" style="background:#BF976F;"></span><span class="name">Cumin</span></td><td class="hex">#BF976F</td></tr>
+      <tr><td class="element">Operator</td><td><span class="swatch" style="background:#FF7F90;"></span><span class="name">Salmon</span></td><td class="hex">#FF7F90</td></tr>
+      <tr><td class="element">Punctuation</td><td><span class="swatch" style="background:#E8FE96;"></span><span class="name">Zest</span></td><td class="hex">#E8FE96</td></tr>
+      <tr><td class="element">Comment</td><td><span class="swatch" style="background:#605F6B;"></span><span class="name">Oyster</span></td><td class="hex">#605F6B</td></tr>
+      <tr><td class="element">Diff + (add)</td><td><span class="swatch" style="background:#00FFB2;"></span><span class="name">Julep</span></td><td class="hex">#00FFB2</td></tr>
+      <tr><td class="element">Diff - (del)</td><td><span class="swatch" style="background:#EB4268;"></span><span class="name">Sriracha</span></td><td class="hex">#EB4268</td></tr>
+
+      <tr><td colspan="3" class="section">Status</td></tr>
+      <tr><td class="element">Model name</td><td><span class="swatch" style="background:#6B50FF;"></span><span class="name">Charple</span></td><td class="hex">#6B50FF</td></tr>
+      <tr><td class="element">Mode (agent)</td><td><span class="swatch" style="background:#FF60FF;"></span><span class="name">Dolly</span></td><td class="hex">#FF60FF</td></tr>
+      <tr><td class="element">Agent bar bg</td><td><span class="swatch" style="background:#0891B2;"></span><span class="name">~Zinc</span></td><td class="hex">#0891B2</td></tr>
+      <tr><td class="element">Usage bar full</td><td><span class="swatch" style="background:#00FFB2;"></span><span class="name">Julep</span></td><td class="hex">#00FFB2</td></tr>
+      <tr><td class="element">Warning / limit</td><td><span class="swatch" style="background:#E8FE96;"></span><span class="name">Zest</span></td><td class="hex">#E8FE96</td></tr>
+      <tr><td class="element">Error</td><td><span class="swatch" style="background:#EB4268;"></span><span class="name">Sriracha</span></td><td class="hex">#EB4268</td></tr>
+      <tr><td class="element">Success</td><td><span class="swatch" style="background:#00FFB2;"></span><span class="name">Julep</span></td><td class="hex">#00FFB2</td></tr>
+      <tr><td class="element">Info</td><td><span class="swatch" style="background:#00A4FF;"></span><span class="name">Malibu</span></td><td class="hex">#00A4FF</td></tr>
+    </table>
+  </div>
+</div>
+
+</body>
+</html>

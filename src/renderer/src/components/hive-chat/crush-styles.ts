@@ -28,20 +28,26 @@ export const CRUSH = {
 } as const
 
 export const TOOL_COLORS: Record<string, string> = {
-  Read: CRUSH.Bok,
-  View: CRUSH.Bok,
+  // File-touching tools → Julep green
+  Read: CRUSH.Julep,
+  View: CRUSH.Julep,
   Edit: CRUSH.Julep,
   Write: CRUSH.Julep,
   MultiEdit: CRUSH.Julep,
+  Grep: CRUSH.Julep,
+  Glob: CRUSH.Julep,
+  // Shell → Malibu blue
   Bash: CRUSH.Malibu,
   BashOutput: CRUSH.Malibu,
-  Grep: CRUSH.Zest,
-  Glob: CRUSH.Zest,
+  // Agents / orchestration → Dolly
   Task: CRUSH.Dolly,
   Agent: CRUSH.Dolly,
+  // Local planning / bookkeeping → Charple
   TodoWrite: CRUSH.Charple,
+  // Network → Violet
   WebFetch: CRUSH.Violet,
   WebSearch: CRUSH.Violet,
+  // Skills → Mochi
   Skill: CRUSH.Mochi
 }
 
