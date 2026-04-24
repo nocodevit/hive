@@ -24,6 +24,11 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
   const [sending, setSending] = useState(false)
   const [exited, setExited] = useState<number | null>(null)
   const [stderr, setStderr] = useState<string[]>([])
+  // Status-bar state (above + below input)
+  const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
+  const [contextSize, setContextSize] = useState<string>('') // "1M"
+  const [rateLimit, setRateLimit] = useState<{ status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null>(null)
+  const [usagePct, setUsagePct] = useState<{ fiveHour?: number; sevenDay?: number }>({})
   const scrollRef = useRef<HTMLDivElement>(null)
   const entryIdRef = useRef(0)
 
@@ -61,6 +66,34 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
     }
 
     const offEv = window.api.chat.onEvent(id, (ev: StreamEvent) => {
+      // Status-bar updates — these bypass the scrolling timeline.
+      if (ev.type === 'system' && (ev as any).subtype === 'init') {
+        const rawModel = (ev as any).model as string | undefined
+        if (rawModel) {
+          const m = rawModel.match(/^(.+?)(?:\[(\d+[kKmM])\])?$/)
+          if (m) {
+            setModelName(m[1])
+            setContextSize((m[2] || '').toUpperCase())
+          } else {
+            setModelName(rawModel)
+          }
+        }
+        return
+      }
+      if (ev.type === 'rate_limit_event') {
+        const info = (ev as any).rate_limit_info
+        if (info) setRateLimit(info)
+        return
+      }
+      if (ev.type === 'stream_event') {
+        // Pluck model from message_start if we didn't get it via init.
+        const e = (ev as any).event
+        if (e?.type === 'message_start') {
+          const m = e.message?.model as string | undefined
+          if (m && !modelName) setModelName(m)
+        }
+        return
+      }
       if (ev.type === 'assistant' && 'message' in ev) {
         const msg = (ev as any).message
         const content = msg?.content as ContentBlock[] | undefined
@@ -171,6 +204,9 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
         )}
       </div>
 
+      {/* Rate-limit status line — sits just above input, updates live */}
+      <RateLimitBar info={rateLimit} />
+
       {/* Input box */}
       <div style={{
         borderTop: `1px solid ${CRUSH.Charcoal}`,
@@ -205,6 +241,64 @@ export default function HiveChat({ id, cwd, agent, agentName, visible }: Props) 
           />
         </div>
       </div>
+
+      {/* Model / usage line — stays under input */}
+      <ModelUsageBar modelName={modelName} contextSize={contextSize} usagePct={usagePct} rateLimit={rateLimit} />
+    </div>
+  )
+}
+
+function humanEta(resetsAt: number | undefined): string {
+  if (!resetsAt) return ''
+  const ms = resetsAt * 1000 - Date.now()
+  if (ms <= 0) return 'now'
+  const mins = Math.floor(ms / 60000)
+  const hours = Math.floor(mins / 60)
+  const m = mins % 60
+  if (hours > 0) return `${hours}h ${m}m`
+  return `${m}m`
+}
+
+function RateLimitBar({ info }: { info: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null }) {
+  if (!info) return null
+  const type = info.rateLimitType === 'five_hour' ? '5h' : info.rateLimitType === 'seven_day' ? '7d' : info.rateLimitType || '?'
+  const color = info.status === 'allowed' ? CRUSH.Julep : info.status === 'blocked' ? CRUSH.Sriracha : CRUSH.Zest
+  return (
+    <div style={{
+      padding: '4px 12px',
+      borderTop: `1px solid ${CRUSH.Charcoal}`,
+      background: CRUSH.BBQ,
+      fontFamily: FONT_MONO, fontSize: 11,
+      display: 'flex', gap: 10, alignItems: 'center',
+      color: CRUSH.Squid
+    }}>
+      <span style={{ color, fontWeight: 700 }}>● {type}</span>
+      <span style={{ color: CRUSH.Ash }}>{info.status}</span>
+      {info.resetsAt && <span>resets in {humanEta(info.resetsAt)}</span>}
+      {info.isUsingOverage && <span style={{ color: CRUSH.Zest }}>⚠ overage</span>}
+    </div>
+  )
+}
+
+function ModelUsageBar({ modelName, contextSize, usagePct, rateLimit }:
+  { modelName: string; contextSize: string; usagePct: { fiveHour?: number; sevenDay?: number }; rateLimit: any }) {
+  if (!modelName) return null
+  const contextStr = contextSize ? ` (${contextSize})` : ''
+  return (
+    <div style={{
+      padding: '4px 12px',
+      borderTop: `1px solid ${CRUSH.Charcoal}`,
+      background: CRUSH.BBQ,
+      fontFamily: FONT_MONO, fontSize: 11,
+      display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
+      color: CRUSH.Squid
+    }}>
+      <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{modelName}</span>
+      {contextStr && <span>{contextStr.replace(/[()]/g, '')}</span>}
+      <span style={{ color: CRUSH.Oyster }}>|</span>
+      <span>5h: <span style={{ color: CRUSH.Ash }}>{usagePct.fiveHour != null ? `${usagePct.fiveHour}%` : '—'}</span></span>
+      <span style={{ color: CRUSH.Oyster }}>|</span>
+      <span>7d: <span style={{ color: CRUSH.Ash }}>{usagePct.sevenDay != null ? `${usagePct.sevenDay}%` : '—'}</span></span>
     </div>
   )
 }
