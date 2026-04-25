@@ -173,3 +173,26 @@ pre:hover .hive-code-copy {
 pre .hive-code-copy:hover {
   opacity: 1 !important;
 }
+
+/* HiveChat — markdown bullet lists use Charple ▸ instead of the
+   browser default disc. ol (numbered) keeps default decimal — the
+   number itself is information, not decoration. Scoped via the
+   .hive-chat-md class on CrushMarkdown's outer div so we don't
+   affect xterm Term content or the rest of the app. */
+.hive-chat-md ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 4px 0;
+}
+.hive-chat-md ul > li {
+  padding-left: 1.4em;
+  position: relative;
+  margin-bottom: 2px;
+}
+.hive-chat-md ul > li::before {
+  content: '▸';
+  color: #6B50FF;
+  font-weight: 700;
+  position: absolute;
+  left: 0.2em;
+}
