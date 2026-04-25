@@ -14,6 +14,27 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.53] — 2026-04-25
+
+### Changed
+- **Trailing list rendering** no longer assumes the list is a "pick
+  one" question. stream-json doesn't distinguish a real choice
+  question from a TODO / next-steps list — both are plain markdown.
+  So instead of guessing, every numbered/lettered trailing list
+  item now renders as a regular line with two hover-revealed
+  action icons on the right:
+    - **✓ (Julep)** — treat this row as my reply (existing onChoose
+      behavior: re-send the raw line as a user message).
+    - **✏ (Charple)** — quote this row into the input box prefixed
+      with `-- ` so the user can append a free-form response, then
+      hit Enter when ready.
+  Hovering the row also shifts its background to a subtle Charple
+  tint so it's clear which item the icons act on. Works whether
+  claude is asking a real question OR dropping a next-steps list —
+  same UI, no detection needed.
+
+---
+
 ## [1.7.52] — 2026-04-25
 
 ### Fixed
@@ -821,7 +842,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.52...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.53...HEAD
+[1.7.53]: https://github.com/nocodevit/hive/compare/v1.7.52...v1.7.53
 [1.7.52]: https://github.com/nocodevit/hive/compare/v1.7.51...v1.7.52
 [1.7.51]: https://github.com/nocodevit/hive/compare/v1.7.50...v1.7.51
 [1.7.50]: https://github.com/nocodevit/hive/compare/v1.7.49...v1.7.50
