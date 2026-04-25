@@ -402,6 +402,34 @@ export function respondPermission(
   }
 }
 
+/**
+ * Cancel the current generation. Sends a `control_request` with
+ * `subtype: "interrupt"` on stdin. Claude immediately stops the
+ * current turn (mid-thinking, mid-tool-call, mid-text). Session
+ * stays alive — user can send another message right after.
+ *
+ * Discovered by grepping the claude binary for `sendControlRequest`
+ * patterns. Stop has no ACK event in stream-json land; we just
+ * fire and trust.
+ */
+export function interruptSession(id: string) {
+  const session = sessions.get(id)
+  if (!session) return { ok: false, error: 'no_session' }
+  if (!session.child || session.mode !== 'print') return { ok: false, error: 'not_in_print_mode' }
+  const frame = {
+    type: 'control_request',
+    request_id: `hive-int-${Date.now()}`,
+    request: { subtype: 'interrupt' }
+  }
+  try {
+    session.child.stdin.write(JSON.stringify(frame) + '\n')
+    try { appendFileSync(session.logPath, JSON.stringify({ _direction: 'stdin', ...frame }) + '\n') } catch {}
+    return { ok: true }
+  } catch (e) {
+    return { ok: false, error: String(e) }
+  }
+}
+
 export function sendUserMessage(id: string, text: string) {
   const session = sessions.get(id)
   if (!session) return { ok: false, error: 'no_session' }
@@ -726,4 +754,5 @@ export function registerChatIpc() {
   ipcMain.handle('chat:loadOlder', (_e, { id, batch }) => loadOlderHistory(id, batch))
   ipcMain.handle('chat:startRemoteControl', (_e, { id }) => startRemoteControl(id))
   ipcMain.handle('chat:resumeFromRemoteControl', (_e, { id }) => resumeFromRemoteControl(id))
+  ipcMain.handle('chat:interrupt', (_e, { id }) => interruptSession(id))
 }

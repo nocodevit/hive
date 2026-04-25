@@ -66,6 +66,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     sevenDay?: number
   }>({})
   const [sessionId, setSessionId] = useState<string>('')
+  // Latest result.usage.input_tokens — the full context size right
+  // now (system + history + last user msg). Drives the context %% bar.
+  const [latestInputTokens, setLatestInputTokens] = useState<number>(0)
   // Pending permission request — when present, a modal blocks Chat until
   // the user picks allow / deny. See the `control_request` handler below.
   // Set when we see message_start and cleared when the first user-
@@ -330,6 +333,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }
       } else if (ev.type === 'result') {
         const e = ev as any
+        // Track latest context usage for the status-bar progress bar.
+        // Each result.usage.input_tokens is the FULL current context
+        // (system + history + this turn), not a delta. So we just take
+        // the most recent — no accumulation needed.
+        if (typeof e.usage?.input_tokens === 'number') {
+          setLatestInputTokens(e.usage.input_tokens)
+        }
         addEntry({
           kind: 'result',
           costUSD: e.total_cost_usd,
@@ -499,6 +509,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setPendingPermission(null)
     setHasOlderOnDisk(false)
     setTrimmedCount(0)
+    setLatestInputTokens(0)
     await window.api.chat.start(id, {
       cwd, agent, name: agentName,
       continueSession: false,
@@ -778,6 +789,38 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               }}
               rows={1}
             />
+            {/* Stop button — appears at the right of the input while
+                claude is generating (sending or thinking). Sends a
+                control_request {subtype:"interrupt"} on stdin which
+                cancels the current turn without ending the session. */}
+            {(sending || thinking) && (
+              <button
+                onClick={() => {
+                  window.api.chat.interrupt(id).catch(() => {})
+                  setThinking(null)
+                }}
+                title="Stop generation (interrupt current turn)"
+                style={{
+                  flexShrink: 0,
+                  background: 'transparent',
+                  border: `1px solid ${CRUSH.Sriracha}`,
+                  color: CRUSH.Sriracha,
+                  width: 22, height: 22,
+                  borderRadius: 4,
+                  fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
+                  cursor: 'pointer',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = CRUSH.Sriracha
+                  e.currentTarget.style.color = CRUSH.Butter
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'transparent'
+                  e.currentTarget.style.color = CRUSH.Sriracha
+                }}
+              >■</button>
+            )}
           </div>
         </div>
       )}
@@ -788,6 +831,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         streamingMode={streamingMode} onToggleStreaming={toggleStreamingMode}
         onCloseSession={closeSession}
         sessionActive={exited === null && rcState === 'idle'}
+        contextUsedTokens={latestInputTokens}
       />
 
       {/* Permission modal */}
@@ -974,7 +1018,7 @@ function PctBar({ pct }: { pct?: number }) {
   )
 }
 
-function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode, onToggleStreaming, onCloseSession, sessionActive }: {
+function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode, onToggleStreaming, onCloseSession, sessionActive, contextUsedTokens }: {
   modelName: string
   contextSize: string
   usage: {
@@ -986,7 +1030,24 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
   onToggleStreaming: () => void
   onCloseSession: () => void
   sessionActive: boolean
+  contextUsedTokens: number
 }) {
+  // Parse "1M" / "200K" → number for context %% math.
+  const parseSize = (s: string): number => {
+    const m = s.match(/^(\d+)([kKmM])$/)
+    if (!m) return 0
+    const n = parseInt(m[1], 10)
+    return m[2].toLowerCase() === 'm' ? n * 1_000_000 : n * 1_000
+  }
+  const ctxTotal = parseSize(contextSize)
+  const ctxPct = ctxTotal > 0 && contextUsedTokens > 0
+    ? Math.round((contextUsedTokens / ctxTotal) * 100)
+    : null
+  const ctxColor = ctxPct == null
+    ? CRUSH.Squid
+    : ctxPct >= 85 ? CRUSH.Sriracha
+    : ctxPct >= 70 ? CRUSH.Zest
+    : CRUSH.Bok
   const mins = usage.remainingMinutes
   const eta = mins != null ? (mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`) : ''
   return (
@@ -1004,6 +1065,32 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
           {contextSize && <span style={{ color: CRUSH.Squid }}>({contextSize})</span>}
           <span style={{ color: CRUSH.Oyster }}>|</span>
         </>
+      )}
+      {/* Context window %% — input_tokens of the latest result event vs
+          the model's context size. Color shifts from Bok (cool) → Zest
+          (warning) → Sriracha (danger near auto-compact). */}
+      {ctxPct != null && (
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
+              title={`Context: ${contextUsedTokens.toLocaleString()} / ${ctxTotal.toLocaleString()} tokens`}>
+          <span style={{ color: CRUSH.Squid }}>ctx</span>
+          <span style={{
+            display: 'inline-block',
+            width: 32, height: 6,
+            borderRadius: 3,
+            background: CRUSH.Charcoal,
+            overflow: 'hidden',
+            position: 'relative' as const
+          }}>
+            <span style={{
+              display: 'block',
+              width: `${Math.min(ctxPct, 100)}%`, height: '100%',
+              background: ctxColor
+            }} />
+          </span>
+          <span style={{ color: ctxColor, minWidth: 28, fontWeight: ctxPct >= 70 ? 700 : 400 }}>
+            {ctxPct}%
+          </span>
+        </span>
       )}
       {/* Subscription tier %% (scraped from /usage TUI) */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
