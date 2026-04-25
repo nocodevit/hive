@@ -148,7 +148,7 @@ interface CachedUsage {
 let usageCache: CachedUsage | null = null
 let usageInFlight: Promise<CachedUsage> | null = null
 
-async function getSharedUsage(): Promise<CachedUsage> {
+async function getSharedUsage(scrapeCwd?: string): Promise<CachedUsage> {
   if (usageCache && Date.now() - usageCache.ts < USAGE_TTL_MS) {
     return usageCache
   }
@@ -156,12 +156,18 @@ async function getSharedUsage(): Promise<CachedUsage> {
   usageInFlight = (async () => {
     const [cc, pct] = await Promise.all([
       queryUsageViaCcusage(),
-      // Subscription %% is account-level — cwd doesn't change the answer,
-      // we just need the PTY to land in a directory `claude` can boot in.
-      queryUsagePctViaPty(process.env.HOME || '/')
+      // Subscription %% IS account-level (same answer regardless of cwd),
+      // BUT the interactive `claude` PTY we spawn here gates input on a
+      // workspace-trust dialog the first time it sees an unfamiliar dir.
+      // $HOME is unfamiliar → trust dialog blocks → /usage never sent →
+      // scrape times out and caches a null. Use the caller's cwd (an
+      // already-trusted agent project dir) so the dialog never fires.
+      queryUsagePctViaPty(scrapeCwd || process.env.HOME || '/')
     ])
     const result: CachedUsage = { cc, pct, ts: Date.now() }
-    usageCache = result
+    // Don't cache a null pct — short-circuit so the next agent that
+    // refreshes (likely with a different cwd) gets a fresh chance.
+    if (pct) usageCache = result
     usageInFlight = null
     return result
   })()
@@ -316,7 +322,7 @@ export function startChat(id: string, opts: StartOpts = {}) {
   // below, debounced 30s). No idle timer — avoids burning /usage turns
   // while the user stares at the UI without talking to Claude.
   const refresh = async () => {
-    const { cc, pct } = await getSharedUsage()
+    const { cc, pct } = await getSharedUsage(opts.cwd)
     if (cc || pct) broadcast(`chat:usage:${session.id}`, { ...(cc || {}), ...(pct || {}) })
   }
   // One snapshot at startup so the status bar isn't blank until the

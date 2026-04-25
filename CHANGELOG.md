@@ -14,6 +14,23 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.45] — 2026-04-25
+
+### Fixed
+- **Subscription %% (5h / 7d) silently went blank for every agent
+  after v1.7.31's shared cache.** Root cause: I switched the cold-
+  scrape PTY's `cwd` from each agent's project dir to `$HOME` to
+  make the cache feel "global". But interactive `claude` gates input
+  on a workspace-trust dialog the first time it sees an unfamiliar
+  directory. `$HOME` had never been opened as a project → trust
+  dialog → `/usage\r` never sent → 25s timeout → cache filled with
+  `pct: null`. Every subsequent agent refresh hit that null cache.
+  Fix: caller passes its `cwd` (an already-trusted agent project),
+  and we skip caching a null result so the next refresh gets a
+  fresh chance with potentially a different (trusted) cwd.
+
+---
+
 ## [1.7.44] — 2026-04-25
 
 ### Changed
@@ -672,7 +689,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.44...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.45...HEAD
+[1.7.45]: https://github.com/nocodevit/hive/compare/v1.7.44...v1.7.45
 [1.7.44]: https://github.com/nocodevit/hive/compare/v1.7.43...v1.7.44
 [1.7.43]: https://github.com/nocodevit/hive/compare/v1.7.42...v1.7.43
 [1.7.42]: https://github.com/nocodevit/hive/compare/v1.7.41...v1.7.42
