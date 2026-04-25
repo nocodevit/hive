@@ -197,6 +197,23 @@ pre .hive-code-copy:hover {
   left: 0.2em;
 }
 
+/* HiveChat — animated `…` ellipsis loader for the Subagent banner.
+   Reveals dots one-at-a-time over 1.5s by sliding a clip-mask from
+   0 → full width in 4 steps. CSS-only, no JS state. */
+@keyframes hive-dots {
+  0% { width: 0; }
+  100% { width: 1.2em; }
+}
+.hive-dots-loader::after {
+  content: '...';
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  overflow: hidden;
+  vertical-align: bottom;
+  animation: hive-dots 1.5s steps(4) infinite;
+}
+
 /* HiveChat — choice rows. Each row is a Charcoal-bordered button-shaped
    frame so it reads as a selectable option (matching the original
    v1.7.x choice button style). Two action icons (✓ / ✏) hover-reveal
