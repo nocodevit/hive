@@ -65,6 +65,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     totalTokens?: number
     fiveHour?: number   // % of subscription limit — scraped from /usage TUI
     sevenDay?: number
+    fiveHourReset?: string   // raw "Resets in 4h 12m" / "on Apr 30" string from /usage
+    sevenDayReset?: string
   }>({})
   const [sessionId, setSessionId] = useState<string>('')
   // Latest result.usage.input_tokens — the full context size right
@@ -1142,6 +1144,7 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
   usage: {
     costUSD?: number; burnPerHour?: number; projectedUSD?: number; remainingMinutes?: number
     totalTokens?: number; fiveHour?: number; sevenDay?: number
+    fiveHourReset?: string; sevenDayReset?: string
   }
   rateLimit: any
   streamingMode: boolean
@@ -1209,13 +1212,18 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
           <span style={{ color: CRUSH.Oyster }}>|</span>
         </>
       )}
-      {/* Subscription tier %% (scraped from /usage TUI) */}
+      {/* Subscription tier %% + reset countdown (both scraped from
+          /usage TUI). reset string is verbatim from claude — could be
+          "4h 12m" / "6d 14h" / "Apr 30 14:00" depending on locale. */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <span style={{ color: CRUSH.Squid }}>5h</span>
         <PctBar pct={usage.fiveHour} />
         <span style={{ color: CRUSH.Butter, minWidth: 28 }}>
           {usage.fiveHour != null ? `${usage.fiveHour}%` : '—'}
         </span>
+        {usage.fiveHourReset && (
+          <span style={{ color: CRUSH.Oyster, fontSize: 10 }}>· in {usage.fiveHourReset}</span>
+        )}
       </span>
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         <span style={{ color: CRUSH.Squid }}>7d</span>
@@ -1223,6 +1231,9 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
         <span style={{ color: CRUSH.Butter, minWidth: 28 }}>
           {usage.sevenDay != null ? `${usage.sevenDay}%` : '—'}
         </span>
+        {usage.sevenDayReset && (
+          <span style={{ color: CRUSH.Oyster, fontSize: 10 }}>· in {usage.sevenDayReset}</span>
+        )}
       </span>
       {/* eta "Xh Ym left" removed — RateLimitBar above the input
           already shows the same reset countdown. */}

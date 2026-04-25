@@ -304,18 +304,20 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
   return (
     <>
       <PlainAssistantText text={parsed.body} />
-      <div style={{ margin: '4px 0 10px 0', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ margin: '4px 0 10px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
         {parsed.choices.map(c => (
           <div
             key={c.num}
             className="hive-choice-row"
             style={{
               display: 'flex', alignItems: 'flex-start', gap: 10,
-              padding: '4px 8px',
-              borderRadius: 4,
+              padding: '6px 12px',
+              border: `1px solid ${CRUSH.Charcoal}`,
+              borderRadius: 6,
+              background: 'transparent',
               fontFamily: FONT_MONO, fontSize: 13,
               color: CRUSH.Ash,
-              transition: 'background 120ms ease'
+              transition: 'background 120ms ease, border-color 120ms ease'
             }}
           >
             <span style={{ color: CRUSH.Charple, fontWeight: 700, minWidth: 16, lineHeight: 1.55 }}>{c.num}.</span>
@@ -902,42 +904,24 @@ function InlineResult({ content, isError, tool, input }: {
   }
 
   const allLines = content.split('\n')
-  // Caps applied CUMULATIVELY: trim by lines first, then trim the
-  // result by chars. Whichever cap bites tighter wins. Examples:
-  //   13 lines × 38 chars = 500 total → line cap to 12 lines (still
-  //     under 800 chars) → display 12 lines.
-  //   8 lines × 200 chars = 1600 total → line cap doesn't fire (under
-  //     12), char cap kicks → display first 800 chars (≈ 4 lines).
-  //   25 short lines × 25 chars = 625 total → line cap to 12 lines
-  //     (300 chars), char cap doesn't fire → display 12 lines.
-  // Same caps for all tools (was per-tool special case for Bash;
-  // dropped because the cumulative rule already handles wide-line
-  // Bash output correctly).
+  // Pick ONE truncation rule based on which cap fires first.
+  // Priority: lines > chars. If lines > 12 → truncate by lines, label
+  // 'N more lines'. Otherwise if chars > 800 → truncate by chars,
+  // label 'N more chars'. Never mix.
   const MAX_CHARS = 800
-  const MAX_LINES = DEFAULT_EXPANDED_LINES   // 12
+  const MAX_LINES = DEFAULT_EXPANDED_LINES  // 12
+  const byLines = allLines.length > MAX_LINES
+  const byChars = !byLines && content.length > MAX_CHARS
+  const truncated = byLines || byChars
   let visibleContent = content
-  let trimmedLines = 0
-  let trimmedChars = 0
-  if (!expanded) {
-    if (allLines.length > MAX_LINES) {
-      visibleContent = allLines.slice(0, MAX_LINES).join('\n')
-      trimmedLines = allLines.length - MAX_LINES
-    }
-    if (visibleContent.length > MAX_CHARS) {
-      // We may further trim a line-trimmed result, OR start from the
-      // full content when line cap didn't fire.
-      const before = visibleContent.length
-      visibleContent = visibleContent.slice(0, MAX_CHARS)
-      trimmedChars = before - MAX_CHARS
-    }
+  let hiddenLabel = ''
+  if (!expanded && byLines) {
+    visibleContent = allLines.slice(0, MAX_LINES).join('\n')
+    hiddenLabel = `${allLines.length - MAX_LINES} more lines`
+  } else if (!expanded && byChars) {
+    visibleContent = content.slice(0, MAX_CHARS)
+    hiddenLabel = `${content.length - MAX_CHARS} more chars`
   }
-  const truncated = trimmedLines > 0 || trimmedChars > 0
-  // Build a label that reflects which caps fired.
-  const hiddenLabel = trimmedLines > 0 && trimmedChars > 0
-    ? `${trimmedLines} more lines · ${trimmedChars} more chars`
-    : trimmedLines > 0
-      ? `${trimmedLines} more lines`
-      : `${trimmedChars} more chars`
   return (
     <div style={{
       marginTop: 2,

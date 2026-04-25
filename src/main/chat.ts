@@ -142,7 +142,7 @@ const DEFAULT_REPLAY_LIMIT = 500
 const USAGE_TTL_MS = 30_000
 interface CachedUsage {
   cc: any | null
-  pct: { fiveHour?: number; sevenDay?: number } | null
+  pct: { fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null
   ts: number
 }
 let usageCache: CachedUsage | null = null
@@ -615,11 +615,11 @@ async function queryUsageViaCcusage(): Promise<{
  * short-circuited to a synthetic canned reply. Uses xterm-headless so
  * TUI redraws don't break the regex.
  */
-async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: number; sevenDay?: number } | null> {
+async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null> {
   return new Promise(resolve => {
     let done = false
     let child: pty.IPty | null = null
-    const finish = (v: { fiveHour?: number; sevenDay?: number } | null) => {
+    const finish = (v: { fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null) => {
       if (done) return
       done = true
       try { child?.kill() } catch {}
@@ -659,10 +659,18 @@ async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: number; s
       const text = dumpGrid()
       const session = text.match(/Current session[\s\S]{0,300}?(\d+)\s*%\s*used/)
       const week = text.match(/Current week[\s\S]{0,300}?(\d+)\s*%\s*used/)
+      // Reset captures sit within ~500 chars after each section header.
+      // Verb is "Resets in" / "Resets on" / "Resets at" — take whatever
+      // follows up to end of the line and use as-is (e.g. "4h 12m",
+      // "6d 14h", "Apr 30 14:00", etc.).
+      const sessionReset = text.match(/Current session[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
+      const weekReset = text.match(/Current week[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
       if (session || week) {
         finish({
           fiveHour: session ? parseInt(session[1], 10) : undefined,
-          sevenDay: week ? parseInt(week[1], 10) : undefined
+          sevenDay: week ? parseInt(week[1], 10) : undefined,
+          fiveHourReset: sessionReset ? sessionReset[1].trim() : undefined,
+          sevenDayReset: weekReset ? weekReset[1].trim() : undefined
         })
       }
     }
