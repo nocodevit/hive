@@ -24,7 +24,14 @@ export function langFromPath(path?: string): string {
     yaml: 'yaml', yml: 'yaml', json: 'json', toml: 'toml',
     html: 'markup', xml: 'markup', svg: 'markup', vue: 'markup',
     css: 'css', scss: 'scss', less: 'less',
-    md: 'markdown', markdown: 'markdown',
+    // .md / .markdown intentionally fall through to 'markup' below.
+    // prism's markdown grammar emits multi-line tokens for tables
+    // (e.g. `| a | b |\n| - | - |\n| 1 | 2 |` becomes one token whose
+    // content has newlines), and prism-react-renderer's per-line
+    // tokens[] split fragments those tokens — table rows get shredded
+    // across the rendered <div>s. markup grammar is effectively
+    // pass-through for text without HTML tags, so the source displays
+    // line-for-line as written.
     dockerfile: 'docker'
   }
   return map[ext] || 'markup'
