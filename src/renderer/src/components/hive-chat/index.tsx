@@ -362,7 +362,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           numTurns: e.num_turns,
           inputTokens: e.usage?.input_tokens,
           outputTokens: e.usage?.output_tokens,
-          cacheReadTokens: e.usage?.cache_read_input_tokens
+          cacheReadTokens: e.usage?.cache_read_input_tokens,
+          // Surface non-`end_turn` stop reasons (refusal, max_tokens,
+          // pause_turn, model_context_window_exceeded, etc.) so the
+          // user notices when claude didn't simply finish normally.
+          stopReason: typeof e.stop_reason === 'string' ? e.stop_reason : undefined
         })
       }
       // control_request: claude is asking for permission to use a tool

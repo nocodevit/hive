@@ -1295,6 +1295,17 @@ app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.hive.app')
   registerChatIpc()
   registerStorageIpc()
+
+  // File-link click in HiveChat → open the file with the default app.
+  // Used by Read/Edit/Write tool headers etc. (Reveal-in-Finder for
+  // the same paths is already wired via the older `fs:revealInFinder`
+  // handler — kept untouched for compatibility.) shell.openPath
+  // returns "" on success, error string on failure.
+  ipcMain.handle('fs:openPath', async (_e, { path }: { path: string }) => {
+    if (!path) return { ok: false, error: 'no path' }
+    const err = await shell.openPath(path)
+    return err ? { ok: false, error: err } : { ok: true }
+  })
   // Write port lock file — single source of truth for hive-report.sh
   const portLockFile = join(DATA_DIR, 'port.lock')
   const existingLock = existsSync(portLockFile) ? readFileSync(portLockFile, 'utf-8').trim().split('\n') : []
