@@ -14,6 +14,27 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.42] — 2026-04-25
+
+### Added
+- **Stop button (■)** at the right of the input box. Appears only
+  while claude is generating (`sending` or `thinking`). Click sends a
+  `control_request {subtype: "interrupt"}` to claude on stdin —
+  cancels the current turn (mid-thinking, mid-tool-call, mid-text)
+  without ending the session. Discovered the protocol by grepping
+  the claude binary for `sendControlRequest` patterns.
+- **Context window % bar** in the bottom status bar:
+  `ctx ▰▰▰▱▱▱▱▱ 47%`. Driven by the latest `result.usage.input_tokens`
+  vs the parsed model context window (`1M` / `200K` from system/init).
+  Color shifts Bok → Zest → Sriracha as it crosses 70% / 85%, so you
+  see auto-compact coming. Hover for raw tokens.
+
+### Backend
+- `interruptSession(id)` + `chat:interrupt` IPC. Fire-and-forget; no
+  ACK in stream-json land.
+
+---
+
 ## [1.7.41] — 2026-04-25
 
 ### Fixed
@@ -613,7 +634,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.41...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.42...HEAD
+[1.7.42]: https://github.com/nocodevit/hive/compare/v1.7.41...v1.7.42
 [1.7.41]: https://github.com/nocodevit/hive/compare/v1.7.40...v1.7.41
 [1.7.40]: https://github.com/nocodevit/hive/compare/v1.7.39...v1.7.40
 [1.7.39]: https://github.com/nocodevit/hive/compare/v1.7.38...v1.7.39
