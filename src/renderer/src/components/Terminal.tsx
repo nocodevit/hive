@@ -551,7 +551,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
           // palette (Charple/Dolly/Julep accents + Butter/Ash text) is
           // engineered for a dark base; on a light background the text
           // and high-saturation accents collapse into invisibility.
-          background: '#170d2e',
+          background: '#150e24',  // matches --sidebar-bg dark mode
           visibility: (chatMode && visible) ? 'visible' : 'hidden',
           pointerEvents: (chatMode && visible) ? 'auto' : 'none'
         }}>

@@ -672,7 +672,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       // palette is engineered for a dark base; on a light background the
       // accents (Charple/Dolly/Julep) and Butter/Ash text collapse into
       // invisibility. Don't follow var(--bg-primary).
-      background: '#170d2e',
+      background: '#150e24',  // matches --sidebar-bg dark mode (project list)
       color: CRUSH.Ash,
       fontFamily: FONT_MONO, fontSize: 13,
       display: 'flex', flexDirection: 'column',

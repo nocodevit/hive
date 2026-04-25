@@ -260,6 +260,86 @@ export function loadOlderHistory(sessionId: string, batch = DEFAULT_REPLAY_LIMIT
   }
 }
 
+/**
+ * Smart-startup wrapper: when `continueSession: true` AND a heavy
+ * prior session exists (input_tokens / contextWindow > 50%), runs a
+ * /compact PTY round-trip BEFORE spawning --print --resume <sid>.
+ * Otherwise just calls startChat normally. Goal: every Hive open of
+ * a long-lived agent gets auto-thinned context, no more 17-min hangs
+ * from cache-miss + huge context on resume.
+ */
+export async function smartStartChat(id: string, opts: StartOpts = {}) {
+  if (sessions.has(id)) return { ok: false, error: 'already_started' }
+  if (opts.continueSession && opts.cwd && !opts.resumeSid) {
+    try {
+      const slug = opts.cwd.replace(/\//g, '-')
+      const dir = join(homedir(), '.claude', 'projects', slug)
+      if (existsSync(dir)) {
+        const files = readdirSync(dir)
+          .filter(f => f.endsWith('.jsonl'))
+          .map(f => ({ f, m: statSync(join(dir, f)).mtimeMs }))
+          .sort((a, b) => b.m - a.m)
+        if (files.length) {
+          const sid = files[0].f.replace(/\.jsonl$/, '')
+          const pct = readContextPctFromJsonl(opts.cwd, sid)
+          if (pct !== null && pct > 0.5) {
+            broadcast(`chat:stderr:${id}`, `⏳ Smart-startup: prior session ${(pct * 100).toFixed(0)}% context — running /compact first (~10s)…\n`)
+            await runCompactPty(opts.cwd, sid)
+            // Resume the same sid AFTER compact (non-fork — JSONL was
+            // updated in-place by /compact). Renderer's replay will
+            // pick up the new compacted state.
+            startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
+            return { ok: true, compacted: true, sid, pct }
+          }
+        }
+      }
+    } catch {
+      // any fallback into plain start
+    }
+  }
+  startChat(id, opts)
+  return { ok: true, compacted: false }
+}
+
+/**
+ * Run a /compact PTY round-trip independently. Used by smart-startup
+ * BEFORE the actual --print spawn happens. Doesn't touch sessions
+ * map. Resolves when /compact's prompt-return is detected (or 25s
+ * timeout, or PTY exit). The caller is responsible for spawning
+ * the next --print after this resolves.
+ */
+async function runCompactPty(cwd: string, sid: string): Promise<void> {
+  return new Promise(resolve => {
+    let promptSeen = false
+    let buffer = ''
+    let settled = false
+    const finish = () => { if (settled) return; settled = true; try { p.kill() } catch {}; resolve() }
+    const p = pty.spawn('claude', ['--resume', sid], {
+      name: 'xterm-color', cols: 120, rows: 30, cwd, env: process.env as any
+    })
+    p.onData((data: string) => {
+      buffer += data
+      if (!promptSeen) {
+        const tail = buffer.split('\n').slice(-3).join('\n')
+        if (tail.includes('❯') || /^\s*>\s/m.test(tail)) {
+          promptSeen = true
+          setTimeout(() => { try { p.write('/compact\r') } catch {} }, 500)
+          return
+        }
+      }
+      if (promptSeen) {
+        const recent = buffer.slice(-300)
+        if (/compact(ed|ion).*?(complete|done|summary)/i.test(recent) ||
+            /Conversation\s+(?:summary|compacted)/i.test(recent)) {
+          setTimeout(finish, 1000)
+        }
+      }
+    })
+    p.onExit(() => finish())
+    setTimeout(finish, 25000)
+  })
+}
+
 export function startChat(id: string, opts: StartOpts = {}) {
   if (sessions.has(id)) return
   const args = [
@@ -966,9 +1046,8 @@ function refreshUsage(session: ChatSession) {
 }
 
 export function registerChatIpc() {
-  ipcMain.handle('chat:start', (_e, { id, cwd, agent, name, continueSession, rebaseOnStart }) => {
-    startChat(id, { cwd, agent, name, continueSession, rebaseOnStart })
-    return { ok: true }
+  ipcMain.handle('chat:start', async (_e, { id, cwd, agent, name, continueSession, rebaseOnStart }) => {
+    return smartStartChat(id, { cwd, agent, name, continueSession, rebaseOnStart })
   })
   ipcMain.handle('chat:send', (_e, { id, text }) => sendUserMessage(id, text))
   ipcMain.handle('chat:respondPermission', (_e, { id, requestId, decision, input, denyMessage }) =>
