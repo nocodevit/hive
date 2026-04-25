@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Highlight, themes } from 'prism-react-renderer'
@@ -180,7 +180,7 @@ export function parseUserCommand(raw: string): { kind: 'command'; command: strin
   return { kind: 'text', text: raw }
 }
 
-export function UserMessage({ text }: { text: string }) {
+export function UserMessage({ text, onRecall }: { text: string; onRecall?: (text: string) => void }) {
   const parsed = parseUserCommand(text)
   if (parsed.kind === 'command') {
     return (
@@ -201,7 +201,7 @@ export function UserMessage({ text }: { text: string }) {
     )
   }
   return (
-    <div style={{
+    <div className="hive-user-msg" style={{
       background: 'rgba(255, 96, 255, 0.14)',
       border: `1px solid ${CRUSH.Dolly}`,
       borderRadius: 8,
@@ -210,10 +210,33 @@ export function UserMessage({ text }: { text: string }) {
       display: 'flex',
       alignItems: 'center',
       gap: 8,
-      fontFamily: FONT_MONO
+      fontFamily: FONT_MONO,
+      position: 'relative' as const
     }}>
       <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
       <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(parsed.text)}</span>
+      {onRecall && (
+        <button
+          onClick={() => onRecall(parsed.text)}
+          title="Recall to input box (edit & resend)"
+          className="hive-recall-btn"
+          style={{
+            flexShrink: 0,
+            background: 'transparent',
+            border: 'none',
+            color: CRUSH.Dolly,
+            cursor: 'pointer',
+            padding: '2px 6px',
+            borderRadius: 4,
+            fontSize: 12,
+            opacity: 0,
+            transition: 'opacity 120ms ease',
+            fontFamily: FONT_MONO
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,96,255,0.2)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+        >↺</button>
+      )}
     </div>
   )
 }
@@ -379,7 +402,56 @@ export function ToolBlock({ name, input, result }: {
       borderRadius: isError ? 4 : 0
     }}>
       <ToolHeader name={name} input={input} />
-      {result && <InlineResult content={result.content} isError={result.isError} tool={name} input={input} />}
+      {result
+        ? <InlineResult content={result.content} isError={result.isError} tool={name} input={input} />
+        : <LongRunningTick toolName={name} />}
+    </div>
+  )
+}
+
+/**
+ * Sub-row that appears under a ToolBlock header while the tool is still
+ * running (no tool_result yet). Silent for the first 5s — most tools
+ * finish in 1-3s and a spinner that flashes is just visual noise. Past
+ * 5s it lights up with the same Charple→Dolly scrolling gradient as
+ * ThinkingSpinner so long-running Bash / Task / WebFetch don't look
+ * like the UI froze.
+ */
+function LongRunningTick({ toolName }: { toolName: string }) {
+  const startedAtRef = useRef<number>(Date.now())
+  const [, force] = useState(0)
+  useEffect(() => {
+    const iv = setInterval(() => force(n => n + 1), 1000)
+    return () => clearInterval(iv)
+  }, [])
+  const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000)
+  if (elapsed < 5) return null
+  const gradStyle: React.CSSProperties = {
+    background: `linear-gradient(90deg, ${CRUSH.Charple}, ${CRUSH.Dolly}, ${CRUSH.Charple}, ${CRUSH.Dolly})`,
+    backgroundSize: '400% 100%',
+    WebkitBackgroundClip: 'text',
+    backgroundClip: 'text',
+    color: 'transparent',
+    WebkitTextFillColor: 'transparent',
+    animation: 'thinking-grad 2s linear infinite',
+    fontWeight: 700
+  }
+  // toolName tells us why we're waiting — Bash 30s feels different
+  // from Task 30s. Showed for context, not for the gradient.
+  const verb = toolName === 'Bash' || toolName === 'BashOutput'
+    ? 'shell'
+    : toolName === 'Task' || toolName === 'Agent'
+      ? 'subagent'
+      : 'tool'
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '4px 0 0 14px',
+      fontFamily: FONT_MONO, fontSize: 11
+    }}>
+      <span style={{ ...gradStyle, fontSize: 12 }}>⏳</span>
+      <span style={gradStyle}>{verb} still running…</span>
+      <span style={{ color: CRUSH.Oyster }}>{elapsed}s</span>
     </div>
   )
 }
@@ -895,6 +967,56 @@ export function ThinkingSpinner({ since }: { since: number }) {
   )
 }
 
+/**
+ * Auto-compact boundary divider — inserted into the timeline at the
+ * point where Claude's session crossed its context-window threshold and
+ * the prior turns got summarized. Above the divider you can still see
+ * the old turns visually, but the *model* only "remembers" them as a
+ * summary — it can't quote details verbatim. Useful to surface so the
+ * user knows when to re-paste critical context.
+ *
+ * Detection heuristic in HiveChat: when a `result.usage.input_tokens`
+ * drops to less than half of the previous high-water mark (i.e. we
+ * previously had 180K, now we see 35K), assume compact happened.
+ */
+export function CompactBoundary({ previousTokens, newTokens, turnsSummarized }: {
+  previousTokens: number
+  newTokens: number
+  turnsSummarized: number
+}) {
+  const fmt = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(0)}K` : `${n}`
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 12,
+      margin: '12px 0',
+      fontFamily: FONT_MONO, fontSize: 11,
+      color: CRUSH.Squid
+    }}>
+      <span style={{
+        flex: 1,
+        height: 1,
+        background: `linear-gradient(90deg, transparent, ${CRUSH.Charple}, transparent)`
+      }} />
+      <span style={{
+        background: 'rgba(107,80,255,0.14)',
+        border: `1px solid ${CRUSH.Charple}`,
+        borderRadius: 999,
+        padding: '3px 12px',
+        color: CRUSH.Charple,
+        fontWeight: 700,
+        whiteSpace: 'nowrap' as const
+      }}>
+        ── auto-compacted{turnsSummarized > 0 ? ` · ${turnsSummarized} turns summarized` : ''}{previousTokens > 0 ? ` · ${fmt(previousTokens)} → ${fmt(newTokens)}` : ''} ──
+      </span>
+      <span style={{
+        flex: 1,
+        height: 1,
+        background: `linear-gradient(90deg, transparent, ${CRUSH.Charple}, transparent)`
+      }} />
+    </div>
+  )
+}
+
 export function SystemLine({ text }: { text: string }) {
   return (
     <div style={{ color: CRUSH.Oyster, fontSize: 11, fontFamily: FONT_MONO, padding: '2px 0' }}>
@@ -973,13 +1095,14 @@ export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, 
 /** React.memo-wrapped row: skips re-render when entry / result / onChoose
  *  references are stable. Without this, typing in the input box re-renders
  *  every row (including any large Read panels) on every keystroke. */
-export const TimelineRow = React.memo(function TimelineRow({ entry, result, onChoose }: {
+export const TimelineRow = React.memo(function TimelineRow({ entry, result, onChoose, onRecall }: {
   entry: TimelineEntry
   result?: { content: string; isError?: boolean }
   onChoose?: (pick: string) => void
+  onRecall?: (text: string) => void
 }) {
   switch (entry.kind) {
-    case 'user': return <UserMessage text={entry.text} />
+    case 'user': return <UserMessage text={entry.text} onRecall={onRecall} />
     case 'assistant': return <AssistantMessage text={entry.text} onChoose={onChoose} />
     case 'tool_call':
       return <ToolBlock name={entry.name} input={entry.input} result={result} />
@@ -990,9 +1113,11 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
       inputTokens={entry.inputTokens} outputTokens={entry.outputTokens}
       cacheReadTokens={entry.cacheReadTokens}
     />
+    case 'compact_boundary': return <CompactBoundary previousTokens={entry.previousTokens} newTokens={entry.newTokens} turnsSummarized={entry.turnsSummarized} />
   }
 }, (prev, next) => {
   if (prev.onChoose !== next.onChoose) return false
+  if (prev.onRecall !== next.onRecall) return false
   if (prev.entry !== next.entry) return false
   // Result content stability — reference OR deep equal for the 2 fields.
   const pr = prev.result, nr = next.result

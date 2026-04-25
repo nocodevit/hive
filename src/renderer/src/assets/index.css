@@ -53,7 +53,7 @@
     --bg-tertiary: #231838;
     --bg-hover: #2d1f48;
     --bg-active: #3b2a5e;
-    --bg-terminal: #0a0a0a;
+    --bg-terminal: #201F26;
 
     --border-default: #352555;
     --border-subtle: #281a40;
@@ -152,4 +152,14 @@ h1, h2, h3, h4, h5, h6 {
 }
 .animate-slide-in {
   animation: slide-in 0.2s ease-out;
+}
+
+/* HiveChat — recall icon appears only on hover over the user message
+   bubble, so it doesn't clutter quiet timeline. Click pulls the text
+   back into the input box for re-send/edit. */
+.hive-user-msg:hover .hive-recall-btn {
+  opacity: 0.7;
+}
+.hive-user-msg .hive-recall-btn:hover {
+  opacity: 1 !important;
 }
