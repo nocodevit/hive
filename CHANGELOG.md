@@ -14,6 +14,18 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.49] — 2026-04-25
+
+### Changed
+- **Close session is now two-step.** First click on `close ✕` expands
+  the button into `[cancel] [confirm close ✕]`; only the second click
+  on confirm actually kills the subprocess. Confirming state
+  auto-reverts after 4s of inactivity so a stray click can't strand
+  the bar in confirm-mode. Killing a running session was too
+  destructive for a single-click hit.
+
+---
+
 ## [1.7.48] — 2026-04-25
 
 ### Added
@@ -744,7 +756,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.48...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.49...HEAD
+[1.7.49]: https://github.com/nocodevit/hive/compare/v1.7.48...v1.7.49
 [1.7.48]: https://github.com/nocodevit/hive/compare/v1.7.47...v1.7.48
 [1.7.47]: https://github.com/nocodevit/hive/compare/v1.7.46...v1.7.47
 [1.7.46]: https://github.com/nocodevit/hive/compare/v1.7.45...v1.7.46

@@ -1164,30 +1164,78 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
       >
         {streamingMode ? '● streaming mode' : '○ streaming mode'}
       </button>
-      {sessionActive && (
-        <button
-          onClick={onCloseSession}
-          title="End this claude session. Timeline is kept; a 'Start new session' panel replaces the input."
-          style={{
-            background: 'transparent',
-            border: `1px solid ${CRUSH.Charcoal}`,
-            color: CRUSH.Squid,
-            padding: '2px 6px',
-            borderRadius: 4,
-            fontFamily: FONT_MONO, fontSize: 10,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap'
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.borderColor = CRUSH.Sriracha
-            e.currentTarget.style.color = CRUSH.Sriracha
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.borderColor = CRUSH.Charcoal
-            e.currentTarget.style.color = CRUSH.Squid
-          }}
-        >close ✕</button>
-      )}
+      {sessionActive && <CloseSessionButton onConfirm={onCloseSession} />}
     </div>
+  )
+}
+
+/**
+ * Two-step close button. First click expands into [cancel] [confirm
+ * close ✕]; second click on confirm fires the actual stopChat. The
+ * confirming state auto-resets after 4s if the user does nothing,
+ * so a stray click never strands the bar in confirm-mode.
+ */
+function CloseSessionButton({ onConfirm }: { onConfirm: () => void }) {
+  const [confirming, setConfirming] = useState(false)
+  useEffect(() => {
+    if (!confirming) return
+    const t = setTimeout(() => setConfirming(false), 4000)
+    return () => clearTimeout(t)
+  }, [confirming])
+  if (!confirming) {
+    return (
+      <button
+        onClick={() => setConfirming(true)}
+        title="End this claude session. Timeline kept; click again to confirm."
+        style={{
+          background: 'transparent',
+          border: `1px solid ${CRUSH.Charcoal}`,
+          color: CRUSH.Squid,
+          padding: '2px 6px',
+          borderRadius: 4,
+          fontFamily: FONT_MONO, fontSize: 10,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.borderColor = CRUSH.Sriracha
+          e.currentTarget.style.color = CRUSH.Sriracha
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.borderColor = CRUSH.Charcoal
+          e.currentTarget.style.color = CRUSH.Squid
+        }}
+      >close ✕</button>
+    )
+  }
+  return (
+    <span style={{ display: 'inline-flex', gap: 4 }}>
+      <button
+        onClick={() => setConfirming(false)}
+        style={{
+          background: 'transparent',
+          border: `1px solid ${CRUSH.Charcoal}`,
+          color: CRUSH.Squid,
+          padding: '2px 6px',
+          borderRadius: 4,
+          fontFamily: FONT_MONO, fontSize: 10,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap'
+        }}
+      >cancel</button>
+      <button
+        onClick={() => { setConfirming(false); onConfirm() }}
+        style={{
+          background: CRUSH.Sriracha,
+          border: `1px solid ${CRUSH.Sriracha}`,
+          color: CRUSH.Butter,
+          padding: '2px 6px',
+          borderRadius: 4,
+          fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
+          cursor: 'pointer',
+          whiteSpace: 'nowrap'
+        }}
+      >confirm close ✕</button>
+    </span>
   )
 }
