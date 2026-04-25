@@ -14,6 +14,32 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.43] — 2026-04-25
+
+### Added
+- **↺ Recall icon on each sent UserMessage bubble.** Hover over your
+  past message → ↺ icon appears at the right → click → fills the input
+  box with that text and focuses the textarea. Edit & resend.
+  Replaces the ↑/↓ keyboard recall (chat-native: ↑ stays as plain
+  textarea cursor navigation). The pure recall.ts helpers + 12 vitest
+  cases stay in tree for potential keyboard re-enable later.
+- **Long-running tool spinner** under the ToolBlock header when a
+  `tool_use` has been issued for >5s without a matching `tool_result`.
+  Same Charple→Dolly scrolling gradient as the thinking spinner.
+  Verb adapts to tool: `shell still running…` (Bash), `subagent still
+  running…` (Task / Agent), `tool still running…` (everything else).
+  Silent for the first 5s so quick tools (1-3s) don't flash a spinner.
+- **Auto-compact divider** in the timeline. Detected when
+  `result.usage.input_tokens` drops by more than half (and ≥30K
+  delta) — heuristic for "claude just summarized old turns to free
+  context". Renders a Charple gradient bar with summary
+  `── auto-compacted · N turns summarized · 180K → 35K ──`. Surfaces
+  what was previously a silent event so the user knows the old
+  conversation above is no longer in the model's literal context,
+  just a summary.
+
+---
+
 ## [1.7.42] — 2026-04-25
 
 ### Added
@@ -634,7 +660,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.42...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.43...HEAD
+[1.7.43]: https://github.com/nocodevit/hive/compare/v1.7.42...v1.7.43
 [1.7.42]: https://github.com/nocodevit/hive/compare/v1.7.41...v1.7.42
 [1.7.41]: https://github.com/nocodevit/hive/compare/v1.7.40...v1.7.41
 [1.7.40]: https://github.com/nocodevit/hive/compare/v1.7.39...v1.7.40
