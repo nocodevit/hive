@@ -72,6 +72,21 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // Latest result.usage.input_tokens — the full context size right
   // now (system + history + last user msg). Drives the context %% bar.
   const [latestInputTokens, setLatestInputTokens] = useState<number>(0)
+  // Active subagent (Task tool) tracking. Keyed by parent tool_use_id.
+  // Updated on Task tool_use (register) → task_progress events
+  // (description / metrics) → tool_result (deregister). Drives the
+  // sticky 'subagent active' banner above the rate-limit bar.
+  interface SubagentState {
+    startedAt: number
+    lastEventAt: number
+    eventCount: number
+    description?: string
+    lastToolName?: string
+    totalTokens?: number
+    toolUses?: number
+    durationMs?: number
+  }
+  const [activeSubagents, setActiveSubagents] = useState<Record<string, SubagentState>>({})
   // Pending permission request — when present, a modal blocks Chat until
   // the user picks allow / deny. See the `control_request` handler below.
   // Set when we see message_start and cleared when the first user-
@@ -196,6 +211,72 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
 
     const offEv = window.api.chat.onEvent(id, (ev: StreamEvent) => {
+      // ── Active subagent tracking ───────────────────────────────
+      // Run before any early-return branch so we never miss a
+      // signal. Three categories of update:
+      //   - Task tool_use spawning  → register
+      //   - task_progress / any parent_tool_use_id event → bump
+      //   - tool_result with matching tool_use_id → deregister
+      const evAny = ev as any
+      if (ev.type === 'stream_event') {
+        const e = evAny.event
+        if (e?.type === 'content_block_start') {
+          const b = e.content_block
+          if (b?.type === 'tool_use' && b.id && (b.name === 'Task' || b.name === 'Agent')) {
+            setActiveSubagents(prev => ({
+              ...prev,
+              [b.id]: { startedAt: Date.now(), lastEventAt: Date.now(), eventCount: 0 }
+            }))
+          }
+        }
+      } else if (ev.type === 'assistant' && evAny.message?.content) {
+        for (const b of evAny.message.content) {
+          if (b?.type === 'tool_use' && b.id && (b.name === 'Task' || b.name === 'Agent')) {
+            setActiveSubagents(prev => prev[b.id]
+              ? prev
+              : { ...prev, [b.id]: { startedAt: Date.now(), lastEventAt: Date.now(), eventCount: 0 } })
+          }
+        }
+      }
+      if (ev.type === 'system' && evAny.subtype === 'task_progress' && evAny.tool_use_id) {
+        const tuid = evAny.tool_use_id as string
+        setActiveSubagents(prev => {
+          const cur = prev[tuid] || { startedAt: Date.now(), lastEventAt: Date.now(), eventCount: 0 }
+          return {
+            ...prev,
+            [tuid]: {
+              ...cur,
+              lastEventAt: Date.now(),
+              eventCount: cur.eventCount + 1,
+              description: evAny.description,
+              lastToolName: evAny.last_tool_name,
+              totalTokens: evAny.usage?.total_tokens,
+              toolUses: evAny.usage?.tool_uses,
+              durationMs: evAny.usage?.duration_ms
+            }
+          }
+        })
+      }
+      if (evAny.parent_tool_use_id) {
+        const ptid = evAny.parent_tool_use_id as string
+        setActiveSubagents(prev => {
+          if (!prev[ptid]) return prev
+          return { ...prev, [ptid]: { ...prev[ptid], lastEventAt: Date.now(), eventCount: prev[ptid].eventCount + 1 } }
+        })
+      }
+      if (ev.type === 'user' && evAny.message?.content && Array.isArray(evAny.message.content)) {
+        for (const b of evAny.message.content) {
+          if (b?.type === 'tool_result' && b.tool_use_id) {
+            setActiveSubagents(prev => {
+              if (!prev[b.tool_use_id]) return prev
+              const next = { ...prev }
+              delete next[b.tool_use_id]
+              return next
+            })
+          }
+        }
+      }
+
       // Status-bar updates — these bypass the scrolling timeline.
       if (ev.type === 'system' && (ev as any).subtype === 'init') {
         const rawModel = (ev as any).model as string | undefined
@@ -760,6 +841,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         {/* stderr lines now flow into the timeline as system entries — no pinned box. */}
       </div>
 
+      {/* Subagent active banner — sticky above rate-limit, only when
+         at least one Task tool is running. Spinner + per-subagent line. */}
+      {Object.keys(activeSubagents).length > 0 && (
+        <SubagentBanner subs={activeSubagents} />
+      )}
       {/* Rate-limit status line — sits just above input, updates live.
          When no rate_limit_event has arrived yet, shows a subdued
          "waiting for first message…" so the user knows Chat is live
@@ -1166,6 +1252,91 @@ function humanEta(resetsAt: number | undefined): string {
   const m = mins % 60
   if (hours > 0) return `${hours}h ${m}m`
   return `${m}m`
+}
+
+/**
+ * Sticky banner above the rate-limit row whenever a Task tool's
+ * subagent is currently running. Driven by the `activeSubagents`
+ * state — populated on Task tool_use, refreshed on every
+ * `task_progress` system event (claude tells us subagent is alive
+ * + what it's doing right now), removed on matching tool_result.
+ *
+ * Per-row format:
+ *   🔧 [Read]  Reading regen-batch2-handbook.md  · 2 tools · 21K · 3.5s
+ * Multiple subagents → multiple rows.
+ *
+ * Uses a 1Hz tick so 'last activity Xs ago' stays fresh even when
+ * no new events flow.
+ */
+function SubagentBanner({ subs }: { subs: Record<string, {
+  startedAt: number; lastEventAt: number; eventCount: number
+  description?: string; lastToolName?: string
+  totalTokens?: number; toolUses?: number; durationMs?: number
+}> }) {
+  const [, force] = useState(0)
+  useEffect(() => {
+    const iv = setInterval(() => force(n => n + 1), 1000)
+    return () => clearInterval(iv)
+  }, [])
+  const fmtDur = (ms: number) => {
+    const s = Math.floor(ms / 1000)
+    if (s < 60) return `${s}s`
+    return `${Math.floor(s / 60)}m ${s % 60}s`
+  }
+  const fmtK = (n?: number) => {
+    if (typeof n !== 'number') return '—'
+    if (n >= 1000) return `${(n / 1000).toFixed(1)}K`
+    return String(n)
+  }
+  const entries = Object.entries(subs)
+  return (
+    <div style={{
+      padding: '4px 10px',
+      borderTop: `1px solid ${CRUSH.Charcoal}`,
+      borderBottom: `1px solid ${CRUSH.Charcoal}`,
+      background: 'rgba(107,80,255,0.08)',  // Charple tint (Crush purple)
+      fontFamily: FONT_MONO, fontSize: 11,
+      color: CRUSH.Ash,
+      display: 'flex', flexDirection: 'column', gap: 2
+    }}>
+      <style>{`@keyframes hg-flip { 0%,40% { transform: rotate(0deg); } 60%,100% { transform: rotate(180deg); } }`}</style>
+      {entries.map(([tuid, s], i) => {
+        const elapsed = Date.now() - s.startedAt
+        const idleMs = Date.now() - s.lastEventAt
+        // 60s threshold: claude task_progress fires every few seconds
+        // when the subagent is alive; only flag idle when nothing has
+        // come in for a full minute (likely true hang, not just a
+        // slow tool).
+        const isHealthy = idleMs < 60000
+        return (
+          <div key={tuid} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
+            <span style={{
+              display: 'inline-block',
+              fontSize: 13,
+              animation: isHealthy ? 'hg-flip 2s ease-in-out infinite' : 'none',
+              color: isHealthy ? CRUSH.Charple : CRUSH.Zest
+            }}>⏳</span>
+            <span style={{ color: CRUSH.Charple, fontWeight: 700, letterSpacing: '0.02em' }}>
+              Subagent #{i + 1}
+            </span>
+            <span style={{ color: CRUSH.Butter, flex: 1, minWidth: 0, overflow: 'hidden' as const, textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
+              {s.description ? redact(s.description) : 'thinking'}
+              {isHealthy
+                ? <span className="hive-dots-loader" style={{ color: CRUSH.Charple, marginLeft: 1 }} />
+                : <span style={{ color: CRUSH.Zest, marginLeft: 1 }}>...</span>}
+            </span>
+            <span style={{ color: CRUSH.Squid, marginLeft: 'auto' }}>
+              {s.toolUses != null && `${s.toolUses} tools · `}
+              {fmtK(s.totalTokens)} tok · {fmtDur(elapsed)}
+              {!isHealthy && (
+                <span style={{ color: CRUSH.Zest, marginLeft: 6 }}>· idle {Math.floor(idleMs / 1000)}s</span>
+              )}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function RateLimitBar({ info }: { info: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null }) {

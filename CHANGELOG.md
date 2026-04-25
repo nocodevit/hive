@@ -14,6 +14,31 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.65] — 2026-04-25
+
+### Added
+- **Sticky `Subagent #N` banner** above the rate-limit row whenever
+  a Task tool's subagent is actively running. Tracks active
+  subagents by `tool_use_id`, populated on Task `tool_use`,
+  refreshed on every `system.subtype: task_progress` event (claude
+  tells us what the sub is doing right now), removed when the
+  matching `tool_result` arrives. Shows:
+    `⏳ Subagent #1   Reading regen-batch2-handbook.md…   2 tools · 21K tok · 3.5s`
+  - Charple `#6B50FF` color scheme (Crush purple, matches tool-block
+    border / summary tag family).
+  - Title-case "Subagent" with always-shown `#N` index assigned by
+    insertion order (resets when sub finishes).
+  - Hourglass `⏳` rotates 180° via `hg-flip` keyframe.
+  - Animated `…` ellipsis loader (CSS-only `hive-dots` keyframe)
+    after the description so you can see "still moving" even between
+    `task_progress` events.
+  - 1Hz tick keeps elapsed-time live.
+  - **Idle detection**: if no event in 60s the row tints Zest, ⏳
+    stops rotating, dots freeze — visual "stuck not slow" signal.
+  - Multiple concurrent subagents stack as separate rows.
+
+---
+
 ## [1.7.64] — 2026-04-25
 
 ### Fixed
