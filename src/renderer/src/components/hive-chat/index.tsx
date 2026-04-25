@@ -150,6 +150,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // fresh --print --resume <sid> that picks up mobile-driven turns).
   const [rcState, setRcState] = useState<'idle' | 'active'>('idle')
   const [rcOutput, setRcOutput] = useState<string>('')
+  // Two-step close: clicking `close ✕` on the bottom bar flips this
+  // flag, which swaps the input area for a confirm panel ([Cancel]
+  // [Confirm]). Confirm fires the real stopChat. Cancel reverts.
+  const [closeConfirming, setCloseConfirming] = useState(false)
 
   useEffect(() => {
     window.api.chat.start(id, { cwd, agent, name: agentName, continueSession, rebaseOnStart })
@@ -501,12 +505,20 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
   }
 
-  const closeSession = async () => {
+  // Two-step close. First click on `close ✕` opens a confirm panel
+  // (replaces the input area). Cancel reverts; Confirm actually
+  // kills the subprocess. Auto-revert if rcState/exited changes
+  // would make the panel meaningless (handled implicitly by the
+  // render branch order).
+  const closeSession = () => { setCloseConfirming(true) }
+  const cancelClose = () => { setCloseConfirming(false) }
+  const confirmClose = async () => {
+    setCloseConfirming(false)
     addEntry({ kind: 'system', text: 'Session closed by user. Timeline kept; click Start new session below to continue with the same agent.' })
     await window.api.chat.stop(id)
-    // main's stopChat fires chat:exit which flips `exited` state; no need
-    // to set it manually. The input area picks up the new-session UI off
-    // `exited !== null`.
+    // main's stopChat fires chat:exit which flips `exited` state; the
+    // input area then renders the existing "session closed" + new-
+    // session button panel off `exited !== null`.
   }
 
   const startNewSession = async () => {
@@ -691,13 +703,68 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }}>waiting for first message…</div>
       ) : null}
 
-      {/* Input area — three variants:
-          - rcState === 'active'    → RC pairing panel
+      {/* Input area — four variants in priority order:
           - exited !== null          → "session closed, start new" panel
+          - rcState === 'active'     → RC pairing panel
+          - closeConfirming          → confirm-close panel (Cancel / OK)
           - else                     → normal textarea
-          Precedence matches real priority (RC ends when user clicks
-          Resume; a closed session can't be in RC at the same time). */}
-      {exited !== null && rcState !== 'active' ? (
+          A confirmed close fires confirmClose() → stopChat → exit
+          event → exited flips → first branch takes over. */}
+      {closeConfirming && exited === null && rcState !== 'active' ? (
+        <div style={{
+          borderTop: `1px solid ${CRUSH.Charcoal}`,
+          background: CRUSH.BBQ,
+          padding: 8
+        }}>
+          <div style={{
+            border: `1px solid ${CRUSH.Sriracha}`,
+            borderRadius: 8,
+            padding: 10,
+            background: 'rgba(235,66,104,0.06)'
+          }}>
+            <div style={{
+              color: CRUSH.Sriracha, fontWeight: 700, fontSize: 12,
+              textTransform: 'uppercase' as const, letterSpacing: '0.08em',
+              marginBottom: 6
+            }}>● close this session?</div>
+            <div style={{ color: CRUSH.Squid, fontSize: 11, marginBottom: 10 }}>
+              The claude subprocess will be killed. Timeline above is kept.
+              You can start a fresh session afterwards (same agent, new
+              context). No API charges while closed.
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={cancelClose}
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: `1px solid ${CRUSH.Charcoal}`,
+                  borderRadius: 6,
+                  padding: '8px 16px',
+                  color: CRUSH.Squid,
+                  fontFamily: FONT_MONO, fontSize: 13, fontWeight: 500,
+                  cursor: 'pointer'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = CRUSH.Squid; e.currentTarget.style.color = CRUSH.Butter }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = CRUSH.Charcoal; e.currentTarget.style.color = CRUSH.Squid }}
+              >Cancel</button>
+              <button
+                onClick={confirmClose}
+                style={{
+                  flex: 1,
+                  background: CRUSH.Sriracha,
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '8px 16px',
+                  color: CRUSH.Butter,
+                  fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700,
+                  cursor: 'pointer'
+                }}
+              >OK · close session</button>
+            </div>
+          </div>
+        </div>
+      ) : exited !== null && rcState !== 'active' ? (
         <div style={{
           borderTop: `1px solid ${CRUSH.Charcoal}`,
           background: CRUSH.BBQ,
@@ -1164,78 +1231,30 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
       >
         {streamingMode ? '● streaming mode' : '○ streaming mode'}
       </button>
-      {sessionActive && <CloseSessionButton onConfirm={onCloseSession} />}
+      {sessionActive && (
+        <button
+          onClick={onCloseSession}
+          title="End this claude session. A confirm panel will appear."
+          style={{
+            background: 'transparent',
+            border: `1px solid ${CRUSH.Charcoal}`,
+            color: CRUSH.Squid,
+            padding: '2px 6px',
+            borderRadius: 4,
+            fontFamily: FONT_MONO, fontSize: 10,
+            cursor: 'pointer',
+            whiteSpace: 'nowrap'
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.borderColor = CRUSH.Sriracha
+            e.currentTarget.style.color = CRUSH.Sriracha
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.borderColor = CRUSH.Charcoal
+            e.currentTarget.style.color = CRUSH.Squid
+          }}
+        >close ✕</button>
+      )}
     </div>
-  )
-}
-
-/**
- * Two-step close button. First click expands into [cancel] [confirm
- * close ✕]; second click on confirm fires the actual stopChat. The
- * confirming state auto-resets after 4s if the user does nothing,
- * so a stray click never strands the bar in confirm-mode.
- */
-function CloseSessionButton({ onConfirm }: { onConfirm: () => void }) {
-  const [confirming, setConfirming] = useState(false)
-  useEffect(() => {
-    if (!confirming) return
-    const t = setTimeout(() => setConfirming(false), 4000)
-    return () => clearTimeout(t)
-  }, [confirming])
-  if (!confirming) {
-    return (
-      <button
-        onClick={() => setConfirming(true)}
-        title="End this claude session. Timeline kept; click again to confirm."
-        style={{
-          background: 'transparent',
-          border: `1px solid ${CRUSH.Charcoal}`,
-          color: CRUSH.Squid,
-          padding: '2px 6px',
-          borderRadius: 4,
-          fontFamily: FONT_MONO, fontSize: 10,
-          cursor: 'pointer',
-          whiteSpace: 'nowrap'
-        }}
-        onMouseEnter={e => {
-          e.currentTarget.style.borderColor = CRUSH.Sriracha
-          e.currentTarget.style.color = CRUSH.Sriracha
-        }}
-        onMouseLeave={e => {
-          e.currentTarget.style.borderColor = CRUSH.Charcoal
-          e.currentTarget.style.color = CRUSH.Squid
-        }}
-      >close ✕</button>
-    )
-  }
-  return (
-    <span style={{ display: 'inline-flex', gap: 4 }}>
-      <button
-        onClick={() => setConfirming(false)}
-        style={{
-          background: 'transparent',
-          border: `1px solid ${CRUSH.Charcoal}`,
-          color: CRUSH.Squid,
-          padding: '2px 6px',
-          borderRadius: 4,
-          fontFamily: FONT_MONO, fontSize: 10,
-          cursor: 'pointer',
-          whiteSpace: 'nowrap'
-        }}
-      >cancel</button>
-      <button
-        onClick={() => { setConfirming(false); onConfirm() }}
-        style={{
-          background: CRUSH.Sriracha,
-          border: `1px solid ${CRUSH.Sriracha}`,
-          color: CRUSH.Butter,
-          padding: '2px 6px',
-          borderRadius: 4,
-          fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
-          cursor: 'pointer',
-          whiteSpace: 'nowrap'
-        }}
-      >confirm close ✕</button>
-    </span>
   )
 }
