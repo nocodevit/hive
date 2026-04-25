@@ -22,7 +22,15 @@ describe('langFromPath', () => {
     expect(langFromPath('a.yaml')).toBe('yaml')
     expect(langFromPath('a.json')).toBe('json')
     expect(langFromPath('a.css')).toBe('css')
-    expect(langFromPath('a.md')).toBe('markdown')
+  })
+
+  it('maps .md / .markdown to "markup" (not "markdown")', () => {
+    // Prism's markdown grammar emits multi-line tokens for tables which
+    // get shredded by prism-react-renderer's per-line splitter. We
+    // intentionally fall through to "markup" so .md source renders
+    // line-for-line. Regression guard.
+    expect(langFromPath('docs/design.md')).toBe('markup')
+    expect(langFromPath('README.markdown')).toBe('markup')
   })
 
   it('falls back to markup for unknown / missing extension', () => {

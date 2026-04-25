@@ -14,6 +14,20 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.37] — 2026-04-25
+
+### Fixed
+- **Markdown tables in Read results no longer get shredded.** Prism's
+  markdown grammar emits multi-line tokens for tables (one token whose
+  content includes `\n`), which prism-react-renderer's per-line splitter
+  fragments — table rows scatter across rendered `<div>`s, every `|`
+  ends up on its own line. Fix: `.md` / `.markdown` extensions fall
+  through to `markup` (HTML grammar), which is effectively pass-through
+  for markdown source without HTML tags. Source displays line-for-line.
+  Regression guard added in `renderers-helpers.test.ts`.
+
+---
+
 ## [1.7.36] — 2026-04-25
 
 ### Fixed
@@ -552,7 +566,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.36...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.37...HEAD
+[1.7.37]: https://github.com/nocodevit/hive/compare/v1.7.36...v1.7.37
 [1.7.36]: https://github.com/nocodevit/hive/compare/v1.7.35...v1.7.36
 [1.7.35]: https://github.com/nocodevit/hive/compare/v1.7.34...v1.7.35
 [1.7.34]: https://github.com/nocodevit/hive/compare/v1.7.33...v1.7.34
