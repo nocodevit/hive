@@ -2,16 +2,16 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { TimelineRow, ThinkingSpinner } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
-import { EMPTY_RECALL, pushAfterSend, recallDown, recallUp, type RecallState } from './recall'
 import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
 
 /** Isolated subtree so the timeline doesn't re-render on every keystroke
  *  in the input box — only when the timeline array itself or `onChoose`
  *  reference change. */
-const TimelineList = React.memo(function TimelineList({ timeline, onChoose }: {
+const TimelineList = React.memo(function TimelineList({ timeline, onChoose, onRecall }: {
   timeline: TimelineEntry[]
   onChoose: (pick: string) => void
+  onRecall: (text: string) => void
 }) {
   const resultsByToolUseId = useMemo(() => {
     const m = new Map<string, { content: string; isError?: boolean }>()
@@ -24,7 +24,7 @@ const TimelineList = React.memo(function TimelineList({ timeline, onChoose }: {
     <>
       {timeline.map(entry => {
         const result = entry.kind === 'tool_call' ? resultsByToolUseId.get(entry.toolUseId) : undefined
-        return <TimelineRow key={entry.id} entry={entry} result={result} onChoose={onChoose} />
+        return <TimelineRow key={entry.id} entry={entry} result={result} onChoose={onChoose} onRecall={onRecall} />
       })}
     </>
   )
@@ -117,11 +117,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // composition confirms the candidate, not sends the message.
   const composingRef = useRef(false)
 
-  // Bash-style recall for sent user messages. State transitions live in
-  // ./recall.ts as pure helpers so they're unit-tested without a DOM.
-  const sentHistoryRef = useRef<string[]>([])
-  const recallStateRef = useRef<RecallState>(EMPTY_RECALL)
-  const HISTORY_CAP = 100
+  // Recall is now a per-bubble click action (UserMessage's ↺ icon)
+  // instead of ↑/↓ keys. Kept the recall.ts pure helpers in tree for
+  // potential keyboard re-enable down the road, but not wired here.
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Cap in-memory timeline so very long sessions don't accumulate
   // unbounded React state. Entries fall off the top; JSONL on disk
@@ -337,8 +336,24 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         // Each result.usage.input_tokens is the FULL current context
         // (system + history + this turn), not a delta. So we just take
         // the most recent — no accumulation needed.
-        if (typeof e.usage?.input_tokens === 'number') {
-          setLatestInputTokens(e.usage.input_tokens)
+        const newInput = e.usage?.input_tokens
+        if (typeof newInput === 'number') {
+          // Auto-compact heuristic: if input_tokens dropped to less
+          // than half of the prior peak, assume claude auto-compacted.
+          // 50K → 25K is normal ebb. 180K → 35K is a compact event.
+          // Insert a divider into the timeline so the user knows the
+          // old context above is summarized, not literal.
+          const prior = latestInputTokens
+          if (prior > 0 && newInput < prior * 0.5 && prior - newInput > 30000) {
+            const turns = e.num_turns || 0
+            addEntry({
+              kind: 'compact_boundary',
+              previousTokens: prior,
+              newTokens: newInput,
+              turnsSummarized: turns
+            } as any)
+          }
+          setLatestInputTokens(newInput)
         }
         addEntry({
           kind: 'result',
@@ -454,9 +469,6 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     // no stream-json frame goes out.
     if (text === '/remote-control') {
       setInput('')
-      const { history, state } = pushAfterSend(sentHistoryRef.current, text, HISTORY_CAP)
-      sentHistoryRef.current = history
-      recallStateRef.current = state
       addEntry({ kind: 'system', text: 'Starting remote control…' })
       setRcOutput('')
       const res = await window.api.chat.startRemoteControl(id)
@@ -470,9 +482,6 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setSending(true)
     addEntry({ kind: 'user', text })
     setInput('')
-    const { history, state } = pushAfterSend(sentHistoryRef.current, text, HISTORY_CAP)
-    sentHistoryRef.current = history
-    recallStateRef.current = state
     await window.api.chat.send(id, text)
     setSending(false)
   }
@@ -517,21 +526,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     })
   }
 
-  const tryRecallUp = (ta: HTMLTextAreaElement): boolean => {
-    const cursorAtTop = ta.selectionStart === 0 || !input.slice(0, ta.selectionStart).includes('\n')
-    const r = recallUp(sentHistoryRef.current, recallStateRef.current, input, cursorAtTop)
-    if (!r) return false
-    recallStateRef.current = r.state
-    setInput(r.input)
-    return true
-  }
-  const tryRecallDown = (): boolean => {
-    const r = recallDown(sentHistoryRef.current, recallStateRef.current)
-    if (!r) return false
-    recallStateRef.current = r.state
-    setInput(r.input)
-    return true
-  }
+  // Click ↺ icon on any past UserMessage → fill input with that text
+  // for edit & resend. Focuses the textarea so the user can immediately
+  // tweak. Replaces the ↑/↓ keyboard recall (chat-native idiom — ↑ is
+  // for textarea cursor navigation, not a history shortcut).
+  const handleRecall = useCallback((text: string) => {
+    setInput(text)
+    setTimeout(() => textareaRef.current?.focus(), 0)
+  }, [])
 
   const handleChoose = useCallback((pick: string) => {
     addEntry({ kind: 'user', text: pick })
@@ -628,7 +630,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             </button>
           </div>
         )}
-        <TimelineList timeline={timeline} onChoose={handleChoose} />
+        <TimelineList timeline={timeline} onChoose={handleChoose} onRecall={handleRecall} />
         {thinking && <ThinkingSpinner since={thinking.since} />}
         {exited !== null && (
           <div style={{ color: CRUSH.Sriracha, fontSize: 11, marginTop: 12, padding: 4 }}>
@@ -764,6 +766,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           }}>
             <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
             <textarea
+              ref={textareaRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onCompositionStart={() => { composingRef.current = true }}
@@ -774,8 +777,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 // is the belt-and-suspenders backup.
                 if (composingRef.current || (e.nativeEvent as any).isComposing) return
                 if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); return }
-                if (e.key === 'ArrowUp' && tryRecallUp(e.currentTarget)) { e.preventDefault(); return }
-                if (e.key === 'ArrowDown' && tryRecallDown()) { e.preventDefault(); return }
+                // ↑/↓ left as native textarea cursor navigation. Recall is
+                // a click-the-↺-icon action on each past UserMessage now.
               }}
               disabled={sending || exited !== null}
               placeholder="Message Claude… (Enter to send, Shift+Enter for newline)"
