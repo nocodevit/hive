@@ -183,7 +183,7 @@ function CodeBlockWithCopy({ code, language }: { code: string; language: string 
 
 function CrushMarkdown({ text }: { text: string }) {
   return (
-    <div style={{ fontFamily: FONT_MONO, fontSize: 13, lineHeight: 1.55 }}>
+    <div className="hive-chat-md" style={{ fontFamily: FONT_MONO, fontSize: 13, lineHeight: 1.55 }}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{redact(text)}</ReactMarkdown>
     </div>
   )
