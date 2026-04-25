@@ -609,10 +609,13 @@ function InlineResult({ content, isError, tool, input }: {
 
   const allLines = content.split('\n')
   // Collapse if either the line count OR the raw character length is large.
-  // Bash results like `ps aux` often have only ~4 logical lines but each is
-  // 400+ chars — they wrap visually and dominate the screen.
-  const MAX_CHARS = 1200
-  const byLines = allLines.length > DEFAULT_EXPANDED_LINES
+  // Bash results like `ps aux` / `npm run build` often have only ~4-10
+  // logical lines but each is 200-400 chars; they wrap visually and
+  // dominate the screen. Tighter cap on Bash specifically.
+  const isBashy = tool === 'Bash' || tool === 'BashOutput'
+  const MAX_CHARS = isBashy ? 600 : 1000
+  const MAX_LINES = isBashy ? 8 : DEFAULT_EXPANDED_LINES
+  const byLines = allLines.length > MAX_LINES
   const byChars = content.length > MAX_CHARS
   const truncated = byLines || byChars
   let visibleContent: string
@@ -623,8 +626,8 @@ function InlineResult({ content, isError, tool, input }: {
     visibleContent = content.slice(0, MAX_CHARS)
     hidden = content.length - MAX_CHARS
   } else {
-    visibleContent = allLines.slice(0, DEFAULT_EXPANDED_LINES).join('\n')
-    hidden = allLines.length - DEFAULT_EXPANDED_LINES
+    visibleContent = allLines.slice(0, MAX_LINES).join('\n')
+    hidden = allLines.length - MAX_LINES
   }
   const hiddenLabel = byLines && !byChars
     ? `${hidden} more lines`
