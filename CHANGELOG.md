@@ -14,6 +14,19 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.46] — 2026-04-25
+
+### Added
+- **Drag-and-drop file → input box** in HiveChat. Drop one or more
+  files anywhere on the chat surface (from FilesPanel or Finder) and
+  their absolute paths get appended to the textarea, quoted if the
+  path contains spaces, separated by spaces, then the input is
+  focused so you can keep typing. Plain-text drops (e.g. selected
+  text from another editor) work too. Mirrors Terminal's existing
+  drop behavior, just routed to the chat input instead of the PTY.
+
+---
+
 ## [1.7.45] — 2026-04-25
 
 ### Fixed
@@ -689,7 +702,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.45...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.46...HEAD
+[1.7.46]: https://github.com/nocodevit/hive/compare/v1.7.45...v1.7.46
 [1.7.45]: https://github.com/nocodevit/hive/compare/v1.7.44...v1.7.45
 [1.7.44]: https://github.com/nocodevit/hive/compare/v1.7.43...v1.7.44
 [1.7.43]: https://github.com/nocodevit/hive/compare/v1.7.42...v1.7.43
