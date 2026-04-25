@@ -14,6 +14,34 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.51] — 2026-04-25
+
+### Added
+- **● Julep status dot on every assistant text reply** — symmetric to
+  the Julep `❯` on user input. Tool calls keep their per-tool ●;
+  this is for plain-text replies that previously had no visual
+  marker.
+- **`[SUMMARY]` tag** when the reply starts with a recognized
+  summary marker (`Summary:` / `## Summary` / `**Summary**` /
+  `总结：` / `结论:` / `小结` / `Final Report`, case-insensitive,
+  with or without inline title). Tag is Julep-bordered uppercase
+  badge; an optional title (text after the colon) renders as a
+  Butter subtitle. Heading line is stripped from the body so the
+  markdown content flows naturally below.
+- 11 new vitest cases for the new `detectSummary` helper covering
+  no-marker / plain prefix / `## Summary` / bold / Chinese variants
+  / case-insensitivity / blank-line stripping / mid-text rejection.
+  Total: 408 → 419.
+
+### Changed
+- **Agent panel R&D / Non-R&D card borders** changed from
+  `border-border/50` (resolved to a near-invisible gray-purple) to
+  solid Charple `#6B50FF` — same purple as the chat tool-block
+  vertical line. Borders now read as deliberate frames, not
+  accidental.
+
+---
+
 ## [1.7.50] — 2026-04-25
 
 ### Changed
@@ -770,7 +798,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.50...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.51...HEAD
+[1.7.51]: https://github.com/nocodevit/hive/compare/v1.7.50...v1.7.51
 [1.7.50]: https://github.com/nocodevit/hive/compare/v1.7.49...v1.7.50
 [1.7.49]: https://github.com/nocodevit/hive/compare/v1.7.48...v1.7.49
 [1.7.48]: https://github.com/nocodevit/hive/compare/v1.7.47...v1.7.48
