@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Hive — Batch Activity Timeline Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0f0a1a;
+    --bg-secondary: #1a1128;
+    --bg-hover: #2d1f48;
+    --border-default: #2d1f48;
+    --text-primary: #f0ecf9;
+    --text-secondary: #d4bcfa;
+    --text-muted: #8d7fb0;
+    --accent: #b794f6;
+    --status-working: #4ade80;
+    --status-waiting: #fbbf24;
+    --status-done: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 32px;
+  }
+  h1,h2,h3 { font-family: 'Space Grotesk', sans-serif; }
+
+  .page { max-width: 800px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 32px; }
+  .header h1 { font-size: 18px; margin-bottom: 4px; }
+  .header p { font-size: 12px; color: var(--text-muted); }
+
+  .glass-card {
+    background: rgba(124,58,237,0.08);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(124,58,237,0.15);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(124,58,237,0.06), inset 0 1px 0 rgba(255,255,255,0.08);
+    overflow: hidden;
+    margin-bottom: 16px;
+  }
+
+  /* Batch header */
+  .batch-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    cursor: pointer;
+  }
+  .batch-header:hover { background: rgba(167,139,250,0.04); }
+  .batch-left { display: flex; align-items: center; gap: 10px; }
+  .batch-arrow { color: var(--text-muted); font-size: 13px; width: 16px; }
+  .batch-title { font-size: 14px; font-weight: 700; }
+  .batch-date { font-size: 11px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+  .batch-right { display: flex; align-items: center; gap: 10px; }
+  .batch-bar { width: 80px; height: 4px; background: var(--bg-hover); border-radius: 2px; overflow: hidden; }
+  .batch-bar-fill { height: 100%; background: var(--accent); border-radius: 2px; }
+  .batch-count { font-size: 12px; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+  /* Timeline */
+  .timeline { padding: 0 16px 12px; }
+  .tl-row {
+    display: grid;
+    grid-template-columns: 24px 110px 60px 90px 1fr;
+    gap: 8px;
+    align-items: start;
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(167,139,250,0.05);
+    font-size: 12px;
+  }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-emoji { font-size: 15px; text-align: center; }
+  .tl-who {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tl-who.manager { color: #F59E0B; }
+  .tl-who.worker { color: #3B82F6; }
+  .tl-who.qa { color: #10B981; }
+  .tl-who.critic { color: #8B5CF6; }
+  .tl-who.system { color: var(--text-muted); }
+
+  .tl-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(141,127,176,0.5);
+  }
+  .tl-action {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .tl-action.create { color: var(--accent); }
+  .tl-action.assign { color: #3B82F6; }
+  .tl-action.done { color: var(--status-working); }
+  .tl-action.blocked { color: #f87171; }
+  .tl-action.abandoned { color: var(--status-waiting); }
+  .tl-action.gate { color: var(--text-muted); }
+  .tl-action.qa-pass { color: var(--status-working); }
+  .tl-action.qa-fail { color: #f87171; }
+
+  .tl-content { color: var(--text-primary); line-height: 1.4; }
+  .tl-content .task-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--bg-hover);
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-right: 2px;
+  }
+  .tl-content .arrow { color: var(--text-muted); margin: 0 3px; }
+  .tl-content .agent-name { font-weight: 500; }
+  .tl-content .agent-name.worker { color: #3B82F6; }
+  .tl-content .agent-name.qa { color: #10B981; }
+  .tl-content .agent-name.critic { color: #8B5CF6; }
+  .tl-content .result { font-weight: 600; }
+  .tl-content .result.pass { color: var(--status-working); }
+  .tl-content .result.fail { color: #f87171; }
+
+  /* Compact sub-items */
+  .tl-sub {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+  .tl-sub-item {
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .note { font-size: 11px; color: var(--text-muted); text-align: center; padding: 16px; opacity: 0.6; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="header">
+  <h1>Batch Activity Timeline — Preview</h1>
+  <p>Who | Time | Action | Content</p>
+</div>
+
+<!-- ═══ Batch 3 (current, expanded) ═══ -->
+<div class="glass-card">
+  <div class="batch-header">
+    <div class="batch-left">
+      <span class="batch-arrow">▾</span>
+      <span class="batch-title">Batch 3</span>
+      <span class="batch-date">Apr 16</span>
+    </div>
+    <div class="batch-right">
+      <div class="batch-bar"><div class="batch-bar-fill" style="width:75%;"></div></div>
+      <span class="batch-count">6/8</span>
+    </div>
+  </div>
+  <div class="timeline">
+    <!-- Manager creates batch -->
+    <div class="tl-row">
+      <span class="tl-emoji">👑</span>
+      <span class="tl-who manager">Tracy(Manager)</span>
+      <span class="tl-time">Apr 16 09:30</span>
+      <span class="tl-action create">create</span>
+      <span class="tl-content">
+        Created 8 tasks for Batch 3
+      </span>
+    </div>
+
+    <!-- Manager assigns -->
+    <div class="tl-row">
+      <span class="tl-emoji">👑</span>
+      <span class="tl-who manager">Tracy(Manager)</span>
+      <span class="tl-time">09:31</span>
+      <span class="tl-action assign">assign</span>
+      <span class="tl-content">
+        <div class="tl-sub">
+          <span class="tl-sub-item"><span class="task-id">task-111</span><span class="arrow">→</span><span class="agent-name worker">David</span></span>
+          <span class="tl-sub-item"><span class="task-id">task-112</span><span class="arrow">→</span><span class="agent-name worker">Alex(data)</span></span>
+        </div>
+      </span>
+    </div>
+
+    <!-- Worker done -->
+    <div class="tl-row">
+      <span class="tl-emoji">🔧</span>
+      <span class="tl-who worker">David</span>
+      <span class="tl-time">10:15</span>
+      <span class="tl-action done">done</span>
+      <span class="tl-content">
+        <span class="task-id">task-111</span> Gate reform — scope+verify only <span class="result pass">✓</span>
+      </span>
+    </div>
+
+    <!-- System auto-assign -->
+    <div class="tl-row" style="opacity:0.55;">
+      <span class="tl-emoji">⚡</span>
+      <span class="tl-who system">system</span>
+      <span class="tl-time">10:15</span>
+      <span class="tl-action assign">auto-assign</span>
+      <span class="tl-content">
+        <span class="task-id">task-113</span><span class="arrow">→</span><span class="agent-name worker">David</span>
+      </span>
+    </div>
+
+    <!-- Worker done with scope warning -->
+    <div class="tl-row">
+      <span class="tl-emoji">🔧</span>
+      <span class="tl-who worker">Alex(data)</span>
+      <span class="tl-time">10:45</span>
+      <span class="tl-action done">done</span>
+      <span class="tl-content">
+        <span class="task-id">task-112</span> Stuck detection dispatcher <span class="result pass">✓</span>
+        <span style="font-size:10px;color:var(--status-waiting);margin-left:4px;">⚠ scope warning</span>
+      </span>
+    </div>
+
+    <!-- Worker blocked -->
+    <div class="tl-row">
+      <span class="tl-emoji">🔧</span>
+      <span class="tl-who worker">David</span>
+      <span class="tl-time">11:20</span>
+      <span class="tl-action blocked">blocked</span>
+      <span class="tl-content">
+        <span class="task-id">task-113</span> E2E test timeout — Playwright hung on auth
+      </span>
+    </div>
+
+    <!-- Manager abandons -->
+    <div class="tl-row">
+      <span class="tl-emoji">👑</span>
+      <span class="tl-who manager">Tracy(Manager)</span>
+      <span class="tl-time">11:25</span>
+      <span class="tl-action abandoned">abandon</span>
+      <span class="tl-content">
+        <span class="task-id">task-113</span> Deferred to next sprint — auth refactor needed first
+      </span>
+    </div>
+
+    <!-- More workers done -->
+    <div class="tl-row">
+      <span class="tl-emoji">🔧</span>
+      <span class="tl-who worker">David</span>
+      <span class="tl-time">12:30</span>
+      <span class="tl-action done">done</span>
+      <span class="tl-content">
+        <span class="task-id">task-114</span> Enrich answers lib <span class="result pass">✓</span>
+      </span>
+    </div>
+    <div class="tl-row">
+      <span class="tl-emoji">🔧</span>
+      <span class="tl-who worker">Alex(data)</span>
+      <span class="tl-time">13:10</span>
+      <span class="tl-action done">done</span>
+      <span class="tl-content">
+        <span class="task-id">task-115</span> Entitlement gate server-side <span class="result pass">✓</span>
+      </span>
+    </div>
+
+    <!-- Handoff -->
+    <div class="tl-row">
+      <span class="tl-emoji">🔧</span>
+      <span class="tl-who worker">Drake</span>
+      <span class="tl-time">14:00</span>
+      <span class="tl-action assign">handoff</span>
+      <span class="tl-content">
+        <span class="task-id">task-124</span><span class="arrow">→</span><span class="agent-name worker">Hodas</span> Content audit fixes — MathText
+      </span>
+    </div>
+
+    <!-- QA -->
+    <div class="tl-row">
+      <span class="tl-emoji">🛡️</span>
+      <span class="tl-who qa">Drake(QA)</span>
+      <span class="tl-time">15:00</span>
+      <span class="tl-action qa-pass">qa pass</span>
+      <span class="tl-content">
+        Merge 2 branches ✓ · build ✓ · test 198/198 · coverage 84%
+      </span>
+    </div>
+
+    <!-- Critic -->
+    <div class="tl-row">
+      <span class="tl-emoji">⚖️</span>
+      <span class="tl-who critic">Hodas(Critic)</span>
+      <span class="tl-time">15:30</span>
+      <span class="tl-action done">pr ready</span>
+      <span class="tl-content">
+        PR #42 created · code review pass · 8 files changed
+      </span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Batch 2 (collapsed) ═══ -->
+<div class="glass-card" style="opacity:0.8;">
+  <div class="batch-header">
+    <div class="batch-left">
+      <span class="batch-arrow">▸</span>
+      <span class="batch-title">Batch 2</span>
+      <span class="batch-date">Apr 13</span>
+    </div>
+    <div class="batch-right">
+      <div class="batch-bar"><div class="batch-bar-fill" style="width:100%;"></div></div>
+      <span class="batch-count">12/12</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Batch 1 (collapsed) ═══ -->
+<div class="glass-card" style="opacity:0.8;">
+  <div class="batch-header">
+    <div class="batch-left">
+      <span class="batch-arrow">▸</span>
+      <span class="batch-title">Batch 1</span>
+      <span class="batch-date">Apr 6</span>
+    </div>
+    <div class="batch-right">
+      <div class="batch-bar"><div class="batch-bar-fill" style="width:65%;"></div></div>
+      <span class="batch-count">20/31 · 6 abandoned</span>
+    </div>
+  </div>
+</div>
+
+<div class="note">
+  Timeline rows: emoji role color | agent name | time | action tag (color-coded) | content with task IDs and agent references<br>
+  System events (auto-assign, gate) are dimmed. Handoff, QA, Critic events included.
+</div>
+
+</div>
+</body>
+</html>

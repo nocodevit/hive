@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Hive — Dashboard Analytics Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0f0a1a;
+    --bg-secondary: #1a1128;
+    --bg-hover: #2d1f48;
+    --border-default: #2d1f48;
+    --text-primary: #f0ecf9;
+    --text-secondary: #d4bcfa;
+    --text-muted: #8d7fb0;
+    --accent: #b794f6;
+    --accent-muted: #8b5cf6;
+    --status-working: #4ade80;
+    --status-waiting: #fbbf24;
+    --status-done: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'DM Sans', sans-serif; background: var(--bg-primary); color: var(--text-primary); padding: 24px; }
+  h1,h2,h3,h4 { font-family: 'Space Grotesk', sans-serif; }
+
+  .page { max-width: 900px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 28px; }
+  .header h1 { font-size: 18px; margin-bottom: 4px; }
+  .header p { font-size: 12px; color: var(--text-muted); }
+
+  .glass-card {
+    background: rgba(124,58,237,0.08);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(124,58,237,0.15);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(124,58,237,0.06), inset 0 1px 0 rgba(255,255,255,0.08);
+    padding: 16px 20px;
+  }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+
+  /* Stat card */
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    margin-bottom: 6px;
+  }
+  .stat-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 28px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .stat-sub {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* Commit density chart */
+  .commit-chart {
+    display: flex;
+    align-items: flex-end;
+    gap: 4px;
+    height: 60px;
+    padding-top: 8px;
+  }
+  .commit-day {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .commit-bar {
+    width: 100%;
+    border-radius: 3px 3px 0 0;
+    min-height: 2px;
+    transition: height 0.3s;
+  }
+  .commit-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    color: var(--text-muted);
+  }
+  /* Stacked bars per agent */
+  .commit-stack {
+    width: 100%;
+    display: flex;
+    flex-direction: column-reverse;
+    gap: 1px;
+  }
+  .commit-seg {
+    width: 100%;
+    border-radius: 2px;
+    min-height: 0;
+  }
+
+  /* Agent work time table */
+  .agent-row {
+    display: grid;
+    grid-template-columns: 24px 1fr 80px 60px;
+    gap: 8px;
+    align-items: center;
+    padding: 6px 0;
+    font-size: 12px;
+    border-bottom: 1px solid rgba(167,139,250,0.06);
+  }
+  .agent-row:last-child { border-bottom: none; }
+  .agent-emoji { font-size: 14px; text-align: center; }
+  .agent-name { font-weight: 500; }
+  .agent-bar-wrap { position: relative; height: 6px; background: var(--bg-hover); border-radius: 3px; overflow: hidden; }
+  .agent-bar-fill { height: 100%; border-radius: 3px; }
+  .agent-hours { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-secondary); text-align: right; }
+
+  /* Task group stats mini */
+  .tg-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+  }
+  .tg-num {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+  }
+  .tg-label {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::before { content: ''; width: 12px; height: 1px; background: var(--accent-muted); }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="header">
+  <h1>Dashboard Analytics — Preview</h1>
+  <p>PSLE Alex project</p>
+</div>
+
+<!-- ═══ Row 1: Key metrics ═══ -->
+<div class="section-label">Overview</div>
+<div class="grid-4">
+  <div class="glass-card">
+    <div class="stat-label">Total Tasks</div>
+    <div class="stat-value">116</div>
+    <div class="stat-sub">Latest: task-124</div>
+  </div>
+  <div class="glass-card">
+    <div class="stat-label">Completed</div>
+    <div class="stat-value" style="color:var(--status-working);">97</div>
+    <div class="stat-sub">84% done</div>
+  </div>
+  <div class="glass-card">
+    <div class="stat-label">Batches</div>
+    <div class="stat-value">19</div>
+    <div class="stat-sub">Batch 3 active</div>
+  </div>
+  <div class="glass-card">
+    <div class="stat-label">Blocked</div>
+    <div class="stat-value" style="color:#f87171;">5</div>
+    <div class="stat-sub">9 abandoned</div>
+  </div>
+</div>
+
+<!-- ═══ Row 2: 7-Day Commit Density ═══ -->
+<div class="section-label">7-Day Commit Density</div>
+<div class="glass-card" style="margin-bottom:12px;">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+    <span style="font-size:12px;color:var(--text-muted);">Commits per day across all agent worktrees</span>
+    <span style="font-family:'JetBrains Mono';font-size:11px;color:var(--text-secondary);">Total: 47 commits</span>
+  </div>
+  <div class="commit-chart">
+    <!-- Apr 13 -->
+    <div class="commit-day">
+      <div class="commit-stack" style="height:48px;">
+        <div class="commit-seg" style="height:20px;background:#3B82F6;" title="David: 4"></div>
+        <div class="commit-seg" style="height:15px;background:#10B981;" title="Alex(data): 3"></div>
+        <div class="commit-seg" style="height:10px;background:#8B5CF6;" title="Hodas: 2"></div>
+      </div>
+      <span class="commit-label">13</span>
+    </div>
+    <!-- Apr 14 -->
+    <div class="commit-day">
+      <div class="commit-stack" style="height:24px;">
+        <div class="commit-seg" style="height:12px;background:#3B82F6;" title="David: 2"></div>
+        <div class="commit-seg" style="height:8px;background:#10B981;" title="Alex(data): 1"></div>
+      </div>
+      <span class="commit-label">14</span>
+    </div>
+    <!-- Apr 15 -->
+    <div class="commit-day">
+      <div class="commit-stack" style="height:56px;">
+        <div class="commit-seg" style="height:25px;background:#3B82F6;" title="David: 5"></div>
+        <div class="commit-seg" style="height:20px;background:#10B981;" title="Alex(data): 4"></div>
+        <div class="commit-seg" style="height:8px;background:#8B5CF6;" title="Hodas: 1"></div>
+      </div>
+      <span class="commit-label">15</span>
+    </div>
+    <!-- Apr 16 -->
+    <div class="commit-day">
+      <div class="commit-stack" style="height:40px;">
+        <div class="commit-seg" style="height:15px;background:#3B82F6;" title="David: 3"></div>
+        <div class="commit-seg" style="height:15px;background:#10B981;" title="Alex(data): 3"></div>
+        <div class="commit-seg" style="height:8px;background:#F59E0B;" title="Drake: 1"></div>
+      </div>
+      <span class="commit-label">16</span>
+    </div>
+    <!-- Apr 17 -->
+    <div class="commit-day">
+      <div class="commit-stack" style="height:16px;">
+        <div class="commit-seg" style="height:8px;background:#3B82F6;" title="David: 1"></div>
+        <div class="commit-seg" style="height:5px;background:#10B981;" title="Alex(data): 1"></div>
+      </div>
+      <span class="commit-label">17</span>
+    </div>
+    <!-- Apr 18 -->
+    <div class="commit-day">
+      <div class="commit-stack" style="height:32px;">
+        <div class="commit-seg" style="height:12px;background:#3B82F6;" title="David: 2"></div>
+        <div class="commit-seg" style="height:12px;background:#8B5CF6;" title="Hodas: 2"></div>
+        <div class="commit-seg" style="height:5px;background:#10B981;" title="Alex(data): 1"></div>
+      </div>
+      <span class="commit-label">18</span>
+    </div>
+    <!-- Apr 19 (today) -->
+    <div class="commit-day">
+      <div class="commit-stack" style="height:20px;">
+        <div class="commit-seg" style="height:10px;background:#3B82F6;" title="David: 2"></div>
+        <div class="commit-seg" style="height:8px;background:#8B5CF6;" title="Hodas: 1"></div>
+      </div>
+      <span class="commit-label">19</span>
+    </div>
+  </div>
+  <!-- Legend -->
+  <div style="display:flex;gap:12px;margin-top:8px;flex-wrap:wrap;">
+    <span style="font-size:10px;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#3B82F6;"></span><span style="color:var(--text-muted);">David</span></span>
+    <span style="font-size:10px;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#10B981;"></span><span style="color:var(--text-muted);">Alex(data)</span></span>
+    <span style="font-size:10px;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#8B5CF6;"></span><span style="color:var(--text-muted);">Hodas</span></span>
+    <span style="font-size:10px;display:flex;align-items:center;gap:4px;"><span style="width:8px;height:8px;border-radius:2px;background:#F59E0B;"></span><span style="color:var(--text-muted);">Drake</span></span>
+  </div>
+</div>
+
+<!-- ═══ Row 3: Agent Work Time ═══ -->
+<div class="section-label">Agent Work Time (7 days)</div>
+<div class="glass-card" style="margin-bottom:12px;">
+  <div class="agent-row" style="font-size:10px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:0.06em;border-bottom:1px solid var(--border-default);padding-bottom:8px;">
+    <span></span>
+    <span>Agent</span>
+    <span>Activity</span>
+    <span style="text-align:right;">Hours</span>
+  </div>
+  <div class="agent-row">
+    <span class="agent-emoji">🔧</span>
+    <span class="agent-name" style="color:#3B82F6;">David</span>
+    <div class="agent-bar-wrap"><div class="agent-bar-fill" style="width:85%;background:#3B82F6;"></div></div>
+    <span class="agent-hours">18.5h</span>
+  </div>
+  <div class="agent-row">
+    <span class="agent-emoji">🔧</span>
+    <span class="agent-name" style="color:#10B981;">Alex(data)</span>
+    <div class="agent-bar-wrap"><div class="agent-bar-fill" style="width:72%;background:#10B981;"></div></div>
+    <span class="agent-hours">15.8h</span>
+  </div>
+  <div class="agent-row">
+    <span class="agent-emoji">⚖️</span>
+    <span class="agent-name" style="color:#8B5CF6;">Hodas</span>
+    <div class="agent-bar-wrap"><div class="agent-bar-fill" style="width:45%;background:#8B5CF6;"></div></div>
+    <span class="agent-hours">9.7h</span>
+  </div>
+  <div class="agent-row">
+    <span class="agent-emoji">🛡️</span>
+    <span class="agent-name" style="color:#F59E0B;">Drake</span>
+    <div class="agent-bar-wrap"><div class="agent-bar-fill" style="width:25%;background:#F59E0B;"></div></div>
+    <span class="agent-hours">5.4h</span>
+  </div>
+  <div class="agent-row">
+    <span class="agent-emoji">👑</span>
+    <span class="agent-name" style="color:#F59E0B;">Tracy(Manager)</span>
+    <div class="agent-bar-wrap"><div class="agent-bar-fill" style="width:15%;background:#F59E0B;"></div></div>
+    <span class="agent-hours">3.2h</span>
+  </div>
+  <div style="text-align:right;font-size:11px;color:var(--text-muted);margin-top:6px;font-family:'JetBrains Mono',monospace;">
+    Total: 52.6h
+  </div>
+</div>
+
+<!-- ═══ Row 4: Task Group Quick Stats ═══ -->
+<div class="section-label">Task Group</div>
+<div class="glass-card" style="margin-bottom:12px;">
+  <div style="display:flex;justify-content:space-around;padding:8px 0;">
+    <div class="tg-stat">
+      <span class="tg-num" style="color:var(--status-working);">97</span>
+      <span class="tg-label">Done</span>
+    </div>
+    <div class="tg-stat">
+      <span class="tg-num" style="color:var(--status-waiting);">4</span>
+      <span class="tg-label">In Progress</span>
+    </div>
+    <div class="tg-stat">
+      <span class="tg-num" style="color:#f87171;">5</span>
+      <span class="tg-label">Blocked</span>
+    </div>
+    <div class="tg-stat">
+      <span class="tg-num" style="color:var(--text-muted);">9</span>
+      <span class="tg-label">Abandoned</span>
+    </div>
+    <div class="tg-stat">
+      <span class="tg-num">19</span>
+      <span class="tg-label">Batches</span>
+    </div>
+    <div class="tg-stat">
+      <span class="tg-num" style="font-family:'JetBrains Mono';font-size:14px;">task-124</span>
+      <span class="tg-label">Latest</span>
+    </div>
+  </div>
+  <div style="text-align:center;margin-top:8px;">
+    <div style="width:100%;height:6px;background:var(--bg-hover);border-radius:3px;overflow:hidden;">
+      <div style="height:100%;width:84%;background:linear-gradient(90deg,var(--accent-muted),var(--accent));border-radius:3px;"></div>
+    </div>
+    <span style="font-size:11px;color:var(--text-muted);margin-top:4px;display:inline-block;">84% complete (97/116)</span>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

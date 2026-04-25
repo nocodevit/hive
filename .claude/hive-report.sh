@@ -15,7 +15,7 @@
 
 ACTION="$1"
 MSG="$2"
-AGENT="agent-1775389695002"
+AGENT="agent-1775913332033"
 PORT=17796
 
 case "$ACTION" in
@@ -53,6 +53,12 @@ case "$ACTION" in
     TASK_ID="$2"
     REASON="$3"
     curl -s -X POST http://127.0.0.1:$PORT/task-blocked -H "Content-Type: application/json" \
+      -d "{\"agentId\":\"$AGENT\",\"taskId\":\"$TASK_ID\",\"reason\":\"$REASON\"}" > /dev/null 2>&1
+    ;;
+  task-abandon)
+    TASK_ID="$2"
+    REASON="$3"
+    curl -s -X POST http://127.0.0.1:$PORT/task-abandon -H "Content-Type: application/json" \
       -d "{\"agentId\":\"$AGENT\",\"taskId\":\"$TASK_ID\",\"reason\":\"$REASON\"}" > /dev/null 2>&1
     ;;
   task-status)
