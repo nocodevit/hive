@@ -14,6 +14,31 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.33] — 2026-04-25
+
+### Fixed
+- **Tighter collapse on Bash results.** InlineResult's gates were
+  permissive enough that wide-but-few-line Bash output (11 lines × 80
+  chars = 880) dodged both byLines (12) and byChars (1200) and dumped
+  uncollapsed. Bash / BashOutput now collapse at 8 lines / 600 chars;
+  other tools keep gentler caps.
+
+---
+
+## [1.7.32] — 2026-04-25
+
+### Added
+- **Built-in cleanup for `~/.claude/projects`** in App Settings →
+  Storage. Slider 1-90 days, default 15. Shows total + breakdown
+  (main sessions vs subagent transcripts), live size delta as the
+  slider moves, two-click delete (Delete → Confirm) so a misclick
+  can't nuke things, post-delete summary.
+- Verified subagent JSONLs (`subagents/agent-*.jsonl`) are sidechain
+  transcripts that Claude's `/resume` picker filters out
+  (`isSidechain=true` in binary strings) — safe to delete.
+
+---
+
 ## [1.7.31] — 2026-04-25
 
 ### Performance
@@ -488,7 +513,9 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.31...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.33...HEAD
+[1.7.33]: https://github.com/nocodevit/hive/compare/v1.7.32...v1.7.33
+[1.7.32]: https://github.com/nocodevit/hive/compare/v1.7.31...v1.7.32
 [1.7.31]: https://github.com/nocodevit/hive/compare/v1.7.30...v1.7.31
 [1.7.30]: https://github.com/nocodevit/hive/compare/v1.7.29...v1.7.30
 [1.7.29]: https://github.com/nocodevit/hive/compare/v1.7.28...v1.7.29
