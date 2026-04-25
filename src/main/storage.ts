@@ -20,7 +20,7 @@ import { ipcMain } from 'electron'
 
 const PROJECTS_DIR = join(homedir(), '.claude', 'projects')
 
-interface FileMeta {
+export interface FileMeta {
   path: string
   bytes: number
   mtimeMs: number
@@ -68,9 +68,13 @@ export interface ClaudeLogStats {
   topStale: { path: string; bytes: number; mtimeMs: number }[]
 }
 
-export function getClaudeLogStats(retentionDays: number): ClaudeLogStats {
-  const files = walkJsonl()
-  const cutoff = Date.now() - retentionDays * 24 * 3600 * 1000
+/**
+ * Pure summarizer: takes an already-collected list of file metadata
+ * + a cutoff timestamp and emits the stats payload. Extracted so we
+ * can vitest-cover the bucketing logic without touching the real
+ * filesystem (the walk lives in walkJsonl()).
+ */
+export function summarizeFiles(files: FileMeta[], cutoffMs: number): ClaudeLogStats {
   const stats: ClaudeLogStats = {
     totalFiles: 0, totalBytes: 0,
     mainFiles: 0, mainBytes: 0,
@@ -86,7 +90,7 @@ export function getClaudeLogStats(retentionDays: number): ClaudeLogStats {
     stats.totalBytes += f.bytes
     if (f.isSubagent) { stats.subagentFiles++; stats.subagentBytes += f.bytes }
     else { stats.mainFiles++; stats.mainBytes += f.bytes }
-    if (f.mtimeMs < cutoff) {
+    if (f.mtimeMs < cutoffMs) {
       stats.staleFiles++; stats.staleBytes += f.bytes
       if (f.isSubagent) { stats.staleSubagentFiles++; stats.staleSubagentBytes += f.bytes }
       else { stats.staleMainFiles++; stats.staleMainBytes += f.bytes }
@@ -96,6 +100,10 @@ export function getClaudeLogStats(retentionDays: number): ClaudeLogStats {
   stale.sort((a, b) => b.bytes - a.bytes)
   stats.topStale = stale.slice(0, 20).map(f => ({ path: f.path, bytes: f.bytes, mtimeMs: f.mtimeMs }))
   return stats
+}
+
+export function getClaudeLogStats(retentionDays: number): ClaudeLogStats {
+  return summarizeFiles(walkJsonl(), Date.now() - retentionDays * 24 * 3600 * 1000)
 }
 
 export interface CleanResult {
