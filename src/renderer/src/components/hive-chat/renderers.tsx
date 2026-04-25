@@ -340,7 +340,7 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
                   }}
                   onMouseEnter={e => { e.currentTarget.style.background = CRUSH.Julep; e.currentTarget.style.color = CRUSH.Pepper }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = CRUSH.Julep }}
-                ><Check size={12} strokeWidth={2.4} /></button>
+                ><Check size={12} strokeWidth={2.4} style={{ pointerEvents: 'none' }} /></button>
               )}
               {onRespond && (
                 <button
@@ -358,7 +358,7 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
                   }}
                   onMouseEnter={e => { e.currentTarget.style.background = CRUSH.Charple; e.currentTarget.style.color = CRUSH.Butter }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = CRUSH.Charple }}
-                ><Pencil size={12} strokeWidth={2.2} /></button>
+                ><Pencil size={12} strokeWidth={2.2} style={{ pointerEvents: 'none' }} /></button>
               )}
             </span>
           </div>
