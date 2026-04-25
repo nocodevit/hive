@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import {
   langFromPath, stripReadPrefix, extractTrailingChoices,
-  pickVerb, glyphAt, elapsedSec, THINKING_VERBS, THINKING_GLYPHS
+  pickVerb, glyphAt, elapsedSec, THINKING_VERBS, THINKING_GLYPHS,
+  detectSummary
 } from '../renderers'
 
 describe('langFromPath', () => {
@@ -190,5 +191,70 @@ describe('thinking spinner helpers', () => {
 
   it('elapsedSec clamps negatives to 0', () => {
     expect(elapsedSec(5000, 1000)).toBe(0)
+  })
+})
+
+describe('detectSummary', () => {
+  it('returns null when no summary marker is present', () => {
+    expect(detectSummary('hello world')).toBeNull()
+    expect(detectSummary('I read the file. It has 5 lines.')).toBeNull()
+    expect(detectSummary('# Some heading\nbody')).toBeNull()
+  })
+
+  it('matches plain "Summary:" prefix', () => {
+    const r = detectSummary('Summary: refactored login flow\n- did X\n- did Y')
+    expect(r).not.toBeNull()
+    expect(r!.title).toBe('refactored login flow')
+    expect(r!.body).toBe('- did X\n- did Y')
+  })
+
+  it('matches "## Summary" markdown heading', () => {
+    const r = detectSummary('## Summary\n\nThe file has 5 issues.')
+    expect(r!.title).toBe('')
+    expect(r!.body).toBe('The file has 5 issues.')
+  })
+
+  it('matches "## Summary: title"', () => {
+    const r = detectSummary('## Summary: audit complete\nbody')
+    expect(r!.title).toBe('audit complete')
+    expect(r!.body).toBe('body')
+  })
+
+  it('matches bold **Summary**', () => {
+    const r = detectSummary('**Summary**\nbody')
+    expect(r!.title).toBe('')
+    expect(r!.body).toBe('body')
+  })
+
+  it('matches Chinese variants 总结/结论/小结', () => {
+    expect(detectSummary('总结：完成')!.title).toBe('完成')
+    expect(detectSummary('结论: ok')!.title).toBe('ok')
+    expect(detectSummary('小结')!.title).toBe('')
+  })
+
+  it('matches "Final Report"', () => {
+    const r = detectSummary('Final Report: 3/5 tests pass\nrest is broken')
+    expect(r!.title).toBe('3/5 tests pass')
+    expect(r!.body).toBe('rest is broken')
+  })
+
+  it('is case-insensitive', () => {
+    expect(detectSummary('SUMMARY: ok')).not.toBeNull()
+    expect(detectSummary('summary: ok')).not.toBeNull()
+  })
+
+  it('strips trailing ** from bold-wrapped titles', () => {
+    const r = detectSummary('**Summary: shipped**\nbody')
+    expect(r!.title).toBe('shipped')
+  })
+
+  it('drops a single blank line between heading and body', () => {
+    const r = detectSummary('Summary\n\n\n\nfirst line of body')
+    expect(r!.body).toBe('first line of body')
+  })
+
+  it('does NOT match "Summary" appearing in mid-text', () => {
+    expect(detectSummary('Here is the summary: foo')).toBeNull()
+    expect(detectSummary('Some text\nSummary: foo')).toBeNull()
   })
 })

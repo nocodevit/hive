@@ -630,7 +630,7 @@ export default function App() {
                 }
 
                 return (
-                  <div key={dept} className="rounded-xl bg-bg-primary/50 border border-border/50 shadow-sm p-1.5">
+                  <div key={dept} className="rounded-xl bg-bg-primary/50 border shadow-sm p-1.5" style={{ borderColor: '#6B50FF' }}>
                     <div className="px-2.5 py-1.5 text-[13px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
                       <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />

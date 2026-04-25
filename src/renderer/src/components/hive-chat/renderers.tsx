@@ -331,10 +331,67 @@ export function AssistantMessage({ text, onChoose }: { text: string; onChoose?: 
   )
 }
 
+/**
+ * Detect a "summary" preamble at the very start of an assistant text
+ * block. Matches `Summary:` / `## Summary` / `**Summary**` / `总结：`
+ * / `Final Report` etc., case-insensitive, with or without a trailing
+ * colon and inline title. Returns the body with the heading line
+ * stripped + the optional inline title (text after the colon).
+ *
+ * Returns null when no summary marker is present — caller renders the
+ * text plain.
+ */
+const SUMMARY_HEAD = /^\s*(?:#{1,3}\s*)?(?:\*\*)?\s*(?:Summary|Recap|Final\s*Report|总结|结论|小结)(?:\*\*)?\s*[:：]?\s*([^\n]*?)\s*(?:\*\*)?\s*$/i
+
+export function detectSummary(text: string): { title: string; body: string } | null {
+  const lines = text.split('\n')
+  const m = lines[0]?.match(SUMMARY_HEAD)
+  if (!m) return null
+  // m[1] is whatever followed the keyword on the first line.
+  const title = (m[1] || '').replace(/[*]+$/, '').trim()
+  // Drop the heading line + one optional blank line.
+  let i = 1
+  while (i < lines.length && lines[i].trim() === '') i++
+  return { title, body: lines.slice(i).join('\n') }
+}
+
 function PlainAssistantText({ text }: { text: string }) {
+  const summary = detectSummary(text)
+  // ● Julep dot prefixes every assistant text — same family as the
+  // Julep ❯ on user input, signaling "claude is speaking" symmetric
+  // to "user is speaking". Tool calls get their own colored ● in
+  // ToolBlock; this is for plain-text reply.
   return (
     <div style={{ color: CRUSH.Ash, margin: '6px 0', padding: '2px 0' }}>
-      <CrushMarkdown text={text} />
+      <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+        <span style={{ color: CRUSH.Julep, fontWeight: 700, fontSize: 14, lineHeight: 1.55, flexShrink: 0 }}>●</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {summary ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 4 }}>
+                <span style={{
+                  border: `1px solid ${CRUSH.Julep}`,
+                  background: 'rgba(0,255,178,0.08)',
+                  color: CRUSH.Julep,
+                  padding: '1px 8px',
+                  borderRadius: 3,
+                  fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
+                  letterSpacing: '0.06em',
+                  textTransform: 'uppercase' as const
+                }}>summary</span>
+                {summary.title && (
+                  <span style={{ color: CRUSH.Butter, fontWeight: 600, fontSize: 13 }}>
+                    {redact(summary.title)}
+                  </span>
+                )}
+              </div>
+              <CrushMarkdown text={summary.body} />
+            </>
+          ) : (
+            <CrushMarkdown text={text} />
+          )}
+        </div>
+      </div>
     </div>
   )
 }
