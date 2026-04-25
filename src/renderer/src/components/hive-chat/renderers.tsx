@@ -583,7 +583,12 @@ function LongRunningTick({ toolName }: { toolName: string }) {
       padding: '4px 0 0 14px',
       fontFamily: FONT_MONO, fontSize: 11
     }}>
-      <span style={{ ...gradStyle, fontSize: 12 }}>⏳</span>
+      <style>{`@keyframes hg-flip { 0%,40% { transform: rotate(0deg); } 60%,100% { transform: rotate(180deg); } }`}</style>
+      {/* hourglass alternates between ⌛ (sand-up) and ⏳ (sand-flowing)
+          via CSS keyframe — gives a real "sand falling" feel instead
+          of a static glyph. The Charple→Dolly gradient still applies
+          to the verb text so motion + color both signal liveness. */}
+      <span style={{ ...gradStyle, fontSize: 14, display: 'inline-block', animation: 'hg-flip 2s ease-in-out infinite' }}>⏳</span>
       <span style={gradStyle}>{verb} still running…</span>
       <span style={{ color: CRUSH.Oyster }}>{elapsed}s</span>
     </div>
@@ -1298,20 +1303,48 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
   onRecall?: (text: string) => void
   onRespond?: (item: string) => void
 }) {
+  // Subagent entries (parent_tool_use_id != null in stream) are
+  // dimmed + indented + Mochi-bordered to visually demote them: they
+  // belong to a sub-execution, not the main chat. Goal: you can still
+  // SEE what the subagent did, but it's clearly secondary content.
+  const isSub = (entry as any).isSubagent === true
+  let row: React.ReactNode = null
   switch (entry.kind) {
-    case 'user': return <UserMessage text={entry.text} onRecall={onRecall} />
-    case 'assistant': return <AssistantMessage text={entry.text} onChoose={onChoose} onRespond={onRespond} />
-    case 'tool_call':
-      return <ToolBlock name={entry.name} input={entry.input} result={result} />
-    case 'tool_result': return null
-    case 'system': return <SystemLine text={entry.text} />
-    case 'result': return <ResultSummaryCard
+    case 'user': row = <UserMessage text={entry.text} onRecall={isSub ? undefined : onRecall} />; break
+    case 'assistant': row = <AssistantMessage text={entry.text} onChoose={isSub ? undefined : onChoose} onRespond={isSub ? undefined : onRespond} />; break
+    case 'tool_call': row = <ToolBlock name={entry.name} input={entry.input} result={result} />; break
+    case 'tool_result': row = null; break
+    case 'system': row = <SystemLine text={entry.text} />; break
+    case 'result': row = <ResultSummaryCard
       costUSD={entry.costUSD} durationMs={entry.durationMs} numTurns={entry.numTurns}
       inputTokens={entry.inputTokens} outputTokens={entry.outputTokens}
       cacheReadTokens={entry.cacheReadTokens} stopReason={entry.stopReason}
-    />
-    case 'compact_boundary': return <CompactBoundary previousTokens={entry.previousTokens} newTokens={entry.newTokens} turnsSummarized={entry.turnsSummarized} />
+    />; break
+    case 'compact_boundary': row = <CompactBoundary previousTokens={entry.previousTokens} newTokens={entry.newTokens} turnsSummarized={entry.turnsSummarized} />; break
   }
+  if (!row) return null
+  if (isSub) {
+    return (
+      <div style={{
+        marginLeft: 24,
+        paddingLeft: 10,
+        borderLeft: `2px solid ${CRUSH.Mochi}`,
+        opacity: 0.7,
+        fontSize: 12,
+        position: 'relative' as const
+      }}>
+        <div style={{
+          position: 'absolute' as const, left: -8, top: 6,
+          background: '#150e24',
+          color: CRUSH.Mochi,
+          fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
+          padding: '0 4px', borderRadius: 2
+        }}>SUB</div>
+        {row}
+      </div>
+    )
+  }
+  return row
 }, (prev, next) => {
   if (prev.onChoose !== next.onChoose) return false
   if (prev.onRecall !== next.onRecall) return false

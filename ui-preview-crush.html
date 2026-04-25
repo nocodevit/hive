@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hive UI — Current vs Crush-Flavored</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: #111; color: #eee; padding: 24px; }
+h1 { font-family: 'Space Grotesk', sans-serif; font-size: 20px; text-align: center; margin-bottom: 24px; color: #aaa; }
+
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; max-width: 1200px; margin: 0 auto; }
+.side { border-radius: 16px; overflow: hidden; border: 1px solid #333; }
+.side-label { text-align: center; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 8px; }
+.label-before { background: #1a1128; color: #c4a0ff; }
+.label-after { background: #201F26; color: #FF60FF; }
+
+/* ═══ CURRENT HIVE ═══ */
+.hive-current {
+  --bg: #0f0a1a;
+  --panel: #1a1128;
+  --hover: #2d1f48;
+  --border: #352555;
+  --text: #f4f0ff;
+  --muted: #9888c0;
+  --accent: #c4a0ff;
+  --accent2: #9b6fff;
+  --working: #5cff90;
+  --waiting: #ffcc33;
+  --done: #7888a0;
+}
+
+/* ═══ CRUSH-FLAVORED ═══ */
+.hive-crush {
+  --bg: #201F26;
+  --panel: #2D2C35;
+  --hover: #3A3943;
+  --border: #3A3943;
+  --text: #DFDBDD;
+  --muted: #858392;
+  --accent: #6B50FF;
+  --accent2: #FF60FF;
+  --tertiary: #68FFD6;
+  --working: #00FFB2;
+  --waiting: #E8FE96;
+  --done: #605F6B;
+  --error: #EB4268;
+  --info: #00A4FF;
+}
+
+.app {
+  background: var(--bg);
+  display: grid;
+  grid-template-columns: 140px 160px 1fr;
+  height: 520px;
+  font-size: 12px;
+}
+
+/* Sidebar - Projects */
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.sidebar-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--muted);
+  padding: 8px 4px 12px;
+}
+.hive-crush .sidebar-title .logo {
+  background: linear-gradient(135deg, #FF60FF, #6B50FF);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-size: 12px;
+}
+.hive-current .sidebar-title .logo { color: var(--accent); font-size: 12px; }
+.proj-item {
+  padding: 6px 8px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.proj-item.active { background: var(--hover); color: var(--text); font-weight: 500; }
+.proj-item .emoji { font-size: 12px; }
+.proj-item .count { margin-left: auto; font-size: 10px; opacity: 0.5; }
+
+/* Agents panel */
+.agents {
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  padding: 8px;
+  overflow: hidden;
+}
+.dept-header {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  padding: 4px 6px 6px;
+}
+.agent-item {
+  padding: 5px 8px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text);
+  position: relative;
+}
+.agent-item.active { background: var(--hover); }
+.agent-avatar {
+  width: 20px; height: 20px;
+  background: var(--hover);
+  border-radius: 4px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px;
+}
+.agent-status {
+  position: absolute;
+  bottom: 3px; left: 24px;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  border: 1.5px solid var(--bg);
+}
+.status-working { background: var(--working); }
+.status-waiting { background: var(--waiting); }
+.status-done { background: var(--done); }
+.agent-role {
+  font-size: 9px;
+  color: var(--muted);
+  margin-left: auto;
+}
+/* Role badge on avatar */
+.role-badge {
+  position: absolute;
+  top: 1px; right: -2px;
+  font-size: 10px;
+}
+
+/* Main content */
+.main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.main-header {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.main-header .name { font-weight: 600; color: var(--text); }
+.main-header .task-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.hive-current .task-tag { background: rgba(196,160,255,0.1); color: var(--accent); }
+.hive-crush .task-tag { background: rgba(107,80,255,0.15); color: #8B75FF; }
+.tabs {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 6px 14px;
+  font-size: 11px;
+  color: var(--muted);
+  border-bottom: 2px solid transparent;
+}
+.tab.active { color: var(--text); }
+.hive-current .tab.active { border-bottom-color: var(--accent); }
+.hive-crush .tab.active { border-bottom-color: var(--accent); }
+
+/* Dashboard content */
+.dashboard {
+  flex: 1;
+  padding: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.stat-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
+.stat-card {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.hive-current .stat-card { background: rgba(124,58,237,0.08); }
+.hive-crush .stat-card { background: var(--panel); }
+.stat-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+.stat-value {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text);
+}
+.stat-sub { font-size: 9px; color: var(--muted); margin-top: 2px; }
+
+/* Commit chart */
+.chart-card {
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.hive-current .chart-card { background: rgba(124,58,237,0.08); }
+.hive-crush .chart-card { background: var(--panel); }
+.chart-title { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px; }
+.chart-bars { display: flex; align-items: flex-end; gap: 3px; height: 36px; }
+.chart-bar { flex: 1; border-radius: 2px 2px 0 0; min-height: 2px; }
+.chart-label { font-size: 8px; color: var(--muted); text-align: center; margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+.chart-day { flex: 1; display: flex; flex-direction: column; align-items: center; }
+
+/* Agent activity */
+.activity-card {
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+.hive-current .activity-card { background: rgba(124,58,237,0.08); }
+.hive-crush .activity-card { background: var(--panel); }
+.activity-row {
+  display: grid;
+  grid-template-columns: 14px 60px 40px 18px;
+  gap: 4px;
+  align-items: center;
+  padding: 3px 0;
+  font-size: 10px;
+}
+.activity-emoji { font-size: 11px; }
+.activity-bar { height: 4px; border-radius: 2px; background: var(--hover); }
+.activity-fill { height: 100%; border-radius: 2px; }
+.activity-count { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: var(--muted); text-align: right; }
+
+/* Glass card for current */
+.hive-current .glass { box-shadow: 0 2px 12px rgba(140,70,255,0.06), inset 0 1px 0 rgba(255,255,255,0.06); }
+.hive-crush .glass { box-shadow: 0 2px 12px rgba(0,0,0,0.3); }
+
+/* Crush-specific accents */
+.hive-crush .stat-value.success { color: #00FFB2; }
+.hive-crush .stat-value.error { color: #EB4268; }
+.hive-current .stat-value.success { color: #5cff90; }
+.hive-current .stat-value.error { color: #f87171; }
+
+/* Crush agent colors */
+.hive-crush .agent-name-manager { color: #FF60FF; }
+.hive-crush .agent-name-worker { color: #00A4FF; }
+.hive-crush .agent-name-qa { color: #68FFD6; }
+.hive-crush .agent-name-critic { color: #6B50FF; }
+
+.hive-current .agent-name-manager { color: #F59E0B; }
+.hive-current .agent-name-worker { color: #3B82F6; }
+.hive-current .agent-name-qa { color: #10B981; }
+.hive-current .agent-name-critic { color: #8B5CF6; }
+</style>
+</head>
+<body>
+<h1>Hive UI — Current vs Crush-Flavored</h1>
+
+<div class="compare">
+  <!-- ═══ CURRENT ═══ -->
+  <div class="side">
+    <div class="side-label label-before">Current (Purple Glassmorphism)</div>
+    <div class="app hive-current">
+      <div class="sidebar">
+        <div class="sidebar-title"><span class="logo">Hive</span> v1.0.1</div>
+        <div class="proj-item active"><span class="emoji">🏃</span> PSLE Alex <span class="count">7</span></div>
+        <div class="proj-item"><span class="emoji">☕</span> Sphere2 <span class="count">3</span></div>
+        <div class="proj-item"><span class="emoji">💤</span> Vortex <span class="count">1</span></div>
+      </div>
+      <div class="agents">
+        <div class="dept-header">R&D</div>
+        <div class="agent-item active">
+          <div class="agent-avatar">🧑</div>
+          <span class="agent-status status-working"></span>
+          <span class="role-badge">👑</span>
+          <span class="agent-name-manager">Tracy</span>
+          <span class="agent-role">ENG</span>
+        </div>
+        <div class="agent-item">
+          <div class="agent-avatar">🧑</div>
+          <span class="agent-status status-working"></span>
+          <span class="role-badge">🔧</span>
+          <span class="agent-name-worker">David</span>
+          <span class="agent-role">ENG</span>
+        </div>
+        <div class="agent-item">
+          <div class="agent-avatar">🧑</div>
+          <span class="agent-status status-waiting"></span>
+          <span class="role-badge">🔧</span>
+          <span class="agent-name-worker">Alex</span>
+          <span class="agent-role">ENG</span>
+        </div>
+        <div class="agent-item">
+          <div class="agent-avatar">🧑</div>
+          <span class="agent-status status-done"></span>
+          <span class="role-badge">🛡️</span>
+          <span class="agent-name-qa">Drake</span>
+          <span class="agent-role">QA</span>
+        </div>
+      </div>
+      <div class="main">
+        <div class="main-header">
+          <span class="name">Dashboard</span>
+          <span class="task-tag">PSLE Alex</span>
+        </div>
+        <div class="tabs">
+          <div class="tab active">Dashboard</div>
+          <div class="tab">Office</div>
+          <div class="tab">Task Group</div>
+          <div class="tab">Settings</div>
+        </div>
+        <div class="dashboard">
+          <div class="stat-row">
+            <div class="stat-card glass"><div class="stat-label">Total Tasks</div><div class="stat-value">131</div><div class="stat-sub">Latest: task-131</div></div>
+            <div class="stat-card glass"><div class="stat-label">Completed</div><div class="stat-value success">112</div><div class="stat-sub">85% done</div></div>
+            <div class="stat-card glass"><div class="stat-label">Batches</div><div class="stat-value">19</div><div class="stat-sub">0 in progress</div></div>
+            <div class="stat-card glass"><div class="stat-label">Blocked</div><div class="stat-value error">0</div><div class="stat-sub">19 abandoned</div></div>
+          </div>
+          <div class="chart-card glass">
+            <div class="chart-title">7-Day Commit Density</div>
+            <div class="chart-bars">
+              <div class="chart-day"><div class="chart-bar" style="height:28px;background:#3B82F6;"></div><div class="chart-label">13</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:12px;background:#3B82F6;"></div><div class="chart-label">14</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:32px;background:#3B82F6;"></div><div class="chart-label">15</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:20px;background:#10B981;"></div><div class="chart-label">16</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:8px;background:#3B82F6;"></div><div class="chart-label">17</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:16px;background:#8B5CF6;"></div><div class="chart-label">18</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:10px;background:#3B82F6;"></div><div class="chart-label">19</div></div>
+            </div>
+          </div>
+          <div class="activity-card glass">
+            <div class="chart-title">Agent Activity</div>
+            <div class="activity-row"><span class="activity-emoji">🔧</span><span class="agent-name-worker" style="font-size:10px;font-weight:500;">David</span><div class="activity-bar"><div class="activity-fill" style="width:85%;background:#3B82F6;"></div></div><span class="activity-count">61</span></div>
+            <div class="activity-row"><span class="activity-emoji">🔧</span><span class="agent-name-worker" style="font-size:10px;font-weight:500;">Alex</span><div class="activity-bar"><div class="activity-fill" style="width:60%;background:#3B82F6;"></div></div><span class="activity-count">38</span></div>
+            <div class="activity-row"><span class="activity-emoji">🛡️</span><span class="agent-name-qa" style="font-size:10px;font-weight:500;">Drake</span><div class="activity-bar"><div class="activity-fill" style="width:15%;background:#10B981;"></div></div><span class="activity-count">9</span></div>
+            <div class="activity-row"><span class="activity-emoji">⚖️</span><span style="font-size:10px;font-weight:500;color:#8B5CF6;">Hodas</span><div class="activity-bar"><div class="activity-fill" style="width:5%;background:#8B5CF6;"></div></div><span class="activity-count">3</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ CRUSH-FLAVORED ═══ -->
+  <div class="side">
+    <div class="side-label label-after">Crush-Flavored (v2)</div>
+    <div class="app hive-crush">
+      <div class="sidebar">
+        <div class="sidebar-title"><span class="logo">HIVE</span> v1.0.1</div>
+        <div class="proj-item active"><span class="emoji">🏃</span> PSLE Alex <span class="count">7</span></div>
+        <div class="proj-item"><span class="emoji">☕</span> Sphere2 <span class="count">3</span></div>
+        <div class="proj-item"><span class="emoji">💤</span> Vortex <span class="count">1</span></div>
+      </div>
+      <div class="agents">
+        <div class="dept-header">R&D</div>
+        <div class="agent-item active">
+          <div class="agent-avatar">🧑</div>
+          <span class="agent-status status-working"></span>
+          <span class="role-badge">👑</span>
+          <span class="agent-name-manager">Tracy</span>
+          <span class="agent-role">ENG</span>
+        </div>
+        <div class="agent-item">
+          <div class="agent-avatar">🧑</div>
+          <span class="agent-status status-working"></span>
+          <span class="role-badge">🔧</span>
+          <span class="agent-name-worker">David</span>
+          <span class="agent-role">ENG</span>
+        </div>
+        <div class="agent-item">
+          <div class="agent-avatar">🧑</div>
+          <span class="agent-status status-waiting"></span>
+          <span class="role-badge">🔧</span>
+          <span class="agent-name-worker">Alex</span>
+          <span class="agent-role">ENG</span>
+        </div>
+        <div class="agent-item">
+          <div class="agent-avatar">🧑</div>
+          <span class="agent-status status-done"></span>
+          <span class="role-badge">🛡️</span>
+          <span class="agent-name-qa">Drake</span>
+          <span class="agent-role">QA</span>
+        </div>
+      </div>
+      <div class="main">
+        <div class="main-header">
+          <span class="name">Dashboard</span>
+          <span class="task-tag">PSLE Alex</span>
+        </div>
+        <div class="tabs">
+          <div class="tab active">Dashboard</div>
+          <div class="tab">Office</div>
+          <div class="tab">Task Group</div>
+          <div class="tab">Settings</div>
+        </div>
+        <div class="dashboard">
+          <div class="stat-row">
+            <div class="stat-card glass"><div class="stat-label">Total Tasks</div><div class="stat-value">131</div><div class="stat-sub">Latest: task-131</div></div>
+            <div class="stat-card glass"><div class="stat-label">Completed</div><div class="stat-value success">112</div><div class="stat-sub">85% done</div></div>
+            <div class="stat-card glass"><div class="stat-label">Batches</div><div class="stat-value">19</div><div class="stat-sub">0 in progress</div></div>
+            <div class="stat-card glass"><div class="stat-label">Blocked</div><div class="stat-value error">0</div><div class="stat-sub">19 abandoned</div></div>
+          </div>
+          <div class="chart-card glass">
+            <div class="chart-title">7-Day Commit Density</div>
+            <div class="chart-bars">
+              <div class="chart-day"><div class="chart-bar" style="height:28px;background:#00A4FF;"></div><div class="chart-label">13</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:12px;background:#00A4FF;"></div><div class="chart-label">14</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:32px;background:#00A4FF;"></div><div class="chart-label">15</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:20px;background:#68FFD6;"></div><div class="chart-label">16</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:8px;background:#00A4FF;"></div><div class="chart-label">17</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:16px;background:#6B50FF;"></div><div class="chart-label">18</div></div>
+              <div class="chart-day"><div class="chart-bar" style="height:10px;background:#FF60FF;"></div><div class="chart-label">19</div></div>
+            </div>
+          </div>
+          <div class="activity-card glass">
+            <div class="chart-title">Agent Activity</div>
+            <div class="activity-row"><span class="activity-emoji">🔧</span><span class="agent-name-worker" style="font-size:10px;font-weight:500;">David</span><div class="activity-bar"><div class="activity-fill" style="width:85%;background:#00A4FF;"></div></div><span class="activity-count">61</span></div>
+            <div class="activity-row"><span class="activity-emoji">🔧</span><span class="agent-name-worker" style="font-size:10px;font-weight:500;">Alex</span><div class="activity-bar"><div class="activity-fill" style="width:60%;background:#00A4FF;"></div></div><span class="activity-count">38</span></div>
+            <div class="activity-row"><span class="activity-emoji">🛡️</span><span class="agent-name-qa" style="font-size:10px;font-weight:500;">Drake</span><div class="activity-bar"><div class="activity-fill" style="width:15%;background:#68FFD6;"></div></div><span class="activity-count">9</span></div>
+            <div class="activity-row"><span class="activity-emoji">⚖️</span><span style="font-size:10px;font-weight:500;color:#6B50FF;">Hodas</span><div class="activity-bar"><div class="activity-fill" style="width:5%;background:#6B50FF;"></div></div><span class="activity-count">3</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div style="max-width:1200px;margin:24px auto 0;padding:16px;background:#1a1a1a;border-radius:12px;border:1px solid #333;">
+  <h2 style="font-family:'Space Grotesk';font-size:14px;margin-bottom:12px;">Key Differences</h2>
+  <table style="width:100%;font-size:12px;border-collapse:collapse;">
+    <tr style="border-bottom:1px solid #333;"><td style="padding:6px;color:#858392;width:25%;">Background</td><td style="padding:6px;color:#c4a0ff;">Purple-black #0f0a1a</td><td style="padding:6px;color:#FF60FF;">Warm gray-purple #201F26</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:6px;color:#858392;">Primary accent</td><td style="padding:6px;color:#c4a0ff;">Pale lavender #c4a0ff</td><td style="padding:6px;color:#6B50FF;">Deep indigo #6B50FF</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:6px;color:#858392;">Secondary</td><td style="padding:6px;color:#858392;">None</td><td style="padding:6px;color:#FF60FF;">Hot magenta #FF60FF</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:6px;color:#858392;">Tertiary</td><td style="padding:6px;color:#858392;">None</td><td style="padding:6px;color:#68FFD6;">Mint cyan #68FFD6</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:6px;color:#858392;">Worker color</td><td style="padding:6px;color:#3B82F6;">Tailwind blue #3B82F6</td><td style="padding:6px;color:#00A4FF;">Malibu #00A4FF</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:6px;color:#858392;">QA color</td><td style="padding:6px;color:#10B981;">Tailwind emerald</td><td style="padding:6px;color:#68FFD6;">Bok mint #68FFD6</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:6px;color:#858392;">Manager color</td><td style="padding:6px;color:#F59E0B;">Amber</td><td style="padding:6px;color:#FF60FF;">Dolly magenta #FF60FF</td></tr>
+    <tr style="border-bottom:1px solid #333;"><td style="padding:6px;color:#858392;">Success</td><td style="padding:6px;color:#5cff90;">#5cff90</td><td style="padding:6px;color:#00FFB2;">Julep #00FFB2</td></tr>
+    <tr><td style="padding:6px;color:#858392;">Glass effect</td><td style="padding:6px;color:#858392;">Purple tint + blur</td><td style="padding:6px;color:#858392;">Solid panel + subtle shadow</td></tr>
+  </table>
+</div>
+</body>
+</html>

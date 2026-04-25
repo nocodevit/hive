@@ -2,7 +2,7 @@
   "id": "task-004",
   "title": "Create delta.md with code examples",
   "status": "done",
-  "owner": "agent-1775441425255",
+  "owner": "agent-1775913324617",
   "batch": 1,
   "depends": [],
   "scope": "/Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/",
@@ -11,5 +11,8 @@
     "test -f /Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/delta.md"
   ],
   "attempt": 0,
-  "blocked_reason": null
+  "blocked_reason": null,
+  "abandoned_reason": null,
+  "estimatedMinutes": 5,
+  "assignedAt": "2026-04-11T13:17:24.909Z"
 }

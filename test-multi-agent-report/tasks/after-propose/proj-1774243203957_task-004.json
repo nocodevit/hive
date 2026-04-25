@@ -11,5 +11,8 @@
     "test -f /Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/delta.md"
   ],
   "attempt": 0,
-  "blocked_reason": null
+  "blocked_reason": null,
+  "abandoned_reason": null,
+  "estimatedMinutes": 5,
+  "assignedAt": null
 }

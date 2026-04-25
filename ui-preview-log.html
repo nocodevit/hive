@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Hive — Task Group Log Preview</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0f0a1a;
+    --bg-secondary: #1a1128;
+    --bg-hover: #2d1f48;
+    --border-default: #2d1f48;
+    --text-primary: #f0ecf9;
+    --text-secondary: #d4bcfa;
+    --text-muted: #8d7fb0;
+    --accent: #b794f6;
+    --accent-muted: #8b5cf6;
+    --status-working: #4ade80;
+    --status-waiting: #fbbf24;
+    --status-done: #64748b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 32px;
+  }
+  h1,h2,h3,h4 { font-family: 'Space Grotesk', sans-serif; }
+
+  .page { max-width: 900px; margin: 0 auto; }
+  .header { text-align: center; margin-bottom: 40px; }
+  .header h1 { font-size: 20px; margin-bottom: 4px; }
+  .header p { font-size: 12px; color: var(--text-muted); }
+
+  .badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; padding: 3px 8px; border-radius: 6px; margin: 0 4px; display: inline-block; }
+  .badge-before { background: rgba(239,68,68,0.15); color: #f87171; }
+  .badge-after { background: rgba(74,222,128,0.15); color: #4ade80; }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-bottom: 40px; }
+
+  .glass-card {
+    background: rgba(124,58,237,0.08);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(124,58,237,0.15);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(124,58,237,0.06), inset 0 1px 0 rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+
+  /* ═══ BEFORE: Current log ═══ */
+  .old-log {
+    background: var(--bg-primary);
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    padding: 8px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .old-log-line {
+    color: var(--text-muted);
+    padding: 2px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .old-log-line .time { color: rgba(141,127,176,0.4); }
+  .old-log-line .action { font-weight: 500; }
+  .old-log-line .action.green { color: #4ade80; }
+  .old-log-line .action.red { color: #f87171; }
+  .old-log-line .action.purple { color: var(--accent); }
+
+  /* ═══ AFTER: Structured log ═══ */
+  .log-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .log-title { font-size: 13px; font-weight: 700; }
+  .log-filter {
+    display: flex; gap: 4px;
+  }
+  .log-filter button {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border-default);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+  .log-filter button.active {
+    background: var(--accent-muted);
+    color: white;
+    border-color: var(--accent-muted);
+  }
+
+  .log-body {
+    max-height: 420px;
+    overflow-y: auto;
+  }
+
+  /* Batch separator */
+  .batch-sep {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .batch-sep::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-default);
+  }
+  .batch-loop {
+    font-size: 9px;
+    color: var(--text-muted);
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  /* Log row */
+  .log-row {
+    display: grid;
+    grid-template-columns: 56px 24px 80px 1fr;
+    gap: 8px;
+    align-items: center;
+    padding: 5px 16px;
+    font-size: 12px;
+    transition: background 0.1s;
+  }
+  .log-row:hover { background: rgba(167,139,250,0.04); }
+
+  .log-time {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: rgba(141,127,176,0.5);
+  }
+  .log-emoji { font-size: 14px; text-align: center; }
+  .log-agent {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .log-agent.manager { color: #F59E0B; }
+  .log-agent.worker { color: #3B82F6; }
+  .log-agent.qa { color: #10B981; }
+  .log-agent.critic { color: #8B5CF6; }
+  .log-agent.system { color: var(--text-muted); }
+
+  .log-event { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .log-event .result { margin-left: 4px; }
+  .log-event .result.pass { color: #4ade80; }
+  .log-event .result.fail { color: #f87171; }
+  .log-event .result.blocked { color: #fbbf24; }
+  .log-event .task-id {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    background: var(--bg-hover);
+    padding: 1px 4px;
+    border-radius: 3px;
+    margin-right: 4px;
+  }
+
+  /* System rows — slightly dimmed, toggleable */
+  .log-row.sys { opacity: 0.55; }
+  .log-row.sys:hover { opacity: 0.85; }
+  body.show-sys .log-row.sys { opacity: 0.75; }
+  body.hide-sys .log-row.sys { display: none; }
+
+  .note { font-size: 11px; color: var(--text-muted); text-align: center; padding: 12px; opacity: 0.6; }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="header">
+  <h1>Task Group Log — Before / After</h1>
+  <p>Dispatcher log redesign with batch context, role emoji, structured events</p>
+</div>
+
+<div class="compare">
+  <!-- BEFORE -->
+  <div>
+    <div style="margin-bottom:8px;"><span class="badge badge-before">Before</span> <span style="font-size:13px;font-weight:600;">Dispatcher Log</span></div>
+    <div class="glass-card" style="padding:12px;">
+      <h4 style="font-size:11px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:8px;">Dispatcher Log</h4>
+      <div class="old-log">
+        <div class="old-log-line"><span class="time">14:32:08</span> <span class="action purple">[task-create]</span> task-001: "Implement gate reform" in proj-123</div>
+        <div class="old-log-line"><span class="time">14:32:09</span> <span class="action purple">[task-create]</span> task-002: "Add estimatedMinutes" in proj-123</div>
+        <div class="old-log-line"><span class="time">14:32:10</span> <span class="action purple">[task-create]</span> task-003: "Stuck detection" in proj-123</div>
+        <div class="old-log-line"><span class="time">14:32:12</span> <span class="action purple">[task-assign]</span> task-001 → agent-001 (PTY: true)</div>
+        <div class="old-log-line"><span class="time">14:32:13</span> <span class="action purple">[task-assign]</span> task-002 → agent-002 (PTY: true)</div>
+        <div class="old-log-line"><span class="time">14:33:45</span> <span class="action purple">[task-done]</span> task-001 by agent-001: "gate reform done"</div>
+        <div class="old-log-line"><span class="time">14:33:46</span> <span class="action green">[gate]</span> ✅ task-001 PASSED</div>
+        <div class="old-log-line"><span class="time">14:33:47</span> <span class="action purple">[auto-assign]</span> task-003 → agent-001 (PTY: true)</div>
+        <div class="old-log-line"><span class="time">14:34:20</span> <span class="action purple">[task-done]</span> task-002 by agent-002: "estimatedMinutes added"</div>
+        <div class="old-log-line"><span class="time">14:34:21</span> <span class="action green">[gate]</span> ✅ task-002 PASSED</div>
+        <div class="old-log-line"><span class="time">14:35:10</span> <span class="action purple">[task-done]</span> task-003 by agent-001: "stuck detection done"</div>
+        <div class="old-log-line"><span class="time">14:35:11</span> <span class="action red">[gate]</span> ❌ task-003 FAILED (attempt 1/3): verify</div>
+        <div class="old-log-line"><span class="time">14:36:00</span> <span class="action purple">[task-done]</span> task-003 by agent-001: "fixed verify"</div>
+        <div class="old-log-line"><span class="time">14:36:01</span> <span class="action green">[gate]</span> ✅ task-003 PASSED</div>
+        <div class="old-log-line"><span class="time">14:36:30</span> <span class="action purple">[ready]</span> agent-001 available for next task</div>
+        <div class="old-log-line"><span class="time">14:36:31</span> <span class="action purple">[ready]</span> agent-002 available for next task</div>
+      </div>
+    </div>
+    <div class="note">Flat text, no batch context, agent IDs instead of names, no role distinction</div>
+  </div>
+
+  <!-- AFTER -->
+  <div>
+    <div style="margin-bottom:8px;"><span class="badge badge-after">After</span> <span style="font-size:13px;font-weight:600;">Task Group Log</span></div>
+    <div class="glass-card">
+      <div class="log-header">
+        <span class="log-title">Activity Log</span>
+        <div class="log-filter">
+          <button class="active">All</button>
+          <button>👑</button>
+          <button>🔧</button>
+          <button>🛡️</button>
+          <button>⚖️</button>
+          <button class="active" onclick="document.body.classList.toggle('hide-sys');this.classList.toggle('active')">⚡ sys</button>
+        </div>
+      </div>
+      <div class="log-body">
+        <!-- Batch 1 -->
+        <div class="batch-sep">Batch 1 <span class="batch-loop">· loop 1/3</span></div>
+
+        <div class="log-row">
+          <span class="log-time">14:32</span>
+          <span class="log-emoji">👑</span>
+          <span class="log-agent manager">Alex</span>
+          <span class="log-event">Created 3 tasks, proposed batch</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:32</span>
+          <span class="log-emoji">👑</span>
+          <span class="log-agent manager">Alex</span>
+          <span class="log-event"><span class="task-id">task-001</span>→ David &nbsp; <span class="task-id">task-002</span>→ Drake</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:33</span>
+          <span class="log-emoji">🔧</span>
+          <span class="log-agent worker">David</span>
+          <span class="log-event"><span class="task-id">task-001</span>task-done: "gate reform done"</span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:33</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">gate</span>
+          <span class="log-event"><span class="task-id">task-001</span>scope ✓ &nbsp; verify[1/1] ✓ <span class="result pass">✓ gate pass</span></span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:33</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">dispatch</span>
+          <span class="log-event"><span class="task-id">task-003</span>auto-assign → David</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:34</span>
+          <span class="log-emoji">🔧</span>
+          <span class="log-agent worker">Drake</span>
+          <span class="log-event"><span class="task-id">task-002</span>task-done: "estimatedMinutes added"</span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:34</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">gate</span>
+          <span class="log-event"><span class="task-id">task-002</span>scope ✓ &nbsp; verify[2/2] ✓ <span class="result pass">✓ gate pass</span></span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:35</span>
+          <span class="log-emoji">🔧</span>
+          <span class="log-agent worker">David</span>
+          <span class="log-event"><span class="task-id">task-003</span>task-done: "stuck detection done"</span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:35</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">gate</span>
+          <span class="log-event"><span class="task-id">task-003</span>scope ✓ &nbsp; verify[0/1] <span class="result fail">✗ gate fail (1/3)</span></span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:36</span>
+          <span class="log-emoji">🔧</span>
+          <span class="log-agent worker">David</span>
+          <span class="log-event"><span class="task-id">task-003</span>task-done: "fixed verify cmd"</span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:36</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">gate</span>
+          <span class="log-event"><span class="task-id">task-003</span>scope ✓ &nbsp; verify[1/1] ✓ <span class="result pass">✓ gate pass (2/3)</span></span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:36</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">dispatch</span>
+          <span class="log-event">All 3 tasks done → triggering QA</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:36</span>
+          <span class="log-emoji">🛡️</span>
+          <span class="log-agent qa">Quinn</span>
+          <span class="log-event">Merging 2 worker branches → integration</span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:36</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">merge</span>
+          <span class="log-event">hive/david-001 <span class="result pass">✓</span> &nbsp; hive/drake-002 <span class="result pass">✓</span> &nbsp; 0 conflicts</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:37</span>
+          <span class="log-emoji">🛡️</span>
+          <span class="log-agent qa">Quinn</span>
+          <span class="log-event">build ✓ &nbsp; test 198/198 ✓ &nbsp; coverage 84% <span class="result pass">✓ QA pass</span></span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:37</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">dispatch</span>
+          <span class="log-event">QA pass → triggering Critic</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:38</span>
+          <span class="log-emoji">⚖️</span>
+          <span class="log-agent critic">Chris</span>
+          <span class="log-event">Code review + PR #42 created <span class="result pass">✓ ready</span></span>
+        </div>
+
+        <!-- Batch 2 with QA fail loop -->
+        <div class="batch-sep">Batch 2 <span class="batch-loop">· loop 1/3</span></div>
+
+        <div class="log-row">
+          <span class="log-time">14:40</span>
+          <span class="log-emoji">👑</span>
+          <span class="log-agent manager">Alex</span>
+          <span class="log-event">Created 4 tasks, proposed batch</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:42</span>
+          <span class="log-emoji">🔧</span>
+          <span class="log-agent worker">David</span>
+          <span class="log-event"><span class="task-id">task-004</span>task-done: "auth middleware"</span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:42</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">gate</span>
+          <span class="log-event"><span class="task-id">task-004</span>scope ✓ &nbsp; verify[2/2] ✓ <span class="result pass">✓ gate pass</span></span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:44</span>
+          <span class="log-emoji">🔧</span>
+          <span class="log-agent worker">Drake</span>
+          <span class="log-event"><span class="task-id">task-005</span>task-done: "rate limiting"</span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:44</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">gate</span>
+          <span class="log-event"><span class="task-id">task-005</span>scope ✓ &nbsp; verify[1/1] ✓ <span class="result pass">✓ gate pass</span></span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:44</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">dispatch</span>
+          <span class="log-event">All 4 tasks done → triggering QA</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:45</span>
+          <span class="log-emoji">🛡️</span>
+          <span class="log-agent qa">Quinn</span>
+          <span class="log-event">Merging 2 branches → integration</span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:45</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">merge</span>
+          <span class="log-event">hive/david-001 <span class="result pass">✓</span> &nbsp; hive/drake-002 <span class="result pass">✓</span> &nbsp; 0 conflicts</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:46</span>
+          <span class="log-emoji">🛡️</span>
+          <span class="log-agent qa">Quinn</span>
+          <span class="log-event">build ✓ &nbsp; test 196/198 <span class="result fail">✗ 2 failed</span> &nbsp; coverage 82%</span>
+        </div>
+        <div class="log-row sys">
+          <span class="log-time">14:46</span>
+          <span class="log-emoji">⚡</span>
+          <span class="log-agent system">dispatch</span>
+          <span class="log-event" style="color:#fbbf24;">QA fail → notifying Manager for fix-batch</span>
+        </div>
+
+        <div class="batch-sep">Batch 2 <span class="batch-loop">· loop 2/3 — fix round</span></div>
+
+        <div class="log-row">
+          <span class="log-time">14:47</span>
+          <span class="log-emoji">👑</span>
+          <span class="log-agent manager">Alex</span>
+          <span class="log-event">Created 2 fix tasks from QA report</span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:49</span>
+          <span class="log-emoji">🔧</span>
+          <span class="log-agent worker">David</span>
+          <span class="log-event"><span class="task-id">task-fix-1</span>fix auth test <span class="result pass">✓ pass</span></span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:50</span>
+          <span class="log-emoji">🛡️</span>
+          <span class="log-agent qa">Quinn</span>
+          <span class="log-event">Re-merge + re-test — 198 passed <span class="result pass">✓ QA pass</span></span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">14:51</span>
+          <span class="log-emoji">⚖️</span>
+          <span class="log-agent critic">Chris</span>
+          <span class="log-event">Code review + PR #43 created <span class="result pass">✓ ready</span></span>
+        </div>
+
+        <!-- Example: 3 rounds fail -->
+        <div class="batch-sep" style="color:#f87171;">Batch 3 <span class="batch-loop" style="color:#f87171;">· loop 3/3 — STOPPED</span></div>
+        <div class="log-row">
+          <span class="log-time">15:20</span>
+          <span class="log-emoji">🛡️</span>
+          <span class="log-agent qa">Quinn</span>
+          <span class="log-event">npm test — 195 passed, 3 failed <span class="result fail">✗ QA fail (3rd round)</span></span>
+        </div>
+        <div class="log-row">
+          <span class="log-time">15:20</span>
+          <span class="log-emoji">🚨</span>
+          <span class="log-agent system">system</span>
+          <span class="log-event" style="color:#f87171;font-weight:600;">QA failed 3 rounds — needs human intervention</span>
+        </div>
+
+      </div>
+    </div>
+    <div class="note">Batch context, role emoji, agent names, task IDs, pass/fail badges, loop counter</div>
+  </div>
+</div>
+
+</div>
+</body>
+</html>

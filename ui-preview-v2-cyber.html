@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Hive UI V2 — Glassmorphism + Cyberpunk</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    /* ─── Deep Space Backgrounds ─── */
+    --bg-primary: #080612;
+    --bg-secondary: #0e0b1e;
+    --bg-tertiary: #151029;
+    --bg-hover: #1c1538;
+    --bg-active: #271e4a;
+    --bg-terminal: #050408;
+
+    /* ─── Neon Accent (Purple-Violet core) ─── */
+    --accent: #b794f6;
+    --accent-hover: #d4bcfa;
+    --accent-muted: #7c3aed;
+    --accent-glow: rgba(167, 139, 250, 0.35);
+    --accent-edge: rgba(167, 139, 250, 0.25);
+
+    /* ─── Cyberpunk Neon Highlights ─── */
+    --neon-cyan: #22d3ee;
+    --neon-cyan-glow: rgba(34, 211, 238, 0.25);
+    --neon-pink: #f472b6;
+    --neon-pink-glow: rgba(244, 114, 182, 0.2);
+    --neon-amber: #fbbf24;
+
+    /* ─── Text ─── */
+    --text-primary: #eae6f5;
+    --text-secondary: #c4b5fd;
+    --text-muted: #6b5f8a;
+    --text-on-accent: #ffffff;
+
+    /* ─── Status ─── */
+    --status-working: #4ade80;
+    --status-waiting: #fbbf24;
+    --status-done: #64748b;
+
+    /* ─── Borders ─── */
+    --border-default: rgba(167, 139, 250, 0.12);
+    --border-glow: rgba(167, 139, 250, 0.25);
+    --border-cyan: rgba(34, 211, 238, 0.2);
+
+    /* ─── Role Colors ─── */
+    --role-manager: #F59E0B;
+    --role-worker: #3B82F6;
+    --role-qa: #10B981;
+    --role-critic: #8B5CF6;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    /* Subtle grid background */
+    background-image:
+      linear-gradient(rgba(167,139,250,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(167,139,250,0.03) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+  h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ─── Neon Glass Card ─── */
+  .cyber-glass {
+    background: rgba(14, 11, 30, 0.85);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid var(--border-default);
+    border-radius: 16px;
+    box-shadow:
+      0 0 0 1px rgba(167,139,250,0.06),
+      0 8px 32px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+    position: relative;
+    overflow: hidden;
+  }
+  /* Top edge glow line */
+  .cyber-glass::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 10%; right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent-edge), transparent);
+  }
+
+  .cyber-glass-cyan {
+    background: rgba(14, 11, 30, 0.85);
+    backdrop-filter: blur(24px);
+    border: 1px solid var(--border-cyan);
+    border-radius: 16px;
+    box-shadow:
+      0 0 0 1px rgba(34,211,238,0.06),
+      0 8px 32px rgba(0,0,0,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+    position: relative;
+    overflow: hidden;
+  }
+  .cyber-glass-cyan::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 10%; right: 10%;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(34,211,238,0.3), transparent);
+  }
+
+  /* ─── Layout ─── */
+  .page { max-width: 1100px; margin: 0 auto; padding: 32px; }
+  .preview-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  .full-width { grid-column: 1 / -1; }
+
+  /* ─── Header ─── */
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+    padding: 32px 0;
+  }
+  .header h1 {
+    font-size: 24px;
+    font-weight: 700;
+    background: linear-gradient(135deg, var(--accent), var(--neon-cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 8px;
+  }
+  .header p { font-size: 13px; color: var(--text-muted); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  /* ─── Section Label ─── */
+  .section-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::before {
+    content: '';
+    width: 12px; height: 1px;
+    background: var(--accent-muted);
+  }
+
+  /* ═══════════════════════════════════════
+     TODO LIST — Cyberpunk Data Table
+     ═══════════════════════════════════════ */
+  .todo-card { padding: 0; }
+
+  .todo-top {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .todo-count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .todo-count-label {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+  .todo-bar-wrap { flex: 1; }
+  .todo-bar-meta {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .todo-bar-meta span {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .todo-bar {
+    height: 4px;
+    background: var(--bg-hover);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .todo-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent-muted), var(--neon-cyan));
+    box-shadow: 0 0 8px var(--neon-cyan-glow);
+    transition: width 0.4s ease;
+  }
+
+  /* Table header */
+  .todo-header {
+    display: grid;
+    grid-template-columns: 28px 1fr 56px 52px;
+    gap: 8px;
+    padding: 8px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    border-bottom: 1px solid rgba(167,139,250,0.06);
+  }
+  .todo-header span:first-child { text-align: right; }
+  .todo-header span:last-child { text-align: right; }
+
+  /* Rows */
+  .todo-list { padding: 4px 0; }
+  .todo-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 56px 52px;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 20px;
+    font-size: 13px;
+    transition: background 0.15s;
+    cursor: default;
+  }
+  .todo-row:hover {
+    background: rgba(167,139,250,0.04);
+  }
+  .todo-row .idx {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+  .todo-row .text {
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .todo-row .text.done-text {
+    color: var(--text-muted);
+    text-decoration: line-through;
+    text-decoration-color: rgba(100,116,139,0.4);
+  }
+
+  /* Zone tags */
+  .ztag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-align: center;
+    text-transform: uppercase;
+  }
+  .ztag-rd { background: rgba(167,139,250,0.12); color: var(--accent); }
+  .ztag-admin { background: rgba(74,222,128,0.10); color: var(--status-working); }
+  .ztag-ops { background: rgba(251,191,36,0.10); color: var(--neon-amber); }
+  .ztag-design { background: rgba(244,114,182,0.10); color: var(--neon-pink); }
+
+  .todo-status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    text-align: right;
+  }
+  .todo-status.open { color: var(--text-muted); }
+  .todo-status.done { color: var(--status-done); }
+  .todo-status.active { color: var(--neon-cyan); }
+
+  .todo-more {
+    padding: 6px 20px 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* ═══════════════════════════════════════
+     AGENT ROSTER — Cyberpunk Vertical Table
+     ═══════════════════════════════════════ */
+  .roster-card { padding: 0; }
+
+  .roster-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .roster-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .roster-batch {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--neon-cyan);
+    padding: 3px 10px;
+    border: 1px solid var(--border-cyan);
+    border-radius: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .roster-header {
+    display: grid;
+    grid-template-columns: 36px 1fr 80px 72px 60px;
+    gap: 8px;
+    padding: 8px 20px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text-muted);
+    border-bottom: 1px solid rgba(167,139,250,0.06);
+  }
+  .roster-header span:nth-child(3),
+  .roster-header span:nth-child(4) { text-align: center; }
+  .roster-header span:last-child { text-align: right; }
+
+  .roster { padding: 4px 0; }
+  .roster-row {
+    display: grid;
+    grid-template-columns: 36px 1fr 80px 72px 60px;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    transition: background 0.15s;
+  }
+  .roster-row:hover { background: rgba(167,139,250,0.04); }
+
+  /* Icon with status dot */
+  .agent-icon {
+    width: 36px; height: 36px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 10px;
+    font-size: 18px;
+    position: relative;
+    border: 1px solid transparent;
+  }
+  .agent-icon.manager { background: rgba(245,158,11,0.10); border-color: rgba(245,158,11,0.2); }
+  .agent-icon.worker { background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.2); }
+  .agent-icon.qa { background: rgba(16,185,129,0.10); border-color: rgba(16,185,129,0.2); }
+  .agent-icon.critic { background: rgba(139,92,246,0.10); border-color: rgba(139,92,246,0.2); }
+
+  .sdot {
+    position: absolute;
+    bottom: -2px; right: -2px;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    border: 2px solid var(--bg-secondary);
+  }
+  .sdot.on { background: var(--status-working); box-shadow: 0 0 6px rgba(74,222,128,0.5); }
+  .sdot.wait { background: var(--status-waiting); }
+  .sdot.off { background: var(--status-done); }
+
+  /* Name cell */
+  .agent-name { min-width: 0; }
+  .agent-name .primary {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .agent-name .sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  /* Dept */
+  .agent-dept {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  /* Role badge */
+  .role-badge {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  .rb-manager { background: rgba(245,158,11,0.12); color: #F59E0B; border: 1px solid rgba(245,158,11,0.2); }
+  .rb-worker { background: rgba(59,130,246,0.12); color: #3B82F6; border: 1px solid rgba(59,130,246,0.2); }
+  .rb-qa { background: rgba(16,185,129,0.12); color: #10B981; border: 1px solid rgba(16,185,129,0.2); }
+  .rb-critic { background: rgba(139,92,246,0.12); color: #8B5CF6; border: 1px solid rgba(139,92,246,0.2); }
+
+  /* Stats */
+  .agent-stats {
+    text-align: right;
+  }
+  .agent-stats .num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+  .agent-stats .sprint-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 1px;
+  }
+
+  /* ═══════════════════════════════════════
+     BATCH TASK LIST (inside Task Group)
+     ═══════════════════════════════════════ */
+  .batch-card { padding: 0; margin-top: 16px; }
+  .batch-top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-default);
+  }
+  .batch-title { font-size: 13px; font-weight: 700; }
+  .batch-progress-wrap { display: flex; align-items: center; gap: 10px; }
+  .batch-bar {
+    width: 80px; height: 4px;
+    background: var(--bg-hover);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .batch-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--status-working), var(--neon-cyan));
+    box-shadow: 0 0 6px rgba(74,222,128,0.3);
+    border-radius: 2px;
+  }
+  .batch-pct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .task-list { padding: 4px 0; }
+  .task-row {
+    display: grid;
+    grid-template-columns: 8px 1fr 100px 60px;
+    align-items: center;
+    gap: 10px;
+    padding: 7px 20px;
+    font-size: 13px;
+  }
+  .task-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+  }
+  .task-dot.done { background: var(--status-working); box-shadow: 0 0 4px rgba(74,222,128,0.4); }
+  .task-dot.active { background: var(--neon-cyan); box-shadow: 0 0 4px var(--neon-cyan-glow); }
+  .task-dot.blocked { background: #f87171; box-shadow: 0 0 4px rgba(248,113,113,0.4); }
+  .task-dot.pending { background: var(--text-muted); opacity: 0.3; }
+
+  .task-title { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .task-owner {
+    font-size: 13px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .task-owner span { color: var(--role-worker); }
+  .task-status-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    text-align: right;
+  }
+  .task-status-label.s-done { color: var(--status-working); }
+  .task-status-label.s-active { color: var(--neon-cyan); }
+  .task-status-label.s-blocked { color: #f87171; }
+  .task-status-label.s-pending { color: var(--text-muted); opacity: 0.5; }
+
+  /* ═══════════════════════════════════════
+     PROGRESS + STATUS SUMMARY (top row)
+     ═══════════════════════════════════════ */
+  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .stat-card { padding: 16px 20px; }
+  .stat-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+  .stat-value {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .stat-sub {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .executing-pulse {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--neon-cyan);
+    box-shadow: 0 0 8px var(--neon-cyan-glow);
+    margin-right: 6px;
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* ═══════════════════════════════════════
+     PROPOSAL CARD (accent border glow)
+     ═══════════════════════════════════════ */
+  .proposal-card {
+    margin-top: 16px;
+    border: 1px solid var(--accent-edge);
+    box-shadow: 0 0 20px var(--accent-glow), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+  .proposal-card::before {
+    background: linear-gradient(90deg, transparent, rgba(167,139,250,0.4), transparent);
+  }
+  .proposal-top {
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border-default);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .proposal-top .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent-glow);
+  }
+  .proposal-top h4 {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .proposal-tasks {
+    padding: 12px 20px;
+  }
+  .proposal-task {
+    font-size: 13px;
+    color: var(--text-primary);
+    padding: 4px 0;
+    display: flex;
+    gap: 8px;
+  }
+  .proposal-task .n {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    min-width: 16px;
+    text-align: right;
+  }
+  .proposal-task .scope {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+  .proposal-actions {
+    padding: 12px 20px 16px;
+    display: flex;
+    gap: 8px;
+  }
+  .btn-approve {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    background: linear-gradient(135deg, var(--accent-muted), var(--accent));
+    color: white;
+    box-shadow: 0 0 16px var(--accent-glow);
+    transition: all 0.2s;
+  }
+  .btn-approve:hover { box-shadow: 0 0 24px var(--accent-glow); transform: translateY(-1px); }
+  .btn-reject {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    border: 1px solid var(--border-default);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-reject:hover { color: #f87171; border-color: rgba(248,113,113,0.3); }
+
+  /* ─── Divider ─── */
+  .divider {
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--border-default), transparent);
+    margin: 32px 0;
+  }
+
+  /* ─── Design Note ─── */
+  .design-note {
+    margin-top: 48px;
+    padding: 20px;
+    border-radius: 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+  }
+  .design-note h3 {
+    font-size: 13px;
+    margin-bottom: 12px;
+    color: var(--text-primary);
+  }
+  .design-note ul {
+    list-style: none;
+    padding: 0;
+  }
+  .design-note li {
+    font-size: 13px;
+    color: var(--text-secondary);
+    padding: 4px 0;
+    display: flex;
+    gap: 8px;
+  }
+  .design-note li::before {
+    content: '→';
+    color: var(--neon-cyan);
+    flex-shrink: 0;
+  }
+
+  /* ─── Theme Toggle ─── */
+  .theme-toggle {
+    position: fixed; top: 16px; right: 16px; z-index: 100;
+    display: flex; align-items: center; gap: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    color: var(--text-muted);
+    transition: all 0.2s;
+  }
+  .theme-toggle:hover { color: var(--text-primary); border-color: var(--accent-edge); }
+  .theme-toggle .icon { font-size: 15px; }
+
+  /* ─── Light Theme ─── */
+  html[data-theme="light"] {
+    --bg-primary: #f5f0ff;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #ede9fe;
+    --bg-hover: #e9d5ff;
+    --bg-active: #ddd6fe;
+    --bg-terminal: #1e1b4b;
+
+    --accent: #7c3aed;
+    --accent-hover: #6d28d9;
+    --accent-muted: #a78bfa;
+    --accent-glow: rgba(124, 58, 237, 0.2);
+    --accent-edge: rgba(124, 58, 237, 0.2);
+
+    --neon-cyan: #0891b2;
+    --neon-cyan-glow: rgba(8, 145, 178, 0.15);
+    --neon-pink: #db2777;
+    --neon-pink-glow: rgba(219, 39, 119, 0.12);
+    --neon-amber: #d97706;
+
+    --text-primary: #1e1b4b;
+    --text-secondary: #4c1d95;
+    --text-muted: #7c6f9b;
+    --text-on-accent: #ffffff;
+
+    --status-working: #16a34a;
+    --status-waiting: #d97706;
+    --status-done: #94a3b8;
+
+    --border-default: rgba(124, 58, 237, 0.12);
+    --border-glow: rgba(124, 58, 237, 0.18);
+    --border-cyan: rgba(8, 145, 178, 0.15);
+
+    --role-manager: #b45309;
+    --role-worker: #2563eb;
+    --role-qa: #059669;
+    --role-critic: #7c3aed;
+  }
+
+  html[data-theme="light"] body {
+    background-image:
+      linear-gradient(rgba(124,58,237,0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(124,58,237,0.04) 1px, transparent 1px);
+  }
+
+  html[data-theme="light"] .cyber-glass {
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(124, 58, 237, 0.1);
+    box-shadow: 0 4px 24px rgba(124, 58, 237, 0.06), inset 0 1px 0 rgba(255,255,255,0.8);
+  }
+  html[data-theme="light"] .cyber-glass::before {
+    background: linear-gradient(90deg, transparent, rgba(124,58,237,0.15), transparent);
+  }
+
+  html[data-theme="light"] .cyber-glass-cyan {
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid rgba(8, 145, 178, 0.12);
+    box-shadow: 0 4px 24px rgba(8, 145, 178, 0.06), inset 0 1px 0 rgba(255,255,255,0.8);
+  }
+  html[data-theme="light"] .cyber-glass-cyan::before {
+    background: linear-gradient(90deg, transparent, rgba(8,145,178,0.2), transparent);
+  }
+
+  html[data-theme="light"] .proposal-card {
+    border-color: rgba(124,58,237,0.2);
+    box-shadow: 0 0 16px rgba(124,58,237,0.1), inset 0 1px 0 rgba(255,255,255,0.8);
+  }
+
+  html[data-theme="light"] .todo-row:hover,
+  html[data-theme="light"] .roster-row:hover {
+    background: rgba(124,58,237,0.05);
+  }
+
+  html[data-theme="light"] .todo-bar-fill,
+  html[data-theme="light"] .batch-bar-fill {
+    box-shadow: none;
+  }
+
+  html[data-theme="light"] .sdot.on {
+    box-shadow: 0 0 4px rgba(22,163,74,0.4);
+  }
+  html[data-theme="light"] .task-dot.done { box-shadow: none; }
+  html[data-theme="light"] .task-dot.active { box-shadow: none; }
+
+  html[data-theme="light"] .btn-approve {
+    background: linear-gradient(135deg, #7c3aed, #a78bfa);
+    box-shadow: 0 0 12px rgba(124,58,237,0.15);
+  }
+
+  html[data-theme="light"] .roster-batch {
+    color: var(--neon-cyan);
+    border-color: rgba(8,145,178,0.2);
+  }
+
+  html[data-theme="light"] .executing-pulse {
+    background: var(--neon-cyan);
+    box-shadow: 0 0 6px var(--neon-cyan-glow);
+  }
+
+  html[data-theme="light"] .agent-icon.manager { background: rgba(180,83,9,0.08); border-color: rgba(180,83,9,0.15); }
+  html[data-theme="light"] .agent-icon.worker { background: rgba(37,99,235,0.08); border-color: rgba(37,99,235,0.15); }
+  html[data-theme="light"] .agent-icon.qa { background: rgba(5,150,105,0.08); border-color: rgba(5,150,105,0.15); }
+  html[data-theme="light"] .agent-icon.critic { background: rgba(124,58,237,0.08); border-color: rgba(124,58,237,0.15); }
+
+  html[data-theme="light"] .rb-manager { background: rgba(180,83,9,0.08); color: #b45309; border-color: rgba(180,83,9,0.15); }
+  html[data-theme="light"] .rb-worker { background: rgba(37,99,235,0.08); color: #2563eb; border-color: rgba(37,99,235,0.15); }
+  html[data-theme="light"] .rb-qa { background: rgba(5,150,105,0.08); color: #059669; border-color: rgba(5,150,105,0.15); }
+  html[data-theme="light"] .rb-critic { background: rgba(124,58,237,0.08); color: #7c3aed; border-color: rgba(124,58,237,0.15); }
+
+  html[data-theme="light"] .ztag-rd { background: rgba(124,58,237,0.08); color: #7c3aed; }
+  html[data-theme="light"] .ztag-admin { background: rgba(22,163,74,0.08); color: #16a34a; }
+  html[data-theme="light"] .ztag-ops { background: rgba(217,119,6,0.08); color: #d97706; }
+  html[data-theme="light"] .ztag-design { background: rgba(219,39,119,0.08); color: #db2777; }
+
+  html[data-theme="light"] .design-note {
+    background: #ffffff;
+    border-color: rgba(124,58,237,0.1);
+  }
+
+  .label-new {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 8px;
+    background: rgba(34,211,238,0.15);
+    color: var(--neon-cyan);
+    padding: 2px 5px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    vertical-align: middle;
+    margin-left: 6px;
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" onclick="toggleTheme()">
+  <span class="icon" id="theme-icon">☀</span>
+  <span id="theme-label">Light</span>
+</button>
+
+<div class="page">
+
+<div class="header">
+  <h1>Hive — Glassmorphism + Cyberpunk</h1>
+  <p>Mission Control for AI Agents</p>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ROW 1: Summary Stats
+     ═══════════════════════════════════════ -->
+<div class="section-label">Dashboard Overview</div>
+<div class="summary-grid" style="margin-bottom:24px;">
+  <div class="cyber-glass stat-card">
+    <div class="stat-label">Project Progress</div>
+    <div style="display:flex;align-items:baseline;gap:8px;">
+      <span class="stat-value">72%</span>
+      <span class="mono" style="font-size:11px;color:var(--text-muted);">31/43 tasks</span>
+    </div>
+    <div style="margin-top:10px;">
+      <div class="todo-bar" style="height:4px;">
+        <div class="todo-bar-fill" style="width:72%;"></div>
+      </div>
+    </div>
+  </div>
+  <div class="cyber-glass-cyan stat-card">
+    <div class="stat-label">Task Group</div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span class="executing-pulse"></span>
+      <span class="stat-value" style="font-size:16px;">Executing</span>
+    </div>
+    <div class="stat-sub">Batch 3 · 6 agents · 8 tasks</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ROW 2: Todo List
+     ═══════════════════════════════════════ -->
+<div class="section-label">Todo Tracker</div>
+<div class="cyber-glass todo-card" style="margin-bottom:32px;">
+  <div class="todo-top">
+    <div>
+      <div class="todo-count">17</div>
+      <div class="todo-count-label">Total Items</div>
+    </div>
+    <div class="todo-bar-wrap">
+      <div class="todo-bar-meta">
+        <span>3 done · 1 in progress · 13 open</span>
+        <span>18%</span>
+      </div>
+      <div class="todo-bar"><div class="todo-bar-fill" style="width:18%;"></div></div>
+    </div>
+  </div>
+  <div class="todo-header">
+    <span>#</span>
+    <span>Task</span>
+    <span>Zone</span>
+    <span>Status</span>
+  </div>
+  <div class="todo-list">
+    <div class="todo-row">
+      <span class="idx">1</span>
+      <span class="text">Implement dark mode toggle for settings panel</span>
+      <span class="ztag ztag-rd">R&D</span>
+      <span class="todo-status active">active</span>
+    </div>
+    <div class="todo-row">
+      <span class="idx">2</span>
+      <span class="text">Fix avatar editor z-index on mobile viewport</span>
+      <span class="ztag ztag-rd">R&D</span>
+      <span class="todo-status open">open</span>
+    </div>
+    <div class="todo-row">
+      <span class="idx">3</span>
+      <span class="text">Add WebSocket reconnection with exponential backoff</span>
+      <span class="ztag ztag-rd">R&D</span>
+      <span class="todo-status open">open</span>
+    </div>
+    <div class="todo-row">
+      <span class="idx">4</span>
+      <span class="text">Update onboarding documentation for v0.8</span>
+      <span class="ztag ztag-admin">Admin</span>
+      <span class="todo-status open">open</span>
+    </div>
+    <div class="todo-row">
+      <span class="idx">5</span>
+      <span class="text">Redesign task group agent roster layout</span>
+      <span class="ztag ztag-design">Design</span>
+      <span class="todo-status open">open</span>
+    </div>
+    <div class="todo-row">
+      <span class="idx">6</span>
+      <span class="text">Configure Cloudflare WAF rules for API</span>
+      <span class="ztag ztag-ops">Ops</span>
+      <span class="todo-status open">open</span>
+    </div>
+    <div class="todo-row">
+      <span class="idx">7</span>
+      <span class="text" style="text-decoration:line-through;color:var(--text-muted);">Write E2E tests for task group flow</span>
+      <span class="ztag ztag-rd" style="opacity:0.4;">R&D</span>
+      <span class="todo-status done">done</span>
+    </div>
+    <div class="todo-row">
+      <span class="idx">8</span>
+      <span class="text" style="text-decoration:line-through;color:var(--text-muted);">Gate reform: remove build/test from worker gate</span>
+      <span class="ztag ztag-rd" style="opacity:0.4;">R&D</span>
+      <span class="todo-status done">done</span>
+    </div>
+  </div>
+  <div class="todo-more">+9 more items</div>
+</div>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════════════════════
+     ROW 3: Agent Roster
+     ═══════════════════════════════════════ -->
+<div class="section-label">Task Group — Agent Roster <span class="label-new">new</span></div>
+<div class="cyber-glass roster-card" style="margin-bottom:16px;">
+  <div class="roster-top">
+    <span class="roster-title">Sprint Team</span>
+    <span class="roster-batch">Batch 3 · Executing</span>
+  </div>
+  <div class="roster-header">
+    <span></span>
+    <span>Agent</span>
+    <span style="text-align:center;">Dept</span>
+    <span style="text-align:center;">Role</span>
+    <span style="text-align:right;">Tasks</span>
+  </div>
+  <div class="roster">
+    <div class="roster-row">
+      <div class="agent-icon manager">👑<span class="sdot on"></span></div>
+      <div class="agent-name">
+        <div class="primary">Alex</div>
+        <div class="sub">Product Manager · Batch orchestrator</div>
+      </div>
+      <span class="agent-dept">R&D · PM</span>
+      <span class="role-badge rb-manager">Manager</span>
+      <div class="agent-stats"><span class="num">—</span><br><span class="sprint-label">3 sprints</span></div>
+    </div>
+    <div class="roster-row">
+      <div class="agent-icon worker">🔧<span class="sdot on"></span></div>
+      <div class="agent-name">
+        <div class="primary">David</div>
+        <div class="sub">Full-Stack Engineer</div>
+      </div>
+      <span class="agent-dept">R&D · ENG</span>
+      <span class="role-badge rb-worker">Worker</span>
+      <div class="agent-stats"><span class="num">12/14</span><br><span class="sprint-label">3 sprints</span></div>
+    </div>
+    <div class="roster-row">
+      <div class="agent-icon worker">🔧<span class="sdot wait"></span></div>
+      <div class="agent-name">
+        <div class="primary">Daisy</div>
+        <div class="sub">UI/UX Designer</div>
+      </div>
+      <span class="agent-dept">R&D · DES</span>
+      <span class="role-badge rb-worker">Worker</span>
+      <div class="agent-stats"><span class="num">10/14</span><br><span class="sprint-label">3 sprints</span></div>
+    </div>
+    <div class="roster-row">
+      <div class="agent-icon worker">🔧<span class="sdot on"></span></div>
+      <div class="agent-name">
+        <div class="primary">Drake</div>
+        <div class="sub">Backend Engineer</div>
+      </div>
+      <span class="agent-dept">R&D · ENG</span>
+      <span class="role-badge rb-worker">Worker</span>
+      <div class="agent-stats"><span class="num">11/14</span><br><span class="sprint-label">3 sprints</span></div>
+    </div>
+    <div class="roster-row">
+      <div class="agent-icon qa">🛡️<span class="sdot off"></span></div>
+      <div class="agent-name">
+        <div class="primary">Quinn</div>
+        <div class="sub">QA Engineer · Build + Test + Coverage</div>
+      </div>
+      <span class="agent-dept">R&D · QA</span>
+      <span class="role-badge rb-qa">QA</span>
+      <div class="agent-stats"><span class="num">2/2</span><br><span class="sprint-label">2 sprints</span></div>
+    </div>
+    <div class="roster-row">
+      <div class="agent-icon critic">🔍<span class="sdot off"></span></div>
+      <div class="agent-name">
+        <div class="primary">Chris</div>
+        <div class="sub">Staff Engineer · Code Review + PR</div>
+      </div>
+      <span class="agent-dept">R&D · ENG</span>
+      <span class="role-badge rb-critic">Critic</span>
+      <div class="agent-stats"><span class="num">2/2</span><br><span class="sprint-label">2 sprints</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ROW 4: Batch Task List
+     ═══════════════════════════════════════ -->
+<div class="cyber-glass batch-card" style="margin-bottom:16px;">
+  <div class="batch-top">
+    <span class="batch-title">Batch 3 Tasks</span>
+    <div class="batch-progress-wrap">
+      <div class="batch-bar"><div class="batch-bar-fill" style="width:62.5%;"></div></div>
+      <span class="batch-pct">5/8</span>
+    </div>
+  </div>
+  <div class="task-list">
+    <div class="task-row">
+      <span class="task-dot done"></span>
+      <span class="task-title">Implement gate reform — scope+verify only</span>
+      <span class="task-owner"><span>🔧</span> David</span>
+      <span class="task-status-label s-done">done</span>
+    </div>
+    <div class="task-row">
+      <span class="task-dot done"></span>
+      <span class="task-title">Add estimatedMinutes to task-create API</span>
+      <span class="task-owner"><span>🔧</span> Drake</span>
+      <span class="task-status-label s-done">done</span>
+    </div>
+    <div class="task-row">
+      <span class="task-dot done"></span>
+      <span class="task-title">Stuck detection dispatcher with timeout</span>
+      <span class="task-owner"><span>🔧</span> David</span>
+      <span class="task-status-label s-done">done</span>
+    </div>
+    <div class="task-row">
+      <span class="task-dot done"></span>
+      <span class="task-title">Update Critic soul — trust QA, no re-test</span>
+      <span class="task-owner"><span>🔧</span> Daisy</span>
+      <span class="task-status-label s-done">done</span>
+    </div>
+    <div class="task-row">
+      <span class="task-dot active"></span>
+      <span class="task-title">Redesign todo cards to unified list</span>
+      <span class="task-owner"><span>🔧</span> Daisy</span>
+      <span class="task-status-label s-active">active</span>
+    </div>
+    <div class="task-row">
+      <span class="task-dot done"></span>
+      <span class="task-title">Agent roster vertical layout</span>
+      <span class="task-owner"><span>🔧</span> Drake</span>
+      <span class="task-status-label s-done">done</span>
+    </div>
+    <div class="task-row">
+      <span class="task-dot pending"></span>
+      <span class="task-title">Add JetBrains Mono for data elements</span>
+      <span class="task-owner"></span>
+      <span class="task-status-label s-pending">pending</span>
+    </div>
+    <div class="task-row">
+      <span class="task-dot pending"></span>
+      <span class="task-title">Standardize 4px spacing grid</span>
+      <span class="task-owner"></span>
+      <span class="task-status-label s-pending">pending</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     Proposal Card (Accent Glow)
+     ═══════════════════════════════════════ -->
+<div class="section-label">Batch Proposal Preview</div>
+<div class="cyber-glass proposal-card">
+  <div class="proposal-top">
+    <span class="dot"></span>
+    <h4>Batch 4 — Awaiting Approval</h4>
+  </div>
+  <div class="proposal-tasks">
+    <div class="proposal-task"><span class="n">1.</span> Migrate auth middleware to JWT refresh tokens <span class="scope">src/auth/</span></div>
+    <div class="proposal-task"><span class="n">2.</span> Add rate limiting to status webhook <span class="scope">src/main/</span></div>
+    <div class="proposal-task"><span class="n">3.</span> WebSocket reconnection with exponential backoff <span class="scope">src/renderer/</span></div>
+    <div class="proposal-task"><span class="n">4.</span> Configure Cloudflare WAF rules <span class="scope">infra/</span></div>
+  </div>
+  <div class="proposal-actions">
+    <button class="btn-approve">Approve Batch</button>
+    <button class="btn-reject">Reject</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     Design Notes
+     ═══════════════════════════════════════ -->
+<div class="design-note">
+  <h3>Cyberpunk + Glassmorphism Fusion — Key Decisions</h3>
+  <ul>
+    <li><strong>Grid background</strong> — subtle 32px grid lines give "mission control" feel without noise</li>
+    <li><strong>Top-edge glow</strong> — glass cards have a gradient glow line at the top edge (::before pseudo)</li>
+    <li><strong>Cyan accent</strong> — neon cyan (#22d3ee) for active/executing states, contrasts with purple primary</li>
+    <li><strong>Glow shadows</strong> — status dots and active elements have colored box-shadows for neon effect</li>
+    <li><strong>JetBrains Mono</strong> — all data, stats, counters, headers use monospace for tech density</li>
+    <li><strong>Deeper blacks</strong> — bg-primary is #080612 (bluer-black) vs current #0f0a1a</li>
+    <li><strong>Role badges with borders</strong> — subtle 1px colored borders on role badges add depth</li>
+    <li><strong>Proposal card glow</strong> — accent-bordered card with box-shadow glow draws attention to decisions</li>
+    <li><strong>No glass nesting</strong> — inner elements are flat; only top-level cards use backdrop-filter</li>
+    <li><strong>Pulse animation</strong> — executing status uses a slow 2s pulse on the cyan dot</li>
+  </ul>
+</div>
+
+</div>
+
+<script>
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.dataset.theme === 'dark';
+  html.dataset.theme = isDark ? 'light' : 'dark';
+  document.getElementById('theme-icon').textContent = isDark ? '☾' : '☀';
+  document.getElementById('theme-label').textContent = isDark ? 'Dark' : 'Light';
+}
+</script>
+</body>
+</html>

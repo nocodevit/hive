@@ -1,8 +1,8 @@
 {
   "id": "task-008",
   "title": "Create hotel.md with a timeline",
-  "status": "pending",
-  "owner": null,
+  "status": "done",
+  "owner": "agent-1775913324617",
   "batch": 1,
   "depends": [],
   "scope": "/Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/",
@@ -11,5 +11,8 @@
     "test -f /Users/meiyang/FrontEndProjects/hive/test-multi-agent-tasks/hotel.md"
   ],
   "attempt": 0,
-  "blocked_reason": null
+  "blocked_reason": null,
+  "abandoned_reason": null,
+  "estimatedMinutes": 5,
+  "assignedAt": "2026-04-11T13:18:16.222Z"
 }

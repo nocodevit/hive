@@ -1,0 +1,83 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e3]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - heading "Hive v0.9.27" [level=2] [ref=e6]
+      - button "Switch to dark mode" [ref=e7] [cursor=pointer]:
+        - img [ref=e8]
+    - generic [ref=e10]:
+      - button "💤 PSLE Alex 7" [ref=e11] [cursor=pointer]:
+        - generic "Agents offline" [ref=e12]: 💤
+        - generic [ref=e13]: PSLE Alex
+        - generic [ref=e14]: "7"
+      - button "💤 EPC Agent 1" [ref=e15] [cursor=pointer]:
+        - generic "Agents offline" [ref=e16]: 💤
+        - generic [ref=e17]: EPC Agent
+        - generic [ref=e18]: "1"
+      - button "💤 Hive 2" [ref=e19] [cursor=pointer]:
+        - generic "Agents offline" [ref=e20]: 💤
+        - generic [ref=e21]: Hive
+        - generic [ref=e22]: "2"
+      - button "💤 Sphere2 POC 3" [ref=e23] [cursor=pointer]:
+        - generic "Agents offline" [ref=e24]: 💤
+        - generic [ref=e25]: Sphere2 POC
+        - generic [ref=e26]: "3"
+      - button "💤 MNO 1" [ref=e27] [cursor=pointer]:
+        - generic "Agents offline" [ref=e28]: 💤
+        - generic [ref=e29]: MNO
+        - generic [ref=e30]: "1"
+      - button "💤 SIMply Connect 1" [ref=e31] [cursor=pointer]:
+        - generic "Agents offline" [ref=e32]: 💤
+        - generic [ref=e33]: SIMply Connect
+        - generic [ref=e34]: "1"
+      - button "🕳️ AI Interview" [ref=e35] [cursor=pointer]:
+        - generic "No agents" [ref=e36]: 🕳️
+        - generic [ref=e37]: AI Interview
+      - button "💤 Supplier MCP 1" [ref=e38] [cursor=pointer]:
+        - generic "Agents offline" [ref=e39]: 💤
+        - generic [ref=e40]: Supplier MCP
+        - generic [ref=e41]: "1"
+      - button "💤 Harness 1" [ref=e42] [cursor=pointer]:
+        - generic "Agents offline" [ref=e43]: 💤
+        - generic [ref=e44]: Harness
+        - generic [ref=e45]: "1"
+      - button "💤 Chloe 1" [ref=e46] [cursor=pointer]:
+        - generic "Agents offline" [ref=e47]: 💤
+        - generic [ref=e48]: Chloe
+        - generic [ref=e49]: "1"
+      - button "💤 Vortex 1" [ref=e50] [cursor=pointer]:
+        - generic "Agents offline" [ref=e51]: 💤
+        - generic [ref=e52]: Vortex
+        - generic [ref=e53]: "1"
+      - button "💤 Tenderbid Translate 1" [ref=e54] [cursor=pointer]:
+        - generic "Agents offline" [ref=e55]: 💤
+        - generic [ref=e56]: Tenderbid Translate
+        - generic [ref=e57]: "1"
+      - button "💤 Cube 1" [ref=e58] [cursor=pointer]:
+        - generic "Agents offline" [ref=e59]: 💤
+        - generic [ref=e60]: Cube
+        - generic [ref=e61]: "1"
+      - button "💤 Sphere 2 1" [ref=e62] [cursor=pointer]:
+        - generic "Agents offline" [ref=e63]: 💤
+        - generic [ref=e64]: Sphere 2
+        - generic [ref=e65]: "1"
+      - button "🕳️ Cube v2" [ref=e66] [cursor=pointer]:
+        - generic "No agents" [ref=e67]: 🕳️
+        - generic [ref=e68]: Cube v2
+    - generic [ref=e70]:
+      - button "Add Project" [ref=e71] [cursor=pointer]:
+        - img [ref=e72]
+        - text: Add Project
+      - button "App Settings" [ref=e73] [cursor=pointer]:
+        - img [ref=e74]
+  - generic [ref=e78]:
+    - heading "Agents" [level=2] [ref=e80]
+    - paragraph [ref=e82]: Select a project
+  - generic [ref=e84]:
+    - heading "Select an agent" [level=2] [ref=e87]
+    - generic [ref=e89]:
+      - img [ref=e90]
+      - paragraph [ref=e92]: Select a project first
+```

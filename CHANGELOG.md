@@ -14,6 +14,124 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.64] — 2026-04-25
+
+### Fixed
+- **Context %% bar showed 0% when prompt cache was warm.** Was using
+  only `result.usage.input_tokens` (this turn's *new* tokens — `6`
+  when cache served the rest). Now sums `input_tokens +
+  cache_read_input_tokens + cache_creation_input_tokens` for the
+  real loaded-context size. Auto-compact heuristic adjusted to use
+  the same total.
+- **Subagent prompts no longer render as fake user inputs.** Stream
+  events with `parent_tool_use_id != null` (subagent's user/assistant
+  turns relayed in parent stream) used to render as full UserMessage
+  / AssistantMessage / ToolBlock with main-chat styling — the Task
+  prompt to a subagent appeared as a Julep ❯ + Dolly bg bubble like
+  the human typed it. Now: still rendered (so you can see what the
+  subagent's doing) but wrapped in a Mochi-bordered indented dim-
+  opacity container with a tiny `SUB` badge on the left. Click
+  handlers (✓ / ✏ / ↺) suppressed inside subagent rows since they
+  don't belong to the user's main thread.
+- **`⏳` hourglass spinner now animates.** Was static text. Added a
+  `hg-flip` CSS keyframe that rotates the glyph 180° every 2s so it
+  visibly "tips" while the gradient text scrolls.
+
+---
+
+## [1.7.63] — 2026-04-25
+
+### Added
+- **Smart-startup auto `/compact`.** Every `chat:start` with
+  `continueSession: true` now scans `~/.claude/projects/<cwd>/*.jsonl`
+  for the latest session, reads its last `result.usage.input_tokens` /
+  `modelUsage.contextWindow`, and if > 50% runs `/compact` via a
+  brief PTY round-trip BEFORE the actual `--print --resume <sid>`
+  spawn. Otherwise falls through to plain `-c` startup. Every Hive
+  open of a long-lived agent gets auto-thinned context — no more
+  cache-miss + huge-context hangs on resume.
+
+### Changed
+- Chat background `#170d2e` → `#150e24` to match `--sidebar-bg`
+  (project list panel) in dark mode. Slightly less blue, warmer
+  purple tone.
+
+---
+
+## [1.7.62] — 2026-04-25
+
+### Added
+- **Smart Resume button.** Closed-panel resume reads the session
+  JSONL's last result event; if prior context > 50% runs `/compact`
+  via PTY round-trip before re-spawning `--print --resume <sid>`,
+  else just resumes. No more hangs from cache-miss on big sessions.
+- **"Start with summary" button.** `/compact` + `--resume <sid>
+  --fork-session` — new session-id with the compacted summary as
+  seed context. Middle ground between full Resume and amnesia New.
+- **`/compact` slash command** in the input box. PTY round-trip
+  pattern: kill `--print` → spawn PTY `--resume <sid>` → write
+  `/compact\r` → wait for prompt-return → kill PTY → respawn
+  `--print --resume <sid>`.
+- Closed-panel now shows THREE buttons: `↻ Resume / ≡ With summary
+  / ⊕ New`, each labeled with its memory-persistence semantic.
+- New `StartOpts.forkSession` flag wires `--fork-session` to the
+  spawn. New IPCs: `chat:compact` / `chat:resumeSmart` /
+  `chat:startWithSummary`.
+
+### Fixed
+- **Exit code `null` → `0`** when claude `--print` is killed by
+  signal. The renderer's `useState<number|null>(null)` made the
+  closed-panel never render because `exited !== null` stayed false.
+  Coercing `null → 0` fixes the panel showing after close-confirm.
+
+---
+
+## [1.7.61] — 2026-04-25
+
+### Changed
+- **`--` separator suffix not prefix.** Pencil ✏ now appends
+  `<content> --\\n` instead of `-- <content>\\n`. Caret lands on a
+  fresh line after the quoted content, ready for the user's reply.
+
+---
+
+## [1.7.60] — 2026-04-25
+
+### Removed
+- Temporary `console.log` debug statements in `handleRespond` after
+  v1.7.59's pointer-events fix verified working.
+
+---
+
+## [1.7.59] — 2026-04-25
+
+### Fixed
+- **Pencil ✏ click did nothing in v1.7.58.** The lucide SVG inside
+  the `<button>` was capturing clicks before they bubbled to
+  `onClick`. Adding `style={{ pointerEvents: 'none' }}` to both
+  Check + Pencil SVGs lets clicks pass through to the parent button.
+  Same fix applied to Check icon defensively.
+
+---
+
+## [1.7.58] — 2026-04-25
+
+### Changed
+- **Choice-row icons swapped to `lucide-react`** Check + Pencil
+  components (`size={12}`, `strokeWidth` 2.4 / 2.2). Replaces the
+  prior Unicode `✓` + emoji-y `✏`. Adds `lucide-react ^1.11.0` dep.
+
+---
+
+## [1.7.57] — 2026-04-25
+
+### Changed
+- Replaced Unicode `✏` (heavy emoji-style glyph) with a thin inline
+  SVG pencil. Same Charple stroke. *(Subsequently swapped to
+  lucide-react Pencil in v1.7.58.)*
+
+---
+
 ## [1.7.56] — 2026-04-25
 
 ### Fixed
@@ -903,7 +1021,15 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.56...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.64...HEAD
+[1.7.64]: https://github.com/nocodevit/hive/compare/v1.7.63...v1.7.64
+[1.7.63]: https://github.com/nocodevit/hive/compare/v1.7.62...v1.7.63
+[1.7.62]: https://github.com/nocodevit/hive/compare/v1.7.61...v1.7.62
+[1.7.61]: https://github.com/nocodevit/hive/compare/v1.7.60...v1.7.61
+[1.7.60]: https://github.com/nocodevit/hive/compare/v1.7.59...v1.7.60
+[1.7.59]: https://github.com/nocodevit/hive/compare/v1.7.58...v1.7.59
+[1.7.58]: https://github.com/nocodevit/hive/compare/v1.7.57...v1.7.58
+[1.7.57]: https://github.com/nocodevit/hive/compare/v1.7.56...v1.7.57
 [1.7.56]: https://github.com/nocodevit/hive/compare/v1.7.55...v1.7.56
 [1.7.55]: https://github.com/nocodevit/hive/compare/v1.7.54...v1.7.55
 [1.7.54]: https://github.com/nocodevit/hive/compare/v1.7.53...v1.7.54

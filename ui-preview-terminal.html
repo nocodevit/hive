@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hive Terminal — Current vs Crush Theme</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'JetBrains Mono', monospace; background: #111; color: #eee; padding: 24px; }
+h1 { font-family: sans-serif; font-size: 18px; text-align: center; margin-bottom: 20px; color: #888; }
+
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1300px; margin: 0 auto; }
+.side { border-radius: 12px; overflow: hidden; border: 1px solid #333; }
+.label { text-align: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em; padding: 6px; font-family: sans-serif; }
+.label-before { background: #0a0a0a; color: #888; }
+.label-after { background: #201F26; color: #FF60FF; }
+
+/* Terminal frame */
+.term {
+  padding: 14px 16px;
+  font-size: 12.5px;
+  line-height: 1.55;
+  min-height: 520px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ═══ CURRENT: xterm default ═══ */
+.term-current {
+  background: #0a0a0a;
+  color: #e4e4e7;
+  --red: #cc0000;
+  --green: #4e9a06;
+  --yellow: #c4a000;
+  --blue: #3465a4;
+  --magenta: #75507b;
+  --cyan: #06989a;
+  --white: #d3d7cf;
+  --bright-red: #ef2929;
+  --bright-green: #8ae234;
+  --bright-yellow: #fce94f;
+  --bright-blue: #729fcf;
+  --bright-magenta: #ad7fa8;
+  --bright-cyan: #34e2e2;
+  --bright-white: #eeeeec;
+  --dim: #555;
+  --cursor: #e4e4e7;
+}
+
+/* ═══ CRUSH THEME ═══ */
+.term-crush {
+  background: #201F26;
+  color: #DFDBDD;
+  --red: #EB4268;
+  --green: #00FFB2;
+  --yellow: #E8FE96;
+  --blue: #00A4FF;
+  --magenta: #FF60FF;
+  --cyan: #68FFD6;
+  --white: #DFDBDD;
+  --bright-red: #FF577D;
+  --bright-green: #68FFD6;
+  --bright-yellow: #FFFAF1;
+  --bright-blue: #4FBEFE;
+  --bright-magenta: #FF84FF;
+  --bright-cyan: #5CDFEA;
+  --bright-white: #F1EFEF;
+  --dim: #605F6B;
+  --cursor: #FF60FF;
+}
+
+/* Simulated ANSI classes */
+.red { color: var(--red); }
+.green { color: var(--green); }
+.yellow { color: var(--yellow); }
+.blue { color: var(--blue); }
+.magenta { color: var(--magenta); }
+.cyan { color: var(--cyan); }
+.dim { color: var(--dim); }
+.b-red { color: var(--bright-red); }
+.b-green { color: var(--bright-green); }
+.b-yellow { color: var(--bright-yellow); }
+.b-blue { color: var(--bright-blue); }
+.b-magenta { color: var(--bright-magenta); }
+.b-cyan { color: var(--bright-cyan); }
+.b-white { color: var(--bright-white); }
+.bold { font-weight: 700; }
+.underline { text-decoration: underline; }
+
+/* Tool call block */
+.tool-block {
+  border-left: 2px solid;
+  padding-left: 10px;
+  margin: 4px 0;
+}
+.term-current .tool-block { border-color: var(--dim); }
+.term-crush .tool-block { border-color: var(--magenta); }
+
+/* Code block */
+.code-block {
+  border-radius: 4px;
+  padding: 6px 10px;
+  margin: 4px 0;
+  font-size: 12px;
+}
+.term-current .code-block { background: #1a1a1a; border: 1px solid #333; }
+.term-crush .code-block { background: #2D2C35; border: 1px solid #3A3943; }
+
+/* Diff */
+.diff-add { padding: 0 4px; border-radius: 2px; }
+.diff-del { padding: 0 4px; border-radius: 2px; }
+.term-current .diff-add { background: rgba(78,154,6,0.15); color: var(--green); }
+.term-current .diff-del { background: rgba(204,0,0,0.15); color: var(--red); }
+.term-crush .diff-add { background: rgba(0,255,178,0.1); color: var(--green); }
+.term-crush .diff-del { background: rgba(235,66,104,0.1); color: var(--red); }
+
+/* Status line */
+.status-bar {
+  padding: 4px 10px;
+  font-size: 11px;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid;
+}
+.term-current .status-bar { background: #111; border-color: #333; color: #888; }
+.term-crush .status-bar { background: #2D2C35; border-color: #3A3943; color: #858392; }
+.term-crush .status-bar .model { color: #6B50FF; }
+.term-current .status-bar .model { color: #888; }
+
+/* Cursor */
+.cursor {
+  display: inline-block;
+  width: 8px;
+  height: 16px;
+  animation: blink 1s step-end infinite;
+}
+.term-current .cursor { background: var(--cursor); }
+.term-crush .cursor { background: var(--cursor); }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Prompt */
+.prompt-char { font-weight: 700; }
+.term-current .prompt-char { color: #888; }
+.term-crush .prompt-char { color: #6B50FF; }
+
+/* User input */
+.user-input {
+  padding: 1px 0;
+  font-weight: 500;
+}
+.term-current .user-input {
+  color: #e4e4e7;
+  background: rgba(255,255,255,0.05);
+}
+.term-crush .user-input {
+  color: #FFFAF1;
+  background: rgba(107,80,255,0.12);
+  border-bottom: 1px solid rgba(107,80,255,0.3);
+}
+</style>
+</head>
+<body>
+<h1>Terminal Output — Current vs Crush Theme</h1>
+
+<div class="compare">
+  <!-- ═══ CURRENT TERMINAL ═══ -->
+  <div class="side">
+    <div class="label label-before">Current (xterm default)</div>
+    <div class="term term-current">
+<span class="b-white bold">╭─────────────────────────────────────────────╮</span>
+<span class="b-white bold">│</span> <span class="b-white bold">Claude Code</span> <span class="dim">v2.1.110</span> <span class="b-white bold">│</span>
+<span class="b-white bold">╰─────────────────────────────────────────────╯</span>
+
+<span class="dim">⏺</span> I'll search for the homepage button in the codebase.
+
+<div class="tool-block">  <span class="dim">●</span> <span class="yellow">Grep</span> <span class="dim">"homepage|home.*button|Home.*button"</span>
+  <span class="dim">↳ 18 matches</span></div>
+<div class="tool-block">  <span class="dim">●</span> <span class="yellow">Glob</span> <span class="dim">"**/*.tsx"</span> <span class="dim">(100 matches)</span></div>
+
+  I found several "Home" links. Let me read the most likely candidates:
+
+<div class="tool-block">  <span class="dim">●</span> <span class="cyan">Read</span> <span class="dim">src/components/Header.tsx</span></div>
+
+  Found the button. Let me update the color:
+
+<div class="tool-block">  <span class="dim">●</span> <span class="green">Edit</span> <span class="dim">src/components/Header.tsx</span>
+<div class="code-block"><span class="red">- </span><span class="diff-del">className="text-gray-600 hover:text-gray-800"</span>
+<span class="green">+ </span><span class="diff-add">className="text-blue-600 hover:text-blue-800"</span></div></div>
+
+<div class="tool-block">  <span class="dim">●</span> <span class="magenta">Bash</span> <span class="dim">npm run build</span>
+  <span class="green">✓</span> <span class="dim">Build completed in 1.2s</span></div>
+
+<div class="tool-block">  <span class="dim">●</span> <span class="magenta">Bash</span> <span class="dim">npx vitest run</span>
+  <span class="green">✓</span> <span class="dim">17 passed</span> <span class="dim">(0.8s)</span></div>
+
+<span class="dim">⏺</span> Done! Changed the homepage button color from gray to blue.
+  Modified: <span class="underline">src/components/Header.tsx</span>
+
+<span class="prompt-char">❯</span> <span class="user-input">please fix the login page responsive layout on mobile</span>
+
+<span class="dim">⏺</span> I'll check the login page layout. Let me read the component first.
+
+<div class="tool-block">  <span class="dim">●</span> <span class="cyan">Read</span> <span class="dim">src/app/login/page.tsx</span></div>
+
+<span class="prompt-char">❯</span> <span class="cursor"></span>
+</div>
+    <div class="status-bar">
+      <span><span class="model">opus-4</span> · agent</span>
+      <span>39,413 tokens · $0.29</span>
+    </div>
+  </div>
+
+  <!-- ═══ CRUSH TERMINAL ═══ -->
+  <div class="side">
+    <div class="label label-after">Crush-Flavored Terminal</div>
+    <div class="term term-crush">
+<span class="b-white bold">╭─────────────────────────────────────────────╮</span>
+<span class="b-white bold">│</span> <span class="b-magenta bold">Claude Code</span> <span class="dim">v2.1.110</span> <span class="b-white bold">│</span>
+<span class="b-white bold">╰─────────────────────────────────────────────╯</span>
+
+<span class="dim">⏺</span> I'll search for the homepage button in the codebase.
+
+<div class="tool-block">  <span class="magenta">●</span> <span class="yellow">Grep</span> <span class="dim">"homepage|home.*button|Home.*button"</span>
+  <span class="dim">↳ 18 matches</span></div>
+<div class="tool-block">  <span class="magenta">●</span> <span class="yellow">Glob</span> <span class="dim">"**/*.tsx"</span> <span class="dim">(100 matches)</span></div>
+
+  I found several "Home" links. Let me read the most likely candidates:
+
+<div class="tool-block">  <span class="magenta">●</span> <span class="cyan">Read</span> <span class="dim">src/components/Header.tsx</span></div>
+
+  Found the button. Let me update the color:
+
+<div class="tool-block">  <span class="magenta">●</span> <span class="green">Edit</span> <span class="dim">src/components/Header.tsx</span>
+<div class="code-block"><span class="red">- </span><span class="diff-del">className="text-gray-600 hover:text-gray-800"</span>
+<span class="green">+ </span><span class="diff-add">className="text-blue-600 hover:text-blue-800"</span></div></div>
+
+<div class="tool-block">  <span class="magenta">●</span> <span class="blue">Bash</span> <span class="dim">npm run build</span>
+  <span class="green">✓</span> <span class="dim">Build completed in 1.2s</span></div>
+
+<div class="tool-block">  <span class="magenta">●</span> <span class="blue">Bash</span> <span class="dim">npx vitest run</span>
+  <span class="green">✓</span> <span class="dim">17 passed</span> <span class="dim">(0.8s)</span></div>
+
+<span class="dim">⏺</span> Done! Changed the homepage button color from gray to blue.
+  Modified: <span class="underline">src/components/Header.tsx</span>
+
+<span class="prompt-char">❯</span> <span class="user-input">please fix the login page responsive layout on mobile</span>
+
+<span class="dim">⏺</span> I'll check the login page layout. Let me read the component first.
+
+<div class="tool-block">  <span class="magenta">●</span> <span class="cyan">Read</span> <span class="dim">src/app/login/page.tsx</span></div>
+
+<span class="prompt-char">❯</span> <span class="cursor"></span>
+</div>
+    <div class="status-bar">
+      <span><span class="model">opus-4</span> · agent</span>
+      <span>39,413 tokens · $0.29</span>
+    </div>
+  </div>
+</div>
+
+<div style="max-width:1300px;margin:20px auto 0;padding:16px;background:#1a1a1a;border-radius:12px;border:1px solid #333;font-family:sans-serif;">
+  <h2 style="font-size:13px;margin-bottom:10px;">xterm.js Theme Mapping (Crush Palette)</h2>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;font-size:11px;">
+    <div><span style="display:inline-block;width:12px;height:12px;background:#EB4268;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Red: #EB4268 <span style="color:#666;">(Sriracha)</span></div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#00FFB2;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Green: #00FFB2 <span style="color:#666;">(Julep)</span></div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#E8FE96;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Yellow: #E8FE96 <span style="color:#666;">(Zest)</span></div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#00A4FF;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Blue: #00A4FF <span style="color:#666;">(Malibu)</span></div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#FF60FF;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Magenta: #FF60FF <span style="color:#666;">(Dolly)</span></div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#68FFD6;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Cyan: #68FFD6 <span style="color:#666;">(Bok)</span></div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#201F26;border-radius:2px;vertical-align:middle;margin-right:4px;border:1px solid #444;"></span>Background: #201F26 <span style="color:#666;">(Pepper)</span></div>
+    <div><span style="display:inline-block;width:12px;height:12px;background:#FF60FF;border-radius:2px;vertical-align:middle;margin-right:4px;"></span>Cursor: #FF60FF <span style="color:#666;">(Dolly)</span></div>
+  </div>
+  <p style="margin-top:12px;font-size:11px;color:#666;">
+    Key differences: Tool call bullet (●) goes from gray to <span style="color:#FF60FF;">magenta</span>.
+    Code block background uses Crush panel color. Diff uses Crush red/green.
+    Prompt (❯) uses <span style="color:#6B50FF;">indigo</span>. Cursor is <span style="color:#FF60FF;">magenta</span> (vs white).
+    Status bar shows model in <span style="color:#6B50FF;">indigo</span>.
+  </p>
+</div>
+</body>
+</html>

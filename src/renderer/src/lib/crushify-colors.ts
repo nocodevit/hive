@@ -28,34 +28,49 @@ export const CRUSH_ACCENTS: Array<{ rgb: [number, number, number]; name: string 
 const RGB_SGR_RE = /\x1b\[38;2;(\d+);(\d+);(\d+)m/g
 const RGB_BG_SGR_RE = /\x1b\[48;2;(\d+);(\d+);(\d+)m/g
 
-function chroma(r: number, g: number, b: number): number {
-  const max = Math.max(r, g, b)
-  const min = Math.min(r, g, b)
-  return max === 0 ? 0 : (max - min) / max
+/**
+ * Hue-aware distance between two RGB points. We compare in HSL so muted
+ * colors map to their saturated Crush hue cousin (pale purple → Charple,
+ * not nearest-by-channel-distance to Malibu blue).
+ */
+function rgbToHsl(r: number, g: number, b: number): [number, number, number] {
+  const R = r / 255, G = g / 255, B = b / 255
+  const max = Math.max(R, G, B), min = Math.min(R, G, B)
+  const l = (max + min) / 2
+  let h = 0, s = 0
+  if (max !== min) {
+    const d = max - min
+    s = l > 0.5 ? d / (2 - max - min) : d / (max + min)
+    switch (max) {
+      case R: h = ((G - B) / d + (G < B ? 6 : 0)); break
+      case G: h = (B - R) / d + 2; break
+      case B: h = (R - G) / d + 4; break
+    }
+    h *= 60
+  }
+  return [h, s, l]
 }
 
-function lightness(r: number, g: number, b: number): number {
-  return (Math.max(r, g, b) + Math.min(r, g, b)) / 2 / 255
+function hueDelta(a: number, b: number): number {
+  const d = Math.abs(a - b) % 360
+  return d > 180 ? 360 - d : d
 }
 
-/** Perceptual-ish distance (weighted Euclidean) between two RGB points. */
 function dist(a: [number, number, number], b: [number, number, number]): number {
-  const dr = a[0] - b[0], dg = a[1] - b[1], db = a[2] - b[2]
-  // Human eye is most sensitive to green.
-  return 0.3 * dr * dr + 0.59 * dg * dg + 0.11 * db * db
+  const [h1, s1, l1] = rgbToHsl(a[0], a[1], a[2])
+  const [h2, s2, l2] = rgbToHsl(b[0], b[1], b[2])
+  const dh = hueDelta(h1, h2) / 180                // 0..1
+  const ds = s1 - s2
+  const dl = l1 - l2
+  // Hue dominates — we want purples to stay purple even when muted.
+  return 4 * dh * dh + 0.5 * ds * ds + 0.5 * dl * dl
 }
 
 /**
- * Snap an incoming truecolor to the nearest Crush accent. Returns the
- * original color unchanged if it's near-grayscale (low chroma) or very
- * dark/very light — those are usually dim text, separators, or frames
- * that should not be recolored.
+ * Snap every incoming truecolor to the nearest Crush accent — no chroma
+ * or lightness filtering. Full saturated Crush palette.
  */
 export function crushifyRgb(r: number, g: number, b: number): [number, number, number] {
-  const c = chroma(r, g, b)
-  const l = lightness(r, g, b)
-  if (c < 0.22) return [r, g, b]       // grays / near-grays unchanged
-  if (l < 0.12) return [r, g, b]       // near-black unchanged
   let best = CRUSH_ACCENTS[0].rgb
   let bestD = dist([r, g, b], best)
   for (let i = 1; i < CRUSH_ACCENTS.length; i++) {

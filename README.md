@@ -79,21 +79,47 @@ After three dead-end pivots (handrolled ANSI parser → `@xterm/headless` → xt
 
 Each agent's chat is a structured event stream, rendered as typed components:
 
+**Rendering:**
 - **Streaming typewriter** via `content_block_delta` — live token-by-token rendering
-- **Colored ToolBlocks** — Bash (Malibu blue) · Read/Edit/Grep (Julep green) · Task/Agent (Dolly pink) · Todo (Charple) · MCP (Mochi) · Web (Violet)
-- **Edit diff panel** — before/after in Julep-plus / Sriracha-minus split with gutter line numbers
-- **Syntax-highlighted Read results** via prism-react-renderer, Crush theme
-- **Markdown tables** rendered in Crush style, with code-fence highlighting
-- **Clickable choices** — numbered *and* letter (`A) ...`, `B) ...`), fullwidth parens supported
-- **Permission modal** — deny / allow-once / allow-and-remember, wired through `control_request` ⇄ `control_response` stdio handshake
-- **Real subscription %%** — scraped from interactive `/usage` TUI via node-pty, no guessing
-- **Session resume** — full JSONL replay from `~/.claude/projects/<cwd>/<sid>.jsonl`
-- **Runtime redaction** — masks `meiyang` → `m****g`, bearer tokens, common secrets
-- **Thinking spinner** — Charple → Dolly scrolling gradient, verified against Crush's `makeGradientRamp` source
-- **IME-safe enter** — no accidental send mid-pinyin composition
-- **371 tests passing** — every pure helper covered
+- **Colored ToolBlocks** — Bash (Malibu) · Read/Edit/Grep/Write (Julep) · Task/Agent (Dolly + subagent_type badge) · Todo (Charple) · MCP (Mochi server pill + fn) · Web (Violet)
+- **Edit diff panel** — before/after in Julep+ / Sriracha− split, gutter line numbers, collapses past 12 lines
+- **Read panel** — file content with line-number gutter + prism syntax highlighting (Crush theme)
+- **Markdown** — tables, lists with `▸` Charple bullets, code blocks with hover **`📋 copy`** button, links/file-paths clickable (default-app open / shift-click reveal in Finder)
+- **Assistant text** prefixed with **`●` Julep** dot (mirrors user's `❯`); detects `Summary:` / `## Summary` / `总结：` headers and surfaces a `[SUMMARY]` Julep-bordered tag
+- **Trailing list rows** get hover-revealed action icons: lucide `Check` (re-send as my reply) + lucide `Pencil` (quote into input as `<line> --` for edit & respond)
+- **Auto-compact divider** when context drops > 50% (claude summarized old turns)
+- **Long-running tool spinner** — Charple→Dolly scrolling gradient when a tool exceeds 5s
+- **Stop reason badge** on result card when `stop_reason !== 'end_turn'` (refusal red, max_tokens red, pause_turn yellow)
+- **Bash output formatter** — `=== Title ===` becomes a card; inline `✓ ✔ ●` Julep, `✗ ❌` Sriracha, `⚠` Zest
 
-The ride was not graceful. The lessons live in `docs/slides-hivechat-journey.html` (14-slide journey deck) — 4 pivots, 40+ commits, one lost afternoon to a Zod schema we had to recover from a captured log.
+**Session lifecycle:**
+- **Sticky mount** — HiveChat stays alive across agent / Term↔Chat switches; one live `claude --print` per agent (matches xterm)
+- **Smart-startup `/compact`** — if prior session > 50% context, auto runs `/compact` via PTY round-trip BEFORE resume; no more cache-miss hangs on big sessions
+- **Close → 3 buttons**: `↻ Resume` (auto-compacts if > 50%), `≡ With summary` (compact + `--fork-session`), `⊕ New` (clean slate)
+- **`/compact` slash command** in input — same PTY round-trip, manual trigger
+- **`/remote-control` slash** — round-trip to interactive TUI for mobile pairing, then `/desktop` polite handover before resume
+- **Stop ■** button cancels current generation via `control_request {subtype:"interrupt"}`
+- **Session resume** — full JSONL replay; **Load earlier messages** button if > 500 entries on disk
+- **Auto-compact divider** detection — heuristic on `input_tokens` drop > 50% mid-turn
+
+**Status bar:**
+- Model name + context window + **ctx %% bar** (live from `result.usage.input_tokens` / `modelUsage.contextWindow`, color shifts at 70/85%)
+- 5h / 7d subscription %% **with reset countdown** (`5h 23% · in 4h 12m`) scraped from interactive `/usage` TUI via node-pty (shared cache across all agents to avoid spawning N PTYs)
+- Streaming-mode toggle, `close ✕` button (with confirm panel)
+
+**Input:**
+- Drag-and-drop files → quoted paths land in textarea, focus restored
+- Voice input → `App.tsx` mic + Swift binary, transcripts dispatched as `CustomEvent('hive:voice-final')` so xterm Term and HiveChat both consume contextually
+- Click ↺ on any past sent message → recall to input (chat-native idiom)
+- IME-safe Enter — no accidental send mid-pinyin
+
+**Storage:**
+- `~/.hive/chat-logs/` 30-day retention sweep on startup
+- App Settings → Storage → cleanup tool for `~/.claude/projects/` (slider 1-90 days, dry-run + confirm; subagent transcripts safe to delete since they're filtered out of `/resume` picker)
+
+**438 vitest cases** covering: structured-output parsing, summary detection, choice extraction (numbered + letter + fullwidth parens), markdown helpers, recall ring + state machine, JSONL flattening, storage stats bucketing, language detection, terminal cell rendering, color remapping, more.
+
+The ride was not graceful. The lessons live in `docs/slides-hivechat-journey.html` (14-slide journey deck) — 4 pivots, 60+ commits, one lost afternoon to a Zod schema we had to recover from a captured log.
 
 ### Multiple Agent Terminals
 Run N Claude Code sessions side by side. Click to switch. Each terminal persists — switch between agents without losing state. Auto-run Claude on terminal open.
@@ -318,8 +344,18 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [x] **Project drag-and-drop** — Reorder projects in sidebar
 - [x] **Port lock isolation** — Dispatcher writes port.lock, dev server fully isolated
 - [x] **HiveChat — Crush-styled React chat** — `claude --print --output-format stream-json` parsed into typed ToolBlocks (Bash/Read/Edit/Grep/Todo/Web/MCP), streaming typewriter, Edit diff panel, syntax highlighting, markdown tables, clickable choices (numbered + letter), permission modal with `control_response` handshake, thinking spinner, session resume, secret redaction ([journey](docs/slides-hivechat-journey.html))
-- [x] **Real subscription %%** — node-pty scrape of interactive `/usage` TUI, event-driven refresh on `message_stop`
-- [ ] **Session-scoped slash commands in HiveChat** — `/clear`, `/compact`, `/model`, `/remote-control` via round-trip: pause `--print` → headless PTY `--resume <sid>` → drive TUI → close → re-resume in `--print`
+- [x] **Real subscription %%** — node-pty scrape of interactive `/usage` TUI, event-driven refresh on `message_stop`, shared cache across agents
+- [x] **Session-scoped slash commands** — `/remote-control` (with `/desktop` handover) and `/compact` via PTY round-trip pattern (pause `--print` → spawn interactive PTY `--resume <sid>` → drive TUI → close → re-resume in `--print`)
+- [x] **Smart-startup auto-compact** — Hive checks prior session context % on every open, runs `/compact` automatically if > 50% before resume
+- [x] **Close session → 3 buttons** — Resume (auto-compact if heavy) / With-summary (compact + `--fork-session`) / Start-new (amnesia)
+- [x] **Stop button + Context % bar + reset countdown** — interrupt control_request; status bar shows `ctx 47%`, `5h 23% · in 4h 12m`, `7d 5% · in 6d 14h`
+- [x] **Voice input → HiveChat** — App-level mic broadcasts `CustomEvent`, both xterm and HiveChat consume contextually
+- [x] **Drag-and-drop files** to chat input
+- [x] **Storage cleanup tool** — App Settings → Storage panel for `~/.claude/projects/` retention (slider, dry-run, confirm)
+- [x] **lucide-react icons** — choice-row Check / Pencil; SVG `pointer-events: none` so clicks bubble to button
+- [ ] **Subagent live timeline** — file-watch `subagents/agent-*.jsonl` and stream sub-tool-calls into a nested expandable panel
+- [ ] **Session browser** — list all `~/.claude/projects/<cwd>/*.jsonl` for an agent, click to resume any
+- [ ] **Search timeline** (Cmd+F) across full chat history
 - [ ] **Multi-agent communication** — PTY injection + filesystem mailbox + shared task list ([plan](docs/agent-comms-plan.md))
 - [ ] **Terminal UI customization** — React overlays on xterm: task cards, diff preview, progress bars, agent messages ([plan](docs/terminal-ui-customization-plan.md))
 - [ ] **MCP Server** — Auto-reporting without soul instructions
