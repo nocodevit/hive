@@ -14,6 +14,19 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.31] — 2026-04-25
+
+### Performance
+- **Shared `/usage` cache** across all HiveChat sessions. Subscription %%
+  is account-scoped — N agents see the same numbers — so spawning N
+  PTY scrapes per refresh was wasteful. Now: one process-wide cache
+  (TTL 30s) + in-flight promise dedup. Concurrent callers all await
+  the same scrape; warm-cache callers return instantly with no PTY.
+  Net effect with N agents: 1 PTY for the cold burst (was N), 0 PTY
+  during the 30s warm window (was N).
+
+---
+
 ## [1.7.30] — 2026-04-25
 
 ### Added
@@ -475,7 +488,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.30...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.31...HEAD
+[1.7.31]: https://github.com/nocodevit/hive/compare/v1.7.30...v1.7.31
 [1.7.30]: https://github.com/nocodevit/hive/compare/v1.7.29...v1.7.30
 [1.7.29]: https://github.com/nocodevit/hive/compare/v1.7.28...v1.7.29
 [1.7.28]: https://github.com/nocodevit/hive/compare/v1.7.27...v1.7.28
