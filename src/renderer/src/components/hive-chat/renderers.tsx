@@ -902,30 +902,42 @@ function InlineResult({ content, isError, tool, input }: {
   }
 
   const allLines = content.split('\n')
-  // Collapse if either the line count OR the raw character length is large.
-  // Bash results like `ps aux` / `npm run build` often have only ~4-10
-  // logical lines but each is 200-400 chars; they wrap visually and
-  // dominate the screen. Tighter cap on Bash specifically.
-  const isBashy = tool === 'Bash' || tool === 'BashOutput'
-  const MAX_CHARS = isBashy ? 600 : 1000
-  const MAX_LINES = isBashy ? 8 : DEFAULT_EXPANDED_LINES
-  const byLines = allLines.length > MAX_LINES
-  const byChars = content.length > MAX_CHARS
-  const truncated = byLines || byChars
-  let visibleContent: string
-  let hidden = 0
-  if (!truncated || expanded) {
-    visibleContent = content
-  } else if (byChars) {
-    visibleContent = content.slice(0, MAX_CHARS)
-    hidden = content.length - MAX_CHARS
-  } else {
-    visibleContent = allLines.slice(0, MAX_LINES).join('\n')
-    hidden = allLines.length - MAX_LINES
+  // Caps applied CUMULATIVELY: trim by lines first, then trim the
+  // result by chars. Whichever cap bites tighter wins. Examples:
+  //   13 lines × 38 chars = 500 total → line cap to 12 lines (still
+  //     under 800 chars) → display 12 lines.
+  //   8 lines × 200 chars = 1600 total → line cap doesn't fire (under
+  //     12), char cap kicks → display first 800 chars (≈ 4 lines).
+  //   25 short lines × 25 chars = 625 total → line cap to 12 lines
+  //     (300 chars), char cap doesn't fire → display 12 lines.
+  // Same caps for all tools (was per-tool special case for Bash;
+  // dropped because the cumulative rule already handles wide-line
+  // Bash output correctly).
+  const MAX_CHARS = 800
+  const MAX_LINES = DEFAULT_EXPANDED_LINES   // 12
+  let visibleContent = content
+  let trimmedLines = 0
+  let trimmedChars = 0
+  if (!expanded) {
+    if (allLines.length > MAX_LINES) {
+      visibleContent = allLines.slice(0, MAX_LINES).join('\n')
+      trimmedLines = allLines.length - MAX_LINES
+    }
+    if (visibleContent.length > MAX_CHARS) {
+      // We may further trim a line-trimmed result, OR start from the
+      // full content when line cap didn't fire.
+      const before = visibleContent.length
+      visibleContent = visibleContent.slice(0, MAX_CHARS)
+      trimmedChars = before - MAX_CHARS
+    }
   }
-  const hiddenLabel = byLines && !byChars
-    ? `${hidden} more lines`
-    : `${hidden} more chars`
+  const truncated = trimmedLines > 0 || trimmedChars > 0
+  // Build a label that reflects which caps fired.
+  const hiddenLabel = trimmedLines > 0 && trimmedChars > 0
+    ? `${trimmedLines} more lines · ${trimmedChars} more chars`
+    : trimmedLines > 0
+      ? `${trimmedLines} more lines`
+      : `${trimmedChars} more chars`
   return (
     <div style={{
       marginTop: 2,

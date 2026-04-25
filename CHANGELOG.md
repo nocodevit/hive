@@ -14,6 +14,22 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.55] — 2026-04-25
+
+### Fixed
+- **InlineResult collapse caps now apply cumulatively.** Old logic
+  was `if byLines || byChars: pick one branch and slice`, which
+  meant a `head -10` Bash result with 25 short lines × 25 chars =
+  625 chars would slice to "first 600 chars" → ≈ 24 visible lines
+  (slipping through the 12-line gate entirely). Now: trim by lines
+  first (cap 12), then char-trim the line-trimmed result (cap 800).
+  Whichever cap bites tighter wins. Per-tool 8-line Bash special
+  case dropped — the new cumulative rule handles wide-line Bash
+  correctly without needing a special threshold. Hidden label now
+  reports both numbers when both fired (`X more lines · Y more chars`).
+
+---
+
 ## [1.7.54] — 2026-04-25
 
 ### Refactored / Added
@@ -860,7 +876,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.54...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.55...HEAD
+[1.7.55]: https://github.com/nocodevit/hive/compare/v1.7.54...v1.7.55
 [1.7.54]: https://github.com/nocodevit/hive/compare/v1.7.53...v1.7.54
 [1.7.53]: https://github.com/nocodevit/hive/compare/v1.7.52...v1.7.53
 [1.7.52]: https://github.com/nocodevit/hive/compare/v1.7.51...v1.7.52
