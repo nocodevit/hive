@@ -1,0 +1,34 @@
+{
+  "source": "charmbracelet/crush — extracted from charmtone + styles.go",
+  "backgrounds": {
+    "bgBase":        "#201F26",
+    "bgBaseLighter": "#2D2C35",
+    "bgSubtle":      "#3A3943",
+    "bgOverlay":     "#4D4C57"
+  },
+  "foregrounds": {
+    "fgBase":      "#DFDBDD",
+    "fgMuted":     "#858392",
+    "fgHalfMuted": "#BFBCC8",
+    "fgSubtle":    "#605F6B"
+  },
+  "accents": {
+    "primary":   "#6B50FF",
+    "secondary": "#FF60FF",
+    "tertiary":  "#68FFD6"
+  },
+  "borders": {
+    "default": "#3A3943",
+    "focus":   "#6B50FF"
+  },
+  "status": {
+    "error":   "#EB4268",
+    "warning": "#E8FE96",
+    "info":    "#00A4FF",
+    "success": "#00FFB2"
+  },
+  "logo": {
+    "gradientStart": "#FF60FF",
+    "gradientEnd":   "#6B50FF"
+  }
+}

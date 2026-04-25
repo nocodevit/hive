@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Crush-Style Interactive Popup — Color Test</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: #201F26; color: #DFDBDD; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 40px; padding: 40px; }
+h2 { font-family: 'Space Grotesk'; font-size: 14px; color: #858392; text-transform: uppercase; letter-spacing: 0.1em; }
+
+.row { display: flex; gap: 32px; align-items: flex-start; }
+
+/* Popup container */
+.popup {
+  border-radius: 16px;
+  padding: 24px;
+  min-width: 360px;
+  max-width: 480px;
+}
+
+/* Version A: Charple (current — too dark?) */
+.popup-a {
+  background: #2D2C35;
+  border: 2px solid #6B50FF;
+  box-shadow: 0 0 30px rgba(107,80,255,0.2), 0 0 60px rgba(107,80,255,0.1);
+}
+.popup-a .title { color: #DFDBDD; }
+.popup-a .opt { border: 1px solid #3A3943; background: #201F26; }
+.popup-a .opt.primary { border: 2px solid #6B50FF; background: rgba(107,80,255,0.15); }
+.popup-a .opt .num { color: #6B50FF; }
+
+/* Version B: Dolly Magenta (hot pink) */
+.popup-b {
+  background: #2D2C35;
+  border: 2px solid #FF60FF;
+  box-shadow: 0 0 30px rgba(255,96,255,0.3), 0 0 60px rgba(255,96,255,0.15);
+}
+.popup-b .title { color: #DFDBDD; }
+.popup-b .opt { border: 1px solid #3A3943; background: #201F26; }
+.popup-b .opt.primary { border: 2px solid #FF60FF; background: rgba(255,96,255,0.12); }
+.popup-b .opt .num { color: #FF60FF; }
+
+/* Version C: Violet + Dolly (bright purple + pink gradient) */
+.popup-c {
+  background: #2D2C35;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  position: relative;
+  box-shadow: 0 0 30px rgba(194,89,255,0.3), 0 0 60px rgba(255,96,255,0.15);
+}
+.popup-c::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 18px;
+  background: linear-gradient(135deg, #C259FF, #FF60FF);
+  z-index: -1;
+}
+.popup-c .title { color: #DFDBDD; }
+.popup-c .opt { border: 1px solid #3A3943; background: #201F26; }
+.popup-c .opt.primary { border: 2px solid #C259FF; background: rgba(194,89,255,0.12); }
+.popup-c .opt .num { color: #C259FF; }
+
+/* Version D: Mochi + Bok (bright lilac + mint) */
+.popup-d {
+  background: #2D2C35;
+  border: 2px solid #EB5DFF;
+  box-shadow: 0 0 30px rgba(235,93,255,0.3), 0 0 60px rgba(104,255,214,0.1);
+}
+.popup-d .title { color: #DFDBDD; }
+.popup-d .opt { border: 1px solid #3A3943; background: #201F26; }
+.popup-d .opt.primary { border: 2px solid #EB5DFF; background: rgba(235,93,255,0.12); }
+.popup-d .opt .num { color: #68FFD6; }
+.popup-d .opt .rec { color: #EB5DFF; }
+
+/* Shared option styles */
+.opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  color: #DFDBDD;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 8px;
+}
+.opt:hover { transform: translateX(2px); }
+.opt .num {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700;
+  font-size: 16px;
+  min-width: 20px;
+}
+.opt .rec {
+  margin-left: auto;
+  font-size: 10px;
+  color: #858392;
+}
+.title {
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+.dismiss {
+  margin-top: 8px;
+  padding: 6px;
+  border-radius: 6px;
+  border: 1px solid #3A3943;
+  background: transparent;
+  color: #605F6B;
+  cursor: pointer;
+  font-size: 11px;
+  width: 100%;
+  text-align: center;
+}
+.label {
+  font-family: 'JetBrains Mono';
+  font-size: 10px;
+  color: #858392;
+  text-align: center;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+/* Color swatches */
+.swatches { display: flex; gap: 6px; justify-content: center; margin-top: 8px; }
+.swatch { width: 16px; height: 16px; border-radius: 4px; border: 1px solid rgba(255,255,255,0.1); }
+</style>
+</head>
+<body>
+
+<h2>Crush-Style Popup — Pick a Color Scheme</h2>
+
+<div class="row">
+  <!-- A: Charple (dark indigo) -->
+  <div>
+    <div class="label">A: Charple #6B50FF</div>
+    <div class="popup popup-a">
+      <p class="title">This session is 1h 16m old and 122.7k tokens. Resuming will consume a substantial portion of your limits.</p>
+      <div class="opt primary"><span class="num">1</span><span>Resume from summary</span><span class="rec">recommended</span></div>
+      <div class="opt"><span class="num">2</span><span>Resume full session as-is</span></div>
+      <div class="opt"><span class="num">3</span><span>Don't ask me again</span></div>
+      <div class="dismiss">Dismiss</div>
+    </div>
+    <div class="swatches"><div class="swatch" style="background:#6B50FF;"></div><div class="swatch" style="background:#8B75FF;"></div></div>
+  </div>
+
+  <!-- B: Dolly (hot magenta) -->
+  <div>
+    <div class="label">B: Dolly #FF60FF</div>
+    <div class="popup popup-b">
+      <p class="title">This session is 1h 16m old and 122.7k tokens. Resuming will consume a substantial portion of your limits.</p>
+      <div class="opt primary"><span class="num">1</span><span>Resume from summary</span><span class="rec">recommended</span></div>
+      <div class="opt"><span class="num">2</span><span>Resume full session as-is</span></div>
+      <div class="opt"><span class="num">3</span><span>Don't ask me again</span></div>
+      <div class="dismiss">Dismiss</div>
+    </div>
+    <div class="swatches"><div class="swatch" style="background:#FF60FF;"></div><div class="swatch" style="background:#FF84FF;"></div></div>
+  </div>
+</div>
+
+<div class="row">
+  <!-- C: Violet→Dolly gradient border -->
+  <div>
+    <div class="label">C: Gradient #C259FF → #FF60FF</div>
+    <div class="popup popup-c">
+      <p class="title">This session is 1h 16m old and 122.7k tokens. Resuming will consume a substantial portion of your limits.</p>
+      <div class="opt primary"><span class="num">1</span><span>Resume from summary</span><span class="rec">recommended</span></div>
+      <div class="opt"><span class="num">2</span><span>Resume full session as-is</span></div>
+      <div class="opt"><span class="num">3</span><span>Don't ask me again</span></div>
+      <div class="dismiss">Dismiss</div>
+    </div>
+    <div class="swatches"><div class="swatch" style="background:#C259FF;"></div><div class="swatch" style="background:#FF60FF;"></div></div>
+  </div>
+
+  <!-- D: Mochi + Bok (lilac + mint) -->
+  <div>
+    <div class="label">D: Mochi #EB5DFF + Bok #68FFD6</div>
+    <div class="popup popup-d">
+      <p class="title">This session is 1h 16m old and 122.7k tokens. Resuming will consume a substantial portion of your limits.</p>
+      <div class="opt primary"><span class="num" style="color:#68FFD6;">1</span><span>Resume from summary</span><span class="rec">recommended</span></div>
+      <div class="opt"><span class="num" style="color:#68FFD6;">2</span><span>Resume full session as-is</span></div>
+      <div class="opt"><span class="num" style="color:#68FFD6;">3</span><span>Don't ask me again</span></div>
+      <div class="dismiss">Dismiss</div>
+    </div>
+    <div class="swatches"><div class="swatch" style="background:#EB5DFF;"></div><div class="swatch" style="background:#68FFD6;"></div></div>
+  </div>
+</div>
+
+<div style="text-align:center;font-size:11px;color:#605F6B;margin-top:20px;">
+  Crush source: Charple=#6B50FF (primary), Dolly=#FF60FF (secondary), Bok=#68FFD6 (tertiary)<br>
+  Bright variants: Violet=#C259FF, Mochi=#EB5DFF, Blush=#FF84FF, Lilac=#F379FF
+</div>
+
+</body>
+</html>

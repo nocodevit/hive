@@ -218,6 +218,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         if ((ev as any).hasOlder) setHasOlderOnDisk(true)
         return
       }
+      // Subagent events: when a Task tool spawns a subagent, claude's
+      // stream emits the subagent's user/assistant turns into the
+      // parent stream too, with `parent_tool_use_id` pointing at the
+      // Task call. We tag the entry as `isSubagent: true` later in
+      // each branch so the renderer can dim them visually instead of
+      // making them look like main-chat user input.
+      const isSubagent = (ev as any).parent_tool_use_id != null
       if (ev.type === 'rate_limit_event') {
         const info = (ev as any).rate_limit_info
         if (info) setRateLimit(info)
@@ -310,18 +317,18 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             ? `tool:${block.id}`
             : `msg:${msgId}:${idx}`
           if (block.type === 'text') {
-            replaceEntry(entryId, { kind: 'assistant', text: block.text, id: entryId })
+            replaceEntry(entryId, { kind: 'assistant', text: block.text, id: entryId, isSubagent } as any)
           } else if (block.type === 'tool_use') {
-            replaceEntry(entryId, { kind: 'tool_call', name: block.name, input: block.input, id: entryId, toolUseId: block.id })
+            replaceEntry(entryId, { kind: 'tool_call', name: block.name, input: block.input, id: entryId, toolUseId: block.id, isSubagent } as any)
           }
         })
       } else if (ev.type === 'user' && 'message' in ev) {
         const content = (ev as any).message?.content
         if (typeof content === 'string') {
-          addEntry({ kind: 'user', text: content })
+          addEntry({ kind: 'user', text: content, isSubagent } as any)
         } else if (Array.isArray(content)) {
           for (const block of content) {
-            if (block.type === 'text') addEntry({ kind: 'user', text: block.text })
+            if (block.type === 'text') addEntry({ kind: 'user', text: block.text, isSubagent } as any)
             else if (block.type === 'tool_result') {
               const text = Array.isArray(block.content)
                 ? block.content.map((c: any) => c.text ?? '').join('\n')
@@ -332,35 +339,39 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 toolUseId: block.tool_use_id,
                 content: text,
                 isError: block.is_error,
-                id: entryId
-              })
+                id: entryId,
+                isSubagent
+              } as any)
             }
           }
         }
       } else if (ev.type === 'result') {
         const e = ev as any
         // Track latest context usage for the status-bar progress bar.
-        // Each result.usage.input_tokens is the FULL current context
-        // (system + history + this turn), not a delta. So we just take
-        // the most recent — no accumulation needed.
-        const newInput = e.usage?.input_tokens
-        if (typeof newInput === 'number') {
-          // Auto-compact heuristic: if input_tokens dropped to less
-          // than half of the prior peak, assume claude auto-compacted.
-          // 50K → 25K is normal ebb. 180K → 35K is a compact event.
-          // Insert a divider into the timeline so the user knows the
-          // old context above is summarized, not literal.
+        // The FULL context loaded = input_tokens (this turn's new) +
+        // cache_read_input_tokens (prefix re-used from cache) +
+        // cache_creation_input_tokens (this turn's freshly cacheable).
+        // Earlier we only used input_tokens — when cache was warm the
+        // bar showed 0% (input was 6 while real context was 250K).
+        const u = e.usage
+        const inp = typeof u?.input_tokens === 'number' ? u.input_tokens : 0
+        const cacheRead = typeof u?.cache_read_input_tokens === 'number' ? u.cache_read_input_tokens : 0
+        const cacheCreate = typeof u?.cache_creation_input_tokens === 'number' ? u.cache_creation_input_tokens : 0
+        const total = inp + cacheRead + cacheCreate
+        if (total > 0) {
+          // Auto-compact heuristic: total context dropped to less than
+          // half of the prior peak (and ≥30K delta) → claude compacted.
           const prior = latestInputTokens
-          if (prior > 0 && newInput < prior * 0.5 && prior - newInput > 30000) {
+          if (prior > 0 && total < prior * 0.5 && prior - total > 30000) {
             const turns = e.num_turns || 0
             addEntry({
               kind: 'compact_boundary',
               previousTokens: prior,
-              newTokens: newInput,
+              newTokens: total,
               turnsSummarized: turns
             } as any)
           }
-          setLatestInputTokens(newInput)
+          setLatestInputTokens(total)
         }
         addEntry({
           kind: 'result',

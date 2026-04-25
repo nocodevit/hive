@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Hive UI Redesign Preview — Todo List + Task Group Roster</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #0f0a1a;
+    --bg-secondary: #1a1128;
+    --bg-tertiary: #231838;
+    --bg-hover: #2d1f48;
+    --bg-active: #3b2a5e;
+    --border-default: #2d1f48;
+    --border-subtle: #231838;
+    --text-primary: #f0ecf9;
+    --text-secondary: #c4b5fd;
+    --text-muted: #7c6f9b;
+    --accent: #a78bfa;
+    --accent-hover: #c4b5fd;
+    --accent-subtle: #2d1f48;
+    --accent-muted: #7c3aed;
+    --status-working: #4ade80;
+    --status-waiting: #fbbf24;
+    --status-done: #64748b;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'DM Sans', -apple-system, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    padding: 32px;
+    min-height: 100vh;
+  }
+  h1, h2, h3, h4 { font-family: 'Space Grotesk', sans-serif; }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 12px;
+  }
+
+  /* ─── Glass Card ─── */
+  .glass-card {
+    background: rgba(124, 58, 237, 0.08);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(124, 58, 237, 0.15);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(124, 58, 237, 0.06), inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+  .glass-card-warm {
+    background: rgba(16, 185, 129, 0.08);
+    backdrop-filter: blur(20px);
+    border: 1px solid rgba(16, 185, 129, 0.15);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(16, 185, 129, 0.06), inset 0 1px 0 rgba(255,255,255,0.08);
+  }
+
+  /* ─── Layout ─── */
+  .preview-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 48px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .column { display: flex; flex-direction: column; gap: 20px; }
+
+  /* ─── Header ─── */
+  .header {
+    text-align: center;
+    margin-bottom: 40px;
+  }
+  .header h1 { font-size: 20px; font-weight: 700; color: var(--text-primary); margin-bottom: 4px; }
+  .header p { font-size: 12px; color: var(--text-muted); }
+  .badge {
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 3px 8px;
+    border-radius: 6px;
+    margin: 0 4px;
+  }
+  .badge-before { background: rgba(239,68,68,0.15); color: #f87171; }
+  .badge-after { background: rgba(74,222,128,0.15); color: #4ade80; }
+
+  /* ═══════════════════════════════════════════
+     BEFORE — Current Todo Cards
+     ═══════════════════════════════════════════ */
+  .old-todo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .old-todo-item {
+    display: flex; align-items: flex-start; gap: 8px;
+    font-size: 12px; line-height: 1.4;
+  }
+  .old-todo-item .dot { color: var(--accent); margin-top: 2px; flex-shrink: 0; }
+  .old-todo-item .dot-warm { color: var(--status-working); margin-top: 2px; flex-shrink: 0; }
+
+  /* ═══════════════════════════════════════════
+     AFTER — Unified Todo List (Tech UI)
+     ═══════════════════════════════════════════ */
+  .todo-list { display: flex; flex-direction: column; gap: 1px; }
+  .todo-row {
+    display: grid;
+    grid-template-columns: 20px 1fr 60px 48px;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+  .todo-row:hover { background: var(--bg-hover); }
+  .todo-row .idx {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+  .todo-row .text { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .todo-row .tag {
+    font-size: 9px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-align: center;
+  }
+  .tag-rd { background: rgba(167,139,250,0.15); color: var(--accent); }
+  .tag-admin { background: rgba(74,222,128,0.12); color: var(--status-working); }
+  .tag-ops { background: rgba(251,191,36,0.12); color: var(--status-waiting); }
+  .todo-row .status {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: right;
+  }
+  .todo-row .status.done { color: var(--status-working); text-decoration: line-through; opacity: 0.5; }
+
+  .todo-header {
+    display: grid;
+    grid-template-columns: 20px 1fr 60px 48px;
+    gap: 8px;
+    padding: 4px 12px 8px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-default);
+    margin-bottom: 4px;
+  }
+  .todo-header span:first-child { text-align: right; }
+  .todo-header span:last-child { text-align: right; }
+
+  .todo-summary {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 12px 0;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .todo-summary .count {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1;
+  }
+  .todo-summary .bar {
+    flex: 1;
+    height: 3px;
+    background: var(--bg-hover);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .todo-summary .bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent-muted), var(--accent));
+    transition: width 0.3s;
+  }
+
+  /* ═══════════════════════════════════════════
+     BEFORE — Horizontal Roles Bar
+     ═══════════════════════════════════════════ */
+  .old-roles-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .old-role-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+    font-size: 12px;
+  }
+  .old-role-pill .name { color: var(--text-primary); font-weight: 500; }
+  .old-role-pill .role-tag { color: rgba(124,111,155,0.5); font-size: 9px; text-transform: uppercase; }
+
+  /* ═══════════════════════════════════════════
+     AFTER — Task Group Agent Roster (Vertical List)
+     ═══════════════════════════════════════════ */
+  .roster { display: flex; flex-direction: column; gap: 1px; }
+  .roster-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 72px 72px 64px;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    transition: background 0.15s;
+  }
+  .roster-row:hover { background: var(--bg-hover); }
+
+  .roster-icon {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+
+  .roster-name {
+    display: flex; flex-direction: column; gap: 1px;
+    min-width: 0;
+  }
+  .roster-name .primary { font-size: 13px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .roster-name .secondary { font-size: 10px; color: var(--text-muted); }
+
+  .roster-role {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 3px 8px;
+    border-radius: 6px;
+    text-align: center;
+    white-space: nowrap;
+  }
+
+  .roster-dept {
+    font-size: 10px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .roster-stats {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-align: right;
+    white-space: nowrap;
+  }
+  .roster-stats .sprint-count { font-size: 9px; color: var(--text-muted); }
+
+  .roster-header {
+    display: grid;
+    grid-template-columns: 28px 1fr 72px 72px 64px;
+    gap: 8px;
+    padding: 4px 12px 8px;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-default);
+    margin-bottom: 4px;
+  }
+  .roster-header span:nth-child(3),
+  .roster-header span:nth-child(4) { text-align: center; }
+  .roster-header span:last-child { text-align: right; }
+
+  /* Role colors */
+  .role-manager { background: rgba(245,158,11,0.15); color: #F59E0B; }
+  .role-worker { background: rgba(59,130,246,0.15); color: #3B82F6; }
+  .role-qa { background: rgba(16,185,129,0.15); color: #10B981; }
+  .role-critic { background: rgba(139,92,246,0.15); color: #8B5CF6; }
+  .icon-manager { background: rgba(245,158,11,0.12); }
+  .icon-worker { background: rgba(59,130,246,0.12); }
+  .icon-qa { background: rgba(16,185,129,0.12); }
+  .icon-critic { background: rgba(139,92,246,0.12); }
+
+  /* ─── Status dot for online roster ─── */
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    position: absolute;
+    bottom: -1px; right: -1px;
+    border: 2px solid var(--bg-primary);
+  }
+  .status-dot.working { background: var(--status-working); }
+  .status-dot.waiting { background: var(--status-waiting); }
+  .status-dot.idle { background: var(--status-done); }
+  .roster-icon { position: relative; }
+
+  /* ─── Design Suggestions ─── */
+  .suggestions {
+    max-width: 1100px;
+    margin: 48px auto 0;
+    padding: 24px;
+    border-radius: 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+  }
+  .suggestions h2 { font-size: 14px; margin-bottom: 16px; color: var(--text-primary); }
+  .suggestions table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .suggestions th {
+    text-align: left;
+    padding: 6px 12px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-default);
+  }
+  .suggestions td { padding: 8px 12px; color: var(--text-primary); border-bottom: 1px solid var(--border-subtle); }
+  .suggestions td:first-child { color: var(--accent); font-weight: 600; white-space: nowrap; }
+  .suggestions .swatch {
+    display: inline-block;
+    width: 12px; height: 12px;
+    border-radius: 3px;
+    vertical-align: middle;
+    margin-right: 6px;
+  }
+
+  /* ─── Theme toggle ─── */
+  .theme-toggle {
+    position: fixed; top: 16px; right: 16px;
+    background: var(--bg-secondary); border: 1px solid var(--border-default);
+    color: var(--text-muted); padding: 6px 12px; border-radius: 8px;
+    font-size: 11px; cursor: pointer; font-family: 'DM Sans', sans-serif;
+    z-index: 10;
+  }
+  .theme-toggle:hover { color: var(--text-primary); }
+
+  /* Light theme override */
+  html[data-theme="light"] {
+    --bg-primary: #faf5ff;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #f3e8ff;
+    --bg-hover: #ede9fe;
+    --bg-active: #e9d5ff;
+    --border-default: #e9d5ff;
+    --border-subtle: #f3e8ff;
+    --text-primary: #1e1b4b;
+    --text-secondary: #4c1d95;
+    --text-muted: #7c6f9b;
+    --accent: #7c3aed;
+    --accent-hover: #6d28d9;
+    --accent-subtle: #ede9fe;
+    --accent-muted: #a78bfa;
+    --status-working: #22c55e;
+    --status-waiting: #f59e0b;
+    --status-done: #94a3b8;
+  }
+</style>
+</head>
+<body>
+
+<button class="theme-toggle" onclick="toggleTheme()">Toggle Light/Dark</button>
+
+<div class="header">
+  <h1>Hive UI Redesign Preview</h1>
+  <p>Todo List (tech style) + Task Group Roster (vertical list)</p>
+</div>
+
+<!-- ═══════════════════════════════════════
+     SECTION 1: TODO CARDS
+     ═══════════════════════════════════════ -->
+<div class="preview-grid">
+  <!-- BEFORE -->
+  <div class="column">
+    <div><span class="badge badge-before">Before</span> <span style="font-size:13px;font-weight:600;">Dashboard Todos</span></div>
+    <div class="old-todo-grid">
+      <div class="glass-card" style="padding:20px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>
+          <span style="font-family:'Space Grotesk';font-size:13px;font-weight:700;">R&D</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:auto;">12 open · 3 done</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div class="old-todo-item"><span class="dot">○</span> <span>Implement dark mode toggle for settings panel</span></div>
+          <div class="old-todo-item"><span class="dot">○</span> <span>Fix avatar editor z-index on mobile</span></div>
+          <div class="old-todo-item"><span class="dot">○</span> <span>Add WebSocket reconnection logic</span></div>
+          <div class="old-todo-item"><span class="dot">○</span> <span>Migrate auth to JWT refresh tokens</span></div>
+          <div class="old-todo-item"><span class="dot">○</span> <span>Write E2E tests for task group flow</span></div>
+          <div class="old-todo-item"><span class="dot">○</span> <span>Add rate limiting to status webhook</span></div>
+        </div>
+        <p style="font-size:11px;color:var(--text-muted);margin-top:8px;">+6 more</p>
+      </div>
+      <div class="glass-card-warm" style="padding:20px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--status-working)" stroke-width="2"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+          <span style="font-family:'Space Grotesk';font-size:13px;font-weight:700;">Admin</span>
+          <span style="font-size:11px;color:var(--text-muted);margin-left:auto;">5 open</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <div class="old-todo-item"><span class="dot-warm">○</span> <span>Update onboarding docs for v0.8</span></div>
+          <div class="old-todo-item"><span class="dot-warm">○</span> <span>Review pricing page copy</span></div>
+          <div class="old-todo-item"><span class="dot-warm">○</span> <span>Schedule team sync for Monday</span></div>
+          <div class="old-todo-item"><span class="dot-warm">○</span> <span>Prepare investor update Q2</span></div>
+          <div class="old-todo-item"><span class="dot-warm">○</span> <span>Audit AWS billing alerts</span></div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);text-align:center;opacity:0.6;">Scattered two-column cards — hard to scan, no priority/status info</p>
+  </div>
+
+  <!-- AFTER -->
+  <div class="column">
+    <div><span class="badge badge-after">After</span> <span style="font-size:13px;font-weight:600;">Dashboard Todos</span></div>
+    <div class="glass-card" style="padding:16px;">
+      <div class="todo-summary">
+        <div>
+          <div class="count">17</div>
+          <div style="font-size:10px;">todos</div>
+        </div>
+        <div style="flex:1;">
+          <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
+            <span style="font-size:10px;color:var(--text-muted);">3 done</span>
+            <span class="mono" style="font-size:10px;color:var(--text-muted);">18%</span>
+          </div>
+          <div class="bar"><div class="bar-fill" style="width:18%;"></div></div>
+        </div>
+      </div>
+
+      <div style="padding:12px 0 0;">
+        <div class="todo-header">
+          <span>#</span>
+          <span>Task</span>
+          <span>Zone</span>
+          <span>Status</span>
+        </div>
+        <div class="todo-list">
+          <div class="todo-row">
+            <span class="idx">1</span>
+            <span class="text">Implement dark mode toggle for settings panel</span>
+            <span class="tag tag-rd">R&D</span>
+            <span class="status">open</span>
+          </div>
+          <div class="todo-row">
+            <span class="idx">2</span>
+            <span class="text">Fix avatar editor z-index on mobile</span>
+            <span class="tag tag-rd">R&D</span>
+            <span class="status">open</span>
+          </div>
+          <div class="todo-row">
+            <span class="idx">3</span>
+            <span class="text">Add WebSocket reconnection logic</span>
+            <span class="tag tag-rd">R&D</span>
+            <span class="status">open</span>
+          </div>
+          <div class="todo-row">
+            <span class="idx">4</span>
+            <span class="text">Migrate auth to JWT refresh tokens</span>
+            <span class="tag tag-rd">R&D</span>
+            <span class="status">open</span>
+          </div>
+          <div class="todo-row">
+            <span class="idx">5</span>
+            <span class="text">Update onboarding docs for v0.8</span>
+            <span class="tag tag-admin">Admin</span>
+            <span class="status">open</span>
+          </div>
+          <div class="todo-row">
+            <span class="idx">6</span>
+            <span class="text">Review pricing page copy</span>
+            <span class="tag tag-admin">Admin</span>
+            <span class="status">open</span>
+          </div>
+          <div class="todo-row">
+            <span class="idx">7</span>
+            <span class="text">Write E2E tests for task group flow</span>
+            <span class="tag tag-rd">R&D</span>
+            <span class="status done">done</span>
+          </div>
+          <div class="todo-row">
+            <span class="idx">8</span>
+            <span class="text">Audit AWS billing alerts</span>
+            <span class="tag tag-ops">Ops</span>
+            <span class="status">open</span>
+          </div>
+          <div class="todo-row" style="opacity:0.5;">
+            <span class="idx" style="font-size:9px;color:var(--text-muted);">···</span>
+            <span class="text" style="color:var(--text-muted);font-size:11px;">+9 more</span>
+            <span></span>
+            <span></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);text-align:center;opacity:0.6;">Unified list — scannable, sortable by zone, shows done items</p>
+  </div>
+</div>
+
+<div style="height:48px;"></div>
+
+<!-- ═══════════════════════════════════════
+     SECTION 2: TASK GROUP ROSTER
+     ═══════════════════════════════════════ -->
+<div class="preview-grid">
+  <!-- BEFORE -->
+  <div class="column">
+    <div><span class="badge badge-before">Before</span> <span style="font-size:13px;font-weight:600;">Task Group — Agents</span></div>
+    <div class="glass-card" style="padding:20px;">
+      <div class="old-roles-bar">
+        <span class="old-role-pill"><span style="color:#F59E0B;">♛</span> <span class="name">Alex</span> <span class="role-tag">manager</span></span>
+        <span class="old-role-pill"><span style="color:#3B82F6;">⚒</span> <span class="name">David</span> <span class="role-tag">worker</span></span>
+        <span class="old-role-pill"><span style="color:#3B82F6;">⚒</span> <span class="name">Daisy</span> <span class="role-tag">worker</span></span>
+        <span class="old-role-pill"><span style="color:#3B82F6;">⚒</span> <span class="name">Drake</span> <span class="role-tag">worker</span></span>
+        <span class="old-role-pill"><span style="color:#10B981;">🛡</span> <span class="name">Quinn</span> <span class="role-tag">qa</span></span>
+        <span class="old-role-pill"><span style="color:#8B5CF6;">👁</span> <span class="name">Chris</span> <span class="role-tag">critic</span></span>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);text-align:center;opacity:0.6;">Horizontal pills — no dept, no job title, no stats, hard to parse at 5+ agents</p>
+  </div>
+
+  <!-- AFTER -->
+  <div class="column">
+    <div><span class="badge badge-after">After</span> <span style="font-size:13px;font-weight:600;">Task Group — Agent Roster</span></div>
+    <div class="glass-card" style="padding:16px;">
+      <div class="roster-header">
+        <span></span>
+        <span>Agent</span>
+        <span style="text-align:center;">Dept / Job</span>
+        <span style="text-align:center;">Role</span>
+        <span style="text-align:right;">Tasks</span>
+      </div>
+      <div class="roster">
+        <div class="roster-row">
+          <div class="roster-icon icon-manager">
+            ♛
+            <span class="status-dot working"></span>
+          </div>
+          <div class="roster-name">
+            <span class="primary">Alex</span>
+            <span class="secondary">Coordinates batch planning & assigns tasks</span>
+          </div>
+          <span class="roster-dept">R&D · PM</span>
+          <span class="roster-role role-manager">Manager</span>
+          <span class="roster-stats">—<br><span class="sprint-count">2 sprints</span></span>
+        </div>
+        <div class="roster-row">
+          <div class="roster-icon icon-worker">
+            ⚒
+            <span class="status-dot working"></span>
+          </div>
+          <div class="roster-name">
+            <span class="primary">David</span>
+            <span class="secondary">Full-Stack Engineer</span>
+          </div>
+          <span class="roster-dept">R&D · ENG</span>
+          <span class="roster-role role-worker">Worker</span>
+          <span class="roster-stats">6/8<br><span class="sprint-count">2 sprints</span></span>
+        </div>
+        <div class="roster-row">
+          <div class="roster-icon icon-worker">
+            ⚒
+            <span class="status-dot waiting"></span>
+          </div>
+          <div class="roster-name">
+            <span class="primary">Daisy</span>
+            <span class="secondary">UI/UX Designer</span>
+          </div>
+          <span class="roster-dept">R&D · DES</span>
+          <span class="roster-role role-worker">Worker</span>
+          <span class="roster-stats">5/8<br><span class="sprint-count">2 sprints</span></span>
+        </div>
+        <div class="roster-row">
+          <div class="roster-icon icon-worker">
+            ⚒
+            <span class="status-dot idle"></span>
+          </div>
+          <div class="roster-name">
+            <span class="primary">Drake</span>
+            <span class="secondary">Backend Engineer</span>
+          </div>
+          <span class="roster-dept">R&D · ENG</span>
+          <span class="roster-role role-worker">Worker</span>
+          <span class="roster-stats">4/8<br><span class="sprint-count">2 sprints</span></span>
+        </div>
+        <div class="roster-row">
+          <div class="roster-icon icon-qa">
+            🛡
+            <span class="status-dot idle"></span>
+          </div>
+          <div class="roster-name">
+            <span class="primary">Quinn</span>
+            <span class="secondary">QA Engineer</span>
+          </div>
+          <span class="roster-dept">R&D · QA</span>
+          <span class="roster-role role-qa">QA</span>
+          <span class="roster-stats">2/2<br><span class="sprint-count">2 sprints</span></span>
+        </div>
+        <div class="roster-row">
+          <div class="roster-icon icon-critic">
+            👁
+            <span class="status-dot idle"></span>
+          </div>
+          <div class="roster-name">
+            <span class="primary">Chris</span>
+            <span class="secondary">Staff Engineer · Delivery</span>
+          </div>
+          <span class="roster-dept">R&D · ENG</span>
+          <span class="roster-role role-critic">Critic</span>
+          <span class="roster-stats">2/2<br><span class="sprint-count">2 sprints</span></span>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:11px;color:var(--text-muted);text-align:center;opacity:0.6;">Vertical list — dept, job title, task group role, completion stats, status dots</p>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     DESIGN SUGGESTIONS
+     ═══════════════════════════════════════ -->
+<div class="suggestions">
+  <h2>Design Suggestions</h2>
+  <table>
+    <tr>
+      <th>Area</th>
+      <th>Current</th>
+      <th>Suggestion</th>
+      <th>Why</th>
+    </tr>
+    <tr>
+      <td>Monospace font</td>
+      <td>System mono fallback</td>
+      <td><span style="font-family:'JetBrains Mono';">JetBrains Mono</span> for stats/counters</td>
+      <td>Aligns numbers, feels more technical</td>
+    </tr>
+    <tr>
+      <td>Todo layout</td>
+      <td>2-col glass cards (R&D / Admin)</td>
+      <td>Single unified list with zone tags</td>
+      <td>Scannable, sortable, shows cross-zone priority</td>
+    </tr>
+    <tr>
+      <td>Task Group agents</td>
+      <td>Horizontal pill bar</td>
+      <td>Vertical roster table with stats</td>
+      <td>Shows dept, role, completion at a glance; scales to 10+ agents</td>
+    </tr>
+    <tr>
+      <td>Status indicators</td>
+      <td>Color text only</td>
+      <td><span class="swatch" style="background:var(--status-working);"></span>Small dots on avatars/icons</td>
+      <td>Subtle but visible; matches macOS patterns</td>
+    </tr>
+    <tr>
+      <td>Spacing rhythm</td>
+      <td>Mixed 1.5/2/3/4/5 gaps</td>
+      <td>Standardize to 4px grid (8/12/16/24)</td>
+      <td>Tighter visual rhythm, more data density</td>
+    </tr>
+    <tr>
+      <td>Glass effect usage</td>
+      <td>Everywhere (cards, modals, status)</td>
+      <td>Reserve glass for top-level containers only</td>
+      <td>Glass-on-glass is noisy; flat inner elements read faster</td>
+    </tr>
+    <tr>
+      <td>Sprint counter</td>
+      <td>None</td>
+      <td>Per-agent task/sprint stats in roster</td>
+      <td>Makes productivity visible; motivates balanced distribution</td>
+    </tr>
+    <tr>
+      <td>Color hierarchy</td>
+      <td>Purple accent everywhere</td>
+      <td>Purple for actions, <span style="color:var(--text-secondary);">secondary</span> for data, muted for labels</td>
+      <td>Reduces visual noise; accent stands out when it matters</td>
+    </tr>
+  </table>
+</div>
+
+<div style="height:40px;"></div>
+
+<script>
+function toggleTheme() {
+  const html = document.documentElement;
+  html.dataset.theme = html.dataset.theme === 'dark' ? 'light' : 'dark';
+}
+</script>
+</body>
+</html>
