@@ -196,3 +196,14 @@ pre .hive-code-copy:hover {
   position: absolute;
   left: 0.2em;
 }
+
+/* HiveChat — choice rows. Two action icons (✓ / ✏) hover-reveal on
+   the right side of each numbered/lettered list item that AssistantMessage
+   peeled off as trailing choices. Default state: items render as plain
+   numbered lines; hover the row to surface the actions. */
+.hive-choice-row:hover {
+  background: rgba(107,80,255,0.08);
+}
+.hive-choice-row:hover .hive-choice-actions {
+  opacity: 1 !important;
+}

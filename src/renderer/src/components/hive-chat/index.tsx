@@ -8,10 +8,11 @@ import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
 /** Isolated subtree so the timeline doesn't re-render on every keystroke
  *  in the input box — only when the timeline array itself or `onChoose`
  *  reference change. */
-const TimelineList = React.memo(function TimelineList({ timeline, onChoose, onRecall }: {
+const TimelineList = React.memo(function TimelineList({ timeline, onChoose, onRecall, onRespond }: {
   timeline: TimelineEntry[]
   onChoose: (pick: string) => void
   onRecall: (text: string) => void
+  onRespond: (item: string) => void
 }) {
   const resultsByToolUseId = useMemo(() => {
     const m = new Map<string, { content: string; isError?: boolean }>()
@@ -24,7 +25,7 @@ const TimelineList = React.memo(function TimelineList({ timeline, onChoose, onRe
     <>
       {timeline.map(entry => {
         const result = entry.kind === 'tool_call' ? resultsByToolUseId.get(entry.toolUseId) : undefined
-        return <TimelineRow key={entry.id} entry={entry} result={result} onChoose={onChoose} onRecall={onRecall} />
+        return <TimelineRow key={entry.id} entry={entry} result={result} onChoose={onChoose} onRecall={onRecall} onRespond={onRespond} />
       })}
     </>
   )
@@ -584,6 +585,18 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     window.api.chat.send(id, pick)
   }, [id])
 
+  // ✏ icon on a list item → quote into input box prefixed with `-- `
+  // so user can type their actual reply after. Visual cue this is "I'm
+  // responding to this specific item, not picking it". Doesn't send;
+  // user hits Enter when ready.
+  const handleRespond = useCallback((item: string) => {
+    setInput(prev => {
+      const quoted = `-- ${item}\n`
+      return prev ? prev + (prev.endsWith('\n') ? '' : '\n') + quoted : quoted
+    })
+    setTimeout(() => textareaRef.current?.focus(), 0)
+  }, [])
+
   const toggleStreamingMode = () => {
     const next = !streamingMode
     setStreamingMode(next)
@@ -677,7 +690,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             </button>
           </div>
         )}
-        <TimelineList timeline={timeline} onChoose={handleChoose} onRecall={handleRecall} />
+        <TimelineList timeline={timeline} onChoose={handleChoose} onRecall={handleRecall} onRespond={handleRespond} />
         {thinking && <ThinkingSpinner since={thinking.since} />}
         {exited !== null && (
           <div style={{ color: CRUSH.Sriracha, fontSize: 11, marginTop: 12, padding: 4 }}>
