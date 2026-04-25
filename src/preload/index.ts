@@ -117,6 +117,22 @@ const api = {
       return () => ipcRenderer.removeListener(`chat:usage:${id}`, handler)
     }
   },
+  storage: {
+    claudeLogStats: (retentionDays: number) =>
+      ipcRenderer.invoke('storage:claudeLogStats', { retentionDays }) as Promise<{
+        totalFiles: number; totalBytes: number
+        mainFiles: number; mainBytes: number
+        subagentFiles: number; subagentBytes: number
+        staleFiles: number; staleBytes: number
+        staleMainFiles: number; staleMainBytes: number
+        staleSubagentFiles: number; staleSubagentBytes: number
+        topStale: { path: string; bytes: number; mtimeMs: number }[]
+      }>,
+    cleanClaudeLogs: (retentionDays: number, dryRun: boolean) =>
+      ipcRenderer.invoke('storage:cleanClaudeLogs', { retentionDays, dryRun }) as Promise<{
+        deletedFiles: number; deletedBytes: number; removedDirs: number; errors: string[]
+      }>
+  },
   speech: {
     start: () => ipcRenderer.invoke('speech:start') as Promise<{ ok: boolean; error?: string }>,
     stop: () => ipcRenderer.invoke('speech:stop') as Promise<{ ok: boolean }>,

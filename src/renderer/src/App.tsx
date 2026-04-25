@@ -1878,8 +1878,9 @@ export default function App() {
             return (
               <div
                 key={agentId}
-                className="absolute inset-0 p-1"
+                className="absolute inset-0"
                 style={{
+                  background: '#201F26',
                   visibility: isVisible ? 'visible' : 'hidden',
                   pointerEvents: isVisible ? 'auto' : 'none',
                   zIndex: isVisible ? 1 : 0
@@ -2466,6 +2467,9 @@ export default function App() {
               </div>
             </div>
 
+            {/* Storage — Claude Code logs cleanup */}
+            <ClaudeLogsCleanup />
+
             {/* Git Tokens */}
             <div>
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Git Tokens</label>
@@ -2695,6 +2699,133 @@ export default function App() {
             </div>
           )
         })}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Storage cleanup widget for ~/.claude/projects. Lives inside the App
+ * Settings modal. Shows current size + a retention slider, lets the
+ * user dry-run a sweep before committing. Only files older than the
+ * retention window are touched; subagent JSONLs (sidechain transcripts,
+ * filtered out of Claude's /resume picker anyway) are eligible too.
+ */
+function ClaudeLogsCleanup() {
+  const [retentionDays, setRetentionDays] = useState(15)
+  const [stats, setStats] = useState<Awaited<ReturnType<typeof window.api.storage.claudeLogStats>> | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [confirming, setConfirming] = useState(false)
+  const [lastResult, setLastResult] = useState<Awaited<ReturnType<typeof window.api.storage.cleanClaudeLogs>> | null>(null)
+
+  const refresh = async () => {
+    setLoading(true)
+    try {
+      const s = await window.api.storage.claudeLogStats(retentionDays)
+      setStats(s)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { refresh() /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [retentionDays])
+
+  const fmtMB = (bytes: number) => bytes < 1024 * 1024 ? `${(bytes / 1024).toFixed(0)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`
+
+  const onDelete = async () => {
+    setLoading(true)
+    try {
+      const r = await window.api.storage.cleanClaudeLogs(retentionDays, false)
+      setLastResult(r)
+      setConfirming(false)
+      await refresh()
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div>
+      <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Storage · Claude Logs</label>
+      <div className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
+        <div className="px-4 py-3 border-b border-border">
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="text-sm text-text-primary">~/.claude/projects</span>
+            <span className="text-[13px] text-text-muted font-mono">
+              {stats ? `${stats.totalFiles} files · ${fmtMB(stats.totalBytes)}` : '…'}
+            </span>
+          </div>
+          {stats && (
+            <div className="text-[11px] text-text-muted/80 font-mono">
+              {stats.mainFiles} main session{stats.mainFiles === 1 ? '' : 's'} ({fmtMB(stats.mainBytes)})
+              {' · '}
+              {stats.subagentFiles} subagent transcript{stats.subagentFiles === 1 ? '' : 's'} ({fmtMB(stats.subagentBytes)})
+            </div>
+          )}
+        </div>
+        <div className="px-4 py-3 border-b border-border">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-text-primary">Keep modified within last</span>
+            <span className="text-[13px] text-accent font-mono font-semibold">{retentionDays} days</span>
+          </div>
+          <input
+            type="range" min={1} max={90} value={retentionDays}
+            onChange={(e) => setRetentionDays(Number(e.target.value))}
+            className="w-full accent-accent cursor-pointer"
+          />
+          <div className="flex justify-between text-[10px] text-text-muted/60 font-mono mt-1">
+            <span>1d</span><span>15d</span><span>30d</span><span>60d</span><span>90d</span>
+          </div>
+        </div>
+        <div className="px-4 py-3 border-b border-border">
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm text-text-primary">Will delete (older than {retentionDays}d)</span>
+            <span className="text-[13px] text-status-warning font-mono font-semibold">
+              {stats ? `${stats.staleFiles} files · ${fmtMB(stats.staleBytes)}` : '…'}
+            </span>
+          </div>
+          {stats && stats.staleFiles > 0 && (
+            <div className="text-[11px] text-text-muted/80 font-mono mt-1">
+              {stats.staleMainFiles} main + {stats.staleSubagentFiles} subagent
+            </div>
+          )}
+        </div>
+        {lastResult && (
+          <div className="px-4 py-2.5 border-b border-border bg-status-working/5">
+            <div className="text-[12px] text-status-working font-mono">
+              ✓ deleted {lastResult.deletedFiles} file{lastResult.deletedFiles === 1 ? '' : 's'} · {fmtMB(lastResult.deletedBytes)}
+              {lastResult.removedDirs > 0 && ` · pruned ${lastResult.removedDirs} empty dir${lastResult.removedDirs === 1 ? '' : 's'}`}
+              {lastResult.errors.length > 0 && ` · ${lastResult.errors.length} error${lastResult.errors.length === 1 ? '' : 's'}`}
+            </div>
+          </div>
+        )}
+        <div className="px-4 py-3 flex gap-2 items-center">
+          <button
+            onClick={refresh}
+            disabled={loading}
+            className="px-3 py-1.5 text-[13px] font-mono rounded-lg bg-bg-hover text-text-primary hover:bg-bg-hover/80 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-wait"
+          >Refresh</button>
+          {!confirming ? (
+            <button
+              onClick={() => setConfirming(true)}
+              disabled={loading || !stats || stats.staleFiles === 0}
+              className="ml-auto px-3 py-1.5 text-[13px] font-mono rounded-lg bg-status-error/10 border border-status-error/40 text-status-error hover:bg-status-error/20 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >Delete {stats?.staleFiles ?? 0} files</button>
+          ) : (
+            <>
+              <button
+                onClick={() => setConfirming(false)}
+                disabled={loading}
+                className="ml-auto px-3 py-1.5 text-[13px] font-mono rounded-lg bg-bg-hover text-text-primary hover:bg-bg-hover/80 cursor-pointer transition-colors"
+              >Cancel</button>
+              <button
+                onClick={onDelete}
+                disabled={loading}
+                className="px-3 py-1.5 text-[13px] font-mono rounded-lg bg-status-error text-white hover:bg-status-error/90 cursor-pointer transition-colors disabled:opacity-50 disabled:cursor-wait"
+              >{loading ? 'Deleting…' : 'Confirm delete'}</button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   )

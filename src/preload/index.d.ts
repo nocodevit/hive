@@ -53,6 +53,20 @@ declare global {
         stop: () => Promise<{ ok: boolean }>
         onTranscript: (cb: (line: string) => void) => () => void
       }
+      storage: {
+        claudeLogStats: (retentionDays: number) => Promise<{
+          totalFiles: number; totalBytes: number
+          mainFiles: number; mainBytes: number
+          subagentFiles: number; subagentBytes: number
+          staleFiles: number; staleBytes: number
+          staleMainFiles: number; staleMainBytes: number
+          staleSubagentFiles: number; staleSubagentBytes: number
+          topStale: { path: string; bytes: number; mtimeMs: number }[]
+        }>
+        cleanClaudeLogs: (retentionDays: number, dryRun: boolean) => Promise<{
+          deletedFiles: number; deletedBytes: number; removedDirs: number; errors: string[]
+        }>
+      }
       system: {
         username: () => Promise<string>
       }
