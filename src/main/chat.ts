@@ -131,6 +131,43 @@ function parseJsonLines(buf: string, sessionId: string): { events: any[]; rest: 
  */
 const DEFAULT_REPLAY_LIMIT = 500
 
+/**
+ * Process-wide /usage cache shared across all chat sessions. Subscription
+ * %% is account-scoped, not session-scoped — N agents all see the same
+ * numbers — so it's wasteful to spawn N independent PTY scrapes. The
+ * cache holds the last result for `USAGE_TTL_MS`; concurrent callers
+ * during a cold scrape await the in-flight promise rather than racing
+ * extra PTYs of their own.
+ */
+const USAGE_TTL_MS = 30_000
+interface CachedUsage {
+  cc: any | null
+  pct: { fiveHour?: number; sevenDay?: number } | null
+  ts: number
+}
+let usageCache: CachedUsage | null = null
+let usageInFlight: Promise<CachedUsage> | null = null
+
+async function getSharedUsage(): Promise<CachedUsage> {
+  if (usageCache && Date.now() - usageCache.ts < USAGE_TTL_MS) {
+    return usageCache
+  }
+  if (usageInFlight) return usageInFlight
+  usageInFlight = (async () => {
+    const [cc, pct] = await Promise.all([
+      queryUsageViaCcusage(),
+      // Subscription %% is account-level — cwd doesn't change the answer,
+      // we just need the PTY to land in a directory `claude` can boot in.
+      queryUsagePctViaPty(process.env.HOME || '/')
+    ])
+    const result: CachedUsage = { cc, pct, ts: Date.now() }
+    usageCache = result
+    usageInFlight = null
+    return result
+  })()
+  return usageInFlight
+}
+
 function replaySessionHistory(sessionId: string, cwd: string | undefined, limit = DEFAULT_REPLAY_LIMIT) {
   try {
     const slug = (cwd || '').replace(/\//g, '-')
@@ -279,10 +316,7 @@ export function startChat(id: string, opts: StartOpts = {}) {
   // below, debounced 30s). No idle timer — avoids burning /usage turns
   // while the user stares at the UI without talking to Claude.
   const refresh = async () => {
-    const [cc, pct] = await Promise.all([
-      queryUsageViaCcusage(),
-      queryUsagePctViaPty(opts.cwd)
-    ])
+    const { cc, pct } = await getSharedUsage()
     if (cc || pct) broadcast(`chat:usage:${session.id}`, { ...(cc || {}), ...(pct || {}) })
   }
   // One snapshot at startup so the status bar isn't blank until the
