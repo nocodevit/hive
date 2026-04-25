@@ -22,7 +22,9 @@ interface StartOpts {
   name?: string
   continueSession?: boolean
   rebaseOnStart?: boolean
-  resumeSid?: string  // when present, uses --resume <sid> instead of a fresh session
+  resumeSid?: string     // --resume <sid>; preserves context.
+  forkSession?: boolean  // pair with resumeSid: --fork-session creates a NEW session-id
+                         //   inheriting old context. Used by 'Start with summary'.
 }
 
 interface ChatSession {
@@ -274,8 +276,12 @@ export function startChat(id: string, opts: StartOpts = {}) {
   // `-c` = continue most recent session; `--resume <sid>` = resume a
   // specific session id (used by resumeFromRemoteControl after the
   // interactive TUI round-trip). `--resume` wins if both are set.
-  if (opts.resumeSid) args.push('--resume', opts.resumeSid)
-  else if (opts.continueSession) args.push('-c')
+  if (opts.resumeSid) {
+    args.push('--resume', opts.resumeSid)
+    if (opts.forkSession) args.push('--fork-session')
+  } else if (opts.continueSession) {
+    args.push('-c')
+  }
 
   // Mirror Term's rebase-on-start: fetch + rebase onto first of
   // develop/main/master that the remote has. Only if explicitly enabled
@@ -358,7 +364,11 @@ export function startChat(id: string, opts: StartOpts = {}) {
     broadcast(`chat:stderr:${id}`, chunk.toString('utf8'))
   })
   child.on('exit', (code) => {
-    broadcast(`chat:exit:${id}`, code)
+    // When killed by signal (SIGTERM from stopChat), code is null.
+    // Renderer's onExit sets state to that code; if null lands on
+    // useState<number|null>(null), `exited !== null` stays false and
+    // the close-session panel never renders. Coerce null → 0.
+    broadcast(`chat:exit:${id}`, code ?? 0)
     sessions.delete(id)
   })
   child.on('error', (err) => {
@@ -524,6 +534,200 @@ export function startRemoteControl(id: string) {
     claude_sid: sid
   })
   return { ok: true, sid }
+}
+
+/**
+ * Read the LAST result event from claude's session JSONL and return
+ * the input_tokens / contextWindow ratio. Used by smart-resume to
+ * decide whether to /compact before resuming. Returns null if no
+ * usable data (no JSONL, no result events, parse error).
+ */
+function readContextPctFromJsonl(cwd: string | undefined, sid: string): number | null {
+  if (!cwd || !sid) return null
+  try {
+    const slug = cwd.replace(/\//g, '-')
+    const file = join(homedir(), '.claude', 'projects', slug, `${sid}.jsonl`)
+    if (!existsSync(file)) return null
+    const lines = readFileSync(file, 'utf8').split('\n').filter(Boolean)
+    // Walk backward looking for type=result with usage + modelUsage.
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        const ev = JSON.parse(lines[i])
+        if (ev.type !== 'result') continue
+        const inp = ev?.usage?.input_tokens
+        const cacheRead = ev?.usage?.cache_read_input_tokens || 0
+        const total = (typeof inp === 'number' ? inp : 0) + cacheRead
+        const mu = ev?.modelUsage
+        if (mu && typeof mu === 'object') {
+          for (const k of Object.keys(mu)) {
+            const cw = mu[k]?.contextWindow
+            if (typeof cw === 'number' && cw > 0) {
+              return total / cw
+            }
+          }
+        }
+      } catch {}
+    }
+  } catch {}
+  return null
+}
+
+/**
+ * Smart resume: if the previous turn ate > 50% of the context window,
+ * run /compact first to summarize old context, THEN re-spawn --print
+ * --resume <sid>. Otherwise just re-spawn --print --resume <sid>
+ * directly. Goal: avoid context-overflow hangs / cache misses on huge
+ * sessions while keeping the cheap path for normal-sized ones.
+ */
+export async function resumeSmart(id: string) {
+  const session = sessions.get(id)
+  if (!session) return { ok: false, error: 'no_session' }
+  if (!session.claudeSid || !session.startOpts) return { ok: false, error: 'missing_state' }
+  const sid = session.claudeSid
+  const opts = session.startOpts
+  const pct = readContextPctFromJsonl(session.cwd, sid)
+  const needsCompact = pct !== null && pct > 0.5
+  broadcast(`chat:stderr:${id}`,
+    pct !== null
+      ? `Resume: prior context ${(pct * 100).toFixed(0)}% used${needsCompact ? ' — running /compact first' : ''}\n`
+      : 'Resume: no context data found, going direct\n'
+  )
+  if (needsCompact) {
+    // Defer to compactSession which already does the round-trip then
+    // respawns --print --resume <sid>. Done.
+    return compactSession(id)
+  }
+  // Plain resume.
+  try { session.child?.kill() } catch {}
+  sessions.delete(id)
+  startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
+  return { ok: true, sid, compacted: false }
+}
+
+/**
+ * Start with summary: compact the current session (so context shrinks
+ * to a summary) → fork into a NEW session-id that inherits the
+ * compacted context. Different from resumeSmart in two ways:
+ *   - always compacts (unconditional)
+ *   - the post-compact respawn uses --fork-session, so future writes
+ *     go to a fresh JSONL while the model still remembers the summary.
+ */
+export async function startWithSummary(id: string) {
+  const session = sessions.get(id)
+  if (!session) return { ok: false, error: 'no_session' }
+  if (!session.claudeSid || !session.startOpts) return { ok: false, error: 'missing_state' }
+  const sid = session.claudeSid
+  const opts = session.startOpts
+  const cwd = session.cwd || process.env.HOME || '/'
+  broadcast(`chat:stderr:${id}`, '⏳ Compacting old context, then forking to new session-id\n')
+  try { session.child?.kill() } catch {}
+  session.child = null
+  // Reuse the compactSession PTY logic, but post-compact respawn with
+  // forkSession=true so we get a new session-id with the summary as seed.
+  return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+    let promptSeen = false
+    let buffer = ''
+    let settled = false
+    const compactPty = pty.spawn('claude', ['--resume', sid], {
+      name: 'xterm-color', cols: 120, rows: 30, cwd, env: process.env as any
+    })
+    const finish = (ok: boolean, error?: string) => {
+      if (settled) return
+      settled = true
+      try { compactPty.kill() } catch {}
+      sessions.delete(id)
+      // ↓ key difference vs compactSession: forkSession: true
+      startChat(id, { ...opts, resumeSid: sid, forkSession: true, continueSession: false, rebaseOnStart: false })
+      broadcast(`chat:stderr:${id}`, ok ? '✅ Compacted + forked to new session-id\n' : `⚠ Compact ${error || 'failed'} — forking anyway\n`)
+      resolve({ ok, error })
+    }
+    compactPty.onData((data: string) => {
+      buffer += data
+      if (!promptSeen) {
+        const tail = buffer.split('\n').slice(-3).join('\n')
+        if (tail.includes('❯') || /^\s*>\s/m.test(tail)) {
+          promptSeen = true
+          setTimeout(() => { try { compactPty.write('/compact\r') } catch {} }, 500)
+          return
+        }
+      }
+      if (promptSeen) {
+        const recent = buffer.slice(-300)
+        if (/compact(ed|ion).*?(complete|done|summary)/i.test(recent) ||
+            /Conversation\s+(?:summary|compacted)/i.test(recent)) {
+          setTimeout(() => finish(true), 1000)
+        }
+      }
+    })
+    compactPty.onExit(() => finish(false, 'pty exited'))
+    setTimeout(() => finish(false, 'timeout'), 25000)
+  })
+}
+
+/**
+ * Run /compact via PTY round-trip and auto-resume --print.
+ * Same plumbing as /remote-control but fully automatic (no UI panel
+ * needed): kill --print → spawn PTY --resume <sid> → write /compact
+ * → wait until prompt returns or 25s timeout → kill PTY → respawn
+ * --print --resume <sid>. The user just sees a brief 'Compacting…'
+ * system entry and the session continues with summarized context.
+ */
+export async function compactSession(id: string) {
+  const session = sessions.get(id)
+  if (!session) return { ok: false, error: 'no_session' }
+  if (!session.claudeSid || !session.startOpts) return { ok: false, error: 'no_sid_or_opts' }
+  if (session.mode !== 'print') return { ok: false, error: 'not_in_print_mode' }
+  const sid = session.claudeSid
+  const opts = session.startOpts
+  const cwd = session.cwd || process.env.HOME || '/'
+
+  broadcast(`chat:event:${id}`, { type: 'system', subtype: 'info', session_id: id })
+  broadcast(`chat:stderr:${id}`, '⏳ Compacting context — pausing claude for ~10s\n')
+
+  try { session.child?.kill() } catch {}
+  session.child = null
+
+  return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+    let promptSeen = false
+    let buffer = ''
+    let settled = false
+    const compactPty = pty.spawn('claude', ['--resume', sid], {
+      name: 'xterm-color', cols: 120, rows: 30, cwd, env: process.env as any
+    })
+    const finish = (ok: boolean, error?: string) => {
+      if (settled) return
+      settled = true
+      try { compactPty.kill() } catch {}
+      sessions.delete(id)  // so startChat doesn't short-circuit
+      startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
+      broadcast(`chat:stderr:${id}`, ok ? '✅ Compact done — session resumed\n' : `⚠ Compact ${error || 'failed'} — session resumed anyway\n`)
+      resolve({ ok, error })
+    }
+    compactPty.onData((data: string) => {
+      buffer += data
+      // Step 1: wait for first prompt → fire /compact
+      if (!promptSeen) {
+        const tail = buffer.split('\n').slice(-3).join('\n')
+        if (tail.includes('❯') || /^\s*>\s/m.test(tail)) {
+          promptSeen = true
+          setTimeout(() => { try { compactPty.write('/compact\r') } catch {} }, 500)
+          return
+        }
+      }
+      // Step 2: after /compact, wait for prompt to return (means compact done)
+      if (promptSeen) {
+        const recent = buffer.slice(-300)
+        // Heuristics: claude shows "Compacted" / "compaction" word OR
+        // returns to the ❯ prompt freshly.
+        if (/compact(ed|ion).*?(complete|done|summary)/i.test(recent) ||
+            /Conversation\s+(?:summary|compacted)/i.test(recent)) {
+          setTimeout(() => finish(true), 1000)
+        }
+      }
+    })
+    compactPty.onExit(() => finish(false, 'pty exited'))
+    setTimeout(() => finish(false, 'timeout'), 25000)
+  })
 }
 
 /**
@@ -775,4 +979,7 @@ export function registerChatIpc() {
   ipcMain.handle('chat:startRemoteControl', (_e, { id }) => startRemoteControl(id))
   ipcMain.handle('chat:resumeFromRemoteControl', (_e, { id }) => resumeFromRemoteControl(id))
   ipcMain.handle('chat:interrupt', (_e, { id }) => interruptSession(id))
+  ipcMain.handle('chat:compact', (_e, { id }) => compactSession(id))
+  ipcMain.handle('chat:resumeSmart', (_e, { id }) => resumeSmart(id))
+  ipcMain.handle('chat:startWithSummary', (_e, { id }) => startWithSummary(id))
 }

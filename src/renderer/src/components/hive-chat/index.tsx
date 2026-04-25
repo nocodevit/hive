@@ -476,18 +476,21 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     const text = input.trim()
     if (!text || sending) return
     // Intercept session-scoped slash commands that don't work in --print
-    // mode. Today: just /remote-control. The handler takes over the UI;
-    // no stream-json frame goes out.
+    // mode (each handler takes over; no stream-json frame goes out).
     if (text === '/remote-control') {
       setInput('')
       addEntry({ kind: 'system', text: 'Starting remote control…' })
       setRcOutput('')
       const res = await window.api.chat.startRemoteControl(id)
-      if (res.ok) {
-        setRcState('active')
-      } else {
-        addEntry({ kind: 'system', text: `Remote control failed: ${res.error}` })
-      }
+      if (res.ok) setRcState('active')
+      else addEntry({ kind: 'system', text: `Remote control failed: ${res.error}` })
+      return
+    }
+    if (text === '/compact') {
+      setInput('')
+      addEntry({ kind: 'system', text: '⏳ Compacting context (PTY round-trip, ~10s)…' })
+      const res = await window.api.chat.compact(id)
+      addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
       return
     }
     setSending(true)
@@ -527,8 +530,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const startNewSession = async () => {
     // Fresh session with the same agent — no -c, no --resume. System/init
     // will emit a new session_id; timeline is preserved and a divider is
-    // added to make the boundary visible.
-    addEntry({ kind: 'system', text: '── new session ──' })
+    // added to make the boundary visible. Model has NO memory of the
+    // closed session — context cleared.
+    addEntry({ kind: 'system', text: '── new session (context cleared) ──' })
     setExited(null)
     setSessionId('')
     setRateLimit(null)
@@ -543,6 +547,46 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       continueSession: false,
       rebaseOnStart: false
     })
+  }
+
+  const resumeClosedSession = async () => {
+    // Smart resume: backend reads the session JSONL, if prior context
+    // > 50% of model window it /compact's first, then re-spawns
+    // --print --resume <sid>. Otherwise just plain resume.
+    addEntry({ kind: 'system', text: '── resuming session ──' })
+    setExited(null)
+    setRateLimit(null)
+    setUsage({})
+    setThinking(null)
+    setPendingPermission(null)
+    setLatestInputTokens(0)
+    const res = await window.api.chat.resumeSmart(id)
+    if (!res.ok) {
+      addEntry({ kind: 'system', text: `Resume failed: ${res.error}` })
+    } else if (res.compacted) {
+      addEntry({ kind: 'system', text: '✓ Auto-compacted before resume (context > 50%)' })
+    }
+  }
+
+  const startSessionWithSummary = async () => {
+    // Compact current context into a summary, fork to new session-id.
+    // Same agent, same cwd, but a brand new session JSONL with the
+    // summary as the seeding context. Best when you want to start
+    // 'fresh' without losing the conversation's gist.
+    addEntry({ kind: 'system', text: '── starting new session with summary ──' })
+    setExited(null)
+    setSessionId('')
+    setRateLimit(null)
+    setUsage({})
+    setThinking(null)
+    setPendingPermission(null)
+    setHasOlderOnDisk(false)
+    setTrimmedCount(0)
+    setLatestInputTokens(0)
+    const res = await window.api.chat.startWithSummary(id)
+    if (!res.ok) {
+      addEntry({ kind: 'system', text: `Start with summary failed: ${res.error}` })
+    }
   }
 
   // Click ↺ icon on any past UserMessage → fill input with that text
@@ -800,25 +844,68 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               marginBottom: 6
             }}>● session closed (exit {exited})</div>
             <div style={{
-              color: CRUSH.Squid, fontSize: 11, marginBottom: 10
+              color: CRUSH.Squid, fontSize: 11, marginBottom: 10, lineHeight: 1.6
             }}>
-              The claude subprocess is gone. History above is kept. Click
-              below to start a fresh session with the same agent — this
-              creates a new session-id and begins a clean context.
+              The claude subprocess is gone. History above is kept. Pick
+              how the new claude should remember (or not):
+              <br/>
+              <strong style={{ color: CRUSH.Bok }}>↻ Resume</strong> — same session, full context (auto-compacts if &gt; 50%).
+              <br/>
+              <strong style={{ color: CRUSH.Charple }}>≡ With summary</strong> — compact + fork to new session-id (summary as seed).
+              <br/>
+              <strong style={{ color: CRUSH.Julep }}>⊕ New</strong> — clean slate, no memory.
             </div>
-            <button
-              onClick={startNewSession}
-              style={{
-                background: CRUSH.Julep,
-                border: 'none',
-                borderRadius: 6,
-                padding: '8px 16px',
-                color: CRUSH.Pepper,
-                fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700,
-                cursor: 'pointer',
-                width: '100%'
-              }}
-            >⊕ Start new session</button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={resumeClosedSession}
+                disabled={!sessionId}
+                title={sessionId ? 'Re-spawn claude with --resume <sid>; auto /compact if prior turn used > 50% context' : 'No session-id captured yet'}
+                style={{
+                  flex: 1,
+                  background: sessionId ? CRUSH.Bok : 'rgba(104,255,214,0.2)',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '8px 8px',
+                  color: CRUSH.Pepper,
+                  fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
+                  cursor: sessionId ? 'pointer' : 'not-allowed',
+                  opacity: sessionId ? 1 : 0.5,
+                  whiteSpace: 'nowrap' as const
+                }}
+              >↻ Resume</button>
+              <button
+                onClick={startSessionWithSummary}
+                disabled={!sessionId}
+                title={sessionId ? '/compact + --resume <sid> --fork-session: new session-id, summary preserved' : 'No session-id captured yet'}
+                style={{
+                  flex: 1,
+                  background: sessionId ? CRUSH.Charple : 'rgba(107,80,255,0.2)',
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '8px 8px',
+                  color: CRUSH.Butter,
+                  fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
+                  cursor: sessionId ? 'pointer' : 'not-allowed',
+                  opacity: sessionId ? 1 : 0.5,
+                  whiteSpace: 'nowrap' as const
+                }}
+              >≡ With summary</button>
+              <button
+                onClick={startNewSession}
+                title="Fresh claude --print — model has no memory of prior turns"
+                style={{
+                  flex: 1,
+                  background: CRUSH.Julep,
+                  border: 'none',
+                  borderRadius: 6,
+                  padding: '8px 8px',
+                  color: CRUSH.Pepper,
+                  fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap' as const
+                }}
+              >⊕ New</button>
+            </div>
           </div>
         </div>
       ) : rcState === 'active' ? (
