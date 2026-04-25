@@ -592,17 +592,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // responding to this specific item, not picking it". Doesn't send;
   // user hits Enter when ready.
   const handleRespond = useCallback((item: string) => {
-    console.log('[hive-chat] handleRespond fired with:', JSON.stringify(item))
     setInput(prev => {
       const quoted = `-- ${item}\n`
-      const next = prev ? prev + (prev.endsWith('\n') ? '' : '\n') + quoted : quoted
-      console.log('[hive-chat] setInput prev=', JSON.stringify(prev), 'next=', JSON.stringify(next))
-      return next
+      return prev ? prev + (prev.endsWith('\n') ? '' : '\n') + quoted : quoted
     })
-    setTimeout(() => {
-      console.log('[hive-chat] focusing textarea, ref.current=', textareaRef.current)
-      textareaRef.current?.focus()
-    }, 0)
+    setTimeout(() => textareaRef.current?.focus(), 0)
   }, [])
 
   const toggleStreamingMode = () => {
