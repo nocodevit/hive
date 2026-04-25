@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Highlight, themes } from 'prism-react-renderer'
+import { Check, Pencil } from 'lucide-react'
 import { CRUSH, FONT_MONO, TOOL_COLORS, redact } from './crush-styles'
 import { parseStructuredOutput } from './structured-format'
 import type { TimelineEntry } from './types'
@@ -339,7 +340,7 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
                   }}
                   onMouseEnter={e => { e.currentTarget.style.background = CRUSH.Julep; e.currentTarget.style.color = CRUSH.Pepper }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = CRUSH.Julep }}
-                >✓</button>
+                ><Check size={12} strokeWidth={2.4} /></button>
               )}
               {onRespond && (
                 <button
@@ -357,7 +358,7 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
                   }}
                   onMouseEnter={e => { e.currentTarget.style.background = CRUSH.Charple; e.currentTarget.style.color = CRUSH.Butter }}
                   onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = CRUSH.Charple }}
-                ><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg></button>
+                ><Pencil size={12} strokeWidth={2.2} /></button>
               )}
             </span>
           </div>
