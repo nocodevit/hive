@@ -487,16 +487,31 @@ export function startRemoteControl(id: string) {
 }
 
 /**
- * Leave remote-control mode: kill the PTY, re-spawn --print with the
- * same session-id. The renderer's Load Older / replay machinery
- * automatically picks up any new turns that were driven from the phone
- * during the PTY phase (they live in the same JSONL file).
+ * Leave remote-control mode: politely hand the session back to local via
+ * `/desktop`, then kill the PTY and re-spawn --print with the same
+ * session-id. The renderer's Load Older / replay machinery automatically
+ * picks up any new turns that were driven from the phone during the PTY
+ * phase (they live in the same JSONL file).
+ *
+ * Why /desktop matters: /remote-control registers this session with
+ * Claude's persistent remote-control server, claiming control on behalf
+ * of the mobile/web client. Killing the local PTY without first running
+ * /desktop leaves the server thinking the session is still mobile-claimed,
+ * which can make --resume fail or deliver stale / partial state. /desktop
+ * is the inverse: server releases the claim, mobile is disconnected, the
+ * session goes back to "owned by local CLI". We give it ~1.5s to settle
+ * before killing the PTY (no completion ACK in stream-json land).
  */
-export function resumeFromRemoteControl(id: string) {
+export async function resumeFromRemoteControl(id: string) {
   const session = sessions.get(id)
   if (!session) return { ok: false, error: 'no_session' }
   if (session.mode !== 'rc') return { ok: false, error: 'not_in_rc' }
   if (!session.claudeSid || !session.startOpts) return { ok: false, error: 'missing_state' }
+  // Polite handover before tearing down.
+  try {
+    session.rcPty?.write('/desktop\r')
+    await new Promise(r => setTimeout(r, 1500))
+  } catch {}
   try { session.rcPty?.kill() } catch {}
   const opts = session.startOpts
   const sid = session.claudeSid
