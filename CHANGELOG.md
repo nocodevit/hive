@@ -14,6 +14,30 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.48] — 2026-04-25
+
+### Added
+- **Stop reason badge** on the result summary card. When
+  `result.stop_reason !== 'end_turn'` the card label flips from
+  `TURN COMPLETE` to `STOPPED: <reason>` with a colored left border:
+  Sriracha for refusal / max_tokens / model_context_window_exceeded,
+  Zest for pause_turn / tool_use, Squid for unknown. Refusals are
+  now impossible to miss.
+- **File-link click** in tool headers opens with default app via
+  `shell.openPath`. Shift/Alt-click reveals in Finder. URLs (WebFetch
+  / WebSearch) route to default browser. Existing `revealInFinder`
+  handler kept untouched for compatibility.
+- **Code-block copy button** on every fenced markdown code block.
+  Hover reveals a Charcoal-bordered `📋 copy` button at the top-right;
+  click → navigator.clipboard.writeText, badge swaps to Julep
+  `✓ copied` for 1.5s, then fades.
+
+### Backend
+- New `fs:openPath` IPC + `window.api.fs.openPath(path)`. Calls
+  `shell.openPath`; "" return = success, otherwise error string.
+
+---
+
 ## [1.7.47] — 2026-04-25
 
 ### Fixed
@@ -720,7 +744,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.47...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.48...HEAD
+[1.7.48]: https://github.com/nocodevit/hive/compare/v1.7.47...v1.7.48
 [1.7.47]: https://github.com/nocodevit/hive/compare/v1.7.46...v1.7.47
 [1.7.46]: https://github.com/nocodevit/hive/compare/v1.7.45...v1.7.46
 [1.7.45]: https://github.com/nocodevit/hive/compare/v1.7.44...v1.7.45

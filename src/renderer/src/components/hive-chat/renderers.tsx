@@ -62,28 +62,9 @@ const MD_COMPONENTS: Record<string, any> = {
     const text = React.Children.toArray(children).map(String).join('')
     const isBlock = !!className || text.includes('\n')
     if (isBlock) {
-      // Syntax-highlight the block using the className's "language-xxx" hint.
       const lang = className?.match(/language-(\S+)/)?.[1] || 'markup'
       const code = text.replace(/\n$/, '')
-      return (
-        <Highlight code={code} language={lang as any} theme={CRUSH_PRISM_THEME as any}>
-          {({ tokens, getLineProps, getTokenProps }) => (
-            <code style={{ fontFamily: FONT_MONO, display: 'block' }}>
-              {tokens.map((line, i) => {
-                const { key: lineKey, ...lineRest } = getLineProps({ line })
-                return (
-                  <div key={i} {...lineRest}>
-                    {line.map((token, j) => {
-                      const { key: tokenKey, ...tokenRest } = getTokenProps({ token })
-                      return <span key={j} {...tokenRest} />
-                    })}
-                  </div>
-                )
-              })}
-            </code>
-          )}
-        </Highlight>
-      )
+      return <CodeBlockWithCopy code={code} language={lang} />
     }
     return <code style={{ color: CRUSH.Bok, background: CRUSH.BBQ, padding: '0 4px', borderRadius: 3, fontFamily: FONT_MONO, fontSize: 12 }}>{children}</code>
   },
@@ -141,6 +122,62 @@ const MD_COMPONENTS: Record<string, any> = {
       borderRight: `1px solid ${CRUSH.Charcoal}`,
       verticalAlign: 'top'
     }}>{children}</td>
+  )
+}
+
+/**
+ * Markdown code block with a hover-revealed Copy button. Uses prism-
+ * react-renderer for syntax highlighting (same theme + tokens as the
+ * inline code variant). Click → navigator.clipboard.writeText, brief
+ * "copied!" badge swap, auto-revert after 1.5s.
+ */
+function CodeBlockWithCopy({ code, language }: { code: string; language: string }) {
+  const [copied, setCopied] = useState(false)
+  const onCopy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
+  }
+  return (
+    <span style={{ position: 'relative' as const, display: 'block' }}>
+      <button
+        onClick={onCopy}
+        title={copied ? 'Copied' : 'Copy code'}
+        style={{
+          position: 'absolute' as const,
+          top: 4, right: 6, zIndex: 1,
+          background: copied ? CRUSH.Julep : 'rgba(45,44,53,0.85)',
+          border: `1px solid ${copied ? CRUSH.Julep : CRUSH.Charcoal}`,
+          color: copied ? CRUSH.Pepper : CRUSH.Squid,
+          padding: '1px 8px',
+          borderRadius: 3,
+          fontFamily: FONT_MONO, fontSize: 10,
+          cursor: 'pointer',
+          opacity: copied ? 1 : 0,
+          transition: 'opacity 120ms ease, background 120ms ease, color 120ms ease',
+          fontWeight: copied ? 700 : 400
+        }}
+        className="hive-code-copy"
+      >{copied ? '✓ copied' : '📋 copy'}</button>
+      <Highlight code={code} language={language as any} theme={CRUSH_PRISM_THEME as any}>
+        {({ tokens, getLineProps, getTokenProps }) => (
+          <code style={{ fontFamily: FONT_MONO, display: 'block' }}>
+            {tokens.map((line, i) => {
+              const { key: lineKey, ...lineRest } = getLineProps({ line })
+              return (
+                <div key={i} {...lineRest}>
+                  {line.map((token, j) => {
+                    const { key: tokenKey, ...tokenRest } = getTokenProps({ token })
+                    return <span key={j} {...tokenRest} />
+                  })}
+                </div>
+              )
+            })}
+          </code>
+        )}
+      </Highlight>
+    </span>
   )
 }
 
@@ -655,9 +692,21 @@ function McpHeader({ server, fn, input }: { server: string; fn: string; input: R
 }
 
 function HeaderLine({ tool, color, tail, tailStyle }: { tool: string; color: string; tail: string; tailStyle: 'ash' | 'link' }) {
-  // Keep the real path for reveal-in-Finder; only the shown string is redacted.
-  const onClick = tailStyle === 'link' && tail && tail.startsWith('/')
-    ? () => { window.api.fs.revealInFinder(tail) }
+  // Keep the real path for open / reveal; only the shown string is redacted.
+  const isLink = tailStyle === 'link' && tail && (tail.startsWith('/') || tail.startsWith('http'))
+  const isFile = tailStyle === 'link' && tail && tail.startsWith('/')
+  // Click → open with default app (editor). Shift/Alt-click → reveal
+  // in Finder. URL-style links (WebFetch / WebSearch) get openPath
+  // too; macOS shell.openPath handles http(s) URLs by routing to
+  // the default browser.
+  const onClick = isLink
+    ? (e: React.MouseEvent) => {
+        if (isFile && (e.shiftKey || e.altKey)) {
+          window.api.fs.revealInFinder(tail)
+        } else {
+          window.api.fs.openPath(tail)
+        }
+      }
     : undefined
   const displayTail = redact(tail)
   return (
@@ -669,7 +718,11 @@ function HeaderLine({ tool, color, tail, tailStyle }: { tool: string; color: str
       <span style={{ color, fontWeight: 700 }}>{tool}</span>
       <span
         onClick={onClick}
-        title={onClick ? 'Click to reveal in Finder' : undefined}
+        title={onClick
+          ? (isFile
+            ? 'Click to open · Shift-click to reveal in Finder'
+            : 'Click to open in browser')
+          : undefined}
         style={{
           color: tailStyle === 'link' ? CRUSH.Malibu : CRUSH.Ash,
           textDecoration: tailStyle === 'link' ? 'underline' : 'none',
@@ -1092,14 +1145,27 @@ export function fmtK(n?: number): string {
   return String(n)
 }
 
-export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, outputTokens, cacheReadTokens }: {
+export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, outputTokens, cacheReadTokens, stopReason }: {
   costUSD?: number; durationMs?: number; numTurns?: number
   inputTokens?: number; outputTokens?: number; cacheReadTokens?: number
+  stopReason?: string
 }) {
+  // `end_turn` is the normal "claude finished naturally" stop. Anything
+  // else is worth surfacing — refusal especially is otherwise easy to miss.
+  const abnormal = stopReason && stopReason !== 'end_turn'
+  // Color pick per stop reason. refusal / max_tokens are red; pause_turn
+  // / tool_use mid-flow are yellow; unknown — just dim.
+  const reasonColor = stopReason === 'refusal' || stopReason === 'model_context_window_exceeded'
+    ? CRUSH.Sriracha
+    : stopReason === 'max_tokens'
+      ? CRUSH.Sriracha
+      : stopReason === 'pause_turn' || stopReason === 'tool_use'
+        ? CRUSH.Zest
+        : CRUSH.Squid
   return (
     <div style={{
       margin: '8px 0',
-      borderLeft: `3px solid ${CRUSH.Charple}`,
+      borderLeft: `3px solid ${abnormal ? reasonColor : CRUSH.Charple}`,
       background: CRUSH.BBQ,
       borderRadius: 4,
       padding: '6px 12px',
@@ -1107,7 +1173,10 @@ export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, 
       color: CRUSH.Squid,
       display: 'flex', flexWrap: 'wrap', gap: '4px 14px', alignItems: 'center'
     }}>
-      <span style={{ color: CRUSH.Charple, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: 10 }}>turn complete</span>
+      <span style={{
+        color: abnormal ? reasonColor : CRUSH.Charple,
+        fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: 10
+      }}>{abnormal ? `stopped: ${stopReason}` : 'turn complete'}</span>
       {costUSD != null && (
         <span>
           <span style={{ color: CRUSH.Oyster }}>cost </span>
@@ -1166,7 +1235,7 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
     case 'result': return <ResultSummaryCard
       costUSD={entry.costUSD} durationMs={entry.durationMs} numTurns={entry.numTurns}
       inputTokens={entry.inputTokens} outputTokens={entry.outputTokens}
-      cacheReadTokens={entry.cacheReadTokens}
+      cacheReadTokens={entry.cacheReadTokens} stopReason={entry.stopReason}
     />
     case 'compact_boundary': return <CompactBoundary previousTokens={entry.previousTokens} newTokens={entry.newTokens} turnsSummarized={entry.turnsSummarized} />
   }

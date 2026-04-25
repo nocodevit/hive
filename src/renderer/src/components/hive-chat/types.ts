@@ -74,5 +74,5 @@ export type TimelineEntry =
   | { kind: 'tool_call'; id: string; toolUseId: string; name: string; input: Record<string, unknown> }
   | { kind: 'tool_result'; id: string; toolUseId: string; content: string; isError?: boolean }
   | { kind: 'system'; id: string; text: string }
-  | { kind: 'result'; id: string; costUSD?: number; durationMs?: number; numTurns?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number }
+  | { kind: 'result'; id: string; costUSD?: number; durationMs?: number; numTurns?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; stopReason?: string }
   | { kind: 'compact_boundary'; id: string; turnsSummarized: number; previousTokens: number; newTokens: number }

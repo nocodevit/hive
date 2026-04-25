@@ -163,3 +163,13 @@ h1, h2, h3, h4, h5, h6 {
 .hive-user-msg .hive-recall-btn:hover {
   opacity: 1 !important;
 }
+
+/* HiveChat — code block copy button. Hidden until hover over the
+   surrounding <pre>, then fades in. Inline style sets opacity 0 by
+   default; once .copied state flips it stays visible briefly. */
+pre:hover .hive-code-copy {
+  opacity: 0.85 !important;
+}
+pre .hive-code-copy:hover {
+  opacity: 1 !important;
+}

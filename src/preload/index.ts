@@ -39,6 +39,7 @@ const api = {
     hasGit: (path: string) => ipcRenderer.invoke('fs:hasGit', { path }),
     scanFiles: (dirPath: string, limit?: number) => ipcRenderer.invoke('fs:scanFiles', { dirPath, limit }),
     revealInFinder: (filePath: string) => ipcRenderer.invoke('fs:revealInFinder', { filePath }),
+    openPath: (path: string) => ipcRenderer.invoke('fs:openPath', { path }) as Promise<{ ok: boolean; error?: string }>,
     readFile: (filePath: string) => ipcRenderer.invoke('fs:readFile', { filePath }) as Promise<string | null>,
     writeFile: (filePath: string, content: string) => ipcRenderer.invoke('fs:writeFile', { filePath, content }) as Promise<boolean>
   },
