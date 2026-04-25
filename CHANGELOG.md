@@ -14,6 +14,20 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.34] — 2026-04-25
+
+### Refactored / Added
+- Extract `summarizeFiles(files, cutoffMs)` from storage walker into a
+  pure function so the bucketing logic (totals / main vs subagent /
+  stale boundaries / topStale ranking) is unit-testable without
+  touching the real filesystem.
+- 10 new vitest cases covering empty input, total counting, main-vs-
+  subagent split, mtime cutoff strict-`<` boundary (both directions),
+  stale main/subagent split, topStale capped at 20 + descending sort,
+  and a realistic mixed batch. Total: 397 → 407.
+
+---
+
 ## [1.7.33] — 2026-04-25
 
 ### Fixed
@@ -513,7 +527,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.33...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.34...HEAD
+[1.7.34]: https://github.com/nocodevit/hive/compare/v1.7.33...v1.7.34
 [1.7.33]: https://github.com/nocodevit/hive/compare/v1.7.32...v1.7.33
 [1.7.32]: https://github.com/nocodevit/hive/compare/v1.7.31...v1.7.32
 [1.7.31]: https://github.com/nocodevit/hive/compare/v1.7.30...v1.7.31
