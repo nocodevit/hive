@@ -83,6 +83,7 @@ declare global {
         loadOlder: (id: string, batch?: number) => Promise<{ loaded: number; hasOlder: boolean; error?: string }>
         startRemoteControl: (id: string) => Promise<{ ok: boolean; sid?: string; error?: string }>
         resumeFromRemoteControl: (id: string) => Promise<{ ok: boolean; sid?: string; error?: string }>
+        interrupt: (id: string) => Promise<{ ok: boolean; error?: string }>;
         onRcOutput: (id: string, cb: (data: string) => void) => () => void
         onRcExit: (id: string, cb: () => void) => () => void
         onEvent: (id: string, cb: (ev: any) => void) => () => void

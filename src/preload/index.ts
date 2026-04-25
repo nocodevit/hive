@@ -81,6 +81,8 @@ const api = {
       ipcRenderer.invoke('chat:startRemoteControl', { id }) as Promise<{ ok: boolean; sid?: string; error?: string }>,
     resumeFromRemoteControl: (id: string) =>
       ipcRenderer.invoke('chat:resumeFromRemoteControl', { id }) as Promise<{ ok: boolean; sid?: string; error?: string }>,
+    interrupt: (id: string) =>
+      ipcRenderer.invoke('chat:interrupt', { id }) as Promise<{ ok: boolean; error?: string }>,
     onRcOutput: (id: string, cb: (data: string) => void) => {
       const handler = (_e: any, data: string) => cb(data)
       ipcRenderer.on(`chat:rc_output:${id}`, handler)
