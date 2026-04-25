@@ -14,6 +14,20 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.50] — 2026-04-25
+
+### Changed
+- **Close-session confirm is now a panel**, not a button-row. Click
+  `close ✕` on the bottom bar → input area swaps to a Sriracha-bordered
+  confirm panel with explanatory copy + `[Cancel] [OK · close session]`.
+  Cancel reverts to the normal textarea. OK fires the actual stopChat
+  → existing "session closed" + Start new session panel takes over.
+  Same destination as v1.7.49 but the confirm UI is in the panel
+  zone where the user is already looking, not crammed into the
+  status bar.
+
+---
+
 ## [1.7.49] — 2026-04-25
 
 ### Changed
@@ -756,7 +770,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.49...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.50...HEAD
+[1.7.50]: https://github.com/nocodevit/hive/compare/v1.7.49...v1.7.50
 [1.7.49]: https://github.com/nocodevit/hive/compare/v1.7.48...v1.7.49
 [1.7.48]: https://github.com/nocodevit/hive/compare/v1.7.47...v1.7.48
 [1.7.47]: https://github.com/nocodevit/hive/compare/v1.7.46...v1.7.47
