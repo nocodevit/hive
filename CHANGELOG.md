@@ -14,6 +14,18 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.44] — 2026-04-25
+
+### Changed
+- Reordered ModelUsageBar: `model (1M) ctx 47% | 5h 23% 7d 5%   • streaming  close ✕`.
+  Context %% lives next to `(1M)` because both describe "this session's
+  context window"; subscription `5h` / `7d` are account-level and live
+  on the other side of the `|`. Action buttons stay right-pushed.
+- Removed the redundant `4h 12m left` ETA from the bottom bar — the
+  RateLimitBar above the input already shows the same reset countdown.
+
+---
+
 ## [1.7.43] — 2026-04-25
 
 ### Added
@@ -660,7 +672,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.43...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.44...HEAD
+[1.7.44]: https://github.com/nocodevit/hive/compare/v1.7.43...v1.7.44
 [1.7.43]: https://github.com/nocodevit/hive/compare/v1.7.42...v1.7.43
 [1.7.42]: https://github.com/nocodevit/hive/compare/v1.7.41...v1.7.42
 [1.7.41]: https://github.com/nocodevit/hive/compare/v1.7.40...v1.7.41

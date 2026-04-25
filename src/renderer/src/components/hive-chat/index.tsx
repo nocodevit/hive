@@ -1051,8 +1051,6 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
     : ctxPct >= 85 ? CRUSH.Sriracha
     : ctxPct >= 70 ? CRUSH.Zest
     : CRUSH.Bok
-  const mins = usage.remainingMinutes
-  const eta = mins != null ? (mins >= 60 ? `${Math.floor(mins / 60)}h ${mins % 60}m` : `${mins}m`) : ''
   return (
     <div style={{
       padding: '6px 12px',
@@ -1066,34 +1064,35 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
         <>
           <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{modelName}</span>
           {contextSize && <span style={{ color: CRUSH.Squid }}>({contextSize})</span>}
+          {/* Context window %% sits next to (1M) — both belong to "this
+              session's context window", logically separate from the
+              account-level subscription bars on the other side of the
+              `|`. Color shifts Bok → Zest → Sriracha at 70 / 85. */}
+          {ctxPct != null && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 4 }}
+                  title={`Context: ${contextUsedTokens.toLocaleString()} / ${ctxTotal.toLocaleString()} tokens`}>
+              <span style={{ color: CRUSH.Squid }}>ctx</span>
+              <span style={{
+                display: 'inline-block',
+                width: 32, height: 6,
+                borderRadius: 3,
+                background: CRUSH.Charcoal,
+                overflow: 'hidden',
+                position: 'relative' as const
+              }}>
+                <span style={{
+                  display: 'block',
+                  width: `${Math.min(ctxPct, 100)}%`, height: '100%',
+                  background: ctxColor
+                }} />
+              </span>
+              <span style={{ color: ctxColor, minWidth: 28, fontWeight: ctxPct >= 70 ? 700 : 400 }}>
+                {ctxPct}%
+              </span>
+            </span>
+          )}
           <span style={{ color: CRUSH.Oyster }}>|</span>
         </>
-      )}
-      {/* Context window %% — input_tokens of the latest result event vs
-          the model's context size. Color shifts from Bok (cool) → Zest
-          (warning) → Sriracha (danger near auto-compact). */}
-      {ctxPct != null && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-              title={`Context: ${contextUsedTokens.toLocaleString()} / ${ctxTotal.toLocaleString()} tokens`}>
-          <span style={{ color: CRUSH.Squid }}>ctx</span>
-          <span style={{
-            display: 'inline-block',
-            width: 32, height: 6,
-            borderRadius: 3,
-            background: CRUSH.Charcoal,
-            overflow: 'hidden',
-            position: 'relative' as const
-          }}>
-            <span style={{
-              display: 'block',
-              width: `${Math.min(ctxPct, 100)}%`, height: '100%',
-              background: ctxColor
-            }} />
-          </span>
-          <span style={{ color: ctxColor, minWidth: 28, fontWeight: ctxPct >= 70 ? 700 : 400 }}>
-            {ctxPct}%
-          </span>
-        </span>
       )}
       {/* Subscription tier %% (scraped from /usage TUI) */}
       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
@@ -1110,12 +1109,8 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
           {usage.sevenDay != null ? `${usage.sevenDay}%` : '—'}
         </span>
       </span>
-      {eta && (
-        <>
-          <span style={{ color: CRUSH.Oyster }}>·</span>
-          <span>{eta} left</span>
-        </>
-      )}
+      {/* eta "Xh Ym left" removed — RateLimitBar above the input
+          already shows the same reset countdown. */}
       <span style={{ marginLeft: 'auto' }} />
       <button
         onClick={onToggleStreaming}
