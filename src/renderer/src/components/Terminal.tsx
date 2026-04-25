@@ -471,15 +471,24 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
     }
   }, [visible])
 
-  // Speech transcript → write to PTY
+  // Voice input: App.tsx dispatches CustomEvent `hive:voice-final` per
+  // matched agentId. We only consume it if (a) we're the visible
+  // Terminal AND (b) the user is in xterm tab (chatMode === false).
+  // Otherwise HiveChat takes the transcript via its own listener.
+  // Old direct onTranscript listener was removed — it fought with the
+  // mic button's PTY-write path and double-fed transcripts (with
+  // `final:` prefix littering the terminal output).
   useEffect(() => {
-    const remove = window.api.speech.onTranscript((line: string) => {
-      if (visible && line.trim()) {
-        window.api.pty.write(id, line.trim())
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<{ agentId: string; text: string }>
+      if (!ev.detail || ev.detail.agentId !== id) return
+      if (visible && !chatMode && ev.detail.text.trim()) {
+        window.api.pty.write(id, ev.detail.text.trim())
       }
-    })
-    return remove
-  }, [id, visible])
+    }
+    window.addEventListener('hive:voice-final', handler)
+    return () => window.removeEventListener('hive:voice-final', handler)
+  }, [id, visible, chatMode])
 
   useEffect(() => {
     return () => {
