@@ -14,6 +14,33 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.56] — 2026-04-25
+
+### Fixed
+- **Choice-row border style restored.** v1.7.53 dropped the original
+  v1.7.x choice-button border when adding the per-row ✓/✏ icons —
+  rows became flat divs with no visual cue they were selectable.
+  Border (1px Charcoal → Charple on hover) + 6px border-radius +
+  6/12 padding restored. Hover still reveals the action icons; the
+  whole row also tints Charple at 8% on hover for clarity.
+- **InlineResult cap label** no longer concatenates lines + chars
+  ("X more lines · Y more chars"). Caps are now strictly one-or-the-
+  other: `lines > 12` truncates by lines, ELSE `chars > 800`
+  truncates by chars. Whichever exceeds threshold first owns the
+  truncation; never mix. Lines have priority — if both would fire
+  in theory, the line cap runs and chars are ignored.
+
+### Added
+- **Subscription reset countdown next to each %% bar.** /usage TUI
+  scrape now also extracts the "Resets in 4h 12m" / "Resets on
+  Apr 30" string per section. ModelUsageBar renders it next to the
+  corresponding %%:
+    `5h ▰▰ 23% · in 4h 12m   7d ▰ 5% · in 6d 14h`
+  String is verbatim from claude (could be relative or absolute
+  depending on how /usage formats it).
+
+---
+
 ## [1.7.55] — 2026-04-25
 
 ### Fixed
@@ -876,7 +903,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.55...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.56...HEAD
+[1.7.56]: https://github.com/nocodevit/hive/compare/v1.7.55...v1.7.56
 [1.7.55]: https://github.com/nocodevit/hive/compare/v1.7.54...v1.7.55
 [1.7.54]: https://github.com/nocodevit/hive/compare/v1.7.53...v1.7.54
 [1.7.53]: https://github.com/nocodevit/hive/compare/v1.7.52...v1.7.53
