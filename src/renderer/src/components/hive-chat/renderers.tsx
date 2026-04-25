@@ -213,7 +213,10 @@ export function UserMessage({ text, onRecall }: { text: string; onRecall?: (text
       fontFamily: FONT_MONO,
       position: 'relative' as const
     }}>
-      <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
+      {/* Julep ❯ per ui-preview-decorations.html — the design spec
+          (line 131-139) specifies the prompt glyph is mint green
+          regardless of the bubble's bg. Dolly was a regression. */}
+      <span style={{ color: CRUSH.Julep, fontWeight: 700, fontSize: 16 }}>❯</span>
       <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(parsed.text)}</span>
       {onRecall && (
         <button
@@ -703,6 +706,58 @@ export function stripReadPrefix(s: string): { content: string; startLine: number
     : { content: s, startLine: 1 }
 }
 
+/**
+ * Pretty-format common shell/Bash output patterns. Inline-color glyphs
+ * (✓ Julep, ✗/❌ Sriracha, ⚠ Zest) and turn `=== Title ===` heading
+ * lines into BBQ-backed cards with a Charple left border. Plain text
+ * lines pass through unchanged. Pure helper — same input always
+ * produces same JSX, no state.
+ */
+function formatStructuredOutput(text: string): React.ReactNode {
+  const HEADING = /^={3,}\s+(.+?)\s+={3,}\s*$/
+  const GLYPH = /([✓✗⚠❌●✔])/g
+  const colorFor = (ch: string): string => {
+    if (ch === '✓' || ch === '✔' || ch === '●') return CRUSH.Julep
+    if (ch === '✗' || ch === '❌') return CRUSH.Sriracha
+    if (ch === '⚠') return CRUSH.Zest
+    return CRUSH.Ash
+  }
+  const lines = text.split('\n')
+  return lines.map((line, i) => {
+    const h = line.match(HEADING)
+    if (h) {
+      return (
+        <div key={i} style={{
+          margin: i === 0 ? '0 0 4px' : '8px 0 4px',
+          padding: '3px 10px',
+          background: CRUSH.BBQ,
+          borderLeft: `3px solid ${CRUSH.Charple}`,
+          borderRadius: '0 3px 3px 0',
+          color: CRUSH.Butter,
+          fontWeight: 700,
+          letterSpacing: '0.02em'
+        }}>{h[1]}</div>
+      )
+    }
+    // Inline color glyphs in this line.
+    const segments: React.ReactNode[] = []
+    let last = 0
+    let m: RegExpExecArray | null
+    GLYPH.lastIndex = 0
+    while ((m = GLYPH.exec(line)) !== null) {
+      if (m.index > last) segments.push(line.slice(last, m.index))
+      const ch = m[1]
+      segments.push(
+        <span key={`${i}-${m.index}`} style={{ color: colorFor(ch), fontWeight: 700 }}>{ch}</span>
+      )
+      last = m.index + ch.length
+    }
+    if (last < line.length) segments.push(line.slice(last))
+    if (segments.length === 0) return <div key={i}>{' '}</div>  // preserve blank lines
+    return <div key={i} style={{ whiteSpace: 'pre-wrap' as const }}>{segments}</div>
+  })
+}
+
 function InlineResult({ content, isError, tool, input }: {
   content: string
   isError?: boolean
@@ -753,8 +808,8 @@ function InlineResult({ content, isError, tool, input }: {
     }}>
       <div style={{ display: 'flex', gap: 8 }}>
         <span>{isError ? '⚠' : '⎿'}</span>
-        <div style={{ whiteSpace: 'pre-wrap', flex: 1, wordBreak: 'break-word' }}>
-          {redact(visibleContent)}
+        <div style={{ flex: 1, wordBreak: 'break-word' }}>
+          {formatStructuredOutput(redact(visibleContent))}
           {truncated && !expanded && (
             <button onClick={() => setExpanded(true)} style={expandBtnStyle(CRUSH.Charple)}>
               ▾ Show {hiddenLabel}
