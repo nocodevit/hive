@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Highlight, themes } from 'prism-react-renderer'
 import { CRUSH, FONT_MONO, TOOL_COLORS, redact } from './crush-styles'
+import { parseStructuredOutput } from './structured-format'
 import type { TimelineEntry } from './types'
 
 const DEFAULT_EXPANDED_LINES = 12
@@ -857,18 +858,8 @@ export function stripReadPrefix(s: string): { content: string; startLine: number
  * produces same JSX, no state.
  */
 function formatStructuredOutput(text: string): React.ReactNode {
-  const HEADING = /^={3,}\s+(.+?)\s+={3,}\s*$/
-  const GLYPH = /([✓✗⚠❌●✔])/g
-  const colorFor = (ch: string): string => {
-    if (ch === '✓' || ch === '✔' || ch === '●') return CRUSH.Julep
-    if (ch === '✗' || ch === '❌') return CRUSH.Sriracha
-    if (ch === '⚠') return CRUSH.Zest
-    return CRUSH.Ash
-  }
-  const lines = text.split('\n')
-  return lines.map((line, i) => {
-    const h = line.match(HEADING)
-    if (h) {
+  return parseStructuredOutput(text).map((entry, i) => {
+    if (entry.type === 'heading') {
       return (
         <div key={i} style={{
           margin: i === 0 ? '0 0 4px' : '8px 0 4px',
@@ -879,25 +870,19 @@ function formatStructuredOutput(text: string): React.ReactNode {
           color: CRUSH.Butter,
           fontWeight: 700,
           letterSpacing: '0.02em'
-        }}>{h[1]}</div>
+        }}>{entry.title}</div>
       )
     }
-    // Inline color glyphs in this line.
-    const segments: React.ReactNode[] = []
-    let last = 0
-    let m: RegExpExecArray | null
-    GLYPH.lastIndex = 0
-    while ((m = GLYPH.exec(line)) !== null) {
-      if (m.index > last) segments.push(line.slice(last, m.index))
-      const ch = m[1]
-      segments.push(
-        <span key={`${i}-${m.index}`} style={{ color: colorFor(ch), fontWeight: 700 }}>{ch}</span>
-      )
-      last = m.index + ch.length
-    }
-    if (last < line.length) segments.push(line.slice(last))
-    if (segments.length === 0) return <div key={i}>{' '}</div>  // preserve blank lines
-    return <div key={i} style={{ whiteSpace: 'pre-wrap' as const }}>{segments}</div>
+    if (entry.type === 'blank') return <div key={i}>{' '}</div>
+    return (
+      <div key={i} style={{ whiteSpace: 'pre-wrap' as const }}>
+        {entry.segments.map((seg, j) =>
+          seg.type === 'glyph'
+            ? <span key={j} style={{ color: seg.color, fontWeight: 700 }}>{seg.content}</span>
+            : <React.Fragment key={j}>{seg.content}</React.Fragment>
+        )}
+      </div>
+    )
   })
 }
 

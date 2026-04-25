@@ -14,6 +14,24 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.54] — 2026-04-25
+
+### Refactored / Added
+- Extracted structured-output parsing from `formatStructuredOutput`'s
+  inline body into a new pure module `structured-format.ts` exposing
+  `parseStructuredLine` / `parseStructuredOutput` / `glyphColor` plus
+  the `StructuredLine` / `StructuredSegment` types. The renderer
+  helper now only handles JSX → still does same thing visually.
+- 19 new vitest cases covering: glyph color mapping (`✓ ✔ ●` →
+  Julep, `✗ ❌` → Sriracha, `⚠` → Zest, fallback → Ash); heading
+  detection (`=== Title ===` requires 3+ equals + surround whitespace,
+  rejects `===title===`); blank line; mixed-script titles (CJK);
+  inline glyph splitting + text segment ordering; multi-glyph lines
+  with different colors; whitespace preservation; multi-line input
+  parsing; realistic 8-task stem-regen sample. Total: 419 → 438.
+
+---
+
 ## [1.7.53] — 2026-04-25
 
 ### Changed
@@ -842,7 +860,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.53...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.54...HEAD
+[1.7.54]: https://github.com/nocodevit/hive/compare/v1.7.53...v1.7.54
 [1.7.53]: https://github.com/nocodevit/hive/compare/v1.7.52...v1.7.53
 [1.7.52]: https://github.com/nocodevit/hive/compare/v1.7.51...v1.7.52
 [1.7.51]: https://github.com/nocodevit/hive/compare/v1.7.50...v1.7.51
