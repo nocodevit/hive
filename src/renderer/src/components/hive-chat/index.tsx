@@ -593,7 +593,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // user hits Enter when ready.
   const handleRespond = useCallback((item: string) => {
     setInput(prev => {
-      const quoted = `-- ${item}\n`
+      // Quote the item with `--` AFTER the content + newline so the
+      // user's caret lands on a fresh line ready to write the reply.
+      // e.g. "等 CI 跑 + 你看 PR diff 决定 merge --\n<caret>"
+      const quoted = `${item} --\n`
       return prev ? prev + (prev.endsWith('\n') ? '' : '\n') + quoted : quoted
     })
     setTimeout(() => textareaRef.current?.focus(), 0)
