@@ -14,6 +14,19 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.36] — 2026-04-25
+
+### Fixed
+- **`/desktop` polite handover before killing remote-control PTY.**
+  `resumeFromRemoteControl` was hard-killing the PTY without first
+  releasing the server-side claim that `/remote-control` registered.
+  Server thought the session was still mobile-owned → next `--resume`
+  could land in stale / partial state and the mobile end might not
+  release cleanly. Now: write `/desktop\r` to the PTY, wait 1.5s for
+  the handover to settle, then kill + re-spawn `--print --resume <sid>`.
+
+---
+
 ## [1.7.35] — 2026-04-25
 
 ### Fixed
@@ -539,7 +552,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.35...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.36...HEAD
+[1.7.36]: https://github.com/nocodevit/hive/compare/v1.7.35...v1.7.36
 [1.7.35]: https://github.com/nocodevit/hive/compare/v1.7.34...v1.7.35
 [1.7.34]: https://github.com/nocodevit/hive/compare/v1.7.33...v1.7.34
 [1.7.33]: https://github.com/nocodevit/hive/compare/v1.7.32...v1.7.33
