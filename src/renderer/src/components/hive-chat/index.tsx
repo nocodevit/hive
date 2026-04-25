@@ -1023,15 +1023,16 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
       {sessionActive && (
         <button
           onClick={onCloseSession}
-          title="End this claude session. Timeline is kept; click Start new session to spawn a fresh one with the same agent."
+          title="End this claude session. Timeline is kept; a 'Start new session' panel replaces the input."
           style={{
             background: 'transparent',
             border: `1px solid ${CRUSH.Charcoal}`,
             color: CRUSH.Squid,
-            padding: '2px 8px',
+            padding: '2px 6px',
             borderRadius: 4,
             fontFamily: FONT_MONO, fontSize: 10,
-            cursor: 'pointer'
+            cursor: 'pointer',
+            whiteSpace: 'nowrap'
           }}
           onMouseEnter={e => {
             e.currentTarget.style.borderColor = CRUSH.Sriracha
@@ -1041,7 +1042,7 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
             e.currentTarget.style.borderColor = CRUSH.Charcoal
             e.currentTarget.style.color = CRUSH.Squid
           }}
-        >⏹ close session</button>
+        >close ✕</button>
       )}
     </div>
   )
