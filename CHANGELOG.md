@@ -14,6 +14,24 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.47] — 2026-04-25
+
+### Fixed
+- **`❯` prompt glyph color restored to Julep mint green** per
+  `ui-preview-decorations.html` (the design contract). It had drifted
+  to Dolly pink in a recent change — both the input box prompt and
+  the sent-message bubble's prompt are now back to spec.
+
+### Added
+- **Structured Bash output formatting.** `=== Title ===` heading lines
+  in tool results now render as BBQ-backed cards with a Charple left
+  border. Inline glyphs get colored: `✓` `✔` `●` → Julep, `✗` `❌` →
+  Sriracha, `⚠` → Zest. Other content passes through unchanged. Makes
+  scripts that print `=== 8 tasks done ===` followed by `✓ id1  ✓
+  id2` look like a proper summary rather than ASCII soup.
+
+---
+
 ## [1.7.46] — 2026-04-25
 
 ### Added
@@ -702,7 +720,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.46...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.47...HEAD
+[1.7.47]: https://github.com/nocodevit/hive/compare/v1.7.46...v1.7.47
 [1.7.46]: https://github.com/nocodevit/hive/compare/v1.7.45...v1.7.46
 [1.7.45]: https://github.com/nocodevit/hive/compare/v1.7.44...v1.7.45
 [1.7.44]: https://github.com/nocodevit/hive/compare/v1.7.43...v1.7.44

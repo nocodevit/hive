@@ -795,7 +795,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             borderRadius: 8,
             padding: '8px 12px'
           }}>
-            <span style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 16 }}>❯</span>
+            <span style={{ color: CRUSH.Julep, fontWeight: 700, fontSize: 16 }}>❯</span>
             <textarea
               ref={textareaRef}
               value={input}
