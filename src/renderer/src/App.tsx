@@ -922,7 +922,13 @@ export default function App() {
                       const cleanup = window.api.speech.onTranscript((line) => {
                         if (line.startsWith('final:')) {
                           const text = line.slice(6)
-                          window.api.pty.write(agentId, text)
+                          // Broadcast as CustomEvent so whichever surface is
+                          // currently visible (xterm Terminal or HiveChat)
+                          // can decide to consume it. App.tsx no longer
+                          // hard-writes to PTY — that broke voice input the
+                          // moment the user switched to chat mode (xterm
+                          // was hidden, transcripts vanished).
+                          window.dispatchEvent(new CustomEvent('hive:voice-final', { detail: { agentId, text } }))
                           setSpeechPartial('')
                         } else if (line.startsWith('partial:')) {
                           setSpeechPartial(line.slice(8))

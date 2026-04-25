@@ -14,6 +14,39 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.40] — 2026-04-25
+
+### Fixed
+- **Voice input now reaches HiveChat input.** App.tsx mic was hard-
+  writing transcripts to PTY (`window.api.pty.write`); when the user
+  was in chat mode, xterm was hidden and transcripts vanished into a
+  void. Now: App broadcasts a `hive:voice-final` CustomEvent. Terminal
+  listens and writes to PTY only when `chatMode === false`. HiveChat
+  listens and appends to its input box (smart whitespace separator so
+  multiple voice segments stack naturally).
+- Removed Terminal's stale `onTranscript` listener that was double-
+  feeding the PTY (raw `final:` prefix was leaking into terminal output).
+
+---
+
+## [1.7.39] — 2026-04-25
+
+### Changed
+- Shortened "⏹ close session" → "close ✕" so it doesn't wrap to a
+  second line in the bottom status bar on narrower windows. `nowrap`
+  added so it never breaks again.
+
+---
+
+## [1.7.38] — 2026-04-25
+
+### Changed
+- Bumped HiveChat dark background from `#0f0a1a` → `#170d2e` (slightly
+  more violet — same dark feel, more "Crush deep-violet" than
+  "almost-black"). User pick after side-by-side.
+
+---
+
 ## [1.7.37] — 2026-04-25
 
 ### Fixed
@@ -566,7 +599,10 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.37...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.40...HEAD
+[1.7.40]: https://github.com/nocodevit/hive/compare/v1.7.39...v1.7.40
+[1.7.39]: https://github.com/nocodevit/hive/compare/v1.7.38...v1.7.39
+[1.7.38]: https://github.com/nocodevit/hive/compare/v1.7.37...v1.7.38
 [1.7.37]: https://github.com/nocodevit/hive/compare/v1.7.36...v1.7.37
 [1.7.36]: https://github.com/nocodevit/hive/compare/v1.7.35...v1.7.36
 [1.7.35]: https://github.com/nocodevit/hive/compare/v1.7.34...v1.7.35

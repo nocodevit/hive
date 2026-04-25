@@ -412,6 +412,30 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     if (el) el.scrollTop = el.scrollHeight
   }, [timeline.length])
 
+  // Voice input → input box. App.tsx broadcasts CustomEvent
+  // `hive:voice-final` whenever the mic produces a finalized
+  // transcript. HiveChat's `id` is `chat-<agentId>` so we extract the
+  // raw agentId for matching. We append (not replace) with a smart
+  // separator so multiple voice segments stack naturally.
+  useEffect(() => {
+    const myAgentId = id.startsWith('chat-') ? id.slice(5) : id
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<{ agentId: string; text: string }>
+      if (!ev.detail || ev.detail.agentId !== myAgentId) return
+      const text = ev.detail.text.trim()
+      if (!text) return
+      setInput(prev => {
+        if (!prev) return text
+        // Insert a space before the new chunk unless prev already ends
+        // in whitespace or punctuation that flows naturally.
+        const needsSpace = !/[\s,.!?;:，。！？；：]$/.test(prev)
+        return prev + (needsSpace ? ' ' : '') + text
+      })
+    }
+    window.addEventListener('hive:voice-final', handler)
+    return () => window.removeEventListener('hive:voice-final', handler)
+  }, [id])
+
   const send = async () => {
     const text = input.trim()
     if (!text || sending) return
