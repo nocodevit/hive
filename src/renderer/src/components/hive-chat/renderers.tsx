@@ -287,46 +287,79 @@ export function UserMessage({ text, onRecall }: { text: string; onRecall?: (text
  *  rendered as clickable options below the body. Clicks pipe the
  *  chosen text back as the next user message.
  * ──────────────────────────────────────────────────────────── */
-export function AssistantMessage({ text, onChoose }: { text: string; onChoose?: (pick: string) => void }) {
+export function AssistantMessage({ text, onChoose, onRespond }: {
+  text: string
+  onChoose?: (pick: string) => void
+  onRespond?: (item: string) => void
+}) {
   const parsed = extractTrailingChoices(text)
   if (!parsed) return <PlainAssistantText text={text} />
+  // The trailing numbered/lettered list might be a real "pick one"
+  // question, OR more often a next-steps / TODO list the user wants
+  // to read or respond to. Render each line as a plain item with
+  // hover-revealed action icons on the right:
+  //   ✓  treat as choice — re-send `c.raw` to claude
+  //   ✏  copy to input as `-- <text>` so user can append a reply
   return (
     <>
       <PlainAssistantText text={parsed.body} />
-      {parsed.choices.length > 0 && (
-        <div style={{ margin: '4px 0 10px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          {parsed.choices.map(c => (
-            <button
-              key={c.num}
-              onClick={() => onChoose?.(c.raw)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '6px 12px',
-                border: `1px solid ${CRUSH.Charcoal}`,
-                borderRadius: 6,
-                background: 'transparent',
-                color: CRUSH.Ash,
-                fontFamily: FONT_MONO, fontSize: 13,
-                cursor: 'pointer',
-                textAlign: 'left' as const
-              }}
-              onMouseEnter={e => {
-                e.currentTarget.style.background = 'rgba(255,96,255,0.1)'
-                e.currentTarget.style.borderColor = CRUSH.Dolly
-                e.currentTarget.style.color = CRUSH.Butter
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.background = 'transparent'
-                e.currentTarget.style.borderColor = CRUSH.Charcoal
-                e.currentTarget.style.color = CRUSH.Ash
-              }}
-            >
-              <span style={{ color: CRUSH.Dolly, fontWeight: 700, minWidth: 16 }}>{c.num}</span>
-              <span style={{ flex: 1 }}><CrushMarkdown text={c.label} /></span>
-            </button>
-          ))}
-        </div>
-      )}
+      <div style={{ margin: '4px 0 10px 0', display: 'flex', flexDirection: 'column' }}>
+        {parsed.choices.map(c => (
+          <div
+            key={c.num}
+            className="hive-choice-row"
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: 10,
+              padding: '4px 8px',
+              borderRadius: 4,
+              fontFamily: FONT_MONO, fontSize: 13,
+              color: CRUSH.Ash,
+              transition: 'background 120ms ease'
+            }}
+          >
+            <span style={{ color: CRUSH.Charple, fontWeight: 700, minWidth: 16, lineHeight: 1.55 }}>{c.num}.</span>
+            <span style={{ flex: 1, minWidth: 0 }}><CrushMarkdown text={c.label} /></span>
+            <span className="hive-choice-actions" style={{ display: 'inline-flex', gap: 4, opacity: 0, transition: 'opacity 120ms ease' }}>
+              {onChoose && (
+                <button
+                  onClick={() => onChoose(c.raw)}
+                  title="Send this as my reply (= I pick this)"
+                  style={{
+                    background: 'transparent',
+                    border: `1px solid ${CRUSH.Julep}`,
+                    color: CRUSH.Julep,
+                    width: 22, height: 22,
+                    borderRadius: 3,
+                    fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
+                    cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = CRUSH.Julep; e.currentTarget.style.color = CRUSH.Pepper }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = CRUSH.Julep }}
+                >✓</button>
+              )}
+              {onRespond && (
+                <button
+                  onClick={() => onRespond(c.label)}
+                  title="Quote into input box (edit & respond)"
+                  style={{
+                    background: 'transparent',
+                    border: `1px solid ${CRUSH.Charple}`,
+                    color: CRUSH.Charple,
+                    width: 22, height: 22,
+                    borderRadius: 3,
+                    fontFamily: FONT_MONO, fontSize: 11,
+                    cursor: 'pointer',
+                    display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = CRUSH.Charple; e.currentTarget.style.color = CRUSH.Butter }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = CRUSH.Charple }}
+                >✏</button>
+              )}
+            </span>
+          </div>
+        ))}
+      </div>
     </>
   )
 }
@@ -1276,15 +1309,16 @@ export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, 
 /** React.memo-wrapped row: skips re-render when entry / result / onChoose
  *  references are stable. Without this, typing in the input box re-renders
  *  every row (including any large Read panels) on every keystroke. */
-export const TimelineRow = React.memo(function TimelineRow({ entry, result, onChoose, onRecall }: {
+export const TimelineRow = React.memo(function TimelineRow({ entry, result, onChoose, onRecall, onRespond }: {
   entry: TimelineEntry
   result?: { content: string; isError?: boolean }
   onChoose?: (pick: string) => void
   onRecall?: (text: string) => void
+  onRespond?: (item: string) => void
 }) {
   switch (entry.kind) {
     case 'user': return <UserMessage text={entry.text} onRecall={onRecall} />
-    case 'assistant': return <AssistantMessage text={entry.text} onChoose={onChoose} />
+    case 'assistant': return <AssistantMessage text={entry.text} onChoose={onChoose} onRespond={onRespond} />
     case 'tool_call':
       return <ToolBlock name={entry.name} input={entry.input} result={result} />
     case 'tool_result': return null
@@ -1299,6 +1333,7 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
 }, (prev, next) => {
   if (prev.onChoose !== next.onChoose) return false
   if (prev.onRecall !== next.onRecall) return false
+  if (prev.onRespond !== next.onRespond) return false
   if (prev.entry !== next.entry) return false
   // Result content stability — reference OR deep equal for the 2 fields.
   const pr = prev.result, nr = next.result
