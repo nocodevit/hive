@@ -388,8 +388,14 @@ export function respondPermission(
   const session = sessions.get(id)
   if (!session) return { ok: false, error: 'no_session' }
   if (!session.child || session.mode !== 'print') return { ok: false, error: 'not_in_print_mode' }
+  // Both branches of the response union REQUIRE a `behavior` field
+  // (this caught us out in v1.7.21 — Skill tool surfaced the real
+  // ZodError that allow was being parsed as missing-behavior, not
+  // just deny). Schema:
+  //   allow: { behavior: "allow", updatedInput: <record> }
+  //   deny:  { behavior: "deny",  message: <string> }
   const inner = decision === 'allow'
-    ? { updatedInput: input || {} }
+    ? { behavior: 'allow', updatedInput: input || {} }
     : { behavior: 'deny', message: denyMessage || 'Denied by user' }
   const frame = {
     type: 'control_response',

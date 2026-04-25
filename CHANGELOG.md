@@ -14,6 +14,29 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.52] — 2026-04-25
+
+### Fixed
+- **Permission allow was rejected by claude with a Zod error** for any
+  tool with non-trivial permission shape (Skill, custom MCP). v1.7.21
+  changed the deny payload correctly but missed adding `behavior:
+  "allow"` to the allow branch — sent `{updatedInput: ...}` alone.
+  Both branches of the union require `behavior`. Symptom: ⚠ "Tool
+  permission request failed: ZodError: invalid_union ..." in the
+  timeline whenever the user clicked Allow on a Skill call. Fixed:
+  allow now sends `{behavior: "allow", updatedInput: <input>}`.
+
+### Added
+- **Bullet-point styling** for markdown `<ul>` lists in HiveChat:
+  `▸` Charple `#6B50FF` markers replacing the default browser disc.
+  Matches the chat's other "next-tier" Charple accents (tool block
+  border, summary tag, auto-compact divider). Numbered lists `<ol>`
+  unchanged — the digit itself is information. Scoped via
+  `.hive-chat-md` class so xterm Term + the rest of the app are
+  unaffected.
+
+---
+
 ## [1.7.51] — 2026-04-25
 
 ### Added
@@ -798,7 +821,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.51...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.52...HEAD
+[1.7.52]: https://github.com/nocodevit/hive/compare/v1.7.51...v1.7.52
 [1.7.51]: https://github.com/nocodevit/hive/compare/v1.7.50...v1.7.51
 [1.7.50]: https://github.com/nocodevit/hive/compare/v1.7.49...v1.7.50
 [1.7.49]: https://github.com/nocodevit/hive/compare/v1.7.48...v1.7.49
