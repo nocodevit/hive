@@ -14,6 +14,20 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.41] — 2026-04-25
+
+### Fixed
+- **Task tool header no longer dumps the full subagent prompt.**
+  argSummary used to return `input.prompt` verbatim, which is often
+  1k+ chars and reads as a noisy second copy of the user's own
+  message that triggered the Task call. New `TaskHeader` component
+  renders: `● Task [subagent_type] short-description-or-truncated-
+  prompt`. Uses `input.description` (Task's purpose-built short
+  field) when present, else truncates `prompt` to 120 chars with
+  whitespace collapsed. `subagent_type` shown as a small Dolly badge.
+
+---
+
 ## [1.7.40] — 2026-04-25
 
 ### Fixed
@@ -599,7 +613,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.40...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.41...HEAD
+[1.7.41]: https://github.com/nocodevit/hive/compare/v1.7.40...v1.7.41
 [1.7.40]: https://github.com/nocodevit/hive/compare/v1.7.39...v1.7.40
 [1.7.39]: https://github.com/nocodevit/hive/compare/v1.7.38...v1.7.39
 [1.7.38]: https://github.com/nocodevit/hive/compare/v1.7.37...v1.7.38
