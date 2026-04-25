@@ -30,6 +30,7 @@ declare global {
         hasGit: (path: string) => Promise<boolean>
         scanFiles: (dirPath: string, limit?: number) => Promise<{ path: string; mtime: number; size: number }[]>
         revealInFinder: (filePath: string) => Promise<void>
+        openPath: (path: string) => Promise<{ ok: boolean; error?: string }>
         readFile: (filePath: string) => Promise<string | null>
         writeFile: (filePath: string, content: string) => Promise<boolean>
       }
