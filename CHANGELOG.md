@@ -14,6 +14,18 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.35] — 2026-04-25
+
+### Fixed
+- **HiveChat now locks to deep-purple `#0f0a1a` background** regardless
+  of system / Hive theme. In light mode, `var(--bg-primary)` resolved
+  to white and the entire Crush palette (Butter / Ash text + Charple /
+  Dolly / Julep accents — all engineered for a dark base) collapsed
+  into invisibility. xterm Term tab is unchanged (already dark via
+  xterm.js's own theme config).
+
+---
+
 ## [1.7.34] — 2026-04-25
 
 ### Refactored / Added
@@ -527,7 +539,8 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.34...HEAD
+[Unreleased]: https://github.com/nocodevit/hive/compare/v1.7.35...HEAD
+[1.7.35]: https://github.com/nocodevit/hive/compare/v1.7.34...v1.7.35
 [1.7.34]: https://github.com/nocodevit/hive/compare/v1.7.33...v1.7.34
 [1.7.33]: https://github.com/nocodevit/hive/compare/v1.7.32...v1.7.33
 [1.7.32]: https://github.com/nocodevit/hive/compare/v1.7.31...v1.7.32

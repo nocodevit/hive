@@ -522,7 +522,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   return (
     <div style={{
       width: '100%', height: '100%',
-      background: 'var(--bg-primary)',  // Hive's native deep-purple bg — matches the rest of the app
+      // Locked to deep-purple regardless of system/app theme. The Crush
+      // palette is engineered for a dark base; on a light background the
+      // accents (Charple/Dolly/Julep) and Butter/Ash text collapse into
+      // invisibility. Don't follow var(--bg-primary).
+      background: '#0f0a1a',
       color: CRUSH.Ash,
       fontFamily: FONT_MONO, fontSize: 13,
       display: 'flex', flexDirection: 'column',
