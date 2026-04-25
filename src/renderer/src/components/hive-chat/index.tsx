@@ -535,6 +535,34 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setTimeout(() => textareaRef.current?.focus(), 0)
   }, [])
 
+  // Drag-and-drop file → input box. Same as Terminal but appends to
+  // the chat input instead of writing to PTY. Drop a file from
+  // FilesPanel / Finder anywhere on the HiveChat surface; quoted
+  // paths get appended to the textarea separated by spaces, then
+  // focused so the user can keep typing. Plain-text drops also work.
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    let inserted = ''
+    if (e.dataTransfer.files.length > 0) {
+      const paths = Array.from(e.dataTransfer.files)
+        .map(f => window.api.getFilePath(f))
+        .filter(Boolean) as string[]
+      if (paths.length > 0) {
+        inserted = paths.map(p => p.includes(' ') ? `"${p}"` : p).join(' ')
+      }
+    }
+    if (!inserted) {
+      inserted = e.dataTransfer.getData('text/plain') || ''
+    }
+    if (!inserted) return
+    setInput(prev => {
+      if (!prev) return inserted
+      const sep = /\s$/.test(prev) ? '' : ' '
+      return prev + sep + inserted
+    })
+    setTimeout(() => textareaRef.current?.focus(), 0)
+  }, [])
+
   const handleChoose = useCallback((pick: string) => {
     addEntry({ kind: 'user', text: pick })
     window.api.chat.send(id, pick)
@@ -557,7 +585,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // optimizations, but mount/unmount must NOT be tied to visibility.
 
   return (
-    <div style={{
+    <div
+      onDragOver={e => e.preventDefault()}
+      onDrop={handleDrop}
+      style={{
       width: '100%', height: '100%',
       // Locked to deep-purple regardless of system/app theme. The Crush
       // palette is engineered for a dark base; on a light background the
