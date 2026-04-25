@@ -404,7 +404,8 @@ function ToolHeader({ name, input }: { name: string; input: Record<string, unkno
     const glob = String(input.glob ?? input.include ?? '')
     return <HeaderLine tool={name} color={CRUSH.Julep} tail={`"${pattern}"${glob ? ` ${glob}` : ''}`} tailStyle="ash" />
   }
-  if (name === 'Task' || name === 'Agent') return <HeaderLine tool={name} color={CRUSH.Dolly} tail={argSummary(input)} tailStyle="ash" />
+  if (name === 'Task' || name === 'Agent') return <TaskHeader input={input} />
+
   if (name === 'WebFetch' || name === 'WebSearch') return <HeaderLine tool={name} color={CRUSH.Violet} tail={String(input.url ?? input.query ?? '')} tailStyle="link" />
   return <HeaderLine tool={name} color={toolColor(name)} tail={argSummary(input)} tailStyle="ash" />
 }
@@ -525,6 +526,37 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
           }}
         >{expanded ? '▴ Collapse' : `▾ Show ${hidden} more lines`}</button>
       )}
+    </div>
+  )
+}
+
+/**
+ * Task tool — Claude delegating to a subagent. Show:
+ *   ● Task   [subagent_type]   short description (or truncated prompt)
+ *
+ * Don't dump the full input.prompt. It's frequently 1k+ chars and
+ * looks like duplicated content (the same text usually appears one
+ * UserMessage above as the user's own request that triggered it).
+ */
+function TaskHeader({ input }: { input: Record<string, unknown> }) {
+  const subagentType = String(input.subagent_type ?? input.type ?? '')
+  const description = String(input.description ?? '')
+  const prompt = String(input.prompt ?? '')
+  // Prefer description (purpose-built short label), fall back to truncated prompt.
+  const tail = description || (prompt.length > 120 ? prompt.slice(0, 120).replace(/\s+/g, ' ') + '…' : prompt.replace(/\s+/g, ' '))
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontFamily: FONT_MONO }}>
+      <span style={{ color: CRUSH.Dolly, fontWeight: 700 }}>●</span>
+      <span style={{ color: CRUSH.Dolly, fontWeight: 700 }}>Task</span>
+      {subagentType && (
+        <span style={{
+          color: CRUSH.Pepper, background: CRUSH.Dolly,
+          padding: '1px 6px', borderRadius: 3,
+          fontWeight: 700, fontSize: 10, letterSpacing: '0.04em',
+          textTransform: 'uppercase' as const
+        }}>{subagentType}</span>
+      )}
+      <span style={{ color: CRUSH.Ash, opacity: 0.85 }}>{redact(tail)}</span>
     </div>
   )
 }
