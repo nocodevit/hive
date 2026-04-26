@@ -14,6 +14,19 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.67] — 2026-04-26
+
+### Changed
+- **Status-bar progress bars now match `ui-preview-crush-elements.html`
+  pixel-for-pixel — grain text glyphs (`█` / `░`) instead of CSS color
+  fills.** All three indicators (`ctx`, `5h`, `7d`) render as 10-char
+  monospace bars: filled `█` chars in the indicator's color, empty
+  `░` (light shade / "grain") in Charcoal `#3A3943`. Matches the Crush
+  TUI source. Default fill = Julep `#00FFB2`; `ctx` keeps its dynamic
+  Bok → Zest → Sriracha threshold coloring at 70 / 85.
+
+---
+
 ## [1.7.66] — 2026-04-25
 
 ### Fixed

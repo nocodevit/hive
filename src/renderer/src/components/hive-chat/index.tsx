@@ -1396,21 +1396,18 @@ function BurnBar({ cost, projected }: { cost?: number; projected?: number }) {
   )
 }
 
-function PctBar({ pct }: { pct?: number }) {
+/** Grain-style text bar matching ui-preview-crush-elements.html — `█`
+ * for filled, `░` for empty, both as monospace glyphs. Matches the
+ * Crush TUI's usage bar rendering pixel-for-pixel. */
+function PctBar({ pct, fullColor = CRUSH.Julep, total = 10 }: { pct?: number; fullColor?: string; total?: number }) {
+  const filled = typeof pct === 'number'
+    ? Math.round(Math.max(0, Math.min(100, pct)) / 100 * total)
+    : 0
+  const empty = total - filled
   return (
-    <span style={{
-      position: 'relative', display: 'inline-block',
-      width: 36, height: 7,
-      background: CRUSH.Charcoal, borderRadius: 2, overflow: 'hidden'
-    }}>
-      {typeof pct === 'number' && (
-        <span style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0,
-          width: `${Math.max(0, Math.min(100, pct))}%`,
-          background: CRUSH.Dolly,
-          transition: 'width 0.3s ease'
-        }} />
-      )}
+    <span style={{ letterSpacing: 0 }}>
+      <span style={{ color: fullColor }}>{'█'.repeat(filled)}</span>
+      <span style={{ color: CRUSH.Charcoal }}>{'░'.repeat(empty)}</span>
     </span>
   )
 }
@@ -1467,20 +1464,7 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
             <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 4 }}
                   title={`Context: ${contextUsedTokens.toLocaleString()} / ${ctxTotal.toLocaleString()} tokens`}>
               <span style={{ color: CRUSH.Squid }}>ctx</span>
-              <span style={{
-                display: 'inline-block',
-                width: 32, height: 6,
-                borderRadius: 3,
-                background: CRUSH.Charcoal,
-                overflow: 'hidden',
-                position: 'relative' as const
-              }}>
-                <span style={{
-                  display: 'block',
-                  width: `${Math.min(ctxPct, 100)}%`, height: '100%',
-                  background: ctxColor
-                }} />
-              </span>
+              <PctBar pct={ctxPct} fullColor={ctxColor} />
               <span style={{ color: ctxColor, minWidth: 28, fontWeight: ctxPct >= 70 ? 700 : 400 }}>
                 {ctxPct}%
               </span>
