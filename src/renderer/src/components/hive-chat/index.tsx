@@ -57,6 +57,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
   const [contextSize, setContextSize] = useState<string>('') // "1M"
   const [rateLimit, setRateLimit] = useState<{ status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null>(null)
+  // Auto-continue state — main process schedules a setTimeout when it
+  // sees a `rate_limit_event.status==='rejected'` to inject a "please
+  // continue" turn 60s after `resetsAt`. UI shows a countdown + cancel.
+  const [autoContinueAt, setAutoContinueAt] = useState<number | null>(null)
   const [usage, setUsage] = useState<{
     costUSD?: number
     burnPerHour?: number
@@ -552,6 +556,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       setRcState('idle')
     })
 
+    const offAutoContinue = window.api.chat.onAutoContinue(id, (payload) => {
+      setAutoContinueAt(payload?.at ?? null)
+    })
+
     return () => {
       offEv()
       offErr()
@@ -560,6 +568,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       offPrepend()
       offRcOutput()
       offRcExit()
+      offAutoContinue()
       window.api.chat.stop(id)
     }
   }, [id, cwd, agent, agentName, continueSession, rebaseOnStart])
@@ -880,7 +889,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
          "waiting for first message…" so the user knows Chat is live
          but nothing's happened yet. */}
       {rateLimit ? (
-        <RateLimitBar info={rateLimit} />
+        <RateLimitBar
+          info={rateLimit}
+          autoContinueAt={autoContinueAt}
+          onCancelAutoContinue={() => window.api.chat.cancelAutoContinue(id)}
+        />
       ) : !modelName ? (
         <div style={{
           padding: '4px 12px',
@@ -1368,10 +1381,16 @@ function SubagentBanner({ subs }: { subs: Record<string, {
   )
 }
 
-function RateLimitBar({ info }: { info: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null }) {
+function RateLimitBar({ info, autoContinueAt, onCancelAutoContinue }: {
+  info: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null
+  autoContinueAt?: number | null
+  onCancelAutoContinue?: () => void
+}) {
   if (!info) return null
   const type = info.rateLimitType === 'five_hour' ? '5h' : info.rateLimitType === 'seven_day' ? '7d' : info.rateLimitType || '?'
-  const color = info.status === 'allowed' ? CRUSH.Julep : info.status === 'blocked' ? CRUSH.Sriracha : CRUSH.Zest
+  const color = info.status === 'allowed' ? CRUSH.Julep
+    : info.status === 'rejected' || info.status === 'blocked' ? CRUSH.Sriracha
+    : CRUSH.Zest
   return (
     <div style={{
       padding: '4px 12px',
@@ -1385,6 +1404,27 @@ function RateLimitBar({ info }: { info: { status?: string; rateLimitType?: strin
       <span style={{ color: CRUSH.Ash }}>{info.status}</span>
       {info.resetsAt && <span>resets in {humanEta(info.resetsAt)}</span>}
       {info.isUsingOverage && <span style={{ color: CRUSH.Zest }}>⚠ overage</span>}
+      {autoContinueAt && (
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: CRUSH.Charple }}>
+            ⏱ auto-continue in {humanEta(Math.floor(autoContinueAt / 1000))}
+          </span>
+          {onCancelAutoContinue && (
+            <button
+              onClick={onCancelAutoContinue}
+              style={{
+                background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+                color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 10,
+                padding: '1px 6px', borderRadius: 2, cursor: 'pointer'
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.borderColor = CRUSH.Charple; e.currentTarget.style.color = CRUSH.Charple }}
+              onMouseLeave={(e) => { e.currentTarget.style.borderColor = CRUSH.Charcoal; e.currentTarget.style.color = CRUSH.Squid }}
+            >
+              cancel
+            </button>
+          )}
+        </span>
+      )}
     </div>
   )
 }

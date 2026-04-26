@@ -88,6 +88,8 @@ declare global {
         compact: (id: string) => Promise<{ ok: boolean; error?: string }>
         resumeSmart: (id: string) => Promise<{ ok: boolean; sid?: string; compacted?: boolean; error?: string }>
         startWithSummary: (id: string) => Promise<{ ok: boolean; error?: string }>
+        cancelAutoContinue: (id: string) => Promise<{ ok: boolean }>
+        onAutoContinue: (id: string, cb: (payload: { at: number } | null) => void) => () => void
         onRcOutput: (id: string, cb: (data: string) => void) => () => void
         onRcExit: (id: string, cb: () => void) => () => void
         onEvent: (id: string, cb: (ev: any) => void) => () => void

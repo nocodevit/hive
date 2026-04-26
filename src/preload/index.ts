@@ -90,6 +90,13 @@ const api = {
       ipcRenderer.invoke('chat:resumeSmart', { id }) as Promise<{ ok: boolean; sid?: string; compacted?: boolean; error?: string }>,
     startWithSummary: (id: string) =>
       ipcRenderer.invoke('chat:startWithSummary', { id }) as Promise<{ ok: boolean; error?: string }>,
+    cancelAutoContinue: (id: string) =>
+      ipcRenderer.invoke('chat:cancelAutoContinue', { id }) as Promise<{ ok: boolean }>,
+    onAutoContinue: (id: string, cb: (payload: { at: number } | null) => void) => {
+      const handler = (_e: any, data: any) => cb(data)
+      ipcRenderer.on(`chat:autoContinue:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:autoContinue:${id}`, handler)
+    },
     onRcOutput: (id: string, cb: (data: string) => void) => {
       const handler = (_e: any, data: string) => cb(data)
       ipcRenderer.on(`chat:rc_output:${id}`, handler)
