@@ -14,6 +14,22 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.68] — 2026-04-26
+
+### Changed
+- **"Load earlier" cap is temporary, not permanent.** Previously v1.7.66
+  raised the live cap by `entries.length` on each load-older click —
+  loaded entries persisted forever, growing memory unboundedly. Now
+  the cap is temporarily raised AND a buffer counter (=10) is armed.
+  Each genuine live entry — main-agent user/assistant/tool addition,
+  excluding subagent noise (`parent_tool_use_id != null`) and
+  in-place streaming-text replacements — decrements the counter.
+  When it hits 0, cap snaps back to 500 and the loaded-older block is
+  trimmed in one go. Lets you read 200 loaded entries comfortably
+  before the next 10 real conversational turns push them off.
+
+---
+
 ## [1.7.67] — 2026-04-26
 
 ### Changed
