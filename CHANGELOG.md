@@ -14,6 +14,32 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.69] — 2026-04-26
+
+### Added
+- **Auto-continue after rate-limit reset.** When claude emits a
+  `rate_limit_event` with `status: "rejected"` (5h or 7d cap hit and
+  org-level overage disabled), the main process schedules a one-shot
+  `setTimeout` for `resetsAt + 60s` that injects a normal user input
+  (`"Limit reset — please continue."`) into the live `--print` stdin.
+  No `--resume` needed — empirically the `--print` subprocess stays
+  alive through `rejected` (verified against alex(data)
+  `chat-agent-1774186235213-1777124830944.jsonl` line 41674); only the
+  in-flight API call gets blocked.
+  - State persists to `~/.hive/chat-auto-continue.json` so app
+    restart re-arms the timer (entries older than 5min past their
+    fire time get dropped).
+  - RateLimitBar shows `⏱ auto-continue in Xh Ym` Charple text plus a
+    `cancel` button. `chat:cancelAutoContinue` IPC clears both the
+    timer and the persisted entry.
+  - Only one timer per rejection epoch — many tool calls in a single
+    turn each emit their own `rate_limit_event`, so we gate on
+    `!session.autoContinueTimer`.
+  - Status color in RateLimitBar widened: `rejected` now renders
+    Sriracha (was generic Zest fallback).
+
+---
+
 ## [1.7.68] — 2026-04-26
 
 ### Changed
