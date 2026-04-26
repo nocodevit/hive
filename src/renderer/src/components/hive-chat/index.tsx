@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
+import { computeGrainBar } from './progress-bar'
 import { TimelineRow, ThinkingSpinner } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
 import { shortenPath } from '../../lib/path-display'
@@ -1463,12 +1464,10 @@ function BurnBar({ cost, projected }: { cost?: number; projected?: number }) {
 /** Grain-style text bar — `█` for filled, `░` for empty, monospace.
  * Empty uses Oyster `#605F6B` (not Charcoal `#3A3943` which was too
  * close to BBQ bg `#2D2C35` to be visible — preview was wrong, fixed
- * in v1.7.70 per user feedback). */
+ * in v1.7.70 per user feedback). Math extracted to ./progress-bar
+ * for unit-testing in node-env vitest. */
 function PctBar({ pct, fullColor = CRUSH.Julep, total = 10 }: { pct?: number; fullColor?: string; total?: number }) {
-  const filled = typeof pct === 'number'
-    ? Math.round(Math.max(0, Math.min(100, pct)) / 100 * total)
-    : 0
-  const empty = total - filled
+  const { filled, empty } = computeGrainBar(pct, total)
   return (
     <span style={{ letterSpacing: 0 }}>
       <span style={{ color: fullColor }}>{'█'.repeat(filled)}</span>
