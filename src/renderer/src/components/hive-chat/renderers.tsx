@@ -221,21 +221,30 @@ export function parseUserCommand(raw: string): { kind: 'command'; command: strin
 
 export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRecall?: (text: string) => void; isSubagent?: boolean }) {
   const parsed = parseUserCommand(text)
-  // Subagent prompts (parent agent → Task tool input) are NOT real
-  // user input. Strip the green ❯ + Dolly bubble — just plain text in
-  // the dimmed Mochi-bordered SUB container that TimelineRow wraps
-  // around it. This is "agent instructing subagent", visually distinct
-  // from user-typed messages.
+  // Subagent prompts (parent agent → Task tool input) reuse the
+  // user-bubble SHAPE but recolor everything to Charple — same shape
+  // tells the eye "this is a directive", different color tells it
+  // "this isn't from the human". Per user feedback v1.7.71:
+  //   - Dolly  bg/border  → Charple bg/border
+  //   - Julep  ❯ glyph    → Charple ❯ glyph
+  //   - Butter text       → Ash text (slightly dimmer)
   if (isSubagent) {
     return (
       <div style={{
-        fontFamily: FONT_MONO,
-        fontSize: 12,
-        whiteSpace: 'pre-wrap',
-        color: CRUSH.Ash,
-        padding: '4px 0'
+        background: 'rgba(107, 80, 255, 0.12)',
+        border: `1px solid ${CRUSH.Charple}`,
+        borderRadius: 8,
+        padding: '7px 11px',
+        margin: '6px 0',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        fontFamily: FONT_MONO
       }}>
-        {redact(parsed.kind === 'command' ? `/${parsed.command}${parsed.args ? ' ' + parsed.args : ''}` : parsed.text)}
+        <span style={{ color: CRUSH.Charple, fontWeight: 700, fontSize: 16 }}>❯</span>
+        <span style={{ color: CRUSH.Ash, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>
+          {redact(parsed.kind === 'command' ? `/${parsed.command}${parsed.args ? ' ' + parsed.args : ''}` : parsed.text)}
+        </span>
       </div>
     )
   }
