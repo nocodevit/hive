@@ -219,8 +219,26 @@ export function parseUserCommand(raw: string): { kind: 'command'; command: strin
   return { kind: 'text', text: raw }
 }
 
-export function UserMessage({ text, onRecall }: { text: string; onRecall?: (text: string) => void }) {
+export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRecall?: (text: string) => void; isSubagent?: boolean }) {
   const parsed = parseUserCommand(text)
+  // Subagent prompts (parent agent → Task tool input) are NOT real
+  // user input. Strip the green ❯ + Dolly bubble — just plain text in
+  // the dimmed Mochi-bordered SUB container that TimelineRow wraps
+  // around it. This is "agent instructing subagent", visually distinct
+  // from user-typed messages.
+  if (isSubagent) {
+    return (
+      <div style={{
+        fontFamily: FONT_MONO,
+        fontSize: 12,
+        whiteSpace: 'pre-wrap',
+        color: CRUSH.Ash,
+        padding: '4px 0'
+      }}>
+        {redact(parsed.kind === 'command' ? `/${parsed.command}${parsed.args ? ' ' + parsed.args : ''}` : parsed.text)}
+      </div>
+    )
+  }
   if (parsed.kind === 'command') {
     return (
       <div style={{
@@ -1310,7 +1328,7 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
   const isSub = (entry as any).isSubagent === true
   let row: React.ReactNode = null
   switch (entry.kind) {
-    case 'user': row = <UserMessage text={entry.text} onRecall={isSub ? undefined : onRecall} />; break
+    case 'user': row = <UserMessage text={entry.text} onRecall={isSub ? undefined : onRecall} isSubagent={isSub} />; break
     case 'assistant': row = <AssistantMessage text={entry.text} onChoose={isSub ? undefined : onChoose} onRespond={isSub ? undefined : onRespond} />; break
     case 'tool_call': row = <ToolBlock name={entry.name} input={entry.input} result={result} />; break
     case 'tool_result': row = null; break

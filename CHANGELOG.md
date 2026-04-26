@@ -14,6 +14,28 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.70] — 2026-04-26
+
+### Fixed
+- **Subagent prompts no longer rendered with user-input style.**
+  Stream events with `parent_tool_use_id != null` come through as
+  `kind: 'user'` (subagent's view: "what the parent told me to do"),
+  but they're NOT real user input. v1.7.64 wrapped them in a
+  Mochi-bordered SUB container, but the inner content still ran
+  through `UserMessage` which slapped on the green Julep `❯` prefix
+  and Dolly pink bubble — making subagent prompts look identical to
+  things the human typed. Now `UserMessage` takes an `isSubagent`
+  prop: when true, render as plain Ash `whiteSpace: pre-wrap` text
+  with no bubble or `❯`. Real user input is unaffected (no
+  `parent_tool_use_id` → `isSubagent` stays false → original style).
+- **Progress-bar grain visible against panel bg.** `░` empty cells
+  were Charcoal `#3A3943` against BBQ `#2D2C35` — only ~13 channels
+  of contrast, basically invisible. Switched to Oyster `#605F6B`
+  (~50 channels) so the grain reads clearly. `ui-preview-crush-elements.html`
+  was wrong; updated alongside.
+
+---
+
 ## [1.7.69] — 2026-04-26
 
 ### Added

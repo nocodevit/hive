@@ -1460,9 +1460,10 @@ function BurnBar({ cost, projected }: { cost?: number; projected?: number }) {
   )
 }
 
-/** Grain-style text bar matching ui-preview-crush-elements.html — `█`
- * for filled, `░` for empty, both as monospace glyphs. Matches the
- * Crush TUI's usage bar rendering pixel-for-pixel. */
+/** Grain-style text bar — `█` for filled, `░` for empty, monospace.
+ * Empty uses Oyster `#605F6B` (not Charcoal `#3A3943` which was too
+ * close to BBQ bg `#2D2C35` to be visible — preview was wrong, fixed
+ * in v1.7.70 per user feedback). */
 function PctBar({ pct, fullColor = CRUSH.Julep, total = 10 }: { pct?: number; fullColor?: string; total?: number }) {
   const filled = typeof pct === 'number'
     ? Math.round(Math.max(0, Math.min(100, pct)) / 100 * total)
@@ -1471,7 +1472,7 @@ function PctBar({ pct, fullColor = CRUSH.Julep, total = 10 }: { pct?: number; fu
   return (
     <span style={{ letterSpacing: 0 }}>
       <span style={{ color: fullColor }}>{'█'.repeat(filled)}</span>
-      <span style={{ color: CRUSH.Charcoal }}>{'░'.repeat(empty)}</span>
+      <span style={{ color: CRUSH.Oyster }}>{'░'.repeat(empty)}</span>
     </span>
   )
 }
