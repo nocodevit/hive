@@ -14,6 +14,20 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.66] — 2026-04-25
+
+### Fixed
+- **"Show earlier messages" no longer vanishes**. Clicking the
+  Load-older button prepended history into `timeline`, but a fixed
+  `MAX_LIVE_ENTRIES = 500` cap then sliced the just-prepended
+  oldest rows on the very next stream event — so the new rows
+  appeared and disappeared within a frame. Replaced with a
+  `liveLimitRef` that grows by `entries.length` on each prepend,
+  so the cap respects loaded history. Live cap still starts at
+  500 to bound memory on long fresh sessions.
+
+---
+
 ## [1.7.65] — 2026-04-25
 
 ### Added
