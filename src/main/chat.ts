@@ -1,5 +1,5 @@
 import { spawn, ChildProcessWithoutNullStreams, execSync } from 'node:child_process'
-import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { ipcMain, BrowserWindow, app } from 'electron'
@@ -48,6 +48,11 @@ interface ChatSession {
   // Interactive TUI handle while /remote-control is active. null when idle.
   rcPty?: pty.IPty
   mode: 'print' | 'rc'
+  // Auto-continue after rate-limit reset. fireAt = unix-ms when the timer
+  // will inject "Limit reset — please continue." as a normal user input.
+  // 60s buffer past the resetsAt claude reports. Cancellable from UI.
+  autoContinueTimer?: NodeJS.Timeout
+  autoContinueAt?: number
 }
 
 const sessions = new Map<string, ChatSession>()
@@ -101,6 +106,62 @@ function broadcast(event: string, payload: unknown) {
   for (const win of BrowserWindow.getAllWindows()) {
     win.webContents.send(event, payload)
   }
+}
+
+/**
+ * Auto-continue persistence — keyed by chat session id (chat-<agentId>).
+ * Lives next to ~/.hive/chat-logs. App restart reloads pending timers.
+ */
+const AUTO_CONTINUE_FILE = (): string =>
+  join(process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive'), 'chat-auto-continue.json')
+const AUTO_CONTINUE_BUFFER_MS = 60_000
+const AUTO_CONTINUE_MSG = 'Limit reset — please continue.'
+
+function loadAutoContinue(): Record<string, { fireAt: number }> {
+  try { if (existsSync(AUTO_CONTINUE_FILE())) return JSON.parse(readFileSync(AUTO_CONTINUE_FILE(), 'utf-8')) } catch {}
+  return {}
+}
+function saveAutoContinue(state: Record<string, { fireAt: number }>) {
+  try { writeFileSync(AUTO_CONTINUE_FILE(), JSON.stringify(state)) } catch {}
+}
+function persistAutoContinue(id: string, fireAt: number | null) {
+  const s = loadAutoContinue()
+  if (fireAt == null) delete s[id]
+  else s[id] = { fireAt }
+  saveAutoContinue(s)
+}
+
+function scheduleAutoContinue(id: string, fireAt: number) {
+  const session = sessions.get(id)
+  if (!session) return
+  if (session.autoContinueTimer) clearTimeout(session.autoContinueTimer)
+  session.autoContinueAt = fireAt
+  persistAutoContinue(id, fireAt)
+  broadcast(`chat:autoContinue:${id}`, { at: fireAt })
+  const delay = Math.max(0, fireAt - Date.now())
+  session.autoContinueTimer = setTimeout(() => {
+    const s = sessions.get(id)
+    if (!s) return
+    s.autoContinueTimer = undefined
+    s.autoContinueAt = undefined
+    persistAutoContinue(id, null)
+    broadcast(`chat:autoContinue:${id}`, null)
+    // Inject as normal user input. Same path the user's textarea uses;
+    // claude treats it as the next conversational turn.
+    sendUserMessage(id, AUTO_CONTINUE_MSG)
+  }, delay)
+}
+
+export function cancelAutoContinue(id: string) {
+  const session = sessions.get(id)
+  if (session?.autoContinueTimer) clearTimeout(session.autoContinueTimer)
+  if (session) {
+    session.autoContinueTimer = undefined
+    session.autoContinueAt = undefined
+  }
+  persistAutoContinue(id, null)
+  broadcast(`chat:autoContinue:${id}`, null)
+  return { ok: true }
 }
 
 function parseJsonLines(buf: string, sessionId: string): { events: any[]; rest: string } {
@@ -391,6 +452,21 @@ export function startChat(id: string, opts: StartOpts = {}) {
   }
   sessions.set(id, session)
 
+  // Hydrate any pending auto-continue timer from disk. If app died after
+  // we scheduled but before it fired, pick the timer back up. Stale
+  // entries (fireAt already past + a generous grace) get fired
+  // immediately or dropped.
+  try {
+    const pending = loadAutoContinue()[id]
+    if (pending?.fireAt) {
+      if (pending.fireAt > Date.now() - 5 * 60_000) {
+        scheduleAutoContinue(id, pending.fireAt)
+      } else {
+        persistAutoContinue(id, null)
+      }
+    }
+  } catch {}
+
   // When resuming (either -c or --resume <sid>), replay the most-recent
   // local session file so the UI shows the conversation history, not just
   // the live stream from here.
@@ -429,6 +505,20 @@ export function startChat(id: string, opts: StartOpts = {}) {
       // can --resume exactly this session after the TUI round-trip.
       if (ev?.type === 'system' && ev?.subtype === 'init' && ev?.session_id && !session.claudeSid) {
         session.claudeSid = ev.session_id
+      }
+      // Auto-continue scheduling. claude's rate_limit_event with
+      // status='rejected' means subsequent API calls are blocked until
+      // resetsAt; but the --print process stays alive (verified
+      // empirically — see CHANGELOG v1.7.69 / alex(data) 2026-04-25
+      // log line 41674). Schedule a one-shot timer to fire 60s after
+      // resetsAt that injects a "please continue" turn. Only schedule
+      // once per rejection epoch — many tool calls in a single turn
+      // each emit their own rate_limit_event.
+      if (ev?.type === 'rate_limit_event' && ev.rate_limit_info?.status === 'rejected') {
+        const resetsAt = ev.rate_limit_info.resetsAt
+        if (typeof resetsAt === 'number' && !session.autoContinueTimer) {
+          scheduleAutoContinue(id, resetsAt * 1000 + AUTO_CONTINUE_BUFFER_MS)
+        }
       }
     }
     // message_stop is our only refresh trigger now. One user turn may
@@ -561,6 +651,9 @@ export function stopChat(id: string) {
   try { session.child?.kill() } catch {}
   try { session.rcPty?.kill() } catch {}
   if (session.usageTimer) clearInterval(session.usageTimer)
+  if (session.autoContinueTimer) clearTimeout(session.autoContinueTimer)
+  // NB: don't wipe the persisted entry — user may close+reopen the chat
+  // and want the timer to resume. Hydration on next startChat handles it.
   sessions.delete(id)
 }
 
@@ -1061,4 +1154,5 @@ export function registerChatIpc() {
   ipcMain.handle('chat:compact', (_e, { id }) => compactSession(id))
   ipcMain.handle('chat:resumeSmart', (_e, { id }) => resumeSmart(id))
   ipcMain.handle('chat:startWithSummary', (_e, { id }) => startWithSummary(id))
+  ipcMain.handle('chat:cancelAutoContinue', (_e, { id }) => cancelAutoContinue(id))
 }
