@@ -141,16 +141,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Cap in-memory timeline so very long sessions don't accumulate
-  // unbounded React state. Entries fall off the top; JSONL on disk
-  // remains the source of truth for archeology (see ~/.hive/chat-logs/
-  // and ~/.claude/projects/<cwd>/<sid>.jsonl).
-  const MAX_LIVE_ENTRIES = 500
+  // unbounded React state. Live cap starts at 500; "Load earlier"
+  // grows it by the loaded batch so prepended history isn't immediately
+  // sliced off by the next addEntry.
+  const liveLimitRef = useRef(500)
   const addEntry = (entry: Omit<TimelineEntry, 'id'> & { id?: string }) => {
     const id = entry.id || `e${entryIdRef.current++}`
     setTimeline(prev => {
       const next = [...prev, { ...entry, id } as TimelineEntry]
-      if (next.length > MAX_LIVE_ENTRIES) {
-        const drop = next.length - MAX_LIVE_ENTRIES
+      if (next.length > liveLimitRef.current) {
+        const drop = next.length - liveLimitRef.current
         setTrimmedCount(c => c + drop)
         return next.slice(drop)
       }
@@ -195,10 +195,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       setTimeline(prev => {
         const idx = prev.findIndex(e => e.id === id)
         if (idx < 0) {
-          // Append + apply the same MAX_LIVE_ENTRIES cap as addEntry.
+          // Append + apply the same dynamic cap as addEntry.
           const next = [...prev, entry]
-          if (next.length > MAX_LIVE_ENTRIES) {
-            const drop = next.length - MAX_LIVE_ENTRIES
+          if (next.length > liveLimitRef.current) {
+            const drop = next.length - liveLimitRef.current
             setTrimmedCount(c => c + drop)
             return next.slice(drop)
           }
@@ -503,7 +503,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     // setTimeline atomically so scroll position doesn't jitter.
     const offPrepend = window.api.chat.onPrepend(id, ({ events, hasOlder }) => {
       const entries = flattenHistoricalEvents(events, () => `e${entryIdRef.current++}`)
-      if (entries.length) setTimeline(prev => [...entries, ...prev])
+      if (entries.length) {
+        // Grow the live cap so the next addEntry/replaceEntry doesn't
+        // immediately slice off the just-prepended older entries.
+        liveLimitRef.current += entries.length
+        setTimeline(prev => [...entries, ...prev])
+      }
       setHasOlderOnDisk(hasOlder)
       setLoadingOlder(false)
     })
