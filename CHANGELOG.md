@@ -14,6 +14,29 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.71] — 2026-04-26
+
+### Changed
+- **Subagent prompt bubble re-styled (final).** v1.7.70 stripped to
+  plain Ash text per first-pass user feedback; user followed up
+  "可以和 user input 样式类似，换个颜色就行" — i.e., keep the
+  user-bubble shape, just recolor. Settled on:
+    - bg: `rgba(107, 80, 255, 0.12)` (Charple at 12% — same opacity
+      shape as the Dolly user bubble, different hue)
+    - border: 1px Charple `#6B50FF`
+    - prefix: `❯` Charple (was Julep on user input)
+    - text: Ash `#DFDBDD` (slightly dimmer than Butter)
+  Real human input still renders Dolly + Julep ❯ + Butter — `isSubagent`
+  prop only flips when stream event has `parent_tool_use_id` set.
+
+### Tests
+- Extracted `computeGrainBar(pct, total)` math into
+  `progress-bar.ts` and added 6 vitest cases (clamping, NaN/undefined,
+  rounding, custom total, filled+empty invariant). 32 test files /
+  444 tests now pass.
+
+---
+
 ## [1.7.70] — 2026-04-26
 
 ### Fixed
