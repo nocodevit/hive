@@ -141,14 +141,31 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   // Cap in-memory timeline so very long sessions don't accumulate
-  // unbounded React state. Live cap starts at 500; "Load earlier"
-  // grows it by the loaded batch so prepended history isn't immediately
-  // sliced off by the next addEntry.
+  // unbounded React state. Default cap = 500 entries.
+  //
+  // "Load earlier" semantics: temporarily raises the cap by the loaded
+  // batch so prepended history doesn't get sliced immediately. The cap
+  // snaps back to 500 after PREPEND_BUFFER_TURNS (=10) genuine new
+  // live entries arrive — at which point the loaded-older entries fall
+  // off in one trim. Subagent noise (parent_tool_use_id != null) and
+  // streaming-update replaceEntry calls don't count toward the buffer:
+  // only true new top-level conversational additions tick it down.
   const liveLimitRef = useRef(500)
+  const prependBufferRef = useRef(0)
+  const PREPEND_BUFFER_TURNS = 10
+  const tickPrependBuffer = (entry: { isSubagent?: boolean }) => {
+    if (entry.isSubagent) return
+    if (prependBufferRef.current <= 0) return
+    prependBufferRef.current -= 1
+    if (prependBufferRef.current === 0) {
+      liveLimitRef.current = 500
+    }
+  }
   const addEntry = (entry: Omit<TimelineEntry, 'id'> & { id?: string }) => {
     const id = entry.id || `e${entryIdRef.current++}`
     setTimeline(prev => {
       const next = [...prev, { ...entry, id } as TimelineEntry]
+      tickPrependBuffer(entry)
       if (next.length > liveLimitRef.current) {
         const drop = next.length - liveLimitRef.current
         setTrimmedCount(c => c + drop)
@@ -195,8 +212,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       setTimeline(prev => {
         const idx = prev.findIndex(e => e.id === id)
         if (idx < 0) {
-          // Append + apply the same dynamic cap as addEntry.
+          // First time seeing this id → genuine new entry. Apply cap
+          // + buffer-tick like addEntry. Subsequent same-id calls hit
+          // the in-place replace branch below and don't tick the
+          // buffer (streaming text deltas == 1 logical message).
           const next = [...prev, entry]
+          tickPrependBuffer(entry as any)
           if (next.length > liveLimitRef.current) {
             const drop = next.length - liveLimitRef.current
             setTrimmedCount(c => c + drop)
@@ -504,9 +525,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     const offPrepend = window.api.chat.onPrepend(id, ({ events, hasOlder }) => {
       const entries = flattenHistoricalEvents(events, () => `e${entryIdRef.current++}`)
       if (entries.length) {
-        // Grow the live cap so the next addEntry/replaceEntry doesn't
-        // immediately slice off the just-prepended older entries.
+        // Temporarily raise the cap to fit the loaded batch + arm the
+        // buffer countdown. After PREPEND_BUFFER_TURNS genuine live
+        // entries arrive, tickPrependBuffer snaps cap back to 500 and
+        // the next addEntry trims the loaded-older block in one go.
         liveLimitRef.current += entries.length
+        prependBufferRef.current = PREPEND_BUFFER_TURNS
         setTimeline(prev => [...entries, ...prev])
       }
       setHasOlderOnDisk(hasOlder)
