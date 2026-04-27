@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeGrainBar, parseContextSize, selectCtxNagTier } from '../progress-bar'
+import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from '../progress-bar'
 
 describe('computeGrainBar', () => {
   it('default total = 10', () => {
@@ -81,5 +81,23 @@ describe('selectCtxNagTier', () => {
     expect(selectCtxNagTier(150, both)).toBe('urgent')
     expect(selectCtxNagTier(95, dUrgent)).toBe(null)
     expect(selectCtxNagTier(95, dWarn)).toBe('urgent')  // warn dismissal doesn't affect urgent
+  })
+})
+
+describe('selectCompactBtnTier', () => {
+  it('< 60 → normal', () => {
+    expect(selectCompactBtnTier(0)).toBe('normal')
+    expect(selectCompactBtnTier(30)).toBe('normal')
+    expect(selectCompactBtnTier(59)).toBe('normal')
+  })
+  it('60-79 → warn', () => {
+    expect(selectCompactBtnTier(60)).toBe('warn')
+    expect(selectCompactBtnTier(70)).toBe('warn')
+    expect(selectCompactBtnTier(79)).toBe('warn')
+  })
+  it('>= 80 → urgent', () => {
+    expect(selectCompactBtnTier(80)).toBe('urgent')
+    expect(selectCompactBtnTier(95)).toBe('urgent')
+    expect(selectCompactBtnTier(150)).toBe('urgent')
   })
 })
