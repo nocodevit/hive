@@ -14,6 +14,41 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.72] — 2026-04-27
+
+### Fixed
+- **Ctx % bar overflowing 100% (alex(data) flashed 181%)**. Two
+  bugs combined to produce wildly wrong context-size readings:
+  1. `result.usage.cache_read_input_tokens` is the CUMULATIVE sum
+     across every iteration of an agentic turn — each tool call
+     re-reads the prefix from cache and the running total is
+     reported. For long turns this balloons to multiples of the
+     context window (saw 25M on a 1M model). Fix: use
+     `iterations[-1]` per-iteration values; fall back to top-level
+     only when `iterations` is absent.
+  2. Subagent `result` events carry their own independent usage and
+     were overwriting the parent's ctx number. Fix: skip
+     `setLatestInputTokens` when `parent_tool_use_id != null`. The
+     subagent result entry is still added to the timeline (with
+     `isSubagent: true` so renderer dims it), just not used for
+     the parent's bar.
+
+### Added
+- **Context-pressure nag banner** at 80% (warn, Zest border + bg
+  tint) and 90% (urgent, Sriracha). Sits above the Subagent /
+  RateLimit row. Each tier dismissable independently with `✕`;
+  both reset when ctx drops by ≥ 30% (= a /compact ran). Inline
+  `Compact now` button runs the same path as typing `/compact` in
+  the input box. Typed `/compact` was already supported (no change
+  there) — the banner adds passive prompting + 1-click trigger.
+
+### Tests
+- `parseContextSize(s)` (5 cases) and `selectCtxNagTier(pct, dismissed)`
+  (3 case groups, 11 assertions total) added to `progress-bar.ts`.
+  449 tests across 32 files pass.
+
+---
+
 ## [1.7.71] — 2026-04-26
 
 ### Changed

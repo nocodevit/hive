@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { computeGrainBar } from '../progress-bar'
+import { computeGrainBar, parseContextSize, selectCtxNagTier } from '../progress-bar'
 
 describe('computeGrainBar', () => {
   it('default total = 10', () => {
@@ -34,5 +34,52 @@ describe('computeGrainBar', () => {
       const { filled, empty } = computeGrainBar(pct, 10)
       expect(filled + empty).toBe(10)
     }
+  })
+})
+
+describe('parseContextSize', () => {
+  it('parses M / K suffix case-insensitively', () => {
+    expect(parseContextSize('1M')).toBe(1_000_000)
+    expect(parseContextSize('200K')).toBe(200_000)
+    expect(parseContextSize('1m')).toBe(1_000_000)
+    expect(parseContextSize('200k')).toBe(200_000)
+  })
+
+  it('returns 0 for empty / undefined / unrecognized', () => {
+    expect(parseContextSize('')).toBe(0)
+    expect(parseContextSize(undefined)).toBe(0)
+    expect(parseContextSize('abc')).toBe(0)
+    expect(parseContextSize('1G')).toBe(0)
+    expect(parseContextSize('M')).toBe(0)
+  })
+})
+
+describe('selectCtxNagTier', () => {
+  const both = { warn: false, urgent: false }
+  const dWarn = { warn: true, urgent: false }
+  const dUrgent = { warn: false, urgent: true }
+  const dBoth = { warn: true, urgent: true }
+
+  it('< 80 → no nag regardless of dismissal', () => {
+    expect(selectCtxNagTier(0, both)).toBe(null)
+    expect(selectCtxNagTier(50, both)).toBe(null)
+    expect(selectCtxNagTier(79, both)).toBe(null)
+    expect(selectCtxNagTier(79, dBoth)).toBe(null)
+  })
+
+  it('80-89 → warn (unless dismissed)', () => {
+    expect(selectCtxNagTier(80, both)).toBe('warn')
+    expect(selectCtxNagTier(85, both)).toBe('warn')
+    expect(selectCtxNagTier(89, both)).toBe('warn')
+    expect(selectCtxNagTier(85, dWarn)).toBe(null)
+    expect(selectCtxNagTier(85, dUrgent)).toBe('warn')  // urgent dismissal doesn't affect warn
+  })
+
+  it('>= 90 → urgent (unless dismissed)', () => {
+    expect(selectCtxNagTier(90, both)).toBe('urgent')
+    expect(selectCtxNagTier(95, both)).toBe('urgent')
+    expect(selectCtxNagTier(150, both)).toBe('urgent')
+    expect(selectCtxNagTier(95, dUrgent)).toBe(null)
+    expect(selectCtxNagTier(95, dWarn)).toBe('urgent')  // warn dismissal doesn't affect urgent
   })
 })
