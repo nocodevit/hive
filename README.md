@@ -95,16 +95,22 @@ Each agent's chat is a structured event stream, rendered as typed components:
 **Session lifecycle:**
 - **Sticky mount** — HiveChat stays alive across agent / Term↔Chat switches; one live `claude --print` per agent (matches xterm)
 - **Smart-startup `/compact`** — if prior session > 50% context, auto runs `/compact` via PTY round-trip BEFORE resume; no more cache-miss hangs on big sessions
-- **Close → 3 buttons**: `↻ Resume` (auto-compacts if > 50%), `≡ With summary` (compact + `--fork-session`), `⊕ New` (clean slate)
-- **`/compact` slash command** in input — same PTY round-trip, manual trigger
+- **ActionToolbar above input** — always-on `[Compact]` button (border + label escalate at 60% Zest "Compact (⚠ 68%)" / 80% Sriracha) + `⋮` dropdown housing Compact + Fork / Resume / Remote Control / Close
+- **Floating ↓ scroll-to-bottom** — appears when user scrolls up; auto-scroll respects scroll position so reading older content isn't disrupted by live stream
+- **Subagent prompts** — Charple-bordered bubble with `❯` prefix (visually distinct from real user input's Dolly + Julep `❯`); SUB Mochi-bordered wrapper around all subagent activity
+- **Subagent banner** — `Subagent #N <description> · X tools · Y tok · Z elapsed` row above rate-limit, populated from `task_progress` events
+- **Auto-continue after rate-limit reset** — when `rate_limit_event.status === 'rejected'`, schedules a `setTimeout` for `resetsAt + 60s` that injects "Limit reset — please continue." as a normal user input. Persisted to `~/.hive/chat-auto-continue.json` (survives app restart). Live-ticking `⏱ auto-continue in Xh Ym` countdown + `cancel` button
+- **`/compact` slash command** in input — same PTY round-trip, manual trigger (Compact button does the same)
 - **`/remote-control` slash** — round-trip to interactive TUI for mobile pairing, then `/desktop` polite handover before resume
 - **Stop ■** button cancels current generation via `control_request {subtype:"interrupt"}`
-- **Session resume** — full JSONL replay; **Load earlier messages** button if > 500 entries on disk
+- **Session resume** — full JSONL replay; **Load earlier messages** button (loaded entries persist 10 real conversational turns before the cap snaps back to 500)
 - **Auto-compact divider** detection — heuristic on `input_tokens` drop > 50% mid-turn
 
 **Status bar:**
-- Model name + context window + **ctx %% bar** (live from `result.usage.input_tokens` / `modelUsage.contextWindow`, color shifts at 70/85%)
-- 5h / 7d subscription %% **with reset countdown** (`5h 23% · in 4h 12m`) scraped from interactive `/usage` TUI via node-pty (shared cache across all agents to avoid spawning N PTYs)
+- Model name + context window + **ctx %% grain-text bar** (`█` filled in Bok→Zest→Sriracha at 70/85%, `░` empty in Oyster — matches Crush TUI pixel-for-pixel)
+- ctx % uses `iterations[last]` per-iteration value (NOT the cumulative top-level usage that ballooned to 2498% on long agentic turns); subagent results don't overwrite the parent's bar
+- **Context-pressure nag banner** at 80% (Zest warn) and 90% (Sriracha urgent) — independently dismissable, auto-resets when ctx drops 30%+ (signals /compact ran), inline `Compact now` button
+- 5h / 7d subscription %% grain bars **with live-ticking reset countdown** (`5h 23% · in 4h 12m`, 60s heartbeat by-the-minute) scraped from interactive `/usage` TUI via node-pty (shared cache across all agents to avoid spawning N PTYs)
 - Streaming-mode toggle, `close ✕` button (with confirm panel)
 
 **Input:**
@@ -117,7 +123,7 @@ Each agent's chat is a structured event stream, rendered as typed components:
 - `~/.hive/chat-logs/` 30-day retention sweep on startup
 - App Settings → Storage → cleanup tool for `~/.claude/projects/` (slider 1-90 days, dry-run + confirm; subagent transcripts safe to delete since they're filtered out of `/resume` picker)
 
-**438 vitest cases** covering: structured-output parsing, summary detection, choice extraction (numbered + letter + fullwidth parens), markdown helpers, recall ring + state machine, JSONL flattening, storage stats bucketing, language detection, terminal cell rendering, color remapping, more.
+**452 vitest cases** covering: structured-output parsing, summary detection, choice extraction (numbered + letter + fullwidth parens), markdown helpers, recall ring + state machine, JSONL flattening, storage stats bucketing, language detection, terminal cell rendering, color remapping, grain-bar math, ctx-tier selection (warn/urgent), Compact-button tier selection, parseContextSize, more.
 
 The ride was not graceful. The lessons live in `docs/slides-hivechat-journey.html` (14-slide journey deck) — 4 pivots, 60+ commits, one lost afternoon to a Zod schema we had to recover from a captured log.
 
@@ -353,7 +359,12 @@ Restart Hive — skills appear in Agent Editor under the Skills tab.
 - [x] **Drag-and-drop files** to chat input
 - [x] **Storage cleanup tool** — App Settings → Storage panel for `~/.claude/projects/` retention (slider, dry-run, confirm)
 - [x] **lucide-react icons** — choice-row Check / Pencil; SVG `pointer-events: none` so clicks bubble to button
-- [ ] **Subagent live timeline** — file-watch `subagents/agent-*.jsonl` and stream sub-tool-calls into a nested expandable panel
+- [x] **Subagent live timeline (in-stream)** — events with `parent_tool_use_id` get `isSubagent: true` flag, wrapped in Mochi-bordered SUB container with dim styling; subagent prompts use Charple bubble (visually distinct from real user input). Sticky `Subagent #N` banner above rate-limit row driven by `task_progress` events; idle threshold 60s freezes the spinning ⏳
+- [x] **Auto-continue after rate-limit reset** — `setTimeout` injects "Limit reset — please continue." 60s after `resetsAt`; persisted to `~/.hive/chat-auto-continue.json` so app restart re-arms; live-ticking countdown + cancel button in RateLimitBar
+- [x] **ActionToolbar + scroll-to-bottom** — Compact button always-on with tier escalation (60% Zest / 80% Sriracha); `⋮` dropdown for Fork / Resume / Remote Control / Close; floating ↓ button when scrolled up
+- [x] **Context-pressure nag banner** — 80% Zest warn + 90% Sriracha urgent, independently dismissable, auto-resets when ctx drops 30%+
+- [x] **Grain-text progress bars** — `█` / `░` monospace glyphs matching Crush TUI pixel-for-pixel (ctx, 5h, 7d). Empty Oyster #605F6B for visibility against BBQ panel bg
+- [x] **ctx % uses iterations[last]** — fixed 2498% / 181% overflows from cumulative cache_read counting; subagent results don't overwrite parent's bar
 - [ ] **Session browser** — list all `~/.claude/projects/<cwd>/*.jsonl` for an agent, click to resume any
 - [ ] **Search timeline** (Cmd+F) across full chat history
 - [ ] **Multi-agent communication** — PTY injection + filesystem mailbox + shared task list ([plan](docs/agent-comms-plan.md))
