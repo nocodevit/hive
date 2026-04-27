@@ -44,3 +44,17 @@ export function selectCtxNagTier(
   if (pct >= 80) return dismissed.warn ? null : 'warn'
   return null
 }
+
+export type CompactBtnTier = 'normal' | 'warn' | 'urgent'
+
+/**
+ * Tier for the always-on Compact button in the action toolbar.
+ * Different (lower) thresholds than the nag banner: 60% triggers a
+ * Zest border + `(⚠ X%)` suffix on the label, 80% escalates to
+ * Sriracha (matching the nag banner's urgent color).
+ */
+export function selectCompactBtnTier(pct: number): CompactBtnTier {
+  if (pct >= 80) return 'urgent'
+  if (pct >= 60) return 'warn'
+  return 'normal'
+}

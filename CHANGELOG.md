@@ -14,6 +14,34 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.73] — 2026-04-27
+
+### Added
+- **ActionToolbar above input bubble** — utility row with always-on
+  Compact button + `⋮` kebab dropdown for other session actions.
+  Layout: `ctx 22%` chip on the left (when known) / `[Compact] [⋮]`
+  on the right. Compact button border + label escalate with ctx %:
+    - `< 60`: Charple border, label "Compact"
+    - `60-79`: Zest border, label "Compact (⚠ 68%)"
+    - `>= 80`: Sriracha border, label "Compact (⚠ 88%)"
+  `⋮` dropdown contains: Compact + Fork / Resume Session / Remote
+  Control / Close Session — consolidating session-level actions
+  that previously lived in the bottom ModelUsageBar. Click-outside
+  closes the menu.
+- **Floating scroll-to-bottom button** — appears at the right edge
+  above the toolbar when the user has scrolled up from the live
+  edge (`distFromBottom > 60px`). Charple circular button with `↓`
+  glyph; hover lightens to Violet. Click → scroll to bottom and
+  resume auto-scroll. Auto-scroll on new messages now ALSO respects
+  scroll position: if user is reading older content, new live events
+  no longer yank them down.
+
+### Tests
+- `selectCompactBtnTier(pct)` (3 case groups, 9 assertions) added.
+  Total now 32 files / 452 tests pass.
+
+---
+
 ## [1.7.72] — 2026-04-27
 
 ### Fixed
