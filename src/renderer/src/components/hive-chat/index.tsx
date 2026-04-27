@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
-import { computeGrainBar, parseContextSize, selectCtxNagTier } from './progress-bar'
+import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
 import { TimelineRow, ThinkingSpinner } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
 import { shortenPath } from '../../lib/path-display'
@@ -602,10 +602,32 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
   }, [id, cwd, agent, agentName, continueSession, rebaseOnStart])
 
+  // Auto-scroll only when the user is already at the bottom. If
+  // they've scrolled up to read older content, new live events don't
+  // yank them down — the floating ↓ button is how they get back.
+  const [isAtBottom, setIsAtBottom] = useState(true)
+  const SCROLL_BOTTOM_TOLERANCE_PX = 60
   useEffect(() => {
     const el = scrollRef.current
-    if (el) el.scrollTop = el.scrollHeight
-  }, [timeline.length])
+    if (!el) return
+    if (isAtBottom) el.scrollTop = el.scrollHeight
+  }, [timeline.length, isAtBottom])
+  useEffect(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const onScroll = () => {
+      const distFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight)
+      setIsAtBottom(distFromBottom <= SCROLL_BOTTOM_TOLERANCE_PX)
+    }
+    el.addEventListener('scroll', onScroll, { passive: true })
+    return () => el.removeEventListener('scroll', onScroll)
+  }, [])
+  const scrollToBottom = () => {
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    setIsAtBottom(true)
+  }
 
   // Voice input → input box. App.tsx broadcasts CustomEvent
   // `hive:voice-final` whenever the mic produces a finalized
@@ -1146,8 +1168,50 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         <div style={{
           borderTop: `1px solid ${CRUSH.Charcoal}`,
           background: CRUSH.BBQ,
-          padding: 8
+          padding: 8,
+          position: 'relative' as const
         }}>
+          {!isAtBottom && (
+            <button
+              onClick={scrollToBottom}
+              title="Scroll to latest"
+              style={{
+                position: 'absolute' as const,
+                right: 16,
+                top: -42,
+                width: 32, height: 32,
+                borderRadius: '50%',
+                background: CRUSH.Charple,
+                border: 'none',
+                color: CRUSH.Butter,
+                cursor: 'pointer',
+                fontSize: 16, fontWeight: 700,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                zIndex: 5
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = CRUSH.Violet }}
+              onMouseLeave={e => { e.currentTarget.style.background = CRUSH.Charple }}
+            >↓</button>
+          )}
+          <ActionToolbar
+            usedTokens={latestInputTokens}
+            contextSize={contextSize}
+            onCompact={async () => {
+              addEntry({ kind: 'system', text: '⏳ Compacting context (PTY round-trip, ~10s)…' })
+              const res = await window.api.chat.compact(id)
+              addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
+            }}
+            onFork={() => window.api.chat.startWithSummary(id)}
+            onResume={() => window.api.chat.resumeSmart(id)}
+            onRemoteControl={async () => {
+              const res = await window.api.chat.startRemoteControl(id)
+              if (res.ok) setRcState('active')
+              else addEntry({ kind: 'system', text: `Remote control failed: ${res.error}` })
+            }}
+            onClose={() => setCloseConfirming(true)}
+            sessionActive={exited === null && !!sessionId}
+          />
           <div style={{
             display: 'flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,96,255,0.08)',
@@ -1355,6 +1419,150 @@ function humanEta(resetsAt: number | undefined): string {
  * Uses a 1Hz tick so 'last activity Xs ago' stays fresh even when
  * no new events flow.
  */
+
+/**
+ * ActionToolbar — utility row above the input bubble.
+ *
+ * Layout:  [ ctx 22% ]                          [Compact] [⋮]
+ *
+ * Compact button is always present. Border + label escalate with ctx %:
+ *   < 60%:    Charple border, label "Compact"
+ *   ≥ 60%:    Zest border,    label "Compact (⚠ 68%)"
+ *   ≥ 80%:    Sriracha border (matches CtxNagBanner urgent color)
+ *
+ * `⋮` kebab opens a dropdown housing other session-level actions
+ * (Fork, Resume, Remote Control, Close) that previously lived in
+ * the bottom ModelUsageBar — consolidating here means the bottom row
+ * stays clean for model/usage info.
+ */
+function ActionToolbar({
+  usedTokens, contextSize, onCompact, onFork, onResume, onRemoteControl, onClose, sessionActive
+}: {
+  usedTokens: number
+  contextSize: string
+  onCompact: () => void
+  onFork: () => void
+  onResume: () => void
+  onRemoteControl: () => void
+  onClose: () => void
+  sessionActive: boolean
+}) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const ctxTotal = parseContextSize(contextSize)
+  const pct = ctxTotal > 0 && usedTokens > 0 ? Math.round((usedTokens / ctxTotal) * 100) : 0
+  const tier = selectCompactBtnTier(pct)
+  const compactColor = tier === 'urgent' ? CRUSH.Sriracha : tier === 'warn' ? CRUSH.Zest : CRUSH.Charple
+  const compactBg = tier === 'urgent' ? 'rgba(235,66,104,0.10)' : tier === 'warn' ? 'rgba(232,254,150,0.08)' : 'transparent'
+  const compactLabel = tier === 'normal' ? 'Compact' : `Compact (⚠ ${pct}%)`
+
+  // Click-outside to close menu
+  const menuRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!menuOpen) return
+    const onClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onClick)
+    return () => document.removeEventListener('mousedown', onClick)
+  }, [menuOpen])
+
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center',
+      padding: '0 4px 6px 4px',
+      gap: 8,
+      position: 'relative' as const
+    }}>
+      <span style={{ color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 10 }}>
+        {pct > 0 ? <>ctx <span style={{ color: compactColor, fontWeight: 600 }}>{pct}%</span></> : ''}
+      </span>
+      <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+        <button
+          onClick={onCompact}
+          title="Run /compact — summarize history into a smaller prompt (PTY round-trip ~10s)"
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6,
+            background: compactBg,
+            border: `1px solid ${compactColor}`,
+            color: compactColor,
+            fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
+            padding: '4px 10px',
+            borderRadius: 4,
+            cursor: 'pointer',
+            transition: 'all 120ms'
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = compactColor; e.currentTarget.style.color = CRUSH.Pepper }}
+          onMouseLeave={e => { e.currentTarget.style.background = compactBg; e.currentTarget.style.color = compactColor }}
+        >
+          <span style={{ fontSize: 13 }}>⎙</span>{compactLabel}
+        </button>
+        <div ref={menuRef} style={{ position: 'relative' as const }}>
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            title="More session actions"
+            style={{
+              background: 'transparent',
+              border: `1px solid ${menuOpen ? CRUSH.Charple : CRUSH.Charcoal}`,
+              color: menuOpen ? CRUSH.Charple : CRUSH.Squid,
+              fontFamily: FONT_MONO, fontSize: 13,
+              padding: '3px 9px',
+              borderRadius: 4,
+              cursor: 'pointer',
+              transition: 'all 120ms'
+            }}
+          >⋮</button>
+          {menuOpen && (
+            <div style={{
+              position: 'absolute' as const,
+              right: 0, bottom: 'calc(100% + 4px)',
+              background: CRUSH.BBQ,
+              border: `1px solid ${CRUSH.Charple}`,
+              borderRadius: 6,
+              padding: 4,
+              minWidth: 220,
+              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+              zIndex: 20
+            }}>
+              <MenuItem icon="≡" label="Compact + Fork" desc="summary → new sid" onClick={() => { setMenuOpen(false); onFork() }} disabled={!sessionActive} />
+              <MenuItem icon="↻" label="Resume Session" desc="--resume <sid>" onClick={() => { setMenuOpen(false); onResume() }} disabled={!sessionActive} />
+              <MenuItem icon="⌽" label="Remote Control" desc="/remote-control" onClick={() => { setMenuOpen(false); onRemoteControl() }} />
+              <div style={{ height: 1, background: CRUSH.Charcoal, margin: '3px 0' }} />
+              <MenuItem icon="✕" label="Close Session" desc="stop --print" onClick={() => { setMenuOpen(false); onClose() }} danger />
+            </div>
+          )}
+        </div>
+      </span>
+    </div>
+  )
+}
+
+function MenuItem({ icon, label, desc, onClick, danger, disabled }: {
+  icon: string; label: string; desc?: string; onClick: () => void; danger?: boolean; disabled?: boolean
+}) {
+  const accent = danger ? CRUSH.Sriracha : CRUSH.Charple
+  const bg = danger ? 'rgba(235,66,104,0.14)' : 'rgba(107,80,255,0.14)'
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      style={{
+        display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+        padding: '7px 10px',
+        background: 'transparent', border: 'none', borderRadius: 3,
+        color: disabled ? CRUSH.Oyster : CRUSH.Ash,
+        fontFamily: FONT_MONO, fontSize: 12,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        textAlign: 'left' as const
+      }}
+      onMouseEnter={e => { if (!disabled) { e.currentTarget.style.background = bg; e.currentTarget.style.color = CRUSH.Butter } }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = disabled ? CRUSH.Oyster : CRUSH.Ash }}
+    >
+      <span style={{ color: disabled ? CRUSH.Oyster : accent, minWidth: 14, textAlign: 'center' as const, fontWeight: 700 }}>{icon}</span>
+      <span>{label}</span>
+      {desc && <span style={{ marginLeft: 'auto', color: CRUSH.Oyster, fontSize: 10 }}>{desc}</span>}
+    </button>
+  )
+}
 
 /** Context-pressure nag banner. Fires at 80% (warn, Zest) and 90%
  * (urgent, Sriracha) of the model context window. Each tier
