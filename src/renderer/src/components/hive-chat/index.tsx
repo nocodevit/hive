@@ -1705,6 +1705,16 @@ function RateLimitBar({ info, autoContinueAt, onCancelAutoContinue }: {
   autoContinueAt?: number | null
   onCancelAutoContinue?: () => void
 }) {
+  // 60s heartbeat so `resets in Xh Ym` and `auto-continue in Xh Ym`
+  // tick down live without waiting for the next stream event. Matches
+  // humanEta's minute resolution exactly — by-the-minute updates,
+  // no oversampling.
+  const [, force] = useState(0)
+  useEffect(() => {
+    if (!info?.resetsAt && !autoContinueAt) return
+    const iv = setInterval(() => force(n => n + 1), 60_000)
+    return () => clearInterval(iv)
+  }, [info?.resetsAt, autoContinueAt])
   if (!info) return null
   const type = info.rateLimitType === 'five_hour' ? '5h' : info.rateLimitType === 'seven_day' ? '7d' : info.rateLimitType || '?'
   const color = info.status === 'allowed' ? CRUSH.Julep
