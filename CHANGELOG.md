@@ -14,6 +14,19 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.74] — 2026-04-27
+
+### Fixed
+- **RateLimitBar countdown now ticks live.** `resets in Xh Ym` and
+  `⏱ auto-continue in Xh Ym` were rendered once and frozen — only
+  updated when the next stream event happened to re-render the
+  component, so a long-rejected session showed stale time forever.
+  Added a 60s heartbeat (matches `humanEta`'s minute resolution
+  exactly) that bumps a force-render counter and cleans up when
+  neither `resetsAt` nor `autoContinueAt` is set.
+
+---
+
 ## [1.7.73] — 2026-04-27
 
 ### Added
