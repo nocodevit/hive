@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
-import { computeGrainBar } from './progress-bar'
+import { computeGrainBar, parseContextSize, selectCtxNagTier } from './progress-bar'
 import { TimelineRow, ThinkingSpinner } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
 import { shortenPath } from '../../lib/path-display'
@@ -77,6 +77,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // Latest result.usage.input_tokens — the full context size right
   // now (system + history + last user msg). Drives the context %% bar.
   const [latestInputTokens, setLatestInputTokens] = useState<number>(0)
+  // Per-threshold dismissal: once the user closes a tier's nag, don't
+  // re-fire it on the next result event. Reset when ctx drops below
+  // the lower threshold (i.e. /compact succeeded). 80=warn, 90=urgent.
+  const [ctxNagDismissed, setCtxNagDismissed] = useState<{ warn: boolean; urgent: boolean }>({ warn: false, urgent: false })
   // Active subagent (Task tool) tracking. Keyed by parent tool_use_id.
   // Updated on Task tool_use (register) → task_progress events
   // (description / metrics) → tool_result (deregister). Drives the
@@ -455,16 +459,33 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       } else if (ev.type === 'result') {
         const e = ev as any
         // Track latest context usage for the status-bar progress bar.
-        // The FULL context loaded = input_tokens (this turn's new) +
-        // cache_read_input_tokens (prefix re-used from cache) +
-        // cache_creation_input_tokens (this turn's freshly cacheable).
-        // Earlier we only used input_tokens — when cache was warm the
-        // bar showed 0% (input was 6 while real context was 250K).
+        //
+        // PITFALL #1: subagent result events carry their own
+        // independent usage. Updating ctx % from them flashes the
+        // bar with the subagent's context size, which can exceed
+        // the parent's window (alex(data) showed 181% from a
+        // subagent overflow).
+        //
+        // PITFALL #2: the top-level `usage.cache_read_input_tokens`
+        // is the CUMULATIVE sum across every iteration of an
+        // agentic turn — each tool call re-reads the prefix from
+        // cache, and claude reports the running total. For long
+        // turns this balloons to multiples of the context window
+        // (we saw 25M on a 1M model = 2498%).
+        //
+        // The real context size is the LAST iteration's input.
+        // Each iteration object holds its own `input_tokens` /
+        // `cache_read_input_tokens` / `cache_creation_input_tokens`,
+        // and `iterations[-1]` represents the final model-visible
+        // state. Fallback to top-level if iterations is missing.
+        const isSubagentResult = e.parent_tool_use_id != null
         const u = e.usage
-        const inp = typeof u?.input_tokens === 'number' ? u.input_tokens : 0
-        const cacheRead = typeof u?.cache_read_input_tokens === 'number' ? u.cache_read_input_tokens : 0
-        const cacheCreate = typeof u?.cache_creation_input_tokens === 'number' ? u.cache_creation_input_tokens : 0
-        const total = inp + cacheRead + cacheCreate
+        const its = Array.isArray(u?.iterations) ? u.iterations : []
+        const last = its.length > 0 ? its[its.length - 1] : u
+        const inp = typeof last?.input_tokens === 'number' ? last.input_tokens : 0
+        const cacheRead = typeof last?.cache_read_input_tokens === 'number' ? last.cache_read_input_tokens : 0
+        const cacheCreate = typeof last?.cache_creation_input_tokens === 'number' ? last.cache_creation_input_tokens : 0
+        const total = isSubagentResult ? 0 : inp + cacheRead + cacheCreate
         if (total > 0) {
           // Auto-compact heuristic: total context dropped to less than
           // half of the prior peak (and ≥30K delta) → claude compacted.
@@ -479,6 +500,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             } as any)
           }
           setLatestInputTokens(total)
+          // Reset both nag tiers when context drops ≥ 30% (a /compact
+          // ran successfully). This way the next time we cross 80%
+          // the user gets the warn banner again.
+          if (prior > 0 && total < prior * 0.7) {
+            setCtxNagDismissed({ warn: false, urgent: false })
+          }
         }
         addEntry({
           kind: 'result',
@@ -491,8 +518,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           // Surface non-`end_turn` stop reasons (refusal, max_tokens,
           // pause_turn, model_context_window_exceeded, etc.) so the
           // user notices when claude didn't simply finish normally.
-          stopReason: typeof e.stop_reason === 'string' ? e.stop_reason : undefined
-        })
+          stopReason: typeof e.stop_reason === 'string' ? e.stop_reason : undefined,
+          isSubagent: isSubagentResult
+        } as any)
       }
       // control_request: claude is asking for permission to use a tool
       // (fires when --permission-prompt-tool stdio is set and the tool
@@ -880,6 +908,22 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         {/* stderr lines now flow into the timeline as system entries — no pinned box. */}
       </div>
 
+      {/* Context-pressure nag banner — fires at 80% (warn) and 90%
+         (urgent). Sits ABOVE subagent / rate-limit so it's first
+         thing the user sees. Each tier is independently dismissable;
+         dismissals reset when ctx drops ≥30% (= a /compact ran). */}
+      <CtxNagBanner
+        contextSize={contextSize}
+        usedTokens={latestInputTokens}
+        dismissed={ctxNagDismissed}
+        onDismissWarn={() => setCtxNagDismissed(prev => ({ ...prev, warn: true }))}
+        onDismissUrgent={() => setCtxNagDismissed(prev => ({ ...prev, urgent: true }))}
+        onCompact={async () => {
+          addEntry({ kind: 'system', text: '⏳ Compacting context (PTY round-trip, ~10s)…' })
+          const res = await window.api.chat.compact(id)
+          addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
+        }}
+      />
       {/* Subagent active banner — sticky above rate-limit, only when
          at least one Task tool is running. Spinner + per-subagent line. */}
       {Object.keys(activeSubagents).length > 0 && (
@@ -1311,6 +1355,72 @@ function humanEta(resetsAt: number | undefined): string {
  * Uses a 1Hz tick so 'last activity Xs ago' stays fresh even when
  * no new events flow.
  */
+
+/** Context-pressure nag banner. Fires at 80% (warn, Zest) and 90%
+ * (urgent, Sriracha) of the model context window. Each tier
+ * dismissable independently; both reset when ctx drops by ≥ 30%
+ * (signals a /compact ran). User can hit "Compact now" inline
+ * instead of typing /compact. */
+function CtxNagBanner({
+  contextSize, usedTokens, dismissed,
+  onDismissWarn, onDismissUrgent, onCompact
+}: {
+  contextSize: string
+  usedTokens: number
+  dismissed: { warn: boolean; urgent: boolean }
+  onDismissWarn: () => void
+  onDismissUrgent: () => void
+  onCompact: () => void
+}) {
+  if (!contextSize || usedTokens <= 0) return null
+  const ctxTotal = parseContextSize(contextSize)
+  if (ctxTotal <= 0) return null
+  const pct = Math.round((usedTokens / ctxTotal) * 100)
+  const tier = selectCtxNagTier(pct, dismissed)
+  if (!tier) return null
+  const isUrgent = tier === 'urgent'
+  const color = isUrgent ? CRUSH.Sriracha : CRUSH.Zest
+  const bg = isUrgent ? 'rgba(235, 66, 104, 0.10)' : 'rgba(232, 254, 150, 0.08)'
+  const label = isUrgent ? '⚠️ Context CRITICAL' : '⚠ Context filling up'
+  const onDismiss = isUrgent ? onDismissUrgent : onDismissWarn
+  return (
+    <div style={{
+      padding: '6px 12px',
+      borderTop: `1px solid ${color}`,
+      borderBottom: `1px solid ${color}`,
+      background: bg,
+      fontFamily: FONT_MONO, fontSize: 11,
+      display: 'flex', alignItems: 'center', gap: 10,
+      color: CRUSH.Ash
+    }}>
+      <span style={{ color, fontWeight: 700 }}>{label}</span>
+      <span>{pct}% used ({usedTokens.toLocaleString()} / {ctxTotal.toLocaleString()} tokens)</span>
+      <span style={{ color: CRUSH.Squid }}>· run /compact to summarize history</span>
+      <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6 }}>
+        <button
+          onClick={onCompact}
+          style={{
+            background: color, border: 'none',
+            color: CRUSH.Pepper, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
+            padding: '2px 10px', borderRadius: 3, cursor: 'pointer'
+          }}
+        >Compact now</button>
+        <button
+          onClick={onDismiss}
+          title="Dismiss this warning (will return on /compact)"
+          style={{
+            background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+            color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 10,
+            padding: '1px 6px', borderRadius: 2, cursor: 'pointer'
+          }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.color = color }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = CRUSH.Charcoal; e.currentTarget.style.color = CRUSH.Squid }}
+        >✕</button>
+      </span>
+    </div>
+  )
+}
+
 function SubagentBanner({ subs }: { subs: Record<string, {
   startedAt: number; lastEventAt: number; eventCount: number
   description?: string; lastToolName?: string
