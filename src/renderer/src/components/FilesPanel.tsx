@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react'
 import type { Project, Zone } from '../types'
 import { shortenPath } from '../lib/path-display'
 import { redact, isRedactEnabled, onRedactChange } from './hive-chat/crush-styles'
+import CopyablePath from './CopyablePath'
 
 interface Props {
   project: Project
@@ -341,9 +342,12 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
          streamingMode is on so the real /Users/<name>/… doesn't leak in
          screenshots or live streams. Hover to see the full path. */}
       <div className="px-3 py-2 border-t border-border">
-        <p className="text-[11px] text-text-muted truncate" title={agentCwd}>
-          {files.length} files · {displayCwd}
-        </p>
+        <CopyablePath
+          path={agentCwd}
+          display={`${files.length} files · ${displayCwd}`}
+          className="text-[11px] text-text-muted truncate"
+          block
+        />
       </div>
     </div>
   )

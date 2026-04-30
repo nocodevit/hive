@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, type ComponentPropsWithoutRef } from 'react'
 import Markdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import CopyablePath from './CopyablePath'
 
 const mdComponents = {
-  h1: (props: ComponentPropsWithoutRef<'h1'>) => <h1 style={{ fontSize: '1.8em', fontWeight: 700, borderBottom: '1px solid var(--border)', paddingBottom: 8, marginTop: 24, marginBottom: 12 }} {...props} />,
-  h2: (props: ComponentPropsWithoutRef<'h2'>) => <h2 style={{ fontSize: '1.4em', fontWeight: 600, borderBottom: '1px solid var(--border)', paddingBottom: 6, marginTop: 20, marginBottom: 10 }} {...props} />,
+  h1: (props: ComponentPropsWithoutRef<'h1'>) => <h1 style={{ fontSize: '1.8em', fontWeight: 700, borderBottom: '1px solid var(--border-default)', paddingBottom: 8, marginTop: 24, marginBottom: 12 }} {...props} />,
+  h2: (props: ComponentPropsWithoutRef<'h2'>) => <h2 style={{ fontSize: '1.4em', fontWeight: 600, borderBottom: '1px solid var(--border-default)', paddingBottom: 6, marginTop: 20, marginBottom: 10 }} {...props} />,
   h3: (props: ComponentPropsWithoutRef<'h3'>) => <h3 style={{ fontSize: '1.15em', fontWeight: 600, marginTop: 16, marginBottom: 8 }} {...props} />,
   h4: (props: ComponentPropsWithoutRef<'h4'>) => <h4 style={{ fontSize: '1em', fontWeight: 600, marginTop: 12, marginBottom: 6 }} {...props} />,
   p: (props: ComponentPropsWithoutRef<'p'>) => <p style={{ marginBottom: 12, lineHeight: 1.7 }} {...props} />,
@@ -22,11 +23,11 @@ const mdComponents = {
     }
     return <code className={className} style={{ color: '#c4b5fd', fontSize: '0.85em' }} {...props}>{children}</code>
   },
-  pre: (props: ComponentPropsWithoutRef<'pre'>) => <pre style={{ background: '#1a1a1a', padding: 16, borderRadius: 8, overflowX: 'auto', border: '1px solid var(--border)', marginBottom: 12 }} {...props} />,
-  hr: (props: ComponentPropsWithoutRef<'hr'>) => <hr style={{ border: 'none', borderTop: '1px solid var(--border)', margin: '20px 0' }} {...props} />,
+  pre: (props: ComponentPropsWithoutRef<'pre'>) => <pre style={{ background: '#1a1a1a', padding: 16, borderRadius: 8, overflowX: 'auto', border: '1px solid var(--border-default)', marginBottom: 12 }} {...props} />,
+  hr: (props: ComponentPropsWithoutRef<'hr'>) => <hr style={{ border: 'none', borderTop: '1px solid var(--border-default)', margin: '20px 0' }} {...props} />,
   table: (props: ComponentPropsWithoutRef<'table'>) => <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: 12, fontSize: '0.9em' }} {...props} />,
-  th: (props: ComponentPropsWithoutRef<'th'>) => <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '2px solid var(--border)', fontWeight: 600 }} {...props} />,
-  td: (props: ComponentPropsWithoutRef<'td'>) => <td style={{ padding: '6px 12px', borderBottom: '1px solid var(--border)' }} {...props} />,
+  th: (props: ComponentPropsWithoutRef<'th'>) => <th style={{ textAlign: 'left', padding: '8px 12px', borderBottom: '2px solid var(--border-default)', fontWeight: 600 }} {...props} />,
+  td: (props: ComponentPropsWithoutRef<'td'>) => <td style={{ padding: '6px 12px', borderBottom: '1px solid var(--border-default)' }} {...props} />,
 }
 
 interface Props {
@@ -80,7 +81,11 @@ export default function MarkdownPreviewModal({ filePath, onClose }: Props) {
           <div className="flex items-center gap-2">
             <span className="text-sm font-heading font-semibold text-text-primary">{fileName}</span>
             {dirty && <span className="w-2 h-2 rounded-full bg-status-waiting" title="Unsaved changes" />}
-            <span className="text-[11px] text-text-muted font-mono truncate max-w-[400px]">{filePath}</span>
+            <CopyablePath
+              path={filePath}
+              side="bottom"
+              className="text-[11px] text-text-muted font-mono truncate max-w-[400px] inline-block"
+            />
           </div>
           <div className="flex items-center gap-2">
             <button
