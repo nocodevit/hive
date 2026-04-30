@@ -1,7 +1,7 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
-import { TimelineRow, ThinkingSpinner } from './renderers'
+import { TimelineRow, ThinkingSpinner, HiveChatPausedContext } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
 import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
@@ -57,7 +57,17 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // Status-bar state (above + below input)
   const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
   const [contextSize, setContextSize] = useState<string>('') // "1M"
-  const [rateLimit, setRateLimit] = useState<{ status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null>(null)
+  // Per-window rate-limit state. Each rate_limit_event carries one
+  // rateLimitType ('five_hour' | 'seven_day'). We keep the latest seen
+  // event for each window separately so the toolbar can render both
+  // tiers side-by-side instead of overwriting one with the other.
+  type RlEvent = { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean }
+  const [rateLimit5h, setRateLimit5h] = useState<RlEvent | null>(null)
+  const [rateLimit7d, setRateLimit7d] = useState<RlEvent | null>(null)
+  // Back-compat alias for any consumer that just wants "any rate-limit
+  // event" (e.g. legacy ModelUsageBar prop). Prefers 7d when both exist
+  // since it's the longer window and usually the binding constraint.
+  const rateLimit = rateLimit7d || rateLimit5h
   // Auto-continue state — main process schedules a setTimeout when it
   // sees a `rate_limit_event.status==='rejected'` to inject a "please
   // continue" turn 60s after `resetsAt`. UI shows a countdown + cancel.
@@ -199,8 +209,110 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // [Confirm]). Confirm fires the real stopChat. Cancel reverts.
   const [closeConfirming, setCloseConfirming] = useState(false)
 
+  // Context modal state — opens when user clicks the ⓘ icon next to the
+  // ctx progress bar. data is the parsed /context snapshot; loading/error
+  // drive the spinner / failure variants. Snapshot persists between
+  // open/close so reopen-within-cache shows the prior data instantly.
+  type CtxSnap = NonNullable<Awaited<ReturnType<typeof window.api.chat.scrapeContext>>['data']>
+  const [contextModal, setContextModal] = useState<{
+    open: boolean
+    loading: boolean
+    error: string | null
+    data: CtxSnap | null
+  }>({ open: false, loading: false, error: null, data: null })
+
+  const triggerContextScrape = async (force: boolean) => {
+    setContextModal(prev => ({ ...prev, loading: true, error: null }))
+    try {
+      const res = await window.api.chat.scrapeContext(id, force)
+      if (res.ok && res.data) {
+        setContextModal(prev => ({ ...prev, loading: false, data: res.data!, error: null }))
+      } else {
+        setContextModal(prev => ({ ...prev, loading: false, error: res.error || 'unknown' }))
+      }
+    } catch (e) {
+      setContextModal(prev => ({ ...prev, loading: false, error: String(e) }))
+    }
+  }
+
+  const openContextModal = () => {
+    setContextModal(prev => ({ ...prev, open: true }))
+    // First open: kick a scrape unless we already have data.
+    if (!contextModal.data && !contextModal.loading) {
+      void triggerContextScrape(false)
+    }
+  }
+
+  // Start chooser — agent click opens HiveChat in "pick a startup mode"
+  // state instead of auto-spawning. User picks one of:
+  //   ↻ Resume / ⎙ Compact+Resume / ✦ Start new / ⑂ Fork.
+  // Default focus picks itself: ctx > 80% → Compact+Resume; no prior
+  // session → Start new; otherwise → Resume.
+  const [chooserMode, setChooserMode] = useState(true)
+  const [prevInfo, setPrevInfo] = useState<{
+    sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number
+  } | null>(null)
+  const [prevInfoLoaded, setPrevInfoLoaded] = useState(false)
+  // Picked-mode opts buffer. launchSession stores the desired chat.start
+  // arguments here and flips chooserMode → false in the same render. The
+  // main useEffect watches chooserMode; on the false transition it wires
+  // up event listeners FIRST and only then fires chat.start, so the
+  // backend's initial "Compacting…" stderr never lands before listeners
+  // are ready.
+  const pendingStartRef = useRef<{
+    cwd?: string; agent?: string; name?: string;
+    continueSession?: boolean; rebaseOnStart?: boolean;
+    resumeSid?: string; forkSession?: boolean; forceCompact?: boolean
+  } | null>(null)
+  // Records the StartChooser mode that actually launched this session.
+  // The placeholder text in the empty timeline reads from this — without
+  // it the placeholder would default to the AGENT-level continueSession
+  // pref (almost always true), so picking "Start new" mis-displayed
+  // "Resuming most recent session…" even though the session was fresh.
+  const [launchedMode, setLaunchedMode] = useState<'resume' | 'compact-resume' | 'new' | 'fork' | null>(null)
+
   useEffect(() => {
-    window.api.chat.start(id, { cwd, agent, name: agentName, continueSession, rebaseOnStart })
+    if (!chooserMode) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const info = await window.api.chat.getPrevSessionInfo(cwd || '')
+        if (!cancelled) { setPrevInfo(info); setPrevInfoLoaded(true) }
+      } catch {
+        if (!cancelled) setPrevInfoLoaded(true)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [chooserMode, cwd])
+
+  const launchSession = (
+    mode: 'resume' | 'compact-resume' | 'new' | 'fork',
+    chosenSid?: string
+  ) => {
+    // chosenSid > prevInfo.sid > continueSession=-c. The session picker
+    // hands us an explicit sid; without one we still want a sensible
+    // default (latest sid via -c, which behaves like our pre-picker code).
+    const sid = chosenSid || prevInfo?.sid
+    let opts: typeof pendingStartRef.current
+    if (mode === 'resume') {
+      // Explicit sid → --resume <sid>. No sid → -c (latest).
+      opts = sid
+        ? { cwd, agent, name: agentName, resumeSid: sid, rebaseOnStart }
+        : { cwd, agent, name: agentName, continueSession: true, rebaseOnStart }
+    } else if (mode === 'compact-resume' && sid) {
+      opts = { cwd, agent, name: agentName, resumeSid: sid, forceCompact: true }
+    } else if (mode === 'fork' && sid) {
+      opts = { cwd, agent, name: agentName, resumeSid: sid, forkSession: true }
+    } else {
+      opts = { cwd, agent, name: agentName, continueSession: false, rebaseOnStart: false }
+    }
+    pendingStartRef.current = opts
+    setLaunchedMode(mode)
+    setChooserMode(false)
+  }
+
+  useEffect(() => {
+    if (chooserMode) return  // wait for user pick
 
     /**
      * Timeline integration rules (validated against /tmp/claude-json.log):
@@ -247,62 +359,75 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       //   - Task tool_use spawning  → register
       //   - task_progress / any parent_tool_use_id event → bump
       //   - tool_result with matching tool_use_id → deregister
+      //
+      // CRITICAL: skip historical replay events. claude writes user
+      // (tool_result) and assistant (tool_use) lines into the JSONL in
+      // async-writer order, NOT timestamp order — we've observed
+      // tool_result appearing 11 lines BEFORE its parent tool_use even
+      // though timestamps say tool_use was 20ms earlier. Replay reads
+      // line-by-line, so processing those out-of-order entries leaves
+      // BG subagents stuck registered (delete-before-register is a
+      // no-op, then register sticks forever). Live stream-json events
+      // arrive in timestamp order, so we only mutate activeSubagents
+      // from live events and let the map start empty after replay.
       const evAny = ev as any
-      if (ev.type === 'stream_event') {
-        const e = evAny.event
-        if (e?.type === 'content_block_start') {
-          const b = e.content_block
-          if (b?.type === 'tool_use' && b.id && (b.name === 'Task' || b.name === 'Agent')) {
-            setActiveSubagents(prev => ({
-              ...prev,
-              [b.id]: { startedAt: Date.now(), lastEventAt: Date.now(), eventCount: 0 }
-            }))
-          }
-        }
-      } else if (ev.type === 'assistant' && evAny.message?.content) {
-        for (const b of evAny.message.content) {
-          if (b?.type === 'tool_use' && b.id && (b.name === 'Task' || b.name === 'Agent')) {
-            setActiveSubagents(prev => prev[b.id]
-              ? prev
-              : { ...prev, [b.id]: { startedAt: Date.now(), lastEventAt: Date.now(), eventCount: 0 } })
-          }
-        }
-      }
-      if (ev.type === 'system' && evAny.subtype === 'task_progress' && evAny.tool_use_id) {
-        const tuid = evAny.tool_use_id as string
-        setActiveSubagents(prev => {
-          const cur = prev[tuid] || { startedAt: Date.now(), lastEventAt: Date.now(), eventCount: 0 }
-          return {
-            ...prev,
-            [tuid]: {
-              ...cur,
-              lastEventAt: Date.now(),
-              eventCount: cur.eventCount + 1,
-              description: evAny.description,
-              lastToolName: evAny.last_tool_name,
-              totalTokens: evAny.usage?.total_tokens,
-              toolUses: evAny.usage?.tool_uses,
-              durationMs: evAny.usage?.duration_ms
+      if (!evAny._historical) {
+        if (ev.type === 'stream_event') {
+          const e = evAny.event
+          if (e?.type === 'content_block_start') {
+            const b = e.content_block
+            if (b?.type === 'tool_use' && b.id && (b.name === 'Task' || b.name === 'Agent')) {
+              setActiveSubagents(prev => ({
+                ...prev,
+                [b.id]: { startedAt: Date.now(), lastEventAt: Date.now(), eventCount: 0 }
+              }))
             }
           }
-        })
-      }
-      if (evAny.parent_tool_use_id) {
-        const ptid = evAny.parent_tool_use_id as string
-        setActiveSubagents(prev => {
-          if (!prev[ptid]) return prev
-          return { ...prev, [ptid]: { ...prev[ptid], lastEventAt: Date.now(), eventCount: prev[ptid].eventCount + 1 } }
-        })
-      }
-      if (ev.type === 'user' && evAny.message?.content && Array.isArray(evAny.message.content)) {
-        for (const b of evAny.message.content) {
-          if (b?.type === 'tool_result' && b.tool_use_id) {
-            setActiveSubagents(prev => {
-              if (!prev[b.tool_use_id]) return prev
-              const next = { ...prev }
-              delete next[b.tool_use_id]
-              return next
-            })
+        } else if (ev.type === 'assistant' && evAny.message?.content) {
+          for (const b of evAny.message.content) {
+            if (b?.type === 'tool_use' && b.id && (b.name === 'Task' || b.name === 'Agent')) {
+              setActiveSubagents(prev => prev[b.id]
+                ? prev
+                : { ...prev, [b.id]: { startedAt: Date.now(), lastEventAt: Date.now(), eventCount: 0 } })
+            }
+          }
+        }
+        if (ev.type === 'system' && evAny.subtype === 'task_progress' && evAny.tool_use_id) {
+          const tuid = evAny.tool_use_id as string
+          setActiveSubagents(prev => {
+            const cur = prev[tuid] || { startedAt: Date.now(), lastEventAt: Date.now(), eventCount: 0 }
+            return {
+              ...prev,
+              [tuid]: {
+                ...cur,
+                lastEventAt: Date.now(),
+                eventCount: cur.eventCount + 1,
+                description: evAny.description,
+                lastToolName: evAny.last_tool_name,
+                totalTokens: evAny.usage?.total_tokens,
+                toolUses: evAny.usage?.tool_uses,
+                durationMs: evAny.usage?.duration_ms
+              }
+            }
+          })
+        }
+        if (evAny.parent_tool_use_id) {
+          const ptid = evAny.parent_tool_use_id as string
+          setActiveSubagents(prev => {
+            if (!prev[ptid]) return prev
+            return { ...prev, [ptid]: { ...prev[ptid], lastEventAt: Date.now(), eventCount: prev[ptid].eventCount + 1 } }
+          })
+        }
+        if (ev.type === 'user' && evAny.message?.content && Array.isArray(evAny.message.content)) {
+          for (const b of evAny.message.content) {
+            if (b?.type === 'tool_result' && b.tool_use_id) {
+              setActiveSubagents(prev => {
+                if (!prev[b.tool_use_id]) return prev
+                const next = { ...prev }
+                delete next[b.tool_use_id]
+                return next
+              })
+            }
           }
         }
       }
@@ -321,6 +446,15 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }
         const sid = (ev as any).session_id as string | undefined
         if (sid) setSessionId(sid)
+        // If we previously saw a `chat:exit` (e.g. compactSession killed
+        // the live --print as part of its kill→PTY→respawn dance), the
+        // chat surface flipped into "session closed, start new" mode.
+        // Now that a fresh `system/init` arrived, the new --print is
+        // alive — clear `exited` so the closed-panel doesn't sit on
+        // top of a working session. Bug repro: click ⎙ Compact → 4s
+        // later the panel went to "closed" with no Compact button left,
+        // even though the backend had successfully respawned.
+        setExited(null)
         return
       }
       if (ev.type === 'system' && (ev as any).subtype === 'history_replayed') {
@@ -338,7 +472,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       const isSubagent = (ev as any).parent_tool_use_id != null
       if (ev.type === 'rate_limit_event') {
         const info = (ev as any).rate_limit_info
-        if (info) setRateLimit(info)
+        if (info) {
+          if (info.rateLimitType === 'five_hour') setRateLimit5h(info)
+          else if (info.rateLimitType === 'seven_day') setRateLimit7d(info)
+          else setRateLimit7d(info)
+        }
         return
       }
       if (ev.type === 'stream_event') {
@@ -421,6 +559,19 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         const isHistorical = (ev as any)._historical === true
         if (!isHistorical) return
 
+        // Replay path also has to seed `latestInputTokens` so the
+        // ctx % bar is non-zero immediately after a resume. Live
+        // `result` events do this for new turns, but JSONL replay
+        // never emits `result` (only user/assistant), so without
+        // this branch the post-resume bar reads "context —" until
+        // the user fires a new turn. last-write-wins because replay
+        // walks oldest → newest. Subagent assistants are skipped:
+        // their usage describes the subagent's window, not parent's.
+        if (msg?.usage && !isSubagent) {
+          const total = extractCtxTotalFromUsage(msg.usage)
+          if (total > 0) setLatestInputTokens(total)
+        }
+
         content.forEach((block: any, idx: number) => {
           if (block.type === 'thinking' || block.type === 'redacted_thinking') return
           // For historical replay we key by tool id when available, else msg+idx.
@@ -479,13 +630,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         // and `iterations[-1]` represents the final model-visible
         // state. Fallback to top-level if iterations is missing.
         const isSubagentResult = e.parent_tool_use_id != null
-        const u = e.usage
-        const its = Array.isArray(u?.iterations) ? u.iterations : []
-        const last = its.length > 0 ? its[its.length - 1] : u
-        const inp = typeof last?.input_tokens === 'number' ? last.input_tokens : 0
-        const cacheRead = typeof last?.cache_read_input_tokens === 'number' ? last.cache_read_input_tokens : 0
-        const cacheCreate = typeof last?.cache_creation_input_tokens === 'number' ? last.cache_creation_input_tokens : 0
-        const total = isSubagentResult ? 0 : inp + cacheRead + cacheCreate
+        const total = isSubagentResult ? 0 : extractCtxTotalFromUsage(e.usage)
         if (total > 0) {
           // Auto-compact heuristic: total context dropped to less than
           // half of the prior peak (and ≥30K delta) → claude compacted.
@@ -589,6 +734,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       setAutoContinueAt(payload?.at ?? null)
     })
 
+    // Listeners are now armed — safe to spawn the backend session. The
+    // user's choice from the StartChooser arrived via pendingStartRef.
+    if (pendingStartRef.current) {
+      window.api.chat.start(id, pendingStartRef.current)
+      pendingStartRef.current = null
+    }
+
     return () => {
       offEv()
       offErr()
@@ -600,27 +752,46 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       offAutoContinue()
       window.api.chat.stop(id)
     }
-  }, [id, cwd, agent, agentName, continueSession, rebaseOnStart])
+  }, [id, cwd, agent, agentName, continueSession, rebaseOnStart, chooserMode])
 
   // Auto-scroll only when the user is already at the bottom. If
   // they've scrolled up to read older content, new live events don't
   // yank them down — the floating ↓ button is how they get back.
   const [isAtBottom, setIsAtBottom] = useState(true)
+  // `hasOverflow` separately tracks "is there even anything to scroll
+  // through". Used to gate the floating ↓ button visibility — without
+  // this, the button only ever appears once the user actively scrolls,
+  // which on long sessions where the auto-scroll keeps pinning bottom
+  // means the button effectively never shows. With this flag the
+  // button shows whenever the conversation has grown beyond the
+  // viewport, regardless of current scroll position. Click is no-op
+  // if already at bottom — harmless.
+  const [hasOverflow, setHasOverflow] = useState(false)
   const SCROLL_BOTTOM_TOLERANCE_PX = 60
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
     if (isAtBottom) el.scrollTop = el.scrollHeight
+    setHasOverflow(el.scrollHeight - el.clientHeight > SCROLL_BOTTOM_TOLERANCE_PX)
   }, [timeline.length, isAtBottom])
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
-    const onScroll = () => {
+    const update = () => {
       const distFromBottom = el.scrollHeight - (el.scrollTop + el.clientHeight)
       setIsAtBottom(distFromBottom <= SCROLL_BOTTOM_TOLERANCE_PX)
+      setHasOverflow(el.scrollHeight - el.clientHeight > SCROLL_BOTTOM_TOLERANCE_PX)
     }
-    el.addEventListener('scroll', onScroll, { passive: true })
-    return () => el.removeEventListener('scroll', onScroll)
+    el.addEventListener('scroll', update, { passive: true })
+    // Resize observer in case viewport changes (window resize, side
+    // panel toggles) and content overflow flips.
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    update()
+    return () => {
+      el.removeEventListener('scroll', update)
+      ro.disconnect()
+    }
   }, [])
   const scrollToBottom = () => {
     const el = scrollRef.current
@@ -653,13 +824,19 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     return () => window.removeEventListener('hive:voice-final', handler)
   }, [id])
 
+  // Snap the textarea back to 1-line height after sending. Pairs with
+  // the auto-grow handler in onChange — value going to '' doesn't fire
+  // onChange so we must reset the inline height ourselves.
+  const resetInputHeight = () => {
+    if (textareaRef.current) textareaRef.current.style.height = '20px'
+  }
   const send = async () => {
     const text = input.trim()
     if (!text || sending) return
     // Intercept session-scoped slash commands that don't work in --print
     // mode (each handler takes over; no stream-json frame goes out).
     if (text === '/remote-control') {
-      setInput('')
+      setInput(''); resetInputHeight()
       addEntry({ kind: 'system', text: 'Starting remote control…' })
       setRcOutput('')
       const res = await window.api.chat.startRemoteControl(id)
@@ -668,15 +845,15 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       return
     }
     if (text === '/compact') {
-      setInput('')
-      addEntry({ kind: 'system', text: '⏳ Compacting context (PTY round-trip, ~10s)…' })
+      setInput(''); resetInputHeight()
+      addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
       const res = await window.api.chat.compact(id)
       addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
       return
     }
     setSending(true)
     addEntry({ kind: 'user', text })
-    setInput('')
+    setInput(''); resetInputHeight()
     await window.api.chat.send(id, text)
     setSending(false)
   }
@@ -716,7 +893,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     addEntry({ kind: 'system', text: '── new session (context cleared) ──' })
     setExited(null)
     setSessionId('')
-    setRateLimit(null)
+    setRateLimit5h(null); setRateLimit7d(null)
     setUsage({})
     setThinking(null)
     setPendingPermission(null)
@@ -736,7 +913,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     // --print --resume <sid>. Otherwise just plain resume.
     addEntry({ kind: 'system', text: '── resuming session ──' })
     setExited(null)
-    setRateLimit(null)
+    setRateLimit5h(null); setRateLimit7d(null)
     setUsage({})
     setThinking(null)
     setPendingPermission(null)
@@ -757,7 +934,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     addEntry({ kind: 'system', text: '── starting new session with summary ──' })
     setExited(null)
     setSessionId('')
-    setRateLimit(null)
+    setRateLimit5h(null); setRateLimit7d(null)
     setUsage({})
     setThinking(null)
     setPendingPermission(null)
@@ -844,6 +1021,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // optimizations, but mount/unmount must NOT be tied to visibility.
 
   return (
+    <HiveChatPausedContext.Provider value={!visible}>
     <div
       onDragOver={e => e.preventDefault()}
       onDrop={handleDrop}
@@ -859,6 +1037,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden'
     }}>
+      {chooserMode ? (
+        <StartChooser
+          cwd={cwd}
+          loaded={prevInfoLoaded}
+          info={prevInfo}
+          onPick={launchSession}
+        />
+      ) : (<>
       {/* Timeline — grows naturally with content. When empty, height is
          close to zero and the input box sits right below the (small)
          welcome text near the top. As messages arrive the timeline
@@ -876,9 +1062,22 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       }}>
         {timeline.length === 0 && (
           <div style={{ color: CRUSH.Squid, fontSize: 12, padding: 4 }}>
-            {continueSession
-              ? `Resuming most recent session in ${redact(shortenPath(cwd))}…`
-              : 'New chat. Type below to begin.'}
+            {(() => {
+              // Empty-timeline placeholder reflects the StartChooser mode
+              // the user actually picked, not the agent-level
+              // continueSession pref. Without this, "Start new" displayed
+              // "Resuming most recent session…" because the prop default
+              // was true at agent level.
+              const m = launchedMode
+              if (m === 'new') return 'New chat. Type below to begin.'
+              if (m === 'compact-resume') return `Compacting + resuming session in ${redact(shortenPath(cwd))}…`
+              if (m === 'fork') return `Forking session in ${redact(shortenPath(cwd))}…`
+              if (m === 'resume') return `Resuming session in ${redact(shortenPath(cwd))}…`
+              // Pre-StartChooser fallback (e.g. RC resume, internal recycle)
+              return continueSession
+                ? `Resuming most recent session in ${redact(shortenPath(cwd))}…`
+                : 'New chat. Type below to begin.'
+            })()}
             {sessionId && (
               <span style={{ color: CRUSH.Oyster, marginLeft: 8 }}>
                 · session {sessionId.slice(0, 8)}
@@ -941,7 +1140,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         onDismissWarn={() => setCtxNagDismissed(prev => ({ ...prev, warn: true }))}
         onDismissUrgent={() => setCtxNagDismissed(prev => ({ ...prev, urgent: true }))}
         onCompact={async () => {
-          addEntry({ kind: 'system', text: '⏳ Compacting context (PTY round-trip, ~10s)…' })
+          addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
           const res = await window.api.chat.compact(id)
           addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
         }}
@@ -951,25 +1150,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       {Object.keys(activeSubagents).length > 0 && (
         <SubagentBanner subs={activeSubagents} />
       )}
-      {/* Rate-limit status line — sits just above input, updates live.
-         When no rate_limit_event has arrived yet, shows a subdued
-         "waiting for first message…" so the user knows Chat is live
-         but nothing's happened yet. */}
-      {rateLimit ? (
-        <RateLimitBar
-          info={rateLimit}
-          autoContinueAt={autoContinueAt}
-          onCancelAutoContinue={() => window.api.chat.cancelAutoContinue(id)}
-        />
-      ) : !modelName ? (
-        <div style={{
-          padding: '4px 12px',
-          borderTop: `1px solid ${CRUSH.Charcoal}`,
-          background: CRUSH.BBQ,
-          fontFamily: FONT_MONO, fontSize: 11,
-          color: CRUSH.Oyster
-        }}>waiting for first message…</div>
-      ) : null}
+      {/* Rate-limit + Compact + kebab live in a single ActionToolbar row
+         below — see line ~1264. RateLimitBar is no longer rendered as a
+         standalone strip; the merge cuts ~22px of wasted vertical space. */}
 
       {/* Input area — four variants in priority order:
           - exited !== null          → "session closed, start new" panel
@@ -1171,34 +1354,45 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           padding: 8,
           position: 'relative' as const
         }}>
-          {!isAtBottom && (
+          {/* Show whenever the chat has overflowed the viewport at any
+             point. Hidden only when the entire conversation fits in
+             one screen — there's literally nothing to scroll to. */}
+          {hasOverflow && (
             <button
               onClick={scrollToBottom}
-              title="Scroll to latest"
+              title={isAtBottom ? 'Already at latest' : 'Scroll to latest'}
               style={{
                 position: 'absolute' as const,
                 right: 16,
                 top: -42,
                 width: 32, height: 32,
                 borderRadius: '50%',
-                background: CRUSH.Charple,
+                background: isAtBottom ? CRUSH.Charcoal : CRUSH.Charple,
                 border: 'none',
-                color: CRUSH.Butter,
-                cursor: 'pointer',
+                color: isAtBottom ? CRUSH.Squid : CRUSH.Butter,
+                cursor: isAtBottom ? 'default' : 'pointer',
                 fontSize: 16, fontWeight: 700,
+                opacity: isAtBottom ? 0.55 : 1,
                 boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
-                zIndex: 5
+                zIndex: 5,
+                transition: 'all 150ms'
               }}
-              onMouseEnter={e => { e.currentTarget.style.background = CRUSH.Violet }}
-              onMouseLeave={e => { e.currentTarget.style.background = CRUSH.Charple }}
+              onMouseEnter={e => { if (!isAtBottom) e.currentTarget.style.background = CRUSH.Violet }}
+              onMouseLeave={e => { e.currentTarget.style.background = isAtBottom ? CRUSH.Charcoal : CRUSH.Charple }}
             >↓</button>
           )}
           <ActionToolbar
             usedTokens={latestInputTokens}
             contextSize={contextSize}
+            rateLimit5h={rateLimit5h}
+            rateLimit7d={rateLimit7d}
+            autoContinueAt={autoContinueAt}
+            onCancelAutoContinue={() => window.api.chat.cancelAutoContinue(id)}
+            modelKnown={!!modelName}
+            onViewContext={openContextModal}
             onCompact={async () => {
-              addEntry({ kind: 'system', text: '⏳ Compacting context (PTY round-trip, ~10s)…' })
+              addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
               const res = await window.api.chat.compact(id)
               addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
             }}
@@ -1223,7 +1417,15 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             <textarea
               ref={textareaRef}
               value={input}
-              onChange={e => setInput(e.target.value)}
+              onChange={e => {
+                setInput(e.target.value)
+                // Auto-grow up to 2 lines (~40px); beyond that, fix height
+                // and let overflow-y handle scrolling. Reset to 'auto'
+                // first so shrinking back to 1 line works on delete.
+                const ta = e.currentTarget
+                ta.style.height = 'auto'
+                ta.style.height = Math.min(ta.scrollHeight, 40) + 'px'
+              }}
               onCompositionStart={() => { composingRef.current = true }}
               onCompositionEnd={() => { composingRef.current = false }}
               onKeyDown={e => {
@@ -1241,8 +1443,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 flex: 1, resize: 'none',
                 background: 'transparent', color: CRUSH.Butter,
                 border: 'none', outline: 'none',
-                fontFamily: FONT_MONO, fontSize: 13,
-                minHeight: 20, maxHeight: 200,
+                fontFamily: FONT_MONO, fontSize: 13, lineHeight: 1.4,
+                height: 20,        // 1 line default
+                maxHeight: 40,     // 2 lines cap; overflow scrolls past
+                overflowY: 'auto',
                 padding: 0
               }}
               rows={1}
@@ -1292,13 +1496,41 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         contextUsedTokens={latestInputTokens}
       />
 
-      {/* Permission modal */}
+      {/* Permission modal — wrapped in ErrorBoundary so a schema change
+          in claude's `permission_suggestions` payload (or any other
+          unforeseen render error) can't black-screen the chat. The
+          fallback is a minimal Allow/Deny prompt rendered straight
+          from primitive divs/buttons; it ignores suggestions entirely. */}
       {pendingPermission && (
+        <PermissionErrorBoundary
+          fallback={
+            <PermissionFallback
+              req={pendingPermission}
+              onDecide={(decision) => {
+                window.api.chat.respondPermission(
+                  id,
+                  pendingPermission.requestId,
+                  decision,
+                  decision === 'allow' ? pendingPermission.input : undefined,
+                  decision === 'deny' ? 'Denied by user' : undefined
+                )
+                setPendingPermission(null)
+              }}
+            />
+          }
+        >
         <PermissionModal
           req={pendingPermission}
           onDecide={async (decision, saveSuggestion) => {
             if (saveSuggestion) {
-              await window.api.settings.addClaudeAllowRule(saveSuggestion.rules).catch(() => {})
+              // Pass the WHOLE suggestion to the IPC. claude's new
+              // schema (2.1.123+) sends `{type:'addDirectories', ...}`
+              // or `{type:'setMode', ...}` instead of the old `rules`
+              // array. Backend translates each shape into the right
+              // ~/.claude/settings.json field. Without this the click
+              // silently no-op'd and user kept being re-prompted for
+              // the same file forever.
+              await window.api.settings.addClaudeAllowRule(saveSuggestion as any).catch(() => {})
             }
             // For allow we must echo the original tool input back as
             // updatedInput; for deny we include a human message. Schema
@@ -1313,26 +1545,179 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             setPendingPermission(null)
           }}
         />
+        </PermissionErrorBoundary>
       )}
+      </>)}
+      {contextModal.open && (
+        <ContextModal
+          loading={contextModal.loading}
+          error={contextModal.error}
+          data={contextModal.data}
+          claudeSid={sessionId}
+          onRefresh={() => triggerContextScrape(true)}
+          onClose={() => setContextModal(prev => ({ ...prev, open: false }))}
+        />
+      )}
+    </div>
+    </HiveChatPausedContext.Provider>
+  )
+}
+
+/**
+ * Wrap PermissionModal so a render throw can't unmount HiveChat (which
+ * is what black-screens the chat surface). Caught errors fall back to
+ * a minimal allow/deny prompt that uses zero schema-specific access.
+ *
+ * Why a class component: React's getDerivedStateFromError/componentDidCatch
+ * only exists on class components. There's no hook equivalent yet.
+ */
+class PermissionErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean; err?: Error }
+> {
+  constructor(props: any) { super(props); this.state = { hasError: false } }
+  static getDerivedStateFromError(err: Error) { return { hasError: true, err } }
+  componentDidCatch(err: Error, info: React.ErrorInfo) {
+    // eslint-disable-next-line no-console
+    console.error('[PermissionModal] render threw — falling back to minimal prompt:', err, info)
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback
+    return this.props.children
+  }
+}
+
+/**
+ * Last-ditch permission UI rendered when PermissionModal itself throws.
+ * Uses only primitive props — no permission_suggestions logic, no
+ * input introspection beyond `tool_name`. Goal: claude unsticks even
+ * when our pretty modal can't render.
+ */
+function PermissionFallback({ req, onDecide }: {
+  req: { requestId: string; toolName: string }
+  onDecide: (d: 'allow' | 'deny') => void
+}) {
+  return (
+    <div style={{
+      position: 'absolute', inset: 0,
+      background: 'rgba(15,10,26,0.85)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999, fontFamily: FONT_MONO
+    }}>
+      <div style={{
+        background: CRUSH.BBQ,
+        border: `1px solid ${CRUSH.Sriracha}`,
+        borderRadius: 8,
+        padding: 16,
+        width: 400, maxWidth: '80%'
+      }}>
+        <div style={{ color: CRUSH.Sriracha, fontWeight: 700, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>
+          Permission required (fallback ui)
+        </div>
+        <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 4 }}>
+          Claude wants to use <strong style={{ color: CRUSH.Charple }}>{String(req.toolName || 'unknown tool')}</strong>
+        </div>
+        <div style={{ color: CRUSH.Squid, fontSize: 11, marginBottom: 14 }}>
+          The pretty modal failed to render — using a minimal prompt so the chat doesn't lock up.
+        </div>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+          <button onClick={() => onDecide('deny')} style={{
+            background: 'transparent', color: CRUSH.Sriracha,
+            border: `1px solid ${CRUSH.Sriracha}`, borderRadius: 6,
+            padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
+          }}>Deny</button>
+          <button onClick={() => onDecide('allow')} style={{
+            background: CRUSH.Julep, color: CRUSH.Pepper,
+            border: 'none', borderRadius: 6,
+            padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, fontWeight: 700, cursor: 'pointer'
+          }}>Allow once</button>
+        </div>
+      </div>
     </div>
   )
 }
 
-interface PermissionSuggestion { type: string; rules: { toolName: string; ruleContent: string }[]; behavior: string; destination: string }
+/**
+ * Claude's `permission_suggestions[]` payload. Multiple shapes exist
+ * because claude added new types over time without bumping any version
+ * — we MUST handle each defensively (and accept unknown future types
+ * as plain `Allow & remember` with an opaque label).
+ *
+ * Old shape (v1 — original, was the only one until ~2026-04):
+ *   { type: 'addRule' (or anything), rules: [{toolName, ruleContent}], behavior, destination }
+ *
+ * New shapes (v2 — observed 2026-04 onwards, broke PermissionModal):
+ *   { type: 'setMode', mode: 'acceptEdits', destination: 'session' }
+ *   { type: 'addDirectories', directories: ['/Users/x/.claude'], destination: 'session' }
+ *
+ * NEVER trust `.rules` to exist. NEVER `.map` directly. The 04-29
+ * black-screen incident was `req.suggestions[0].rules.map(...)` throwing
+ * TypeError → React unmounted HiveChat → user saw a black void. Render
+ * MUST be defensive enough that an unknown shape produces a plain button
+ * with a generic label, not a crash.
+ */
+export interface PermissionSuggestion {
+  type: string
+  rules?: { toolName: string; ruleContent: string }[]
+  mode?: string                     // setMode shape
+  directories?: string[]            // addDirectories shape
+  behavior?: string
+  destination?: string
+}
+
+/**
+ * Convert any suggestion shape to a stable `{ label, hover }` pair for
+ * the button. Returns null if we can't make sense of it (caller hides
+ * the button instead of rendering broken text).
+ */
+export function describeSuggestion(s: PermissionSuggestion | null | undefined):
+  { label: string; hover: string } | null
+{
+  if (!s || typeof s !== 'object') return null
+  const dest = s.destination || 'session'
+  // setMode: claude proposes flipping the whole session into a more
+  // permissive mode (e.g. acceptEdits) so future writes don't prompt.
+  if (s.type === 'setMode' && typeof s.mode === 'string') {
+    return { label: `Allow & switch to ${s.mode}`, hover: `Sets permission mode to "${s.mode}" for this ${dest}` }
+  }
+  // addDirectories: trust a path so future tool calls inside it skip
+  // the permission gate.
+  if (s.type === 'addDirectories' && Array.isArray(s.directories) && s.directories.length > 0) {
+    const dirs = s.directories.join(', ')
+    return { label: `Allow & trust ${s.directories.length === 1 ? s.directories[0] : `${s.directories.length} dirs`}`, hover: `Adds ${dirs} to trusted directories for this ${dest}` }
+  }
+  // Original shape — explicit toolName/ruleContent rules.
+  if (Array.isArray(s.rules) && s.rules.length > 0) {
+    const summary = s.rules
+      .filter(r => r && typeof r.toolName === 'string')
+      .map(r => `${r.toolName}(${r.ruleContent ?? ''})`)
+      .join(', ')
+    if (summary) return { label: 'Allow & remember', hover: `Adds "${summary}" to ~/.claude/settings.json` }
+  }
+  // Unknown future shape — keep the action available but with a
+  // generic label. Better than hiding silently.
+  if (s.type) return { label: `Allow & ${s.type}`, hover: `Applies suggestion type "${s.type}" for this ${dest}` }
+  return null
+}
+
 function PermissionModal({ req, onDecide }: {
   req: { requestId: string; toolName: string; displayName?: string; input: Record<string, unknown>; suggestions?: PermissionSuggestion[] }
   onDecide: (d: 'allow' | 'deny', saveSuggestion?: PermissionSuggestion) => void
 }) {
   const summary = (() => {
-    const i = req.input
-    if (typeof i.command === 'string') return i.command
-    if (typeof i.file_path === 'string') return i.file_path
-    if (typeof i.path === 'string') return i.path
-    if (typeof i.skill === 'string') return `${i.skill}${i.args ? ` ${i.args}` : ''}`
-    if (typeof i.url === 'string') return i.url
-    if (typeof i.pattern === 'string') return i.pattern
-    try { return JSON.stringify(i) } catch { return '' }
+    try {
+      const i = req.input || {}
+      if (typeof i.command === 'string') return i.command
+      if (typeof i.file_path === 'string') return i.file_path
+      if (typeof i.path === 'string') return i.path
+      if (typeof i.skill === 'string') return `${i.skill}${i.args ? ` ${i.args}` : ''}`
+      if (typeof i.url === 'string') return i.url
+      if (typeof i.pattern === 'string') return i.pattern
+      return JSON.stringify(i)
+    } catch { return '' }
   })()
+  const suggestion = req.suggestions?.[0]
+  const desc = describeSuggestion(suggestion)
   return (
     <div style={{
       position: 'absolute', inset: 0,
@@ -1378,14 +1763,14 @@ function PermissionModal({ req, onDecide }: {
             border: `1px solid ${CRUSH.Julep}`, borderRadius: 6,
             padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
           }}>Allow once</button>
-          {req.suggestions && req.suggestions[0] && (
-            <button onClick={() => onDecide('allow', req.suggestions![0])} style={{
+          {desc && suggestion && (
+            <button onClick={() => onDecide('allow', suggestion)} style={{
               background: CRUSH.Julep, color: CRUSH.Pepper,
               border: 'none', borderRadius: 6,
               padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO,
               fontWeight: 700, cursor: 'pointer'
-            }} title={`Adds "${req.suggestions[0].rules.map(r => `${r.toolName}(${r.ruleContent})`).join(', ')}" to ~/.claude/settings.json`}>
-              Allow & remember
+            }} title={desc.hover}>
+              {desc.label}
             </button>
           )}
         </div>
@@ -1394,15 +1779,956 @@ function PermissionModal({ req, onDecide }: {
   )
 }
 
+/**
+ * ContextModal — pretty render of `/context` output. Five tabs:
+ *   Overview  — proportional grid (40×20) + category legend
+ *   MCP Tools — searchable + sticky-header table, top-10 highlighted
+ *   Custom Agents / Memory Files / Skills — same table pattern
+ *
+ * Data comes from `chat:scrapeContext` IPC which kills the live --print,
+ * runs `claude --print --resume <sid> /context`, parses the markdown
+ * response, then respawns the live --print. Cache is 5 min; hitting
+ * Refresh forces a fresh scrape.
+ */
+type CtxData = {
+  model: string
+  totalTokens: number
+  totalLimit: number
+  totalPct: number
+  categories: { name: string; tokens: number; pct: number }[]
+  mcpTools: { name: string; server?: string; tokens: number }[]
+  customAgents: { name: string; tokens: number }[]
+  memoryFiles: { name: string; tokens: number }[]
+  skills: { name: string; source?: string; tokens: number }[]
+  scrapedAtMs: number
+}
+
+const CTX_CAT_COLOR: Record<string, string> = {
+  'System prompt': '#858392',
+  'System tools': '#68FFD6',
+  'MCP tools (deferred)': '#00A4FF',
+  'System tools (deferred)': '#4FBFA8',
+  'Custom agents': '#C259FF',
+  'Memory files': '#EB4268',
+  'Skills': '#E8FE96',
+  'Messages': '#6B50FF',
+  'Autocompact buffer': '#EB5DFF',
+  'Free space': '#2A2935'
+}
+
+/**
+ * Extract the model-visible context size in tokens from a Claude
+ * `usage` payload. Same math used by:
+ *   - live `result` events (debounced setLatestInputTokens on every turn)
+ *   - historical replay assistant events (seeds the ctx % bar after
+ *     a session resume, BEFORE any new turn fires a result event)
+ *
+ * Why iterations[-1] not the top level: a single agentic turn can have
+ * dozens of tool-use loops; top-level cache_read_input_tokens is the
+ * cumulative sum across them all and balloons to multiples of the
+ * window. Each `iterations[i]` records that loop's own usage; the LAST
+ * loop is what's currently visible to the model. Falls back to top-level
+ * if iterations is missing (early claude versions / non-agentic turns).
+ */
+export function extractCtxTotalFromUsage(usage: any): number {
+  if (!usage || typeof usage !== 'object') return 0
+  const its = Array.isArray(usage.iterations) ? usage.iterations : []
+  const last = its.length > 0 ? its[its.length - 1] : usage
+  const inp = typeof last?.input_tokens === 'number' ? last.input_tokens : 0
+  const cacheRead = typeof last?.cache_read_input_tokens === 'number' ? last.cache_read_input_tokens : 0
+  const cacheCreate = typeof last?.cache_creation_input_tokens === 'number' ? last.cache_creation_input_tokens : 0
+  return inp + cacheRead + cacheCreate
+}
+
+function fmtTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
+  return String(n)
+}
+function fmtAgo(ms: number): string {
+  const diff = Date.now() - ms
+  if (diff < 60_000) return 'just now'
+  const m = Math.floor(diff / 60_000)
+  if (m < 60) return `${m} min ago`
+  const h = Math.floor(m / 60)
+  return `${h}h ${m % 60}m ago`
+}
+
+type CtxTab = 'overview' | 'mcp' | 'agents' | 'memory' | 'skills'
+
+export function ContextModal({ loading, error, data, claudeSid, onRefresh, onClose }: {
+  loading: boolean
+  error: string | null
+  data: CtxData | null
+  claudeSid: string
+  onRefresh: () => void
+  onClose: () => void
+}) {
+  const [tab, setTab] = useState<CtxTab>('overview')
+  const [filter, setFilter] = useState('')
+
+  // Esc to close
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // Reset filter when switching tabs
+  useEffect(() => { setFilter('') }, [tab])
+
+  const dotColor = error ? CRUSH.Sriracha : loading ? CRUSH.Zest : CRUSH.Charple
+
+  const filterRows = <T extends { name: string; server?: string; source?: string }>(rows: T[]) => {
+    const q = filter.trim().toLowerCase()
+    if (!q) return rows
+    return rows.filter(r =>
+      r.name.toLowerCase().includes(q) ||
+      (r.server || '').toLowerCase().includes(q) ||
+      (r.source || '').toLowerCase().includes(q)
+    )
+  }
+
+  return (
+    <div
+      style={{
+        position: 'absolute' as const, inset: 0, zIndex: 100,
+        background: 'rgba(0,0,0,0.55)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20
+      }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div style={{
+        width: 820, maxWidth: '92%', maxHeight: '92%',
+        background: CRUSH.BBQ,
+        border: `1px solid ${CRUSH.Charple}`,
+        borderRadius: 12,
+        boxShadow: `0 8px 40px rgba(107,80,255,0.25), 0 4px 12px rgba(0,0,0,0.5)`,
+        display: 'flex', flexDirection: 'column' as const,
+        overflow: 'hidden'
+      }}>
+        {/* Head */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          padding: '12px 18px',
+          background: CRUSH.Pepper,
+          borderBottom: `1px solid ${CRUSH.Charcoal}`,
+          flexShrink: 0
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'Space Grotesk, sans-serif' as any, fontSize: 13, fontWeight: 700, letterSpacing: '0.05em', color: CRUSH.Ash }}>
+            <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, boxShadow: `0 0 10px ${dotColor}` }} />
+            Context Usage
+            {data && (
+              <span style={{ fontFamily: FONT_MONO, fontSize: 11, color: CRUSH.Squid, fontWeight: 400, marginLeft: 8 }}>
+                {data.model.replace(/^claude-/, '').replace(/\[.*\]$/, '')} ·{' '}
+                <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{data.totalPct}%</span> · {fmtTokens(data.totalTokens)} / {fmtTokens(data.totalLimit)}
+              </span>
+            )}
+          </div>
+          <button onClick={onClose} style={{
+            background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+            color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 11,
+            padding: '2px 8px', borderRadius: 4, cursor: 'pointer', lineHeight: 1
+          }}>✕</button>
+        </div>
+
+        {/* Tabs (only when data loaded) */}
+        {data && !loading && !error && (
+          <div style={{
+            display: 'flex', gap: 0, padding: '0 12px',
+            background: CRUSH.Pepper, borderBottom: `1px solid ${CRUSH.Charcoal}`, flexShrink: 0
+          }}>
+            <CtxTabBtn active={tab==='overview'} onClick={() => setTab('overview')}>Overview</CtxTabBtn>
+            <CtxTabBtn active={tab==='mcp'} onClick={() => setTab('mcp')} count={data.mcpTools.length}>MCP Tools</CtxTabBtn>
+            <CtxTabBtn active={tab==='agents'} onClick={() => setTab('agents')} count={data.customAgents.length}>Custom Agents</CtxTabBtn>
+            <CtxTabBtn active={tab==='memory'} onClick={() => setTab('memory')} count={data.memoryFiles.length}>Memory Files</CtxTabBtn>
+            <CtxTabBtn active={tab==='skills'} onClick={() => setTab('skills')} count={data.skills.length}>Skills</CtxTabBtn>
+          </div>
+        )}
+
+        {/* Body */}
+        <div style={{ flex: '1 1 auto', overflowY: 'auto' as const, padding: '16px 18px', minHeight: 0 }}>
+          {loading ? (
+            <div style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 14, padding: '38px 18px' }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: '50%',
+                border: `3px solid ${CRUSH.Charcoal}`,
+                borderTopColor: CRUSH.Charple,
+                animation: 'hive-spin 800ms linear infinite'
+              }} />
+              <style>{`@keyframes hive-spin { to { transform: rotate(360deg); } }`}</style>
+              <div style={{ fontSize: 12, color: CRUSH.Ash, textAlign: 'center' as const }}>
+                Pausing chat for /context scrape
+              </div>
+              <div style={{ fontSize: 10, color: CRUSH.Squid, textAlign: 'center' as const, fontFamily: 'Space Grotesk, sans-serif' as any, letterSpacing: '0.04em' }}>
+                ~7s · session resumes automatically when done
+              </div>
+            </div>
+          ) : error ? (
+            <div style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 14, padding: '38px 18px' }}>
+              <div style={{ fontSize: 28, color: CRUSH.Sriracha }}>⚠</div>
+              <div style={{ fontSize: 12, color: CRUSH.Ash }}>Failed to scrape /context</div>
+              <div style={{ fontSize: 10, color: CRUSH.Sriracha, fontFamily: FONT_MONO }}>{error}</div>
+            </div>
+          ) : data ? (
+            tab === 'overview' ? <CtxOverview data={data} />
+            : tab === 'mcp' ? <CtxDetail rows={filterRows(data.mcpTools)} cols={['Tool', 'Server', 'Tokens']} colorDot={CRUSH.Malibu} filter={filter} setFilter={setFilter} totalRows={data.mcpTools.length} totalTokens={data.mcpTools.reduce((s, r) => s + r.tokens, 0)} highlightTopN={10} />
+            : tab === 'agents' ? <CtxDetail rows={filterRows(data.customAgents)} cols={['Agent', '', 'Tokens']} colorDot={CRUSH.Violet} filter={filter} setFilter={setFilter} totalRows={data.customAgents.length} totalTokens={data.customAgents.reduce((s, r) => s + r.tokens, 0)} />
+            : tab === 'memory' ? <CtxDetail rows={filterRows(data.memoryFiles)} cols={['Path', '', 'Tokens']} colorDot={CRUSH.Sriracha} filter={filter} setFilter={setFilter} totalRows={data.memoryFiles.length} totalTokens={data.memoryFiles.reduce((s, r) => s + r.tokens, 0)} pathify />
+            : <CtxDetail rows={filterRows(data.skills)} cols={['Skill', 'Source', 'Tokens']} colorDot={CRUSH.Zest} filter={filter} setFilter={setFilter} totalRows={data.skills.length} totalTokens={data.skills.reduce((s, r) => s + r.tokens, 0)} />
+          ) : (
+            <div style={{ padding: 32, textAlign: 'center' as const, color: CRUSH.Squid }}>No data</div>
+          )}
+        </div>
+
+        {/* Foot */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 10,
+          padding: '10px 18px',
+          background: CRUSH.Pepper,
+          borderTop: `1px solid ${CRUSH.Charcoal}`,
+          fontFamily: FONT_MONO, fontSize: 10, color: CRUSH.Squid,
+          flexShrink: 0
+        }}>
+          {data ? (
+            <span style={Date.now() - data.scrapedAtMs > 60_000 ? { color: CRUSH.Zest, fontStyle: 'italic' as const } : undefined}>
+              {fmtAgo(data.scrapedAtMs)} · session {claudeSid.slice(0, 8)}
+            </span>
+          ) : <span>session {claudeSid.slice(0, 8)}</span>}
+          <span style={{ marginLeft: 'auto' }} />
+          <button
+            onClick={onRefresh}
+            disabled={loading}
+            style={{
+              background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+              color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 11,
+              padding: '4px 12px', borderRadius: 4, cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.5 : 1
+            }}
+          >Refresh now (~7s)</button>
+          <button
+            onClick={onClose}
+            style={{
+              background: 'rgba(107,80,255,0.12)',
+              border: `1px solid ${CRUSH.Charple}`,
+              color: CRUSH.Charple,
+              fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
+              padding: '4px 12px', borderRadius: 4, cursor: 'pointer'
+            }}
+          >Close</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function CtxTabBtn({ active, onClick, children, count }: {
+  active: boolean; onClick: () => void; children: React.ReactNode; count?: number
+}) {
+  return (
+    <span
+      onClick={onClick}
+      style={{
+        fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
+        color: active ? CRUSH.Charple : CRUSH.Squid,
+        padding: '8px 12px',
+        cursor: 'pointer',
+        borderBottom: `2px solid ${active ? CRUSH.Charple : 'transparent'}`,
+        transition: 'all 120ms',
+        display: 'inline-flex' as const, alignItems: 'center', gap: 6
+      }}
+    >
+      {children}
+      {typeof count === 'number' && (
+        <span style={{
+          fontSize: 9, fontWeight: 400,
+          background: active ? 'rgba(107,80,255,0.18)' : CRUSH.Charcoal,
+          color: active ? CRUSH.Charple : CRUSH.Squid,
+          padding: '1px 5px', borderRadius: 8
+        }}>{count}</span>
+      )}
+    </span>
+  )
+}
+
+function CtxOverview({ data }: { data: CtxData }) {
+  // 800-cell proportional grid (40×20). One cell = 0.125% of contextWindow.
+  const totalCells = 800
+  const cells: { color: string; cls?: string }[] = []
+  for (const cat of data.categories) {
+    const n = Math.round(cat.pct * totalCells / 100)
+    const color = CTX_CAT_COLOR[cat.name] || CRUSH.Squid
+    for (let i = 0; i < n; i++) cells.push({ color, cls: cat.name === 'Autocompact buffer' ? 'autocompact' : undefined })
+  }
+  while (cells.length < totalCells) cells.push({ color: CTX_CAT_COLOR['Free space'] })
+  cells.length = totalCells
+
+  return (
+    <>
+      <div style={{
+        background: CRUSH.Pepper,
+        border: `1px solid ${CRUSH.Charcoal}`,
+        borderRadius: 8,
+        padding: '12px 14px',
+        marginBottom: 14
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(40, 1fr)', gap: 2 }}>
+          {cells.map((c, i) => (
+            <div key={i} style={{
+              aspectRatio: '1', minHeight: 8,
+              background: c.color,
+              opacity: c.cls === 'autocompact' ? 0.5 : 1,
+              borderRadius: 1
+            }} />
+          ))}
+        </div>
+      </div>
+      <div style={{
+        display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 22px',
+        fontFamily: FONT_MONO, fontSize: 11
+      }}>
+        {data.categories.map((c) => {
+          const isMessages = c.name === 'Messages'
+          return (
+            <div key={c.name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ width: 10, height: 10, borderRadius: 2, background: CTX_CAT_COLOR[c.name] || CRUSH.Squid, flexShrink: 0 }} />
+              <span style={{
+                color: isMessages ? CRUSH.Charple : CRUSH.Ash,
+                fontWeight: isMessages ? 600 : 400,
+                flex: '1 1 auto', minWidth: 0,
+                overflow: 'hidden', textOverflow: 'ellipsis' as const, whiteSpace: 'nowrap' as const
+              }}>{c.name}</span>
+              <span style={{ color: CRUSH.Squid }}>{fmtTokens(c.tokens)}</span>
+              <span style={{
+                color: isMessages ? CRUSH.Charple : CRUSH.Squid,
+                fontWeight: isMessages ? 600 : 400,
+                minWidth: 36, textAlign: 'right' as const
+              }}>{c.pct.toFixed(1)}%</span>
+            </div>
+          )
+        })}
+      </div>
+    </>
+  )
+}
+
+function CtxDetail({
+  rows, cols, colorDot, filter, setFilter, totalRows, totalTokens, highlightTopN, pathify
+}: {
+  rows: { name: string; server?: string; source?: string; tokens: number }[]
+  cols: [string, string, string]
+  colorDot: string
+  filter: string
+  setFilter: (s: string) => void
+  totalRows: number
+  totalTokens: number
+  highlightTopN?: number
+  pathify?: boolean
+}) {
+  const sorted = [...rows].sort((a, b) => b.tokens - a.tokens)
+  const topThreshold = highlightTopN && sorted.length > highlightTopN ? sorted[highlightTopN - 1].tokens : -1
+
+  return (
+    <>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+        <input
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          placeholder={`filter ${cols[0].toLowerCase()}…`}
+          style={{
+            flex: '1 1 auto',
+            background: CRUSH.Pepper,
+            border: `1px solid ${CRUSH.Charcoal}`,
+            color: CRUSH.Butter,
+            fontFamily: FONT_MONO, fontSize: 11,
+            padding: '5px 10px', borderRadius: 4, outline: 'none'
+          }}
+          onFocus={e => { e.currentTarget.style.borderColor = CRUSH.Charple }}
+          onBlur={e => { e.currentTarget.style.borderColor = CRUSH.Charcoal }}
+        />
+        <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: CRUSH.Squid }}>
+          {filter ? `${rows.length} of ` : ''}{totalRows} · {fmtTokens(totalTokens)} tokens
+          {highlightTopN ? ` · top ${highlightTopN} highlighted` : ''}
+        </span>
+      </div>
+      <table style={{ width: '100%', borderCollapse: 'collapse' as const, fontFamily: FONT_MONO, fontSize: 11 }}>
+        <thead>
+          <tr>
+            {cols.map((c, i) => (
+              <th key={i} style={{
+                textAlign: i === 2 ? 'right' as const : 'left' as const,
+                padding: '6px 10px',
+                background: CRUSH.Pepper,
+                color: CRUSH.Squid,
+                fontWeight: 600, fontSize: 10,
+                textTransform: 'uppercase' as const, letterSpacing: '0.08em',
+                position: 'sticky' as const, top: -16,
+                borderBottom: `1px solid ${CRUSH.Charcoal}`
+              }}>{c}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.length === 0 ? (
+            <tr><td colSpan={3} style={{ padding: 16, textAlign: 'center' as const, color: CRUSH.Squid, fontStyle: 'italic' as const }}>no rows</td></tr>
+          ) : sorted.map((r, i) => {
+            const top = highlightTopN && r.tokens >= topThreshold && i < highlightTopN
+            const displayName = pathify ? r.name.replace(/^\/Users\/[^/]+/, '~') : r.name.replace(/^mcp__[^_]+__/, '')
+            return (
+              <tr key={i} style={{ background: top ? 'rgba(107,80,255,0.06)' : 'transparent' }}>
+                <td style={{ padding: '5px 10px', borderBottom: `1px solid rgba(58,57,67,0.4)`, color: CRUSH.Ash }}>
+                  <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: colorDot, marginRight: 6, verticalAlign: 'middle' as const }} />
+                  {displayName}
+                </td>
+                <td style={{ padding: '5px 10px', borderBottom: `1px solid rgba(58,57,67,0.4)`, color: CRUSH.Squid, fontSize: 10 }}>
+                  {(r.source && (
+                    <span style={{ color: r.source === 'Plugin' ? CRUSH.Violet : CRUSH.Squid }}>{r.source}</span>
+                  )) || r.server || ''}
+                </td>
+                <td style={{
+                  padding: '5px 10px', borderBottom: `1px solid rgba(58,57,67,0.4)`,
+                  textAlign: 'right' as const,
+                  color: top ? CRUSH.Charple : CRUSH.Butter,
+                  fontWeight: 600, whiteSpace: 'nowrap' as const
+                }}>{fmtTokens(r.tokens)}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+    </>
+  )
+}
+
+/**
+ * StartChooser — replaces the chat surface when HiveChat first mounts
+ * (or until the user picks a startup mode). Shows the prior session's
+ * sid / ctx% / model / last-active and four buttons:
+ *   ↻ Resume          claude -c
+ *   ⎙ Compact+Resume  --print /compact → --resume sid
+ *   ✦ Start new       fresh session-id, no prior context
+ *   ⑂ Fork            --resume sid --fork-session
+ *
+ * Smart default focus:
+ *   - no prior session                  → Start new (autoFocus)
+ *   - prior session, ctx >= 80%         → Compact+Resume (autoFocus)
+ *   - prior session, ctx < 80% / unknown → Resume (autoFocus)
+ *
+ * Keyboard: ↵ fires the focused button; 1-4 picks by index.
+ */
+export function StartChooser({
+  cwd, loaded, info, onPick
+}: {
+  cwd?: string
+  loaded: boolean
+  info: { sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number } | null
+  onPick: (mode: 'resume' | 'compact-resume' | 'new' | 'fork', chosenSid?: string) => void
+}) {
+  const ctxTotal = info ? parseContextSize(info.contextSize) : 0
+  const pct = ctxTotal > 0 && info && info.peakInputTokens > 0
+    ? Math.round((info.peakInputTokens / ctxTotal) * 100)
+    : 0
+  const ctxTier: 'normal' | 'warn' | 'urgent' =
+    pct >= 80 ? 'urgent' : pct >= 60 ? 'warn' : 'normal'
+  const ctxColor = ctxTier === 'urgent' ? CRUSH.Sriracha : ctxTier === 'warn' ? CRUSH.Zest : CRUSH.Julep
+
+  const hasPrev = !!info
+  const defaultMode: 'resume' | 'compact-resume' | 'new' | 'fork' = !hasPrev
+    ? 'new'
+    : ctxTier === 'urgent' ? 'compact-resume' : 'resume'
+
+  // Inline session picker. When user clicks Resume / Compact+Resume /
+  // Fork (any of which targets a specific session), we expand a 5-row
+  // list of recent sessions under the buttons. New is direct (no pick).
+  type PickerMode = 'resume' | 'compact-resume' | 'fork'
+  const [picker, setPicker] = useState<{
+    action: PickerMode
+    sessions: RecentSessionRow[]
+    selectedSid: string
+    loading: boolean
+  } | null>(null)
+
+  const openPicker = async (action: PickerMode) => {
+    setPicker({ action, sessions: [], selectedSid: '', loading: true })
+    try {
+      const list = await window.api.chat.getRecentSessions(cwd || '', 5)
+      setPicker({
+        action,
+        sessions: list,
+        selectedSid: list[0]?.sid || '',
+        loading: false
+      })
+    } catch {
+      setPicker({ action, sessions: [], selectedSid: '', loading: false })
+    }
+  }
+
+  const handlePick = (mode: 'resume' | 'compact-resume' | 'new' | 'fork') => {
+    if (mode === 'new') { onPick('new'); return }
+    openPicker(mode)
+  }
+
+  // Keyboard shortcuts: ↵ activates default, 1-4 pick by index.
+  // While picker is open: ↵ confirms, Esc closes, ↑↓ navigates.
+  const orderedModes: Array<'resume' | 'compact-resume' | 'new' | 'fork'> = ['resume', 'compact-resume', 'new', 'fork']
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (picker) {
+        if (e.key === 'Escape') { e.preventDefault(); setPicker(null); return }
+        if (e.key === 'Enter' && picker.selectedSid) {
+          e.preventDefault()
+          onPick(picker.action, picker.selectedSid)
+          return
+        }
+        if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && picker.sessions.length > 0) {
+          e.preventDefault()
+          const idx = picker.sessions.findIndex(s => s.sid === picker.selectedSid)
+          const next = e.key === 'ArrowDown'
+            ? Math.min(picker.sessions.length - 1, idx + 1)
+            : Math.max(0, idx - 1)
+          setPicker({ ...picker, selectedSid: picker.sessions[next].sid })
+          return
+        }
+        return
+      }
+      if (e.key === 'Enter') { e.preventDefault(); handlePick(defaultMode); return }
+      const idx = '1234'.indexOf(e.key)
+      if (idx >= 0) {
+        const m = orderedModes[idx]
+        if (m === 'resume' && !hasPrev) return
+        if (m === 'compact-resume' && !hasPrev) return
+        if (m === 'fork' && !hasPrev) return
+        e.preventDefault(); handlePick(m)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [defaultMode, hasPrev, onPick, picker])
+
+  const cwdLabel = (cwd || '').replace(/^\/Users\/[^/]+/, '~')
+  const sidShort = info?.sid?.slice(0, 8) ?? ''
+  const lastActiveLabel = info ? humanRelativeTime(Date.now() - info.lastActiveMs) : ''
+  const modelLabel = info?.model ? info.model.replace(/^claude-/, '') + (info.contextSize ? ` · ${info.contextSize}` : '') : ''
+
+  return (
+    <div style={{
+      flex: '1 1 auto', minHeight: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '40px 24px',
+      overflow: 'auto'
+    }}>
+      <div style={{
+        width: '100%', maxWidth: 760,
+        background: CRUSH.BBQ,
+        border: `1px solid ${CRUSH.Charcoal}`,
+        borderRadius: 12,
+        padding: '24px 24px 20px',
+        boxShadow: '0 8px 24px rgba(0,0,0,0.35)'
+      }}>
+        {/* Head */}
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+          paddingBottom: 14, marginBottom: 18,
+          borderBottom: `1px dashed ${CRUSH.Charcoal}`
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{
+              width: 8, height: 8, borderRadius: '50%',
+              background: hasPrev ? (ctxTier === 'urgent' ? CRUSH.Sriracha : CRUSH.Charple) : CRUSH.Zest,
+              boxShadow: `0 0 8px ${hasPrev ? (ctxTier === 'urgent' ? CRUSH.Sriracha : CRUSH.Charple) : CRUSH.Zest}`
+            }} />
+            <span style={{ fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700, color: CRUSH.Ash, letterSpacing: '0.04em' }}>
+              Start session — pick a mode
+            </span>
+          </div>
+          {cwdLabel && (
+            <span title={cwd} style={{
+              fontFamily: FONT_MONO, fontSize: 10, color: CRUSH.Squid,
+              background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`,
+              borderRadius: 4, padding: '3px 8px',
+              maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+            }}>{cwdLabel}</span>
+          )}
+        </div>
+
+        {/* Info row */}
+        {!loaded ? (
+          <div style={{
+            background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 8,
+            padding: 18, textAlign: 'center', color: CRUSH.Squid, fontSize: 11, marginBottom: 18
+          }}>scanning ~/.claude/projects…</div>
+        ) : hasPrev ? (
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
+            background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`,
+            borderRadius: 8, overflow: 'hidden', marginBottom: 18
+          }}>
+            <ChooserCell label="Last session" value={sidShort} valueColor={CRUSH.Bok} title={info!.sid} />
+            <ChooserCell label="Context" value={pct > 0 ? `${pct}%` : `${(info!.peakInputTokens / 1000).toFixed(1)}K`} valueColor={ctxColor} />
+            <ChooserCell label="Model" value={modelLabel || 'unknown'} valueColor={CRUSH.Malibu} />
+            <ChooserCell label="Last active" value={lastActiveLabel} valueColor={CRUSH.Ash} last />
+          </div>
+        ) : (
+          <div style={{
+            background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 8,
+            padding: 18, textAlign: 'center', marginBottom: 18
+          }}>
+            <div style={{ fontSize: 9, color: CRUSH.Squid, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
+              No previous session for this directory
+            </div>
+            <div style={{ fontSize: 12, color: CRUSH.Squid }}>First time here — only "Start new" is available</div>
+          </div>
+        )}
+
+        {/* Buttons */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
+          {/* Active mode: when picker is open, the action you clicked
+              is "active" (replaces defaultMode highlight). Otherwise
+              defaultMode (smart pick based on ctx tier) is highlighted.
+              Without this, clicking Compact+Resume left the green
+              Resume highlight up — confusing the user about which
+              action was actually queued. */}
+          <ChooserBtn
+            icon="↻" label="Resume" desc="pick session"
+            color={CRUSH.Bok}
+            disabled={!hasPrev}
+            isDefault={(picker ? picker.action : defaultMode) === 'resume'}
+            onClick={() => handlePick('resume')}
+          />
+          <ChooserBtn
+            icon="⎙" label="Compact + Resume" desc="pick session"
+            color={CRUSH.Charple}
+            disabled={!hasPrev}
+            isDefault={(picker ? picker.action : defaultMode) === 'compact-resume'}
+            onClick={() => handlePick('compact-resume')}
+          />
+          <ChooserBtn
+            icon="✦" label="Start new" desc="fresh session-id"
+            color={CRUSH.Zest}
+            disabled={false}
+            isDefault={picker ? false : defaultMode === 'new'}
+            onClick={() => handlePick('new')}
+          />
+          <ChooserBtn
+            icon="⑂" label="Fork" desc="pick session"
+            color={CRUSH.Mochi}
+            disabled={!hasPrev}
+            isDefault={(picker ? picker.action : defaultMode) === 'fork'}
+            onClick={() => handlePick('fork')}
+          />
+        </div>
+
+        {/* Inline session picker — appears under the buttons whenever
+           Resume / Compact+Resume / Fork is clicked. Lists 5 newest
+           sessions for this cwd; default-selects the latest; click row
+           to swap selection; Confirm to launch with that sid. */}
+        {picker && (
+          <SessionPickerInline
+            action={picker.action}
+            sessions={picker.sessions}
+            loading={picker.loading}
+            selectedSid={picker.selectedSid}
+            onSelect={(sid) => setPicker({ ...picker, selectedSid: sid })}
+            onConfirm={() => {
+              if (picker.selectedSid) onPick(picker.action, picker.selectedSid)
+            }}
+            onCancel={() => setPicker(null)}
+          />
+        )}
+
+        {/* Hint */}
+        <div style={{ marginTop: 14, fontSize: 10, color: CRUSH.Squid, textAlign: 'center', letterSpacing: '0.04em' }}>
+          <Kbd>↵</Kbd> default · <Kbd>1</Kbd>–<Kbd>4</Kbd> pick by index
+        </div>
+        {ctxTier === 'urgent' && hasPrev && (
+          <div style={{ marginTop: 8, fontSize: 10, color: CRUSH.Sriracha, textAlign: 'center' }}>
+            Context near limit — Compact + Resume is the safer bet
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+type RecentSessionRow = {
+  sid: string
+  title: string
+  preview: string
+  lastActiveMs: number
+  ctxPct: number
+  totalTokens: number
+}
+
+export function SessionPickerInline({
+  action, sessions, loading, selectedSid, onSelect, onConfirm, onCancel
+}: {
+  action: 'resume' | 'compact-resume' | 'fork'
+  sessions: RecentSessionRow[]
+  loading: boolean
+  selectedSid: string
+  onSelect: (sid: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const actionMeta = action === 'resume'
+    ? { icon: '↻', label: 'Resume', color: CRUSH.Bok }
+    : action === 'compact-resume'
+      ? { icon: '⎙', label: 'Compact + Resume', color: CRUSH.Charple }
+      : { icon: '⑂', label: 'Fork', color: CRUSH.Mochi }
+
+  const fmtAgo = (ms: number) => {
+    const diff = Date.now() - ms
+    if (diff < 60_000) return 'just now'
+    const m = Math.floor(diff / 60_000)
+    if (m < 60) return `${m}m ago`
+    const h = Math.floor(m / 60)
+    if (h < 24) return `${h}h ago`
+    const d = Math.floor(h / 24)
+    return `${d}d ago`
+  }
+
+  return (
+    <div style={{
+      marginTop: 12,
+      background: CRUSH.Pepper,
+      border: `1px solid ${actionMeta.color}`,
+      borderRadius: 8,
+      padding: 10
+    }}>
+      {/* Picker header */}
+      <div style={{
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        fontFamily: 'Space Grotesk, sans-serif' as any,
+        fontSize: 10, color: CRUSH.Squid,
+        textTransform: 'uppercase' as const, letterSpacing: '0.08em',
+        paddingBottom: 8, marginBottom: 8,
+        borderBottom: `1px dashed ${CRUSH.Charcoal}`
+      }}>
+        <span>
+          Pick a session to{' '}
+          <span style={{ color: actionMeta.color, fontWeight: 700 }}>
+            {actionMeta.icon} {actionMeta.label}
+          </span>
+        </span>
+        <span
+          onClick={onCancel}
+          style={{ cursor: 'pointer', fontSize: 12, color: CRUSH.Squid }}
+          onMouseEnter={e => { e.currentTarget.style.color = CRUSH.Sriracha }}
+          onMouseLeave={e => { e.currentTarget.style.color = CRUSH.Squid }}
+        >✕</span>
+      </div>
+
+      {/* Rows */}
+      {loading ? (
+        <div style={{ padding: 18, textAlign: 'center' as const, color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 11 }}>
+          scanning ~/.claude/projects…
+        </div>
+      ) : sessions.length === 0 ? (
+        <div style={{ padding: 18, textAlign: 'center' as const, color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 11 }}>
+          no prior sessions found for this directory
+        </div>
+      ) : (
+        sessions.map(s => {
+          const isSelected = s.sid === selectedSid
+          const ctxColor = s.ctxPct >= 80 ? CRUSH.Sriracha
+            : s.ctxPct >= 60 ? CRUSH.Zest
+            : CRUSH.Charple
+          return (
+            <div
+              key={s.sid}
+              onClick={() => onSelect(s.sid)}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '80px 1fr 110px',
+                gap: 10,
+                padding: '8px 10px',
+                borderRadius: 6,
+                cursor: 'pointer',
+                border: `1px solid ${isSelected ? actionMeta.color : 'transparent'}`,
+                background: isSelected ? `${actionMeta.color}15` : 'transparent',
+                alignItems: 'start' as const,
+                transition: 'all 120ms'
+              }}
+              onMouseEnter={e => {
+                if (!isSelected) e.currentTarget.style.background = 'rgba(255,255,255,0.03)'
+              }}
+              onMouseLeave={e => {
+                if (!isSelected) e.currentTarget.style.background = 'transparent'
+              }}
+            >
+              <span style={{
+                fontFamily: FONT_MONO, fontSize: 11, color: actionMeta.color,
+                fontWeight: 600, paddingTop: 2,
+                whiteSpace: 'nowrap' as const, overflow: 'hidden', textOverflow: 'ellipsis'
+              }} title={s.sid}>{s.sid.slice(0, 8)}</span>
+              <div style={{ minWidth: 0 }}>
+                <div style={{
+                  fontFamily: FONT_MONO, fontSize: 12, color: CRUSH.Ash, fontWeight: 600,
+                  marginBottom: 2,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const
+                }}>{s.title}</div>
+                <div style={{
+                  fontFamily: FONT_MONO, fontSize: 10, color: CRUSH.Squid,
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const
+                }}>└ {s.preview}</div>
+              </div>
+              <div style={{
+                textAlign: 'right' as const,
+                fontFamily: FONT_MONO, fontSize: 9, color: CRUSH.Squid,
+                paddingTop: 2
+              }}>
+                <div style={{ color: CRUSH.Ash }}>{fmtAgo(s.lastActiveMs)}</div>
+                {s.ctxPct > 0 && (
+                  <div style={{ color: ctxColor, marginTop: 1 }}>{s.ctxPct}%</div>
+                )}
+              </div>
+            </div>
+          )
+        })
+      )}
+
+      {/* Footer */}
+      <div style={{
+        display: 'flex', gap: 8, marginTop: 10,
+        paddingTop: 8,
+        borderTop: `1px dashed ${CRUSH.Charcoal}`,
+        alignItems: 'center'
+      }}>
+        <span style={{ fontFamily: FONT_MONO, fontSize: 10, color: CRUSH.Squid }}>
+          {sessions.length > 0 ? `${sessions.length} most recent · ↑↓ navigate · ↵ confirm · esc cancel` : ''}
+        </span>
+        <span style={{ marginLeft: 'auto' }} />
+        <button
+          onClick={onCancel}
+          style={{
+            background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+            color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 11,
+            padding: '5px 14px', borderRadius: 4, cursor: 'pointer'
+          }}
+        >Cancel</button>
+        <button
+          onClick={onConfirm}
+          disabled={!selectedSid}
+          style={{
+            background: selectedSid ? `${actionMeta.color}1F` : 'transparent',
+            border: `1px solid ${actionMeta.color}`,
+            color: actionMeta.color,
+            fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
+            padding: '5px 14px', borderRadius: 4,
+            cursor: selectedSid ? 'pointer' : 'not-allowed',
+            opacity: selectedSid ? 1 : 0.4
+          }}
+        >{actionMeta.icon} {actionMeta.label} {selectedSid ? selectedSid.slice(0, 8) : ''}</button>
+      </div>
+    </div>
+  )
+}
+
+function ChooserCell({ label, value, valueColor, title, last }: {
+  label: string; value: string; valueColor: string; title?: string; last?: boolean
+}) {
+  return (
+    <div style={{
+      padding: '12px 14px',
+      borderRight: last ? 'none' : `1px solid ${CRUSH.Charcoal}`,
+      display: 'flex', flexDirection: 'column', gap: 4
+    }}>
+      <span style={{ fontSize: 9, color: CRUSH.Squid, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
+      <span title={title} style={{
+        fontSize: 13, fontWeight: 600, color: valueColor, fontFamily: FONT_MONO,
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
+      }}>{value}</span>
+    </div>
+  )
+}
+
+// Solid hex tints for default-mode buttons. Matches ui-preview-start-chooser.html.
+// Per the color contract we don't apply rgba() alpha to accent colors — the
+// border + icon + label render at full saturation, and the panel background
+// is a precomputed solid blend.
+const CHOOSER_TINTS: Record<string, string> = {
+  [CRUSH.Bok]: '#1a3a30',
+  [CRUSH.Charple]: '#1f1a3a',
+  [CRUSH.Zest]: '#2a2a18',
+  [CRUSH.Mochi]: '#3a1d3f'
+}
+function ChooserBtn({ icon, label, desc, color, disabled, isDefault, onClick }: {
+  icon: string; label: string; desc: string; color: string;
+  disabled: boolean; isDefault: boolean; onClick: () => void
+}) {
+  const ref = useRef<HTMLButtonElement>(null)
+  useEffect(() => { if (isDefault && !disabled) ref.current?.focus() }, [isDefault, disabled])
+  const tinted = CHOOSER_TINTS[color] || CRUSH.Pepper
+  return (
+    <button
+      ref={ref}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      style={{
+        background: isDefault && !disabled ? tinted : CRUSH.Pepper,
+        border: isDefault && !disabled ? `2px solid ${color}` : `1px solid ${CRUSH.Charcoal}`,
+        color: disabled ? CRUSH.Squid : (isDefault ? color : CRUSH.Ash),
+        fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
+        padding: isDefault && !disabled ? '15px 11px' : '16px 12px',
+        borderRadius: 8,
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.35 : 1,
+        textAlign: 'center',
+        transition: 'all 120ms',
+        display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'center',
+        outline: 'none'
+      }}
+      onMouseEnter={e => {
+        if (disabled || isDefault) return
+        e.currentTarget.style.borderColor = color
+        e.currentTarget.style.color = color
+      }}
+      onMouseLeave={e => {
+        if (disabled || isDefault) return
+        e.currentTarget.style.borderColor = CRUSH.Charcoal
+        e.currentTarget.style.color = CRUSH.Ash
+      }}
+    >
+      <span style={{ fontSize: 20, lineHeight: 1, color: disabled ? CRUSH.Squid : color }}>{icon}</span>
+      <span style={{ fontSize: 12, fontWeight: 700, letterSpacing: '0.04em' }}>{label}</span>
+      <span style={{ fontSize: 9, fontWeight: 400, letterSpacing: '0.02em', color: disabled ? CRUSH.Squid : CRUSH.Squid }}>{desc}</span>
+    </button>
+  )
+}
+
+function Kbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd style={{
+      background: CRUSH.Charcoal, color: CRUSH.Ash,
+      padding: '1px 6px', borderRadius: 3, margin: '0 2px',
+      fontFamily: FONT_MONO, fontSize: 9, border: `1px solid ${CRUSH.Oyster}`
+    }}>{children}</kbd>
+  )
+}
+
+function humanRelativeTime(ms: number): string {
+  if (ms < 0) return 'just now'
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s ago`
+  const m = Math.floor(s / 60)
+  if (m < 60) return `${m} min ago`
+  const h = Math.floor(m / 60)
+  if (h < 24) return `${h}h ago`
+  const d = Math.floor(h / 24)
+  return `${d}d ago`
+}
+
 function humanEta(resetsAt: number | undefined): string {
   if (!resetsAt) return ''
   const ms = resetsAt * 1000 - Date.now()
   if (ms <= 0) return 'now'
   const mins = Math.floor(ms / 60000)
   const hours = Math.floor(mins / 60)
-  const m = mins % 60
-  if (hours > 0) return `${hours}h ${m}m`
-  return `${m}m`
+  const days = Math.floor(hours / 24)
+  if (days > 0) return `${days}d ${hours % 24}h`
+  if (hours > 0) return `${hours}h ${mins % 60}m`
+  return `${mins}m`
 }
 
 /**
@@ -1421,22 +2747,97 @@ function humanEta(resetsAt: number | undefined): string {
  */
 
 /**
- * ActionToolbar — utility row above the input bubble.
+ * CrushTooltip — small hover popover styled to match the rest of the
+ * chat surface (Pepper bg, Charple border, mono font). Replaces native
+ * HTML `title` attributes (which are rendered as OS tooltips and can't
+ * be CSS-styled). 250ms delay before showing so brief mouseovers don't
+ * flicker; arrow points at the trigger.
  *
- * Layout:  [ ctx 22% ]                          [Compact] [⋮]
+ * Usage:  <CrushTooltip text="run /compact"><button>⎙</button></CrushTooltip>
+ */
+export function CrushTooltip({ text, children, side = 'top', block = false }: {
+  text: string
+  children: React.ReactNode
+  side?: 'top' | 'bottom'
+  block?: boolean
+}) {
+  const [show, setShow] = useState(false)
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const enter = () => {
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(() => setShow(true), 250)
+  }
+  const leave = () => {
+    if (timer.current) clearTimeout(timer.current)
+    setShow(false)
+  }
+  return (
+    <span
+      style={{
+        position: 'relative' as const,
+        display: block ? 'block' as const : 'inline-flex' as const,
+        ...(block ? { minWidth: 0 } : {})
+      }}
+      onMouseEnter={enter}
+      onMouseLeave={leave}
+    >
+      {children}
+      {show && (
+        <span style={{
+          position: 'absolute' as const,
+          ...(side === 'top'
+            ? { bottom: 'calc(100% + 8px)' }
+            : { top: 'calc(100% + 8px)' }),
+          left: '50%', transform: 'translateX(-50%)',
+          background: CRUSH.Pepper,
+          border: `1px solid ${CRUSH.Charple}`,
+          color: CRUSH.Ash,
+          fontFamily: FONT_MONO, fontSize: 11, lineHeight: 1.4,
+          padding: '6px 10px',
+          borderRadius: 6,
+          whiteSpace: 'normal' as const,
+          width: 'max-content',
+          maxWidth: 280,
+          zIndex: 200,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+          pointerEvents: 'none' as const,
+          textAlign: 'center' as const
+        }}>
+          {text}
+          <span style={{
+            position: 'absolute' as const,
+            left: '50%', transform: 'translateX(-50%)',
+            width: 0, height: 0,
+            borderLeft: '5px solid transparent',
+            borderRight: '5px solid transparent',
+            ...(side === 'top'
+              ? { top: '100%', borderTop: `5px solid ${CRUSH.Charple}` }
+              : { bottom: '100%', borderBottom: `5px solid ${CRUSH.Charple}` })
+          }} />
+        </span>
+      )}
+    </span>
+  )
+}
+
+/**
+ * ActionToolbar — single-row utility strip above the input bubble.
  *
- * Compact button is always present. Border + label escalate with ctx %:
+ * Layout:  [● 7d allowed · resets in 4h 12m]  [ctx 22%]   [Compact] [⋮]
+ *
+ * Combines what used to be two stacked rows (RateLimitBar + buttons) into
+ * one — saves vertical space and matches the visual height of the bottom
+ * ModelUsageBar. Compact button border/label escalate with ctx %:
  *   < 60%:    Charple border, label "Compact"
  *   ≥ 60%:    Zest border,    label "Compact (⚠ 68%)"
  *   ≥ 80%:    Sriracha border (matches CtxNagBanner urgent color)
  *
  * `⋮` kebab opens a dropdown housing other session-level actions
- * (Fork, Resume, Remote Control, Close) that previously lived in
- * the bottom ModelUsageBar — consolidating here means the bottom row
- * stays clean for model/usage info.
+ * (Fork, Resume, Remote Control, Close).
  */
 function ActionToolbar({
-  usedTokens, contextSize, onCompact, onFork, onResume, onRemoteControl, onClose, sessionActive
+  usedTokens, contextSize, onCompact, onFork, onResume, onRemoteControl, onClose, sessionActive,
+  rateLimit5h, rateLimit7d, autoContinueAt, onCancelAutoContinue, modelKnown, onViewContext
 }: {
   usedTokens: number
   contextSize: string
@@ -1446,6 +2847,12 @@ function ActionToolbar({
   onRemoteControl: () => void
   onClose: () => void
   sessionActive: boolean
+  rateLimit5h: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null
+  rateLimit7d: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null
+  autoContinueAt: number | null
+  onCancelAutoContinue: () => void
+  modelKnown: boolean
+  onViewContext: () => void
 }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const ctxTotal = parseContextSize(contextSize)
@@ -1454,6 +2861,16 @@ function ActionToolbar({
   const compactColor = tier === 'urgent' ? CRUSH.Sriracha : tier === 'warn' ? CRUSH.Zest : CRUSH.Charple
   const compactBg = tier === 'urgent' ? 'rgba(235,66,104,0.10)' : tier === 'warn' ? 'rgba(232,254,150,0.08)' : 'transparent'
   const compactLabel = tier === 'normal' ? 'Compact' : `Compact (⚠ ${pct}%)`
+
+  // 60s heartbeat so `resets in Xh Ym` ticks down without waiting for new events.
+  const [, force] = useState(0)
+  const paused = useContext(HiveChatPausedContext)
+  useEffect(() => {
+    if (paused) return
+    if (!rateLimit5h?.resetsAt && !rateLimit7d?.resetsAt && !autoContinueAt) return
+    const iv = setInterval(() => force(n => n + 1), 60_000)
+    return () => clearInterval(iv)
+  }, [paused, rateLimit5h?.resetsAt, rateLimit7d?.resetsAt, autoContinueAt])
 
   // Click-outside to close menu
   const menuRef = useRef<HTMLDivElement>(null)
@@ -1466,51 +2883,129 @@ function ActionToolbar({
     return () => document.removeEventListener('mousedown', onClick)
   }, [menuOpen])
 
+  const showRateRow = !!(rateLimit5h || rateLimit7d || autoContinueAt)
+
   return (
-    <div style={{
-      display: 'flex', alignItems: 'center',
-      padding: '0 4px 6px 4px',
-      gap: 8,
-      position: 'relative' as const
-    }}>
-      <span style={{ color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 10 }}>
-        {pct > 0 ? <>ctx <span style={{ color: compactColor, fontWeight: 600 }}>{pct}%</span></> : ''}
-      </span>
-      <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-        <button
-          onClick={onCompact}
-          title="Run /compact — summarize history into a smaller prompt (PTY round-trip ~10s)"
-          style={{
-            display: 'inline-flex', alignItems: 'center', gap: 6,
-            background: compactBg,
-            border: `1px solid ${compactColor}`,
-            color: compactColor,
-            fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
-            padding: '4px 10px',
-            borderRadius: 4,
-            cursor: 'pointer',
-            transition: 'all 120ms'
-          }}
-          onMouseEnter={e => { e.currentTarget.style.background = compactColor; e.currentTarget.style.color = CRUSH.Pepper }}
-          onMouseLeave={e => { e.currentTarget.style.background = compactBg; e.currentTarget.style.color = compactColor }}
-        >
-          <span style={{ fontSize: 13 }}>⎙</span>{compactLabel}
-        </button>
-        <div ref={menuRef} style={{ position: 'relative' as const }}>
+    <>
+      {/* Line 1 — rate-limit + auto-continue (BBQ background, hidden
+         until claude actually emits its first rate_limit_event or a
+         whip schedules an auto-continue) */}
+      {showRateRow && (
+        <div style={{
+          display: 'flex', alignItems: 'center', flexWrap: 'wrap',
+          padding: '4px 12px',
+          background: CRUSH.BBQ,
+          fontFamily: FONT_MONO, fontSize: 10,
+          color: CRUSH.Squid,
+          gap: 10
+        }}>
+          <RateChip info={rateLimit5h} typeLabel="5h" />
+          {rateLimit5h && (rateLimit7d || autoContinueAt) && <span style={{ color: CRUSH.Oyster }}>|</span>}
+          <RateChip info={rateLimit7d} typeLabel="7d" />
+          {rateLimit7d && autoContinueAt && <span style={{ color: CRUSH.Oyster }}>|</span>}
+          {autoContinueAt && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: CRUSH.Charple }}>
+                ⏱ auto-continue in {humanEta(Math.floor(autoContinueAt / 1000))}
+              </span>
+              <button
+                onClick={onCancelAutoContinue}
+                style={{
+                  background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+                  color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 9,
+                  padding: '0 5px', borderRadius: 2, cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = CRUSH.Charple; e.currentTarget.style.color = CRUSH.Charple }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = CRUSH.Charcoal; e.currentTarget.style.color = CRUSH.Squid }}
+              >cancel</button>
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Line 2 — context progress bar + Compact + kebab. Background
+         matches the chat surface (no BBQ panel) so the bar feels part
+         of the conversation column. When no model has emitted yet,
+         left side shows a subdued "waiting for first message…". */}
+      <div style={{
+        display: 'flex', alignItems: 'center',
+        padding: '6px 12px',
+        background: CHAT_SURFACE_BG,
+        fontFamily: FONT_MONO, fontSize: 10,
+        color: CRUSH.Squid,
+        gap: 10,
+        position: 'relative' as const
+      }}>
+        {pct > 0 ? (
+          <>
+            <span style={{ color: CRUSH.Squid, fontSize: 10 }}>context</span>
+            <CtxProgressBar pct={pct} tier={tier} />
+            <span style={{
+              color: compactColor, fontWeight: 600, minWidth: 36, textAlign: 'right' as const
+            }}>{pct}%</span>
+            <CrushTooltip text="View context breakdown · ~7s session pause to scrape /context">
+              <button
+                onClick={onViewContext}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: CRUSH.Squid,
+                  cursor: 'pointer',
+                  fontSize: 13, lineHeight: 1,
+                  padding: '2px 4px',
+                  borderRadius: 3,
+                  transition: 'color 120ms'
+                }}
+                onMouseEnter={e => { e.currentTarget.style.color = CRUSH.Bok }}
+                onMouseLeave={e => { e.currentTarget.style.color = CRUSH.Squid }}
+              >ⓘ</button>
+            </CrushTooltip>
+          </>
+        ) : !modelKnown ? (
+          <span style={{ color: CRUSH.Oyster, fontStyle: 'italic' as const }}>
+            waiting for first message…
+          </span>
+        ) : (
+          <span style={{ color: CRUSH.Oyster }}>context —</span>
+        )}
+        <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
+        <CrushTooltip text="Run /compact · summarize history into a smaller prompt · up to 10 min">
           <button
-            onClick={() => setMenuOpen(o => !o)}
-            title="More session actions"
+            onClick={onCompact}
             style={{
-              background: 'transparent',
-              border: `1px solid ${menuOpen ? CRUSH.Charple : CRUSH.Charcoal}`,
-              color: menuOpen ? CRUSH.Charple : CRUSH.Squid,
-              fontFamily: FONT_MONO, fontSize: 13,
-              padding: '3px 9px',
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              background: compactBg,
+              border: `1px solid ${compactColor}`,
+              color: compactColor,
+              fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600,
+              padding: '2px 8px',
               borderRadius: 4,
               cursor: 'pointer',
               transition: 'all 120ms'
             }}
+            onMouseEnter={e => { e.currentTarget.style.background = compactColor; e.currentTarget.style.color = CRUSH.Pepper }}
+            onMouseLeave={e => { e.currentTarget.style.background = compactBg; e.currentTarget.style.color = compactColor }}
+          >
+            <span style={{ fontSize: 11, lineHeight: 1 }}>⎙</span>{compactLabel}
+          </button>
+        </CrushTooltip>
+        <div ref={menuRef} style={{ position: 'relative' as const }}>
+          <CrushTooltip text="More session actions · Resume / Fork / Remote / Close">
+          <button
+            onClick={() => setMenuOpen(o => !o)}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${menuOpen ? CRUSH.Charple : CRUSH.Charcoal}`,
+              color: menuOpen ? CRUSH.Charple : CRUSH.Squid,
+              fontFamily: FONT_MONO, fontSize: 11,
+              padding: '2px 8px',
+              borderRadius: 4,
+              cursor: 'pointer',
+              transition: 'all 120ms',
+              lineHeight: 1
+            }}
           >⋮</button>
+          </CrushTooltip>
           {menuOpen && (
             <div style={{
               position: 'absolute' as const,
@@ -1532,7 +3027,67 @@ function ActionToolbar({
           )}
         </div>
       </span>
-    </div>
+      </div>
+    </>
+  )
+}
+
+const CHAT_SURFACE_BG = '#150e24'
+
+/** Inline chip rendering "● {type} {status} resets in {eta}" for one
+ * rate-limit window. Returns null when there's no event yet for this
+ * window — caller decides whether to insert separators. */
+function RateChip({ info, typeLabel }: {
+  info: { status?: string; resetsAt?: number; isUsingOverage?: boolean } | null
+  typeLabel: string
+}) {
+  if (!info) return null
+  const color = info.status === 'allowed' ? CRUSH.Julep
+    : info.status === 'rejected' || info.status === 'blocked' ? CRUSH.Sriracha
+    : CRUSH.Zest
+  const isUrgent = info.status === 'rejected' || info.status === 'blocked'
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span style={{ color, fontWeight: 700 }}>● {typeLabel}</span>
+      <span style={{ color: CRUSH.Ash }}>{info.status || '?'}</span>
+      {info.resetsAt && (
+        <span style={{ color: isUrgent ? CRUSH.Sriracha : CRUSH.Squid }}>
+          resets in {humanEta(info.resetsAt)}
+        </span>
+      )}
+      {info.isUsingOverage && <span style={{ color: CRUSH.Zest }}>⚠ overage</span>}
+    </span>
+  )
+}
+
+/** Filled progress bar for context %. Gradient escalates with tier:
+ *   normal  → Charple → Mochi
+ *   warn    → Zest → #FFC857
+ *   urgent  → Sriracha → Dolly
+ */
+function CtxProgressBar({ pct, tier }: { pct: number; tier: 'normal' | 'warn' | 'urgent' }) {
+  const grad = tier === 'urgent' ? `linear-gradient(90deg, ${CRUSH.Sriracha}, ${CRUSH.Dolly})`
+    : tier === 'warn' ? `linear-gradient(90deg, ${CRUSH.Zest}, #FFC857)`
+    : `linear-gradient(90deg, ${CRUSH.Charple}, ${CRUSH.Mochi})`
+  return (
+    <span style={{
+      flex: '1 1 auto',
+      position: 'relative' as const,
+      height: 6,
+      background: 'rgba(255,255,255,0.04)',
+      borderRadius: 3,
+      overflow: 'hidden' as const,
+      border: `1px solid ${CRUSH.Charcoal}`
+    }}>
+      <span style={{
+        display: 'block',
+        height: '100%',
+        width: `${Math.min(100, pct)}%`,
+        background: grad,
+        borderRadius: 2,
+        transition: 'width 200ms'
+      }} />
+    </span>
   )
 }
 
@@ -1635,10 +3190,12 @@ function SubagentBanner({ subs }: { subs: Record<string, {
   totalTokens?: number; toolUses?: number; durationMs?: number
 }> }) {
   const [, force] = useState(0)
+  const paused = useContext(HiveChatPausedContext)
   useEffect(() => {
+    if (paused) return
     const iv = setInterval(() => force(n => n + 1), 1000)
     return () => clearInterval(iv)
-  }, [])
+  }, [paused])
   const fmtDur = (ms: number) => {
     const s = Math.floor(ms / 1000)
     if (s < 60) return `${s}s`
@@ -1650,6 +3207,16 @@ function SubagentBanner({ subs }: { subs: Record<string, {
     return String(n)
   }
   const entries = Object.entries(subs)
+  // Sort: active (recent activity) first, idle last — so when capped + scrolled
+  // the user sees what's actually moving. Stable for equal lastEventAt.
+  entries.sort(([, a], [, b]) => b.lastEventAt - a.lastEventAt)
+  // Cap visible height around ~5 rows; scroll the rest. Without this, a
+  // long-running multi-agent task (e.g. 36 subagents at once) pushes the
+  // input bar and rate-limit row off screen.
+  const ROW_PX = 22
+  const MAX_VISIBLE = 5
+  const needsScroll = entries.length > MAX_VISIBLE
+  const activeCount = entries.filter(([, s]) => Date.now() - s.lastEventAt < 60000).length
   return (
     <div style={{
       padding: '4px 10px',
@@ -1661,6 +3228,28 @@ function SubagentBanner({ subs }: { subs: Record<string, {
       display: 'flex', flexDirection: 'column', gap: 2
     }}>
       <style>{`@keyframes hg-flip { 0%,40% { transform: rotate(0deg); } 60%,100% { transform: rotate(180deg); } }`}</style>
+      {entries.length > 1 && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 8,
+          color: CRUSH.Charple, fontWeight: 700,
+          fontSize: 10, letterSpacing: '0.04em',
+          paddingBottom: 2, marginBottom: 2,
+          borderBottom: `1px dashed ${CRUSH.Charcoal}`
+        }}>
+          <span>🔧 {entries.length} subagents</span>
+          <span style={{ color: CRUSH.Squid, fontWeight: 400 }}>· {activeCount} active</span>
+          {needsScroll && (
+            <span style={{ color: CRUSH.Squid, fontWeight: 400, marginLeft: 'auto' }}>
+              showing {MAX_VISIBLE} · scroll for more
+            </span>
+          )}
+        </div>
+      )}
+      <div style={{
+        maxHeight: needsScroll ? ROW_PX * MAX_VISIBLE : undefined,
+        overflowY: needsScroll ? 'auto' as const : undefined,
+        display: 'flex', flexDirection: 'column' as const, gap: 2
+      }}>
       {entries.map(([tuid, s], i) => {
         const elapsed = Date.now() - s.startedAt
         const idleMs = Date.now() - s.lastEventAt
@@ -1696,6 +3285,7 @@ function SubagentBanner({ subs }: { subs: Record<string, {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -1848,20 +3438,10 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
         <>
           <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{modelName}</span>
           {contextSize && <span style={{ color: CRUSH.Squid }}>({contextSize})</span>}
-          {/* Context window %% sits next to (1M) — both belong to "this
-              session's context window", logically separate from the
-              account-level subscription bars on the other side of the
-              `|`. Color shifts Bok → Zest → Sriracha at 70 / 85. */}
-          {ctxPct != null && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginLeft: 4 }}
-                  title={`Context: ${contextUsedTokens.toLocaleString()} / ${ctxTotal.toLocaleString()} tokens`}>
-              <span style={{ color: CRUSH.Squid }}>ctx</span>
-              <PctBar pct={ctxPct} fullColor={ctxColor} />
-              <span style={{ color: ctxColor, minWidth: 28, fontWeight: ctxPct >= 70 ? 700 : 400 }}>
-                {ctxPct}%
-              </span>
-            </span>
-          )}
+          {/* Context %% lives in the dedicated row above input now (line 2
+              of the new 4-line layout); no longer rendered inline here.
+              Color tier still computed for the (unused) ctxColor var so
+              future re-additions remain trivial. */}
           <span style={{ color: CRUSH.Oyster }}>|</span>
         </>
       )}
@@ -1891,46 +3471,48 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
       {/* eta "Xh Ym left" removed — RateLimitBar above the input
           already shows the same reset countdown. */}
       <span style={{ marginLeft: 'auto' }} />
-      <button
-        onClick={onToggleStreaming}
-        title={streamingMode
-          ? 'Streaming mode ON — username + secrets masked in display'
-          : 'Streaming mode OFF — real values shown'}
-        style={{
-          background: streamingMode ? 'rgba(255,96,255,0.14)' : 'transparent',
-          border: `1px solid ${streamingMode ? CRUSH.Dolly : CRUSH.Charcoal}`,
-          color: streamingMode ? CRUSH.Dolly : CRUSH.Squid,
-          padding: '2px 8px',
-          borderRadius: 4,
-          fontFamily: FONT_MONO, fontSize: 10,
-          cursor: 'pointer'
-        }}
-      >
-        {streamingMode ? '● streaming mode' : '○ streaming mode'}
-      </button>
-      {sessionActive && (
+      <CrushTooltip text={streamingMode
+        ? 'Streaming mode ON · username + secrets masked in display'
+        : 'Streaming mode OFF · real values shown'}>
         <button
-          onClick={onCloseSession}
-          title="End this claude session. A confirm panel will appear."
+          onClick={onToggleStreaming}
           style={{
-            background: 'transparent',
-            border: `1px solid ${CRUSH.Charcoal}`,
-            color: CRUSH.Squid,
-            padding: '2px 6px',
+            background: streamingMode ? 'rgba(255,96,255,0.14)' : 'transparent',
+            border: `1px solid ${streamingMode ? CRUSH.Dolly : CRUSH.Charcoal}`,
+            color: streamingMode ? CRUSH.Dolly : CRUSH.Squid,
+            padding: '2px 8px',
             borderRadius: 4,
             fontFamily: FONT_MONO, fontSize: 10,
-            cursor: 'pointer',
-            whiteSpace: 'nowrap'
+            cursor: 'pointer'
           }}
-          onMouseEnter={e => {
-            e.currentTarget.style.borderColor = CRUSH.Sriracha
-            e.currentTarget.style.color = CRUSH.Sriracha
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.borderColor = CRUSH.Charcoal
-            e.currentTarget.style.color = CRUSH.Squid
-          }}
-        >close ✕</button>
+        >
+          {streamingMode ? '● streaming mode' : '○ streaming mode'}
+        </button>
+      </CrushTooltip>
+      {sessionActive && (
+        <CrushTooltip text="End this claude session · a confirm panel will appear">
+          <button
+            onClick={onCloseSession}
+            style={{
+              background: 'transparent',
+              border: `1px solid ${CRUSH.Charcoal}`,
+              color: CRUSH.Squid,
+              padding: '2px 6px',
+              borderRadius: 4,
+              fontFamily: FONT_MONO, fontSize: 10,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.borderColor = CRUSH.Sriracha
+              e.currentTarget.style.color = CRUSH.Sriracha
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.borderColor = CRUSH.Charcoal
+              e.currentTarget.style.color = CRUSH.Squid
+            }}
+          >close ✕</button>
+        </CrushTooltip>
       )}
     </div>
   )
