@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hive · Session Picker preview</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --chat-bg: #150e24;
+  --pepper: #201F26;
+  --bbq: #2D2C35;
+  --charcoal: #3A3943;
+  --oyster: #605F6B;
+  --squid: #858392;
+  --ash: #DFDBDD;
+  --butter: #FFFAF1;
+  --sriracha: #EB4268;
+  --julep: #00FFB2;
+  --zest: #E8FE96;
+  --malibu: #00A4FF;
+  --dolly: #FF60FF;
+  --bok: #68FFD6;
+  --charple: #6B50FF;
+  --violet: #C259FF;
+  --mochi: #EB5DFF;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: #0d0820;
+  color: var(--ash);
+  padding: 32px;
+  display: flex; flex-direction: column; gap: 36px;
+}
+h2 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px; color: var(--squid);
+  text-transform: uppercase; letter-spacing: 0.14em;
+  font-weight: 600; margin-bottom: 8px;
+}
+.tag {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 9px; color: var(--charple);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  background: rgba(107,80,255,0.12);
+  border: 1px solid var(--charple);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: 8px;
+}
+.note { font-family: 'Space Grotesk', sans-serif; font-size: 10px; color: var(--squid); margin-top: 6px; }
+.note strong { color: var(--zest); }
+
+.surface {
+  background: var(--chat-bg);
+  border-radius: 6px;
+  width: 940px;
+  border: 1px solid var(--charcoal);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ===== StartChooser frame (recreated minimally) ===== */
+.chooser-card {
+  background: var(--bbq);
+  border: 1px solid var(--charcoal);
+  border-radius: 12px;
+  margin: 24px;
+  padding: 20px;
+}
+.chooser-head {
+  display: flex; align-items: center; gap: 10px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px; font-weight: 700; color: var(--ash);
+  margin-bottom: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px dashed var(--charcoal);
+}
+.chooser-head .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--charple); box-shadow: 0 0 8px var(--charple);
+}
+
+/* 4 button row */
+.btn-row {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;
+}
+.btn {
+  background: var(--pepper);
+  border: 1px solid var(--charcoal);
+  color: var(--ash);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px; font-weight: 600;
+  padding: 14px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 4px; align-items: center;
+}
+.btn .icon { font-size: 18px; line-height: 1; }
+.btn .desc { font-size: 9px; color: var(--squid); font-weight: 400; }
+.btn-resume { border: 2px solid var(--bok); background: #1a3a30; color: var(--bok); padding: 13px 9px; }
+.btn-resume .icon, .btn-resume .label { color: var(--bok); }
+.btn-compact .icon { color: var(--charple); }
+.btn-new .icon { color: var(--zest); }
+.btn-fork .icon { color: var(--mochi); }
+
+/* ===== Variant A — inline expand ===== */
+.picker-inline {
+  margin-top: 10px;
+  background: var(--pepper);
+  border: 1px solid var(--bok);
+  border-radius: 8px;
+  padding: 10px;
+}
+.picker-head {
+  display: flex; justify-content: space-between; align-items: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px; color: var(--squid);
+  text-transform: uppercase; letter-spacing: 0.08em;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+  border-bottom: 1px dashed var(--charcoal);
+}
+.picker-head .action { color: var(--bok); font-weight: 700; }
+.picker-head .close { cursor: pointer; }
+
+.session-row {
+  display: grid;
+  grid-template-columns: 80px 1fr 110px;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 120ms;
+  align-items: start;
+}
+.session-row:hover {
+  background: rgba(104,255,214,0.06);
+  border-color: var(--charcoal);
+}
+.session-row.selected {
+  background: rgba(104,255,214,0.10);
+  border-color: var(--bok);
+}
+.s-sid {
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--bok); font-weight: 600;
+  padding-top: 2px;
+}
+.s-body { min-width: 0; }
+.s-title {
+  font-family: 'JetBrains Mono', monospace; font-size: 12px;
+  color: var(--ash); font-weight: 600;
+  margin-bottom: 2px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.s-preview {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: var(--squid);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.s-meta {
+  text-align: right;
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  color: var(--squid);
+  padding-top: 2px;
+}
+.s-meta .ago { color: var(--ash); }
+.s-meta .ctx { color: var(--charple); margin-top: 1px; }
+
+.picker-foot {
+  display: flex; gap: 8px; margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--charcoal);
+}
+.picker-foot .spacer { margin-left: auto; }
+.btn-confirm {
+  background: rgba(104,255,214,0.12);
+  border: 1px solid var(--bok);
+  color: var(--bok);
+  padding: 5px 14px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn-cancel {
+  background: transparent;
+  border: 1px solid var(--charcoal);
+  color: var(--squid);
+  padding: 5px 14px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+/* ===== Variant B — popover dropdown ===== */
+.popover-anchor { position: relative; }
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0; right: 0;
+  background: var(--bbq);
+  border: 1px solid var(--bok);
+  border-radius: 8px;
+  padding: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  z-index: 10;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.popover-arrow {
+  position: absolute;
+  top: -6px; left: 24px;
+  width: 12px; height: 12px;
+  background: var(--bbq);
+  border-top: 1px solid var(--bok);
+  border-left: 1px solid var(--bok);
+  transform: rotate(45deg);
+}
+
+/* ===== Variant C — full modal ===== */
+.backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+  padding: 30px;
+}
+.modal {
+  width: 720px; max-width: 92%;
+  background: var(--bbq);
+  border: 1px solid var(--bok);
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(104,255,214,0.18), 0 4px 12px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column;
+  max-height: 90%;
+  overflow: hidden;
+}
+.modal-head {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 18px;
+  background: var(--pepper);
+  border-bottom: 1px solid var(--charcoal);
+}
+.modal-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px; font-weight: 700; color: var(--ash);
+  display: flex; align-items: center; gap: 10px;
+}
+.modal-title .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--bok); box-shadow: 0 0 8px var(--bok); }
+.modal-title .action-pill {
+  font-size: 10px; color: var(--bok);
+  background: rgba(104,255,214,0.12);
+  border: 1px solid var(--bok);
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-family: 'JetBrains Mono', monospace; font-weight: 600;
+  margin-left: 6px;
+}
+.modal-search {
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--charcoal);
+}
+.modal-search input {
+  width: 100%;
+  background: var(--pepper);
+  border: 1px solid var(--charcoal);
+  color: var(--butter);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  outline: none;
+}
+.modal-body {
+  padding: 8px 12px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+.modal-foot {
+  display: flex; gap: 8px;
+  padding: 10px 18px;
+  background: var(--pepper);
+  border-top: 1px solid var(--charcoal);
+}
+.modal-foot .spacer { margin-left: auto; }
+</style>
+</head>
+<body>
+
+<section>
+  <h2>Variant A · Inline expand under StartChooser buttons<span class="tag">轻量</span></h2>
+  <div class="surface">
+    <div class="chooser-card">
+      <div class="chooser-head">
+        <span class="dot"></span>
+        Start session — pick a mode
+        <span style="margin-left: auto; font-family: 'JetBrains Mono'; font-size: 10px; color: var(--squid); font-weight: 400;">~/FrontEndProjects/hive</span>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-resume"><span class="icon">↻</span><span class="label">Resume</span><span class="desc">claude -c</span></button>
+        <button class="btn btn-compact"><span class="icon">⎙</span><span class="label">Compact + Resume</span><span class="desc">/compact → resume</span></button>
+        <button class="btn btn-new"><span class="icon">✦</span><span class="label">Start new</span><span class="desc">fresh sid</span></button>
+        <button class="btn btn-fork"><span class="icon">⑂</span><span class="label">Fork</span><span class="desc">--fork-session</span></button>
+      </div>
+      <!-- Inline picker triggered by Resume click -->
+      <div class="picker-inline">
+        <div class="picker-head">
+          <span>Pick a session to <span class="action">↻ Resume</span></span>
+          <span class="close">✕</span>
+        </div>
+        <div class="session-row selected">
+          <div class="s-sid">44596b4e</div>
+          <div class="s-body">
+            <div class="s-title">让我帮你 audit context modal 渲染流程</div>
+            <div class="s-preview">└ Late Claude agent for f559b896 finished — actually improved the result</div>
+          </div>
+          <div class="s-meta">
+            <div class="ago">just now</div>
+            <div class="ctx">28%</div>
+          </div>
+        </div>
+        <div class="session-row">
+          <div class="s-sid">990c1471</div>
+          <div class="s-body">
+            <div class="s-title">/context 实测，看 hive cwd 输出形态</div>
+            <div class="s-preview">└ Three events: system/init + assistant + result. cost=0</div>
+          </div>
+          <div class="s-meta">
+            <div class="ago">19h ago</div>
+            <div class="ctx">3%</div>
+          </div>
+        </div>
+        <div class="session-row">
+          <div class="s-sid">0013a0a3</div>
+          <div class="s-body">
+            <div class="s-title">subagent banner overflow + 36 ghost fix</div>
+            <div class="s-preview">└ Found it — JSONL line order ≠ timestamp order during async writes</div>
+          </div>
+          <div class="s-meta">
+            <div class="ago">22h ago</div>
+            <div class="ctx">62%</div>
+          </div>
+        </div>
+        <div class="session-row">
+          <div class="s-sid">ff466f30</div>
+          <div class="s-body">
+            <div class="s-title">StartChooser 4 模式 + 智能默认聚焦</div>
+            <div class="s-preview">└ Variant A · 推荐方案 — 正常状态</div>
+          </div>
+          <div class="s-meta">
+            <div class="ago">4d ago</div>
+            <div class="ctx">88%</div>
+          </div>
+        </div>
+        <div class="session-row">
+          <div class="s-sid">54b12756</div>
+          <div class="s-body">
+            <div class="s-title">v1.7.74 — RateLimitBar countdown ticks live</div>
+            <div class="s-preview">└ ✅ Compact done — session resumed</div>
+          </div>
+          <div class="s-meta">
+            <div class="ago">4d ago</div>
+            <div class="ctx">94%</div>
+          </div>
+        </div>
+        <div class="picker-foot">
+          <span style="font-family: 'JetBrains Mono'; font-size: 10px; color: var(--squid); align-self: center;">5 of 23 · scroll for older</span>
+          <span class="spacer"></span>
+          <button class="btn-cancel">Cancel</button>
+          <button class="btn-confirm">↻ Resume 44596b4e</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">点 Resume → 紧贴下方展开 5 行 · 默认选最新（高亮）· 点行就选中 + 底部确认按钮 · 节省垂直空间但占据 chooser 内部</div>
+</section>
+
+<section>
+  <h2>Variant B · Popover dropdown (anchored to button)</h2>
+  <div class="surface" style="height: 480px;">
+    <div class="chooser-card">
+      <div class="chooser-head">
+        <span class="dot"></span>
+        Start session — pick a mode
+        <span style="margin-left: auto; font-family: 'JetBrains Mono'; font-size: 10px; color: var(--squid); font-weight: 400;">~/FrontEndProjects/hive</span>
+      </div>
+      <div class="btn-row">
+        <div class="popover-anchor">
+          <button class="btn btn-resume"><span class="icon">↻</span><span class="label">Resume</span><span class="desc">claude -c</span></button>
+          <div class="popover">
+            <div class="popover-arrow"></div>
+            <div class="picker-head">
+              <span>Pick a session to <span style="color: var(--bok); font-weight: 700;">↻ Resume</span></span>
+              <span class="close">✕</span>
+            </div>
+            <div class="session-row selected">
+              <div class="s-sid">44596b4e</div>
+              <div class="s-body">
+                <div class="s-title">让我帮你 audit context modal 渲染流程</div>
+                <div class="s-preview">└ Late Claude agent finished — actually improved</div>
+              </div>
+              <div class="s-meta"><div class="ago">just now</div><div class="ctx">28%</div></div>
+            </div>
+            <div class="session-row">
+              <div class="s-sid">990c1471</div>
+              <div class="s-body">
+                <div class="s-title">/context 实测，看 hive cwd 输出形态</div>
+                <div class="s-preview">└ Three events: init + assistant + result</div>
+              </div>
+              <div class="s-meta"><div class="ago">19h ago</div><div class="ctx">3%</div></div>
+            </div>
+            <div class="session-row">
+              <div class="s-sid">0013a0a3</div>
+              <div class="s-body">
+                <div class="s-title">subagent ghost fix — line order issue</div>
+                <div class="s-preview">└ Async writes don't preserve timestamp order</div>
+              </div>
+              <div class="s-meta"><div class="ago">22h ago</div><div class="ctx">62%</div></div>
+            </div>
+            <div class="session-row">
+              <div class="s-sid">ff466f30</div>
+              <div class="s-body">
+                <div class="s-title">StartChooser 4 模式 + 智能默认</div>
+                <div class="s-preview">└ Variant A · 推荐方案 — 正常状态</div>
+              </div>
+              <div class="s-meta"><div class="ago">4d ago</div><div class="ctx">88%</div></div>
+            </div>
+            <div class="session-row">
+              <div class="s-sid">54b12756</div>
+              <div class="s-body">
+                <div class="s-title">v1.7.74 — RateLimitBar live tick</div>
+                <div class="s-preview">└ ✅ Compact done — session resumed</div>
+              </div>
+              <div class="s-meta"><div class="ago">4d ago</div><div class="ctx">94%</div></div>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-compact"><span class="icon">⎙</span><span class="label">Compact + Resume</span><span class="desc">/compact → resume</span></button>
+        <button class="btn btn-new"><span class="icon">✦</span><span class="label">Start new</span><span class="desc">fresh sid</span></button>
+        <button class="btn btn-fork"><span class="icon">⑂</span><span class="label">Fork</span><span class="desc">--fork-session</span></button>
+      </div>
+    </div>
+  </div>
+  <div class="note">浮层贴 Resume 按钮下方 · 点行直接执行（不需要二次确认）· 适合快速场景但遮住其他按钮</div>
+</section>
+
+<section>
+  <h2>Variant C · Full modal — 大空间，最多信息<span class="tag">推荐</span></h2>
+  <div class="surface" style="height: 580px;">
+    <div class="backdrop">
+      <div class="modal">
+        <div class="modal-head">
+          <div class="modal-title">
+            <span class="dot"></span>
+            Pick a session
+            <span class="action-pill">↻ Resume</span>
+          </div>
+          <button style="background: transparent; border: 1px solid var(--charcoal); color: var(--squid); padding: 2px 8px; border-radius: 4px; font-family: 'JetBrains Mono'; font-size: 11px; cursor: pointer;">✕</button>
+        </div>
+        <div class="modal-search">
+          <input placeholder="search sessions by title or session-id…" />
+        </div>
+        <div class="modal-body">
+          <div class="session-row selected">
+            <div class="s-sid">44596b4e</div>
+            <div class="s-body">
+              <div class="s-title">让我帮你 audit context modal 渲染流程</div>
+              <div class="s-preview">└ Late Claude agent for f559b896 finished — actually improved the result</div>
+            </div>
+            <div class="s-meta"><div class="ago">just now</div><div class="ctx">28% · 281k</div></div>
+          </div>
+          <div class="session-row">
+            <div class="s-sid">990c1471</div>
+            <div class="s-body">
+              <div class="s-title">/context 实测，看 hive cwd 输出形态</div>
+              <div class="s-preview">└ Three events: system/init + assistant + result. cost=0, num_turns=579</div>
+            </div>
+            <div class="s-meta"><div class="ago">19h ago</div><div class="ctx">3% · 26k</div></div>
+          </div>
+          <div class="session-row">
+            <div class="s-sid">0013a0a3</div>
+            <div class="s-body">
+              <div class="s-title">subagent banner overflow + 36 ghost fix</div>
+              <div class="s-preview">└ Found it — JSONL line order ≠ timestamp order during async writes</div>
+            </div>
+            <div class="s-meta"><div class="ago">22h ago</div><div class="ctx">62% · 620k</div></div>
+          </div>
+          <div class="session-row">
+            <div class="s-sid">ff466f30</div>
+            <div class="s-body">
+              <div class="s-title">StartChooser 4 模式 + 智能默认聚焦</div>
+              <div class="s-preview">└ Variant A · 推荐方案 — 正常状态 - baseline</div>
+            </div>
+            <div class="s-meta"><div class="ago">4d ago</div><div class="ctx">88% · 880k</div></div>
+          </div>
+          <div class="session-row">
+            <div class="s-sid">54b12756</div>
+            <div class="s-body">
+              <div class="s-title">v1.7.74 — RateLimitBar countdown ticks live (60s heartbeat)</div>
+              <div class="s-preview">└ ✅ Compact done — session resumed automatically</div>
+            </div>
+            <div class="s-meta"><div class="ago">4d ago</div><div class="ctx">94% · 940k</div></div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <span style="font-family: 'JetBrains Mono'; font-size: 10px; color: var(--squid); align-self: center;">5 most recent · 23 total</span>
+          <span class="spacer"></span>
+          <button class="btn-cancel">Cancel</button>
+          <button class="btn-confirm">↻ Resume 44596b4e</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">独立 modal · 大点击区 · 搜索框（适合 23+ session 用户）· 更舒适但多一次点击</div>
+</section>
+
+<section>
+  <h2>三选一对比</h2>
+  <table style="width: 100%; border-collapse: collapse; font-family: 'JetBrains Mono'; font-size: 11px; color: var(--ash);">
+    <thead>
+      <tr style="background: var(--pepper);">
+        <th style="text-align: left; padding: 8px; color: var(--squid); font-weight: 600;">维度</th>
+        <th style="text-align: left; padding: 8px; color: var(--squid); font-weight: 600;">A · Inline</th>
+        <th style="text-align: left; padding: 8px; color: var(--squid); font-weight: 600;">B · Popover</th>
+        <th style="text-align: left; padding: 8px; color: var(--squid); font-weight: 600;">C · Modal</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">点击次数</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal); color: var(--bok);">2 (action + confirm)</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal); color: var(--bok);">2 (action + row)</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">2 (action + row + confirm) - 3</td></tr>
+      <tr><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">展示信息</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">紧凑</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">紧凑</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal); color: var(--bok);">最多 + 搜索</td></tr>
+      <tr><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">遮挡内容</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal); color: var(--bok);">不遮</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">遮 1 行按钮</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">遮全屏 (with backdrop)</td></tr>
+      <tr><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">3 个动作复用</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal); color: var(--bok);">同一 picker 切换 action</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal);">每个 button 独立 popover</td><td style="padding: 6px 8px; border-bottom: 1px solid var(--charcoal); color: var(--bok);">同一 modal 切换 action pill</td></tr>
+      <tr><td style="padding: 6px 8px;">视觉权重</td><td style="padding: 6px 8px;">轻</td><td style="padding: 6px 8px;">中</td><td style="padding: 6px 8px;">重</td></tr>
+    </tbody>
+  </table>
+</section>
+
+</body>
+</html>

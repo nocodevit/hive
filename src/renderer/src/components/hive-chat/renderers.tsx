@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useContext, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Highlight, themes } from 'prism-react-renderer'
@@ -6,6 +6,17 @@ import { Check, Pencil } from 'lucide-react'
 import { CRUSH, FONT_MONO, TOOL_COLORS, redact } from './crush-styles'
 import { parseStructuredOutput } from './structured-format'
 import type { TimelineEntry } from './types'
+
+/**
+ * Tells deep tickers (ThinkingSpinner, LongRunningTick, SubagentBanner)
+ * whether the parent HiveChat is currently visible. When invisible
+ * (user is on another agent's tab), tickers pause their setInterval
+ * to avoid pegging the renderer at 100%+ CPU. With 7+ agents all
+ * mounted but only 1 visible, leaving every ticker running summed to
+ * dozens of setState/sec across hidden chats. Default true (paused)
+ * so any consumer not wrapped in a provider stays cheap by default.
+ */
+export const HiveChatPausedContext = React.createContext<boolean>(true)
 
 const DEFAULT_EXPANDED_LINES = 12
 const LONG_ASSISTANT_THRESHOLD = 30
@@ -581,10 +592,12 @@ export function ToolBlock({ name, input, result }: {
 function LongRunningTick({ toolName }: { toolName: string }) {
   const startedAtRef = useRef<number>(Date.now())
   const [, force] = useState(0)
+  const paused = useContext(HiveChatPausedContext)
   useEffect(() => {
+    if (paused) return
     const iv = setInterval(() => force(n => n + 1), 1000)
     return () => clearInterval(iv)
-  }, [])
+  }, [paused])
   const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000)
   if (elapsed < 5) return null
   const gradStyle: React.CSSProperties = {
@@ -1142,11 +1155,14 @@ export function elapsedSec(since: number, now: number): number {
 export function ThinkingSpinner({ since }: { since: number }) {
   const [tick, setTick] = useState(0)
   const [, forceSec] = useState(0)
+  // Read paused-state from the nearest HiveChat (true when invisible).
+  const paused = useContext(HiveChatPausedContext)
   React.useEffect(() => {
+    if (paused) return
     const glyphIv = setInterval(() => setTick(t => t + 1), 150)
     const secIv = setInterval(() => forceSec(n => n + 1), 1000)
     return () => { clearInterval(glyphIv); clearInterval(secIv) }
-  }, [])
+  }, [paused])
   const verb = pickVerb(Math.floor(since / 1000))
   const glyph = glyphAt(tick)
   const secs = elapsedSec(since, Date.now())
@@ -1230,6 +1246,30 @@ export function CompactBoundary({ previousTokens, newTokens, turnsSummarized }: 
 }
 
 export function SystemLine({ text }: { text: string }) {
+  // Detect "in-progress" lines that start with the hourglass + end with
+  // an ellipsis. These represent ongoing background ops (compact, scrape,
+  // pausing chat). Animate the ⏳ (rotation) and the ellipsis (cycling
+  // dots) so the user sees the operation is alive — static text reads
+  // like a frozen UI even while a 90s /compact is running.
+  const isInProgress = /^⏳\s/.test(text) && /[…\.]+\s*$/.test(text)
+  if (isInProgress) {
+    // Strip the trailing ellipsis (whatever form: "...", "…", " ...")
+    // and re-add it as a separate animated span so the dots cycle.
+    const stripped = text.replace(/\s*[…\.]+\s*$/, '')
+    return (
+      <div style={{ color: CRUSH.Oyster, fontSize: 11, fontFamily: FONT_MONO, padding: '2px 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <style>{`@keyframes hg-flip { 0%,40% { transform: rotate(0deg); } 60%,100% { transform: rotate(180deg); } }`}</style>
+        <span style={{
+          display: 'inline-block',
+          fontSize: 13,
+          animation: 'hg-flip 2s ease-in-out infinite',
+          color: CRUSH.Charple
+        }}>⏳</span>
+        <span>{redact(stripped.replace(/^⏳\s*/, ''))}</span>
+        <span className="hive-dots-loader" style={{ color: CRUSH.Charple }} />
+      </div>
+    )
+  }
   return (
     <div style={{ color: CRUSH.Oyster, fontSize: 11, fontFamily: FONT_MONO, padding: '2px 0' }}>
       {redact(text)}

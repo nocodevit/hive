@@ -65,12 +65,47 @@ const api = {
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', { key }) as Promise<any>,
     set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', { key, value }) as Promise<boolean>,
-    addClaudeAllowRule: (rules: { toolName: string; ruleContent: string }[]) =>
-      ipcRenderer.invoke('settings:addClaudeAllowRule', { rules }) as Promise<{ ok: boolean; added?: number; error?: string }>
+    addClaudeAllowRule: (rulesOrSuggestion: { toolName: string; ruleContent: string }[] | { rules?: any; type?: string; mode?: string; directories?: string[]; destination?: string }) => {
+      // Two call modes for back-compat:
+      //   - array of rules (old) → wrapped as { rules }
+      //   - full suggestion object (new) → wrapped as { suggestion }
+      const payload = Array.isArray(rulesOrSuggestion)
+        ? { rules: rulesOrSuggestion }
+        : { suggestion: rulesOrSuggestion }
+      return ipcRenderer.invoke('settings:addClaudeAllowRule', payload) as Promise<{ ok: boolean; added?: number; error?: string }>
+    }
   },
   chat: {
-    start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean }) =>
-      ipcRenderer.invoke('chat:start', { id, ...opts }) as Promise<{ ok: boolean }>,
+    start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean; resumeSid?: string; forkSession?: boolean; forceCompact?: boolean }) =>
+      ipcRenderer.invoke('chat:start', { id, ...opts }) as Promise<{ ok: boolean; compacted?: boolean; error?: string }>,
+    getPrevSessionInfo: (cwd: string) =>
+      ipcRenderer.invoke('chat:getPrevSessionInfo', { cwd }) as Promise<{ sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number } | null>,
+    getRecentSessions: (cwd: string, limit?: number) =>
+      ipcRenderer.invoke('chat:getRecentSessions', { cwd, limit }) as Promise<{
+        sid: string
+        title: string
+        preview: string
+        lastActiveMs: number
+        ctxPct: number
+        totalTokens: number
+      }[]>,
+    scrapeContext: (id: string, force?: boolean) =>
+      ipcRenderer.invoke('chat:scrapeContext', { id, force: !!force }) as Promise<{
+        ok: boolean
+        error?: string
+        data?: {
+          model: string
+          totalTokens: number
+          totalLimit: number
+          totalPct: number
+          categories: { name: string; tokens: number; pct: number }[]
+          mcpTools: { name: string; server?: string; tokens: number }[]
+          customAgents: { name: string; tokens: number }[]
+          memoryFiles: { name: string; tokens: number }[]
+          skills: { name: string; source?: string; tokens: number }[]
+          scrapedAtMs: number
+        }
+      }>,
     send: (id: string, text: string) =>
       ipcRenderer.invoke('chat:send', { id, text }) as Promise<{ ok: boolean; error?: string }>,
     respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny', input?: Record<string, unknown>, denyMessage?: string) =>

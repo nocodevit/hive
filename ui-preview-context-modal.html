@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hive · Context Modal preview v2 (tabs)</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --chat-bg: #150e24;
+  --pepper: #201F26;
+  --bbq: #2D2C35;
+  --charcoal: #3A3943;
+  --oyster: #605F6B;
+  --squid: #858392;
+  --ash: #DFDBDD;
+  --butter: #FFFAF1;
+  --sriracha: #EB4268;
+  --julep: #00FFB2;
+  --zest: #E8FE96;
+  --malibu: #00A4FF;
+  --dolly: #FF60FF;
+  --bok: #68FFD6;
+  --charple: #6B50FF;
+  --violet: #C259FF;
+  --mochi: #EB5DFF;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: #0d0820;
+  color: var(--ash);
+  padding: 32px;
+  display: flex; flex-direction: column; gap: 36px;
+}
+h2 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px; color: var(--squid);
+  text-transform: uppercase; letter-spacing: 0.14em;
+  font-weight: 600; margin-bottom: 8px;
+}
+
+.surface {
+  background: var(--chat-bg);
+  border-radius: 6px;
+  width: 1000px;
+  height: 640px;
+  border: 1px solid var(--charcoal);
+  position: relative;
+  overflow: hidden;
+}
+.surface::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(0deg, transparent 0 18px, rgba(255,255,255,0.02) 18px 20px);
+  opacity: 0.6;
+}
+
+.backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex; align-items: center; justify-content: center;
+}
+
+.modal {
+  width: 820px; max-width: 92%;
+  height: 580px;
+  background: var(--bbq);
+  border: 1px solid var(--charple);
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(107,80,255,0.25), 0 4px 12px rgba(0,0,0,0.5);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+
+/* Head */
+.modal-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--pepper);
+  border-bottom: 1px solid var(--charcoal);
+  flex-shrink: 0;
+}
+.modal-title {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--ash);
+  display: flex; align-items: center; gap: 10px;
+}
+.modal-title .dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--charple); box-shadow: 0 0 10px var(--charple);
+}
+.modal-title .total {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--squid);
+  font-weight: 400; margin-left: 8px;
+}
+.modal-title .total .pct { color: var(--charple); font-weight: 700; }
+.modal-close {
+  background: transparent; border: 1px solid var(--charcoal);
+  color: var(--squid); font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  padding: 2px 8px; border-radius: 4px; cursor: pointer; line-height: 1;
+}
+
+/* Tabs */
+.tabs {
+  display: flex; gap: 0;
+  background: var(--pepper);
+  border-bottom: 1px solid var(--charcoal);
+  flex-shrink: 0;
+  padding: 0 12px;
+}
+.tab {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  color: var(--squid);
+  padding: 8px 12px;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 120ms;
+  display: inline-flex; align-items: center; gap: 6px;
+}
+.tab:hover { color: var(--ash); }
+.tab.active {
+  color: var(--charple);
+  border-bottom-color: var(--charple);
+}
+.tab .count {
+  font-size: 9px;
+  background: var(--charcoal);
+  color: var(--squid);
+  padding: 1px 5px;
+  border-radius: 8px;
+  font-weight: 400;
+}
+.tab.active .count { background: rgba(107,80,255,0.18); color: var(--charple); }
+
+/* Body — scroll inside */
+.modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 16px 18px;
+}
+
+/* Overview tab */
+.head-line {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 14px;
+  font-family: 'JetBrains Mono', monospace;
+}
+.head-model {
+  font-size: 11px; color: var(--squid);
+}
+.head-model .name { color: var(--charple); font-weight: 700; font-size: 12px; }
+.head-total {
+  font-size: 14px; font-weight: 700; color: var(--ash);
+}
+.head-total .pct { color: var(--charple); }
+
+.grid-wrap {
+  background: var(--pepper);
+  border: 1px solid var(--charcoal);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(40, 1fr);
+  gap: 2px;
+}
+.cell {
+  aspect-ratio: 1;
+  border-radius: 1px;
+  min-height: 8px;
+}
+.c-system { background: #858392; }
+.c-tools { background: #68FFD6; }
+.c-mcp { background: #00A4FF; }
+.c-tools-deferred { background: #4FBFA8; }
+.c-agents { background: #C259FF; }
+.c-memory { background: #EB4268; }
+.c-skills { background: #E8FE96; }
+.c-messages { background: #6B50FF; }
+.c-autocompact { background: #EB5DFF; opacity: 0.5; }
+.c-free { background: #2A2935; }
+
+.legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 22px;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+}
+.legend-row { display: flex; align-items: center; gap: 8px; }
+.legend-swatch { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+.legend-name { color: var(--ash); flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend-tokens { color: var(--squid); }
+.legend-pct { color: var(--squid); min-width: 36px; text-align: right; }
+.legend-row.live .legend-name { color: var(--charple); font-weight: 600; }
+.legend-row.live .legend-pct { color: var(--charple); font-weight: 600; }
+
+/* Detail table */
+.detail-search {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 12px;
+}
+.detail-search input {
+  flex: 1 1 auto;
+  background: var(--pepper);
+  border: 1px solid var(--charcoal);
+  color: var(--butter);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  outline: none;
+}
+.detail-search input:focus { border-color: var(--charple); }
+.detail-search .summary {
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: var(--squid);
+}
+
+.dtable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+}
+.dtable th {
+  text-align: left;
+  padding: 6px 10px;
+  background: var(--pepper);
+  color: var(--squid);
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  position: sticky; top: -16px; /* sticky inside scroll body */
+  border-bottom: 1px solid var(--charcoal);
+}
+.dtable td {
+  padding: 5px 10px;
+  border-bottom: 1px solid rgba(58,57,67,0.4);
+  color: var(--ash);
+}
+.dtable td.tok {
+  text-align: right;
+  color: var(--butter);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.dtable td.src {
+  color: var(--squid);
+  font-size: 10px;
+}
+.dtable .name-mcp::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--malibu); margin-right: 6px; vertical-align: middle; }
+.dtable .name-skill::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--zest); margin-right: 6px; vertical-align: middle; }
+.dtable .name-agent::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--violet); margin-right: 6px; vertical-align: middle; }
+.dtable .name-memory::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--sriracha); margin-right: 6px; vertical-align: middle; }
+.dtable .top10 { background: rgba(107,80,255,0.06); }
+.dtable .top10 td.tok { color: var(--charple); }
+
+/* Foot */
+.modal-foot {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 18px;
+  background: var(--pepper);
+  border-top: 1px solid var(--charcoal);
+  font-family: 'JetBrains Mono', monospace; font-size: 10px;
+  color: var(--squid);
+  flex-shrink: 0;
+}
+.modal-foot .stale { color: var(--zest); font-style: italic; }
+.spacer { margin-left: auto; }
+.btn-primary {
+  background: rgba(107,80,255,0.12);
+  border: 1px solid var(--charple);
+  color: var(--charple);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--charcoal);
+  color: var(--squid);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.note {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px; color: var(--squid); margin-top: 6px;
+}
+.note strong { color: var(--zest); }
+</style>
+</head>
+<body>
+
+<section>
+  <h2>Variant A · Overview tab (default landing)</h2>
+  <div class="surface">
+    <div class="backdrop">
+      <div class="modal">
+        <div class="modal-head">
+          <div class="modal-title">
+            <span class="dot"></span>
+            Context Usage
+            <span class="total">claude-opus-4-7 · 1M · <span class="pct">28%</span> · 281.6k / 1m</span>
+          </div>
+          <button class="modal-close">✕</button>
+        </div>
+        <div class="tabs">
+          <span class="tab active">Overview</span>
+          <span class="tab">MCP Tools <span class="count">208</span></span>
+          <span class="tab">Custom Agents <span class="count">4</span></span>
+          <span class="tab">Memory Files <span class="count">3</span></span>
+          <span class="tab">Skills <span class="count">62</span></span>
+        </div>
+        <div class="modal-body">
+          <div class="grid-wrap">
+            <div class="grid" id="grid-a"></div>
+          </div>
+          <div class="legend">
+            <div class="legend-row"><span class="legend-swatch c-system"></span><span class="legend-name">System prompt</span><span class="legend-tokens">9k</span><span class="legend-pct">0.9%</span></div>
+            <div class="legend-row"><span class="legend-swatch c-tools"></span><span class="legend-name">System tools</span><span class="legend-tokens">7.4k</span><span class="legend-pct">0.7%</span></div>
+            <div class="legend-row"><span class="legend-swatch c-mcp"></span><span class="legend-name">MCP tools (deferred)</span><span class="legend-tokens">104.5k</span><span class="legend-pct">10.4%</span></div>
+            <div class="legend-row"><span class="legend-swatch c-tools-deferred"></span><span class="legend-name">System tools (deferred)</span><span class="legend-tokens">24.7k</span><span class="legend-pct">2.5%</span></div>
+            <div class="legend-row"><span class="legend-swatch c-agents"></span><span class="legend-name">Custom agents</span><span class="legend-tokens">159</span><span class="legend-pct">0.0%</span></div>
+            <div class="legend-row"><span class="legend-swatch c-memory"></span><span class="legend-name">Memory files</span><span class="legend-tokens">3.2k</span><span class="legend-pct">0.3%</span></div>
+            <div class="legend-row"><span class="legend-swatch c-skills"></span><span class="legend-name">Skills</span><span class="legend-tokens">6.5k</span><span class="legend-pct">0.6%</span></div>
+            <div class="legend-row live"><span class="legend-swatch c-messages"></span><span class="legend-name">Messages</span><span class="legend-tokens">255.3k</span><span class="legend-pct">25.5%</span></div>
+            <div class="legend-row"><span class="legend-swatch c-autocompact"></span><span class="legend-name">Autocompact buffer</span><span class="legend-tokens">33k</span><span class="legend-pct">3.3%</span></div>
+            <div class="legend-row"><span class="legend-swatch c-free"></span><span class="legend-name">Free space</span><span class="legend-tokens">685.4k</span><span class="legend-pct">68.5%</span></div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <span>just now · session 44596b4e</span>
+          <span class="spacer"></span>
+          <button class="btn-ghost">Refresh now</button>
+          <button class="btn-primary">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Tab 头有 count 数字（208/4/3/62） · 第一屏即用 grid + legend；细节在后面 4 个 tab</div>
+</section>
+
+<section>
+  <h2>Variant B · MCP Tools tab — searchable + top-10 highlight</h2>
+  <div class="surface">
+    <div class="backdrop">
+      <div class="modal">
+        <div class="modal-head">
+          <div class="modal-title">
+            <span class="dot"></span>
+            Context Usage
+            <span class="total">claude-opus-4-7 · 1M · <span class="pct">28%</span> · 281.6k / 1m</span>
+          </div>
+          <button class="modal-close">✕</button>
+        </div>
+        <div class="tabs">
+          <span class="tab">Overview</span>
+          <span class="tab active">MCP Tools <span class="count">208</span></span>
+          <span class="tab">Custom Agents <span class="count">4</span></span>
+          <span class="tab">Memory Files <span class="count">3</span></span>
+          <span class="tab">Skills <span class="count">62</span></span>
+        </div>
+        <div class="modal-body">
+          <div class="detail-search">
+            <input placeholder="filter MCP tools by name or server…" />
+            <span class="summary">208 tools · 104.5k tokens · top 10 highlighted</span>
+          </div>
+          <table class="dtable">
+            <thead>
+              <tr><th>Tool</th><th>Server</th><th style="text-align: right;">Tokens</th></tr>
+            </thead>
+            <tbody>
+              <tr class="top10"><td><span class="name-mcp"></span>jira_create_issue</td><td class="src">stargate</td><td class="tok">846</td></tr>
+              <tr class="top10"><td><span class="name-mcp"></span>gitlab_get_commits</td><td class="src">stargate</td><td class="tok">749</td></tr>
+              <tr class="top10"><td><span class="name-mcp"></span>kg_ingest_code</td><td class="src">stargate</td><td class="tok">567</td></tr>
+              <tr class="top10"><td><span class="name-mcp"></span>jira_create_version</td><td class="src">stargate</td><td class="tok">546</td></tr>
+              <tr class="top10"><td><span class="name-mcp"></span>eagle_top_metric</td><td class="src">stargate</td><td class="tok">541</td></tr>
+              <tr class="top10"><td><span class="name-mcp"></span>eagle_query_metric</td><td class="src">stargate</td><td class="tok">527</td></tr>
+              <tr class="top10"><td><span class="name-mcp"></span>jira_update_issue</td><td class="src">stargate</td><td class="tok">571</td></tr>
+              <tr class="top10"><td><span class="name-mcp"></span>agentation_watch_annotations</td><td class="src">agentation</td><td class="tok">505</td></tr>
+              <tr class="top10"><td><span class="name-mcp"></span>kg_plan_feature</td><td class="src">stargate</td><td class="tok">491</td></tr>
+              <tr class="top10"><td><span class="name-mcp"></span>kg_link_orphans</td><td class="src">stargate</td><td class="tok">453</td></tr>
+              <tr><td><span class="name-mcp"></span>jira_search</td><td class="src">stargate</td><td class="tok">453</td></tr>
+              <tr><td><span class="name-mcp"></span>jira_update_sprint</td><td class="src">stargate</td><td class="tok">444</td></tr>
+              <tr><td><span class="name-mcp"></span>jira_create_issue_link</td><td class="src">stargate</td><td class="tok">427</td></tr>
+              <tr><td><span class="name-mcp"></span>kg_rag_search</td><td class="src">stargate</td><td class="tok">393</td></tr>
+              <tr><td><span class="name-mcp"></span>jira_create_sprint</td><td class="src">stargate</td><td class="tok">395</td></tr>
+              <tr><td><span class="name-mcp"></span>jira_get_field_options</td><td class="src">stargate</td><td class="tok">381</td></tr>
+              <tr><td><span class="name-mcp"></span>jira_get_issue</td><td class="src">stargate</td><td class="tok">374</td></tr>
+              <tr><td><span class="name-mcp"></span>kg_context_for_pr</td><td class="src">stargate</td><td class="tok">370</td></tr>
+              <tr><td><span class="name-mcp"></span>gitlab_update_issue</td><td class="src">stargate</td><td class="tok">368</td></tr>
+              <tr><td><span class="name-mcp"></span>jira_transition_issue</td><td class="src">stargate</td><td class="tok">357</td></tr>
+              <tr><td colspan="3" style="text-align: center; color: var(--squid); font-style: italic; padding: 16px;">… 188 more (scroll to see all)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-foot">
+          <span>just now · session 44596b4e</span>
+          <span class="spacer"></span>
+          <button class="btn-ghost">Refresh now</button>
+          <button class="btn-primary">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">filter input 实时搜（按 tool name 或 server）· top-10 高亮（Charple bg）· 默认按 token 降序，看哪些工具最贵</div>
+</section>
+
+<section>
+  <h2>Variant C · Skills tab — group by source (User / Plugin / built-in)</h2>
+  <div class="surface">
+    <div class="backdrop">
+      <div class="modal">
+        <div class="modal-head">
+          <div class="modal-title">
+            <span class="dot"></span>
+            Context Usage
+            <span class="total">claude-opus-4-7 · 1M · <span class="pct">28%</span> · 281.6k / 1m</span>
+          </div>
+          <button class="modal-close">✕</button>
+        </div>
+        <div class="tabs">
+          <span class="tab">Overview</span>
+          <span class="tab">MCP Tools <span class="count">208</span></span>
+          <span class="tab">Custom Agents <span class="count">4</span></span>
+          <span class="tab">Memory Files <span class="count">3</span></span>
+          <span class="tab active">Skills <span class="count">62</span></span>
+        </div>
+        <div class="modal-body">
+          <div class="detail-search">
+            <input placeholder="filter skills…" />
+            <span class="summary">62 skills · 6.5k tokens · grouped by source</span>
+          </div>
+          <table class="dtable">
+            <thead>
+              <tr><th>Skill</th><th>Source</th><th style="text-align: right;">Tokens</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="name-skill"></span>schedule</td><td class="src">built-in</td><td class="tok">263</td></tr>
+              <tr><td><span class="name-skill"></span>office-hours</td><td class="src">User</td><td class="tok">192</td></tr>
+              <tr><td><span class="name-skill"></span>claude-api</td><td class="src">built-in</td><td class="tok">189</td></tr>
+              <tr><td><span class="name-skill"></span>design-html</td><td class="src">User</td><td class="tok">183</td></tr>
+              <tr><td><span class="name-skill"></span>plan-devex-review</td><td class="src">User</td><td class="tok">177</td></tr>
+              <tr><td><span class="name-skill"></span>devex-review</td><td class="src">User</td><td class="tok">170</td></tr>
+              <tr><td><span class="name-skill"></span>autoplan</td><td class="src">User</td><td class="tok">168</td></tr>
+              <tr><td><span class="name-skill"></span>qa</td><td class="src">User</td><td class="tok">167</td></tr>
+              <tr><td><span class="name-skill"></span>cso</td><td class="src">User</td><td class="tok">155</td></tr>
+              <tr><td><span class="name-skill"></span>pair-agent</td><td class="src">User</td><td class="tok">151</td></tr>
+              <tr><td><span class="name-skill"></span>plan-ceo-review</td><td class="src">User</td><td class="tok">147</td></tr>
+              <tr><td><span class="name-skill"></span>design-review</td><td class="src">User</td><td class="tok">142</td></tr>
+              <tr><td><span class="name-skill"></span>plan-eng-review</td><td class="src">User</td><td class="tok">141</td></tr>
+              <tr><td><span class="name-skill"></span>vcodes-pr</td><td class="src">User</td><td class="tok">137</td></tr>
+              <tr><td><span class="name-skill"></span>ui-ux-pro-max</td><td class="src" style="color: var(--violet);">Plugin</td><td class="tok">209</td></tr>
+              <tr><td><span class="name-skill"></span>skill-creator</td><td class="src" style="color: var(--violet);">Plugin</td><td class="tok">87</td></tr>
+              <tr><td colspan="3" style="text-align: center; color: var(--squid); font-style: italic; padding: 16px;">… 46 more (scroll to see all)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-foot">
+          <span>just now · session 44596b4e</span>
+          <span class="spacer"></span>
+          <button class="btn-ghost">Refresh now</button>
+          <button class="btn-primary">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Source 列彩色（built-in 灰、User 默认、Plugin 紫色）· filter 同样支持</div>
+</section>
+
+<section>
+  <h2>Variant D · Custom Agents + Memory Files tab — small lists</h2>
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px;">
+    <div class="surface" style="height: 380px; width: 100%;">
+      <div class="backdrop">
+        <div class="modal" style="height: 340px; width: 96%;">
+          <div class="modal-head">
+            <div class="modal-title">
+              <span class="dot"></span>
+              Custom Agents <span style="color: var(--squid); font-size: 10px; font-weight: 400;">· 4 · 159 tokens</span>
+            </div>
+          </div>
+          <div class="modal-body">
+            <table class="dtable">
+              <thead><tr><th>Agent</th><th style="text-align: right;">Tokens</th></tr></thead>
+              <tbody>
+                <tr><td><span class="name-agent"></span>hive-agent-1775913324617</td><td class="tok">42</td></tr>
+                <tr><td><span class="name-agent"></span>hive-agent-1775913327087</td><td class="tok">42</td></tr>
+                <tr><td><span class="name-agent"></span>hive-agent-1775913329549</td><td class="tok">36</td></tr>
+                <tr><td><span class="name-agent"></span>hive-agent-1775913332033</td><td class="tok">39</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="surface" style="height: 380px; width: 100%;">
+      <div class="backdrop">
+        <div class="modal" style="height: 340px; width: 96%;">
+          <div class="modal-head">
+            <div class="modal-title">
+              <span class="dot"></span>
+              Memory Files <span style="color: var(--squid); font-size: 10px; font-weight: 400;">· 3 · 3.2k tokens</span>
+            </div>
+          </div>
+          <div class="modal-body">
+            <table class="dtable">
+              <thead><tr><th>Path</th><th style="text-align: right;">Tokens</th></tr></thead>
+              <tbody>
+                <tr><td><span class="name-memory"></span>~/.claude/CLAUDE.md</td><td class="tok">2.2k</td></tr>
+                <tr><td><span class="name-memory"></span>.claude/CLAUDE.md</td><td class="tok">953</td></tr>
+                <tr><td><span class="name-memory"></span>~/.claude/projects/…/MEMORY.md</td><td class="tok">44</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="note">Agents / Memory Files 内容少，table 直接铺；Memory 路径用 `~/` 简写</div>
+</section>
+
+<script>
+const data = [
+  { cls: 'c-system',          pct: 0.9 },
+  { cls: 'c-tools',           pct: 0.7 },
+  { cls: 'c-mcp',             pct: 10.4 },
+  { cls: 'c-tools-deferred',  pct: 2.5 },
+  { cls: 'c-agents',          pct: 0.0 },
+  { cls: 'c-memory',          pct: 0.3 },
+  { cls: 'c-skills',          pct: 0.6 },
+  { cls: 'c-messages',        pct: 25.5 },
+  { cls: 'c-autocompact',     pct: 3.3 },
+  { cls: 'c-free',            pct: 55.8 },
+]
+function buildGrid(elId, dataset, total = 800) {
+  const el = document.getElementById(elId)
+  if (!el) return
+  const cells = []
+  for (const d of dataset) {
+    const n = Math.round(d.pct * total / 100)
+    for (let i = 0; i < n; i++) cells.push(`<div class="cell ${d.cls}"></div>`)
+  }
+  while (cells.length < total) cells.push(`<div class="cell c-free"></div>`)
+  el.innerHTML = cells.slice(0, total).join('')
+}
+buildGrid('grid-a', data, 800)
+</script>
+
+</body>
+</html>

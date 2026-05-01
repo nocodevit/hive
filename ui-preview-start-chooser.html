@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hive · Start Chooser preview</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  /* Crush palette — full hex, no saturation drop */
+  :root {
+    --pepper: #201F26;
+    --bbq: #2D2C35;
+    --charcoal: #3A3943;
+    --sriracha: #EB4268;
+    --julep: #00FFB2;
+    --zest: #E8FE96;
+    --malibu: #00A4FF;
+    --dolly: #FF60FF;
+    --bok: #68FFD6;
+    --charple: #6B50FF;
+    --violet: #C259FF;
+    --mochi: #EB5DFF;
+    --blush: #FF84FF;
+    --butter: #FFFAF1;
+    --ash: #DFDBDD;
+    --squid: #858392;
+    --oyster: #605F6B;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'JetBrains Mono', monospace;
+    background: var(--pepper);
+    color: var(--ash);
+    min-height: 100vh;
+    padding: 40px 32px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 56px;
+    align-items: center;
+  }
+  h2 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 12px;
+    color: var(--squid);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+
+  /* === Chooser frame === */
+  .chooser {
+    width: 760px;
+    background: var(--bbq);
+    border: 1px solid var(--charcoal);
+    border-radius: 12px;
+    padding: 28px 28px 24px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  }
+  .chooser-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding-bottom: 16px;
+    margin-bottom: 20px;
+    border-bottom: 1px dashed var(--charcoal);
+  }
+  .chooser-title {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 14px; font-weight: 700; color: var(--ash);
+    letter-spacing: 0.06em;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .chooser-title .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--charple); box-shadow: 0 0 8px var(--charple);
+  }
+  .chooser-cwd {
+    font-size: 11px; color: var(--squid);
+    background: var(--pepper);
+    border: 1px solid var(--charcoal);
+    border-radius: 4px;
+    padding: 3px 8px;
+    max-width: 360px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* === Session info row === */
+  .info-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+    background: var(--pepper);
+    border: 1px solid var(--charcoal);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 22px;
+  }
+  .info-cell {
+    padding: 12px 14px;
+    border-right: 1px solid var(--charcoal);
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .info-cell:last-child { border-right: none; }
+  .info-label {
+    font-size: 9px; color: var(--squid);
+    text-transform: uppercase; letter-spacing: 0.1em;
+  }
+  .info-value {
+    font-size: 13px; font-weight: 600; color: var(--ash);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .info-value.sid { color: var(--bok); }
+  .info-value.ctx-warn { color: var(--zest); }
+  .info-value.ctx-urgent { color: var(--sriracha); }
+  .info-value.ctx-normal { color: var(--julep); }
+  .info-value.model { color: var(--malibu); }
+  .info-value.time { color: var(--ash); font-weight: 400; }
+
+  /* === Button row === */
+  .btn-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+  .btn {
+    background: var(--pepper);
+    border: 1px solid var(--charcoal);
+    color: var(--ash);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px; font-weight: 600;
+    padding: 16px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 120ms;
+    display: flex; flex-direction: column; gap: 6px; align-items: center;
+  }
+  .btn .icon {
+    font-size: 20px; line-height: 1;
+  }
+  .btn .label { font-size: 12px; font-weight: 700; letter-spacing: 0.04em; }
+  .btn .desc { font-size: 9px; color: var(--squid); font-weight: 400; letter-spacing: 0.02em; }
+
+  /* Default (Resume) — autoFocus state */
+  .btn-resume {
+    border: 2px solid var(--bok);
+    background: #1a3a30;
+    color: var(--bok);
+    box-shadow: 0 0 12px rgba(104,255,214,0.25), inset 0 0 0 1px rgba(104,255,214,0.15);
+    padding: 15px 11px; /* compensate 2px border */
+  }
+  .btn-resume .icon { color: var(--bok); }
+  .btn-resume .label { color: var(--bok); }
+  .btn-resume .desc { color: var(--bok); opacity: 0.7; }
+
+  .btn-compact:hover { border-color: var(--charple); color: var(--charple); }
+  .btn-compact:hover .icon, .btn-compact:hover .label { color: var(--charple); }
+  .btn-compact .icon { color: var(--charple); }
+
+  .btn-new:hover { border-color: var(--zest); color: var(--zest); }
+  .btn-new:hover .icon, .btn-new:hover .label { color: var(--zest); }
+  .btn-new .icon { color: var(--zest); }
+
+  .btn-fork:hover { border-color: var(--mochi); color: var(--mochi); }
+  .btn-fork:hover .icon, .btn-fork:hover .label { color: var(--mochi); }
+  .btn-fork .icon { color: var(--mochi); }
+
+  .btn-resume:hover {
+    background: var(--bok);
+    color: var(--pepper);
+  }
+  .btn-resume:hover .icon, .btn-resume:hover .label, .btn-resume:hover .desc { color: var(--pepper); opacity: 1; }
+
+  /* disabled state — for "no prev session" demo */
+  .btn[disabled] {
+    opacity: 0.35;
+    cursor: not-allowed;
+    border-color: var(--charcoal) !important;
+  }
+  .btn[disabled] .icon, .btn[disabled] .label { color: var(--squid) !important; }
+
+  .hint {
+    margin-top: 14px;
+    font-size: 10px; color: var(--squid);
+    text-align: center;
+    letter-spacing: 0.04em;
+  }
+  .hint kbd {
+    background: var(--charcoal);
+    color: var(--ash);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    border: 1px solid var(--oyster);
+    margin: 0 2px;
+  }
+
+  .legend {
+    font-size: 10px; color: var(--squid);
+    margin-top: 8px;
+    text-align: center;
+  }
+  .legend .ok { color: var(--bok); }
+  .legend .warn { color: var(--zest); }
+  .legend .urgent { color: var(--sriracha); }
+</style>
+</head>
+<body>
+
+<section>
+  <h2>Variant A · Has previous session (default — Resume autoFocus)</h2>
+  <div class="chooser">
+    <div class="chooser-head">
+      <div class="chooser-title">
+        <span class="dot"></span>
+        Start session — pick a mode
+      </div>
+      <div class="chooser-cwd" title="/Users/meiyang/FrontEndProjects/hive">~/FrontEndProjects/hive</div>
+    </div>
+
+    <div class="info-row">
+      <div class="info-cell">
+        <span class="info-label">Last session</span>
+        <span class="info-value sid">a3f9c1e2</span>
+      </div>
+      <div class="info-cell">
+        <span class="info-label">Context</span>
+        <span class="info-value ctx-warn">68%</span>
+      </div>
+      <div class="info-cell">
+        <span class="info-label">Model</span>
+        <span class="info-value model">Sonnet 4.6 · 1M</span>
+      </div>
+      <div class="info-cell">
+        <span class="info-label">Last active</span>
+        <span class="info-value time">12 min ago</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-resume" autofocus>
+        <span class="icon">↻</span>
+        <span class="label">Resume</span>
+        <span class="desc">claude -c</span>
+      </button>
+      <button class="btn btn-compact">
+        <span class="icon">⎙</span>
+        <span class="label">Compact + Resume</span>
+        <span class="desc">/compact → --resume</span>
+      </button>
+      <button class="btn btn-new">
+        <span class="icon">✦</span>
+        <span class="label">Start new</span>
+        <span class="desc">fresh session-id</span>
+      </button>
+      <button class="btn btn-fork">
+        <span class="icon">⑂</span>
+        <span class="label">Fork</span>
+        <span class="desc">--resume --fork</span>
+      </button>
+    </div>
+
+    <div class="hint">
+      <kbd>↵</kbd> Resume &nbsp;·&nbsp; <kbd>1</kbd>–<kbd>4</kbd> pick &nbsp;·&nbsp; <kbd>Esc</kbd> close
+    </div>
+    <div class="legend">
+      ctx tier: <span class="ok">&lt; 60%</span> &nbsp; <span class="warn">60–80%</span> &nbsp; <span class="urgent">&gt; 80%</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Variant B · No previous session (fresh cwd)</h2>
+  <div class="chooser">
+    <div class="chooser-head">
+      <div class="chooser-title">
+        <span class="dot" style="background: var(--zest); box-shadow: 0 0 8px var(--zest);"></span>
+        Start session — pick a mode
+      </div>
+      <div class="chooser-cwd">~/FrontEndProjects/new-thing</div>
+    </div>
+
+    <div class="info-row" style="opacity: 0.6;">
+      <div class="info-cell" style="grid-column: 1 / -1; align-items: center; padding: 18px;">
+        <span class="info-label">No previous session for this directory</span>
+        <span class="info-value" style="color: var(--squid); font-weight: 400;">First time here — only "Start new" is available</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn" disabled>
+        <span class="icon">↻</span>
+        <span class="label">Resume</span>
+        <span class="desc">no sid</span>
+      </button>
+      <button class="btn" disabled>
+        <span class="icon">⎙</span>
+        <span class="label">Compact + Resume</span>
+        <span class="desc">no sid</span>
+      </button>
+      <button class="btn btn-new" autofocus style="border: 2px solid var(--zest); background: #2a2a18; color: var(--zest); box-shadow: 0 0 12px rgba(232,254,150,0.2); padding: 15px 11px;">
+        <span class="icon" style="color: var(--zest);">✦</span>
+        <span class="label" style="color: var(--zest);">Start new</span>
+        <span class="desc" style="color: var(--zest); opacity: 0.7;">fresh session-id</span>
+      </button>
+      <button class="btn" disabled>
+        <span class="icon">⑂</span>
+        <span class="label">Fork</span>
+        <span class="desc">no sid</span>
+      </button>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Variant C · Urgent context (&gt; 80%) — recommend Compact + Resume</h2>
+  <div class="chooser">
+    <div class="chooser-head">
+      <div class="chooser-title">
+        <span class="dot" style="background: var(--sriracha); box-shadow: 0 0 10px var(--sriracha);"></span>
+        Start session — pick a mode
+      </div>
+      <div class="chooser-cwd">~/FrontEndProjects/hive</div>
+    </div>
+
+    <div class="info-row">
+      <div class="info-cell">
+        <span class="info-label">Last session</span>
+        <span class="info-value sid">7b21d4af</span>
+      </div>
+      <div class="info-cell">
+        <span class="info-label">Context</span>
+        <span class="info-value ctx-urgent">94%</span>
+      </div>
+      <div class="info-cell">
+        <span class="info-label">Model</span>
+        <span class="info-value model">Opus 4.7 · 1M</span>
+      </div>
+      <div class="info-cell">
+        <span class="info-label">Last active</span>
+        <span class="info-value time">2 min ago</span>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-resume" style="border-color: var(--charcoal); background: var(--pepper); box-shadow: none; color: var(--ash); padding: 16px 12px;">
+        <span class="icon" style="color: var(--ash);">↻</span>
+        <span class="label" style="color: var(--ash);">Resume</span>
+        <span class="desc">⚠ may overflow</span>
+      </button>
+      <button class="btn btn-compact" autofocus
+        style="border: 2px solid var(--charple); background: #1f1a3a; color: var(--charple); box-shadow: 0 0 12px rgba(107,80,255,0.3); padding: 15px 11px;">
+        <span class="icon" style="color: var(--charple);">⎙</span>
+        <span class="label" style="color: var(--charple);">Compact + Resume</span>
+        <span class="desc" style="color: var(--charple); opacity: 0.75;">recommended</span>
+      </button>
+      <button class="btn btn-new">
+        <span class="icon">✦</span>
+        <span class="label">Start new</span>
+        <span class="desc">fresh session-id</span>
+      </button>
+      <button class="btn btn-fork">
+        <span class="icon">⑂</span>
+        <span class="label">Fork</span>
+        <span class="desc">--resume --fork</span>
+      </button>
+    </div>
+
+    <div class="hint" style="color: var(--sriracha);">
+      Context near limit — Compact + Resume is the safer bet
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

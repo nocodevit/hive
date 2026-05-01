@@ -597,7 +597,7 @@ export default function App() {
         </div>
         {selectedProject ? (
           <>
-            <div className="flex-1 overflow-y-auto p-2 space-y-3">
+            <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-3">
               {departments.map((dept) => {
                 const deptAgents = projectAgents.filter((a) => a.department === dept).sort((a, b) => (a.order || 0) - (b.order || 0))
                 const groups = [...new Set(deptAgents.map((a) => a.group || ''))].sort()
