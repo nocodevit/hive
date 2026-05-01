@@ -593,9 +593,19 @@ function LongRunningTick({ toolName }: { toolName: string }) {
   const startedAtRef = useRef<number>(Date.now())
   const [, force] = useState(0)
   const paused = useContext(HiveChatPausedContext)
+  // 10 min hard stop (v1.7.98): if no tool_result arrived within 10 min
+  // the tool likely crashed silently — tick stops so this row doesn't
+  // setState every second forever. Visual freezes at the last shown
+  // elapsed value.
   useEffect(() => {
     if (paused) return
-    const iv = setInterval(() => force(n => n + 1), 1000)
+    const iv = setInterval(() => {
+      if (Date.now() - startedAtRef.current > 10 * 60 * 1000) {
+        clearInterval(iv)
+        return
+      }
+      force(n => n + 1)
+    }, 1000)
     return () => clearInterval(iv)
   }, [paused])
   const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000)
