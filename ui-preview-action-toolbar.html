@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Hive · 4-line layout preview v2</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --chat-bg: #150e24;
+  --pepper: #201F26;
+  --bbq: #2D2C35;
+  --charcoal: #3A3943;
+  --oyster: #605F6B;
+  --squid: #858392;
+  --ash: #DFDBDD;
+  --butter: #FFFAF1;
+  --sriracha: #EB4268;
+  --julep: #00FFB2;
+  --zest: #E8FE96;
+  --malibu: #00A4FF;
+  --dolly: #FF60FF;
+  --bok: #68FFD6;
+  --charple: #6B50FF;
+  --mochi: #EB5DFF;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'JetBrains Mono', monospace;
+  background: #0d0820;
+  color: var(--ash);
+  padding: 32px;
+  display: flex; flex-direction: column; gap: 36px;
+}
+h2 {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px; color: var(--squid);
+  text-transform: uppercase; letter-spacing: 0.14em;
+  font-weight: 600; margin-bottom: 8px;
+}
+.tag {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 9px; color: var(--charple);
+  text-transform: uppercase; letter-spacing: 0.1em;
+  background: rgba(107,80,255,0.12);
+  border: 1px solid var(--charple);
+  border-radius: 3px;
+  padding: 1px 6px;
+  margin-left: 8px;
+}
+.note {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 10px; color: var(--squid); margin-top: 6px;
+}
+.note strong { color: var(--zest); }
+
+/* The whole chat surface lives on chat-bg */
+.surface {
+  background: var(--chat-bg);
+  border-radius: 6px;
+  width: 940px;
+  border: 1px solid var(--charcoal);
+}
+
+/* Line 1 — rate-limit / auto-continue: BBQ background (matches model bar) */
+.row-rate {
+  display: flex; align-items: center; gap: 10px;
+  padding: 4px 12px;
+  background: var(--bbq);
+  border-bottom: 1px solid var(--charcoal);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--squid);
+}
+.dot-julep { color: var(--julep); font-weight: 700; }
+.dot-zest { color: var(--zest); font-weight: 700; }
+.dot-sriracha { color: var(--sriracha); font-weight: 700; }
+.status-text { color: var(--ash); }
+.pipe { color: var(--oyster); }
+
+/* Line 2 — ctx progress bar: chat-bg background (transparent strip) */
+.row-ctx {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 12px;
+  background: var(--chat-bg);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--squid);
+}
+.ctx-bar-wrap {
+  flex: 1 1 auto;
+  position: relative;
+  height: 6px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 3px;
+  overflow: hidden;
+  border: 1px solid var(--charcoal);
+}
+.ctx-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 200ms;
+}
+.ctx-bar-fill.normal { background: linear-gradient(90deg, var(--charple), var(--mochi)); }
+.ctx-bar-fill.warn { background: linear-gradient(90deg, var(--zest), #FFC857); }
+.ctx-bar-fill.urgent { background: linear-gradient(90deg, var(--sriracha), var(--dolly)); }
+.ctx-pct-num { font-weight: 600; font-family: 'JetBrains Mono', monospace; font-size: 10px; min-width: 36px; text-align: right; }
+.ctx-pct-num.normal { color: var(--charple); }
+.ctx-pct-num.warn { color: var(--zest); }
+.ctx-pct-num.urgent { color: var(--sriracha); }
+
+/* Buttons — same height as streaming mode button */
+.compact-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  background: transparent;
+  border: 1px solid var(--charple);
+  color: var(--charple);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+.compact-btn .icon { font-size: 11px; line-height: 1; }
+.compact-btn.warn { border-color: var(--zest); color: var(--zest); background: rgba(232,254,150,0.08); }
+.compact-btn.urgent { border-color: var(--sriracha); color: var(--sriracha); background: rgba(235,66,104,0.10); }
+.kebab-btn {
+  background: transparent;
+  border: 1px solid var(--charcoal);
+  color: var(--squid);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  line-height: 1;
+}
+.cancel-btn {
+  background: transparent; border: 1px solid var(--charcoal); color: var(--squid);
+  font-family: 'JetBrains Mono', monospace; font-size: 9px;
+  padding: 0 5px; border-radius: 2px; cursor: pointer; margin-left: 4px;
+}
+.spacer { margin-left: auto; }
+.btn-row { display: inline-flex; gap: 6px; align-items: center; }
+
+/* Line 3 — input box (taller, fits 2 lines) */
+.input-mock {
+  margin: 4px 12px 8px 12px;
+  background: rgba(255,96,255,0.08);
+  border: 1px solid var(--dolly);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex; gap: 8px;
+  min-height: 60px;        /* fits 2 lines of 13px text + padding */
+  align-items: flex-start;
+}
+.input-mock .prompt { color: var(--julep); font-weight: 700; font-size: 16px; line-height: 1.3; flex-shrink: 0; }
+.input-mock .placeholder { color: var(--squid); font-size: 13px; line-height: 1.4; }
+.input-mock .typed { color: var(--ash); font-size: 13px; line-height: 1.4; }
+
+/* Line 4 — model bar: replicate current production format exactly,
+   only WITHOUT the inline ctx [bar]%% segment that's now on line 2 */
+.model-bar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 6px 12px;
+  border-top: 1px solid var(--charcoal);
+  background: var(--bbq);
+  font-family: 'JetBrains Mono', monospace; font-size: 11px;
+  color: var(--squid);
+  flex-wrap: wrap;
+}
+.model-bar .model-name { color: var(--charple); font-weight: 700; }
+.model-bar .ctx-size { color: var(--squid); }
+.model-bar .group { display: inline-flex; align-items: center; gap: 6px; }
+.model-bar .pct-bar {
+  width: 56px; height: 6px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 3px; overflow: hidden;
+  border: 1px solid var(--charcoal);
+}
+.model-bar .pct-fill { height: 100%; }
+.model-bar .pct-num { color: var(--butter); min-width: 28px; }
+.model-bar .reset-eta { color: var(--oyster); font-size: 10px; }
+.streaming-btn {
+  background: rgba(255,96,255,0.14);
+  border: 1px solid var(--dolly);
+  color: var(--dolly);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+}
+.close-btn {
+  background: transparent;
+  border: 1px solid var(--charcoal);
+  color: var(--squid);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  cursor: pointer;
+}
+</style>
+</head>
+<body>
+
+<section>
+  <h2>Variant A · 推荐方案 — 正常状态<span class="tag">baseline</span></h2>
+  <div class="surface">
+    <div class="row-rate">
+      <span class="dot-julep">● 5h</span>
+      <span class="status-text">allowed</span>
+      <span>resets in 4h 12m</span>
+      <span class="pipe">|</span>
+      <span class="dot-zest">● 7d</span>
+      <span class="status-text">allowed_warning</span>
+      <span>resets in <strong style="color: var(--zest);">5d 3h</strong></span>
+    </div>
+    <div class="row-ctx">
+      <span style="color: var(--squid); font-size: 10px;">context</span>
+      <div class="ctx-bar-wrap">
+        <div class="ctx-bar-fill normal" style="width: 22%;"></div>
+      </div>
+      <span class="ctx-pct-num normal">22%</span>
+      <span class="btn-row" style="margin-left: 6px;">
+        <button class="compact-btn"><span class="icon">⎙</span>Compact</button>
+        <button class="kebab-btn">⋮</button>
+      </span>
+    </div>
+    <div class="input-mock">
+      <span class="prompt">❯</span>
+      <span class="typed">这里能放两行字 — 第一行示例文本.<br>第二行示例 — 输入框最小高度 60px 适配 2 行 13px 行高。</span>
+    </div>
+    <div class="model-bar">
+      <span class="model-name">claude-opus-4-7</span>
+      <span class="ctx-size">(1M)</span>
+      <span class="pipe">|</span>
+      <span class="group">
+        <span>5h</span>
+        <span class="pct-bar"><span class="pct-fill" style="width: 12%; background: var(--bok);"></span></span>
+        <span class="pct-num">12%</span>
+        <span class="reset-eta">· in 4h 12m</span>
+      </span>
+      <span class="group">
+        <span>7d</span>
+        <span class="pct-bar"><span class="pct-fill" style="width: 68%; background: var(--zest);"></span></span>
+        <span class="pct-num">68%</span>
+        <span class="reset-eta">· in 5d 3h</span>
+      </span>
+      <span class="spacer"></span>
+      <button class="streaming-btn">● streaming mode</button>
+      <button class="close-btn">close ✕</button>
+    </div>
+  </div>
+  <div class="note">Line 2 用 chat-bg (#150e24) 透明感 · Input 60px 双行 · Line 4 完全保留现有 5h/7d 进度条格式，仅去掉 ctx</div>
+</section>
+
+<section>
+  <h2>Variant A · whip 后 auto-continue 出现在 line 1<span class="tag">放 line 1 末尾</span></h2>
+  <div class="surface">
+    <div class="row-rate">
+      <span class="dot-sriracha">● 5h</span>
+      <span class="status-text">rejected</span>
+      <span style="color: var(--sriracha);">resets in 1h 5m</span>
+      <span class="pipe">|</span>
+      <span class="dot-zest">● 7d</span>
+      <span class="status-text">allowed_warning</span>
+      <span>resets in <strong style="color: var(--zest);">5d 3h</strong></span>
+      <span class="pipe">|</span>
+      <span style="color: var(--charple);">⏱ auto-continue in 1h 6m</span>
+      <button class="cancel-btn">cancel</button>
+    </div>
+    <div class="row-ctx">
+      <span style="color: var(--squid); font-size: 10px;">context</span>
+      <div class="ctx-bar-wrap">
+        <div class="ctx-bar-fill warn" style="width: 72%;"></div>
+      </div>
+      <span class="ctx-pct-num warn">72%</span>
+      <span class="btn-row" style="margin-left: 6px;">
+        <button class="compact-btn warn"><span class="icon">⎙</span>Compact (⚠ 72%)</button>
+        <button class="kebab-btn">⋮</button>
+      </span>
+    </div>
+    <div class="input-mock">
+      <span class="prompt">❯</span>
+      <span class="placeholder">type your message…</span>
+    </div>
+    <div class="model-bar">
+      <span class="model-name">claude-opus-4-7</span>
+      <span class="ctx-size">(1M)</span>
+      <span class="pipe">|</span>
+      <span class="group">
+        <span>5h</span>
+        <span class="pct-bar"><span class="pct-fill" style="width: 100%; background: var(--sriracha);"></span></span>
+        <span class="pct-num">100%</span>
+        <span class="reset-eta">· in 1h 5m</span>
+      </span>
+      <span class="group">
+        <span>7d</span>
+        <span class="pct-bar"><span class="pct-fill" style="width: 78%; background: var(--zest);"></span></span>
+        <span class="pct-num">78%</span>
+        <span class="reset-eta">· in 5d 3h</span>
+      </span>
+      <span class="spacer"></span>
+      <button class="streaming-btn">● streaming mode</button>
+      <button class="close-btn">close ✕</button>
+    </div>
+  </div>
+  <div class="note">5h rejected (红) · whip 触发：line 1 末尾 ⏱ auto-continue in 1h 6m + cancel 按钮 · ctx 72% warn 黄</div>
+</section>
+
+<section>
+  <h2>Variant A · auto-continue 长 reset (whip 跨天)</h2>
+  <div class="surface">
+    <div class="row-rate">
+      <span class="dot-julep">● 5h</span>
+      <span class="status-text">allowed</span>
+      <span>resets in 1h 5m</span>
+      <span class="pipe">|</span>
+      <span class="dot-sriracha">● 7d</span>
+      <span class="status-text">rejected</span>
+      <span style="color: var(--sriracha);">resets in <strong>2d 14h</strong></span>
+      <span class="pipe">|</span>
+      <span style="color: var(--charple);">⏱ auto-continue in 2d 14h</span>
+      <button class="cancel-btn">cancel</button>
+    </div>
+    <div class="row-ctx">
+      <span style="color: var(--squid); font-size: 10px;">context</span>
+      <div class="ctx-bar-wrap">
+        <div class="ctx-bar-fill urgent" style="width: 94%;"></div>
+      </div>
+      <span class="ctx-pct-num urgent">94%</span>
+      <span class="btn-row" style="margin-left: 6px;">
+        <button class="compact-btn urgent"><span class="icon">⎙</span>Compact (⚠ 94%)</button>
+        <button class="kebab-btn">⋮</button>
+      </span>
+    </div>
+    <div class="input-mock">
+      <span class="prompt">❯</span>
+      <span class="placeholder">type your message…</span>
+    </div>
+    <div class="model-bar">
+      <span class="model-name">claude-opus-4-7</span>
+      <span class="ctx-size">(1M)</span>
+      <span class="pipe">|</span>
+      <span class="group">
+        <span>5h</span>
+        <span class="pct-bar"><span class="pct-fill" style="width: 87%; background: var(--zest);"></span></span>
+        <span class="pct-num">87%</span>
+        <span class="reset-eta">· in 1h 5m</span>
+      </span>
+      <span class="group">
+        <span>7d</span>
+        <span class="pct-bar"><span class="pct-fill" style="width: 100%; background: var(--sriracha);"></span></span>
+        <span class="pct-num">100%</span>
+        <span class="reset-eta">· in 2d 14h</span>
+      </span>
+      <span class="spacer"></span>
+      <button class="streaming-btn">● streaming mode</button>
+      <button class="close-btn">close ✕</button>
+    </div>
+  </div>
+  <div class="note">7d rejected 跨天 · auto-continue in 2d 14h 紫色显示 — 跨天 reset 用 Xd Yh 格式</div>
+</section>
+
+<section>
+  <h2>Variant A · 全新 session — line 1 隐藏，line 2 显示 waiting</h2>
+  <div class="surface">
+    <div class="row-ctx">
+      <span style="color: var(--oyster); font-style: italic; font-size: 10px;">waiting for first message…</span>
+      <span class="spacer"></span>
+      <span class="btn-row">
+        <button class="compact-btn"><span class="icon">⎙</span>Compact</button>
+        <button class="kebab-btn">⋮</button>
+      </span>
+    </div>
+    <div class="input-mock">
+      <span class="prompt">❯</span>
+      <span class="placeholder">type your message…</span>
+    </div>
+    <div class="model-bar">
+      <span class="model-name">claude-opus-4-7</span>
+      <span class="ctx-size">(1M)</span>
+      <span class="pipe">|</span>
+      <span class="group">
+        <span>5h</span>
+        <span class="pct-bar"><span class="pct-fill" style="width: 5%; background: var(--bok);"></span></span>
+        <span class="pct-num">5%</span>
+      </span>
+      <span class="group">
+        <span>7d</span>
+        <span class="pct-bar"><span class="pct-fill" style="width: 12%; background: var(--bok);"></span></span>
+        <span class="pct-num">12%</span>
+      </span>
+      <span class="spacer"></span>
+      <button class="streaming-btn">● streaming mode</button>
+      <button class="close-btn">close ✕</button>
+    </div>
+  </div>
+  <div class="note">Line 1 整条隐藏 · Line 2 兜底显示 waiting · 鸠占鹊巢 Compact 按钮还在</div>
+</section>
+
+<section>
+  <h2>时间格式 — humanEta() 对照</h2>
+  <div style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ash); display: grid; grid-template-columns: 200px 240px; gap: 6px 32px;">
+    <span style="color: var(--squid);">123h 8m</span><span>→ <strong style="color: var(--zest);">5d 3h</strong></span>
+    <span style="color: var(--squid);">62h 30m</span><span>→ <strong style="color: var(--zest);">2d 14h</strong></span>
+    <span style="color: var(--squid);">25h 0m</span><span>→ <strong style="color: var(--zest);">1d 1h</strong></span>
+    <span style="color: var(--squid);">23h 45m</span><span>→ <strong style="color: var(--zest);">23h 45m</strong> (&lt; 24h 保留)</span>
+    <span style="color: var(--squid);">4h 12m</span><span>→ <strong style="color: var(--zest);">4h 12m</strong> (&lt; 24h 保留)</span>
+    <span style="color: var(--squid);">12m</span><span>→ <strong style="color: var(--zest);">12m</strong></span>
+  </div>
+</section>
+
+</body>
+</html>

@@ -843,8 +843,23 @@ ipcMain.handle('settings:set', (_event, { key, value }: { key: string; value: un
  *  identical permission prompts auto-approve. Rules come from Claude's
  *  own permission_suggestions, shape `{toolName, ruleContent}`. We
  *  write the claude-native `ToolName(content)` format. */
-ipcMain.handle('settings:addClaudeAllowRule', (_event, { rules }: {
-  rules: { toolName: string; ruleContent: string }[]
+/**
+ * Apply a permission_suggestions[i] entry to ~/.claude/settings.json so
+ * the same prompt doesn't fire again. Supports all 3 shapes claude
+ * emits as of 2026-04 (claude code 2.1.123+):
+ *
+ *   - { rules: [{toolName, ruleContent}], ... }   → permissions.allow
+ *   - { type: 'addDirectories', directories[] }   → permissions.additionalDirectories
+ *   - { type: 'setMode', mode: 'acceptEdits' }    → permissions.defaultMode
+ *
+ * Bug fix 2026-04-30: prior implementation only handled `rules`. The
+ * new claude schema dropped that for system paths in favor of
+ * setMode/addDirectories, so "Allow & remember" silently no-op'd —
+ * user kept getting prompted forever for the same file.
+ */
+ipcMain.handle('settings:addClaudeAllowRule', (_event, payload: {
+  rules?: { toolName: string; ruleContent: string }[]
+  suggestion?: any
 }) => {
   try {
     const home = require('os').userInfo().homedir || process.env.HOME || ''
@@ -855,15 +870,47 @@ ipcMain.handle('settings:addClaudeAllowRule', (_event, { rules }: {
       settings = JSON.parse(fs.readFileSync(path, 'utf8'))
     }
     if (!settings.permissions) settings.permissions = {}
-    if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = []
-    for (const r of rules) {
-      const pattern = `${r.toolName}(${r.ruleContent})`
-      if (!settings.permissions.allow.includes(pattern)) {
-        settings.permissions.allow.push(pattern)
+
+    let added = 0
+    const s = payload.suggestion || (payload.rules ? { rules: payload.rules } : null)
+    if (!s) return { ok: false, error: 'no suggestion' }
+
+    // Shape 1: explicit rules list (old schema, still emitted for some tools)
+    if (Array.isArray(s.rules) && s.rules.length > 0) {
+      if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = []
+      for (const r of s.rules) {
+        const pattern = `${r.toolName}(${r.ruleContent})`
+        if (!settings.permissions.allow.includes(pattern)) {
+          settings.permissions.allow.push(pattern)
+          added++
+        }
       }
     }
+
+    // Shape 2: addDirectories — trust paths so future tool calls inside
+    // them skip the permission gate.
+    if (s.type === 'addDirectories' && Array.isArray(s.directories)) {
+      if (!Array.isArray(settings.permissions.additionalDirectories)) settings.permissions.additionalDirectories = []
+      for (const d of s.directories) {
+        if (typeof d === 'string' && !settings.permissions.additionalDirectories.includes(d)) {
+          settings.permissions.additionalDirectories.push(d)
+          added++
+        }
+      }
+    }
+
+    // Shape 3: setMode — flip default permission mode. "session"
+    // destination is per-session, but if user clicked "Allow &
+    // switch to acceptEdits" they want it to persist.
+    if (s.type === 'setMode' && typeof s.mode === 'string') {
+      if (settings.permissions.defaultMode !== s.mode) {
+        settings.permissions.defaultMode = s.mode
+        added++
+      }
+    }
+
     fs.writeFileSync(path, JSON.stringify(settings, null, 2))
-    return { ok: true, added: rules.length }
+    return { ok: true, added }
   } catch (e: any) {
     return { ok: false, error: String(e?.message || e) }
   }
