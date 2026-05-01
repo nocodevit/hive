@@ -112,6 +112,39 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // visible content_block_delta (text_delta) or message_stop arrives.
   // Drives the bottom-of-timeline "✳ Blanching… 3s" spinner.
   const [thinking, setThinking] = useState<{ since: number } | null>(null)
+
+  // Stale-state auto-cleanup (v1.7.98). Without these, ghost state from
+  // crashed/disconnected --print sessions leaves tickers re-rendering at
+  // 1Hz forever — the trace-confirmed cause of last week's 174% Renderer
+  // CPU spike.
+  //
+  //  - activeSubagents: 20 min since last event → drop. Real subagents'
+  //    actual runtime is well under 20 min; only ghosts (Task whose
+  //    tool_result never arrives because claude died mid-flight) stick
+  //    around longer. Prune runs every 60s.
+  //  - thinking: 60s since set → clear. message_stop normally clears it
+  //    in 5–30s; if 60s passes with neither stop nor text_delta arriving,
+  //    the stream is orphaned and the spinner shouldn't keep ticking.
+  useEffect(() => {
+    const iv = setInterval(() => {
+      setActiveSubagents(prev => {
+        const cutoff = Date.now() - 20 * 60 * 1000
+        let dropped = 0
+        const next: Record<string, SubagentState> = {}
+        for (const [k, v] of Object.entries(prev)) {
+          if (v.lastEventAt > cutoff) next[k] = v
+          else dropped++
+        }
+        return dropped > 0 ? next : prev
+      })
+    }, 60_000)
+    return () => clearInterval(iv)
+  }, [])
+  useEffect(() => {
+    if (!thinking) return
+    const t = setTimeout(() => setThinking(null), 60_000)
+    return () => clearTimeout(t)
+  }, [thinking])
   const [pendingPermission, setPendingPermission] = useState<{
     requestId: string
     toolName: string
