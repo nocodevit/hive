@@ -586,10 +586,22 @@ function writeAgentDefinition(cwd: string, config: {
     yaml += `\n\n## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
   }
 
-  // Inject role-specific soul addendum for task group agents
+  // Inject role-specific soul addendum for task group agents.
+  //
+  // Wrapped in <!-- hive:taskgroup:begin v=1 --> ... :end --> markers
+  // per docs/soul-conventions.md §3-4. The marker block delimits the
+  // Hive-managed task-group orchestration so:
+  //   - tooling can locate / refresh / replace it without touching
+  //     user-authored soul above
+  //   - the convention itself is self-evident in the .md (an agent
+  //     reading its own definition can see what's machine-managed)
+  //
+  // Markers only emitted when there's an addendum to wrap; agents
+  // without a taskGroupRole stay marker-free.
   const rsh = '.claude/hive-report.sh'
+  let addendum = ''
   if (config.taskGroupRole === 'manager') {
-    yaml += getManagerSoulAddendum({
+    addendum = getManagerSoulAddendum({
       todoSource: config.todoSource || 'docs/todo.md',
       projectId: config.taskGroupProjectId,
       workers: config.taskGroupWorkers,
@@ -600,11 +612,16 @@ function writeAgentDefinition(cwd: string, config: {
       targetBranch: config.targetBranch,
     })
   } else if (config.taskGroupRole === 'worker') {
-    yaml += getWorkerSoulAddendum({ maxRetries: config.maxGateRetries || 3, reportScriptPath: rsh })
+    addendum = getWorkerSoulAddendum({ maxRetries: config.maxGateRetries || 3, reportScriptPath: rsh })
   } else if (config.taskGroupRole === 'qa') {
-    yaml += getQaSoulAddendum({ reportScriptPath: rsh })
+    addendum = getQaSoulAddendum({ reportScriptPath: rsh })
   } else if (config.taskGroupRole === 'critic') {
-    yaml += getCriticSoulAddendum({ reportScriptPath: rsh })
+    addendum = getCriticSoulAddendum({ reportScriptPath: rsh })
+  }
+  if (addendum) {
+    yaml += '\n\n<!-- hive:taskgroup:begin v=1 -->\n'
+    yaml += addendum.replace(/^\n+|\n+$/g, '') + '\n'
+    yaml += '<!-- hive:taskgroup:end -->\n'
   }
 
   writeFileSync(join(agentsDir, `${agentName}.md`), yaml)
