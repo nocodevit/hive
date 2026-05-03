@@ -202,7 +202,7 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
   useEffect(() => {
     if (!agentCwd) return
     setLoading(true)
-    window.api.fs.scanFiles(agentCwd, 500).then((f) => {
+    window.api.fs.scanFiles(agentCwd, 5000).then((f) => {
       setFiles(f)
       setLoading(false)
       // Auto-expand top-level directories
@@ -218,7 +218,7 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
   const refresh = () => {
     if (!agentCwd) return
     setLoading(true)
-    window.api.fs.scanFiles(agentCwd, 500).then((f) => {
+    window.api.fs.scanFiles(agentCwd, 5000).then((f) => {
       setFiles(f)
       setLoading(false)
     })
