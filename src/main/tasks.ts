@@ -75,7 +75,10 @@ export function listTasks(dataDir: string, projectId: string): TaskData[] {
   ensureDir(dir)
   const files = readdirSync(dir).filter(f => f.endsWith('.json')).sort()
   return files.map(f => {
-    try { return JSON.parse(readFileSync(join(dir, f), 'utf-8')) } catch { return null }
+    try { return JSON.parse(readFileSync(join(dir, f), 'utf-8')) } catch (e: any) {
+      console.warn('[tasks] parse failed:', f, e?.message || e)
+      return null
+    }
   }).filter(Boolean) as TaskData[]
 }
 
