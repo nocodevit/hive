@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rea
 import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
-import { execSync } from 'child_process'
+import { execSync, execFileSync } from 'child_process'
 import { createTask, readTask, updateTask, listTasks } from './tasks'
 import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
@@ -957,7 +957,8 @@ ipcMain.handle('fs:hasGit', (_event, { path }) => {
 // Git worktree management
 ipcMain.handle('git:commitHistory', (_event, { cwd, days }: { cwd: string; days: number }) => {
   try {
-    const output = execSync(`git log --since="${days} days ago" --format="%ai" --all`, { cwd, encoding: 'utf-8', timeout: 10000 })
+    const safeDays = Math.max(1, Math.min(3650, Math.floor(Number(days) || 1)))
+    const output = execFileSync('git', ['log', `--since=${safeDays} days ago`, '--format=%ai', '--all'], { cwd, encoding: 'utf-8', timeout: 10000 })
     const byDay: Record<string, number> = {}
     for (const line of output.trim().split('\n').filter(Boolean)) {
       const date = line.slice(0, 10) // YYYY-MM-DD
@@ -967,43 +968,46 @@ ipcMain.handle('git:commitHistory', (_event, { cwd, days }: { cwd: string; days:
   } catch { return {} }
 })
 
-ipcMain.handle('git:createTargetBranch', (_event, { repoPath, branch }) => {
+ipcMain.handle('git:createTargetBranch', (_event, { repoPath, branch }: { repoPath: string; branch: string }) => {
+  // Check local
   try {
-    // Check if branch already exists locally or remotely
-    const exists = execSync(`git rev-parse --verify ${branch} 2>/dev/null || git rev-parse --verify origin/${branch} 2>/dev/null`, { cwd: repoPath, encoding: 'utf-8' }).trim()
-    if (exists) return { ok: true, existed: true }
-  } catch {
-    // Branch doesn't exist — create from main
-    try {
-      execSync(`git branch ${branch} main && git push origin ${branch}`, { cwd: repoPath, encoding: 'utf-8' })
-      return { ok: true, existed: false }
-    } catch (err: any) {
-      return { ok: false, error: err.message }
-    }
+    execFileSync('git', ['rev-parse', '--verify', branch], { cwd: repoPath, encoding: 'utf-8', stdio: 'pipe' })
+    return { ok: true, existed: true }
+  } catch {}
+  // Check remote
+  try {
+    execFileSync('git', ['rev-parse', '--verify', `origin/${branch}`], { cwd: repoPath, encoding: 'utf-8', stdio: 'pipe' })
+    return { ok: true, existed: true }
+  } catch {}
+  // Create from main
+  try {
+    execFileSync('git', ['branch', branch, 'main'], { cwd: repoPath, encoding: 'utf-8' })
+    execFileSync('git', ['push', 'origin', branch], { cwd: repoPath, encoding: 'utf-8' })
+    return { ok: true, existed: false }
+  } catch (err: any) {
+    return { ok: false, error: err.message }
   }
-  return { ok: true, existed: true }
 })
 
 ipcMain.handle('git:currentBranch', (_event, { cwd }) => {
   try {
-    return execSync('git branch --show-current', { cwd, encoding: 'utf-8' }).trim()
+    return execFileSync('git', ['branch', '--show-current'], { cwd, encoding: 'utf-8' }).trim()
   } catch { return '' }
 })
 
-ipcMain.handle('git:worktreeAdd', (_event, { repoPath, agentId, agentName }) => {
+ipcMain.handle('git:worktreeAdd', (_event, { repoPath, agentId, agentName }: { repoPath: string; agentId: string; agentName: string }) => {
   try {
-    const { execSync } = require('child_process')
     const safeName = agentName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
     const branchName = `hive/${safeName}-${agentId.slice(-6)}`
     const worktreePath = join(repoPath, '..', `${repoPath.split('/').pop()}-${safeName}`)
 
     // Create branch from current HEAD if it doesn't exist
     try {
-      execSync(`git -C "${repoPath}" branch "${branchName}"`, { encoding: 'utf-8', stdio: 'pipe' })
+      execFileSync('git', ['-C', repoPath, 'branch', branchName], { encoding: 'utf-8', stdio: 'pipe' })
     } catch {} // Branch may already exist
 
     // Add worktree
-    execSync(`git -C "${repoPath}" worktree add "${worktreePath}" "${branchName}"`, { encoding: 'utf-8', stdio: 'pipe' })
+    execFileSync('git', ['-C', repoPath, 'worktree', 'add', worktreePath, branchName], { encoding: 'utf-8', stdio: 'pipe' })
 
     return { ok: true, path: worktreePath, branch: branchName }
   } catch (err) {
@@ -1011,20 +1015,18 @@ ipcMain.handle('git:worktreeAdd', (_event, { repoPath, agentId, agentName }) => 
   }
 })
 
-ipcMain.handle('git:worktreeRemove', (_event, { repoPath, worktreePath }) => {
+ipcMain.handle('git:worktreeRemove', (_event, { repoPath, worktreePath }: { repoPath: string; worktreePath: string }) => {
   try {
-    const { execSync } = require('child_process')
-    execSync(`git -C "${repoPath}" worktree remove "${worktreePath}" --force`, { encoding: 'utf-8', stdio: 'pipe' })
+    execFileSync('git', ['-C', repoPath, 'worktree', 'remove', worktreePath, '--force'], { encoding: 'utf-8', stdio: 'pipe' })
     return { ok: true }
   } catch (err) {
     return { ok: false, error: String(err) }
   }
 })
 
-ipcMain.handle('git:worktreeList', (_event, { repoPath }) => {
+ipcMain.handle('git:worktreeList', (_event, { repoPath }: { repoPath: string }) => {
   try {
-    const { execSync } = require('child_process')
-    const output = execSync(`git -C "${repoPath}" worktree list --porcelain`, { encoding: 'utf-8' })
+    const output = execFileSync('git', ['-C', repoPath, 'worktree', 'list', '--porcelain'], { encoding: 'utf-8' })
     const worktrees = output.split('\n\n').filter(Boolean).map((block) => {
       const lines = block.split('\n')
       const path = lines.find((l) => l.startsWith('worktree '))?.slice(9) || ''
@@ -1040,23 +1042,24 @@ ipcMain.handle('git:worktreeList', (_event, { repoPath }) => {
 // Create integration branch by merging worker branches
 ipcMain.handle('git:createIntegration', (_event, { repoPath, batchNum, workerBranches }: { repoPath: string; batchNum: number; workerBranches: string[] }) => {
   try {
-    const branchName = `integration/batch-${batchNum}`
-    execSync(`git -C "${repoPath}" checkout -b ${branchName} main`, { encoding: 'utf-8' })
+    const safeBatchNum = Math.max(0, Math.floor(Number(batchNum) || 0))
+    const branchName = `integration/batch-${safeBatchNum}`
+    execFileSync('git', ['-C', repoPath, 'checkout', '-b', branchName, 'main'], { encoding: 'utf-8' })
     const mergeResults: { branch: string; ok: boolean; error?: string }[] = []
     for (const branch of workerBranches) {
       try {
-        execSync(`git -C "${repoPath}" merge --no-ff ${branch} -m "merge ${branch} into ${branchName}"`, { encoding: 'utf-8' })
+        execFileSync('git', ['-C', repoPath, 'merge', '--no-ff', branch, '-m', `merge ${branch} into ${branchName}`], { encoding: 'utf-8' })
         mergeResults.push({ branch, ok: true })
       } catch (err: any) {
         mergeResults.push({ branch, ok: false, error: (err.message || '').slice(0, 200) })
         // Abort failed merge
-        try { execSync(`git -C "${repoPath}" merge --abort`, { encoding: 'utf-8' }) } catch {}
+        try { execFileSync('git', ['-C', repoPath, 'merge', '--abort'], { encoding: 'utf-8' }) } catch {}
         break
       }
     }
     const allOk = mergeResults.every(r => r.ok)
     if (allOk) {
-      execSync(`git -C "${repoPath}" push origin ${branchName}`, { encoding: 'utf-8' })
+      execFileSync('git', ['-C', repoPath, 'push', 'origin', branchName], { encoding: 'utf-8' })
     }
     return { ok: allOk, branch: branchName, results: mergeResults }
   } catch (err: any) {
@@ -1067,7 +1070,6 @@ ipcMain.handle('git:createIntegration', (_event, { repoPath, batchNum, workerBra
 // Git clone
 ipcMain.handle('git:clone', async (_event, { url, destPath, token, provider }: { url: string; destPath: string; token?: string; provider?: string }) => {
   try {
-    const { execSync } = require('child_process')
     let cloneUrl = url
     // Inject token for authenticated clone
     if (token && url.startsWith('https://')) {
@@ -1078,7 +1080,7 @@ ipcMain.handle('git:clone', async (_event, { url, destPath, token, provider }: {
         cloneUrl = `https://${token}@${urlObj.host}${urlObj.pathname}`
       }
     }
-    execSync(`git clone "${cloneUrl}" "${destPath}"`, { encoding: 'utf-8', stdio: 'pipe', timeout: 120000 })
+    execFileSync('git', ['clone', cloneUrl, destPath], { encoding: 'utf-8', stdio: 'pipe', timeout: 120000 })
     const folderName = destPath.split('/').pop() || ''
     return { ok: true, path: destPath, name: folderName }
   } catch (err) {
@@ -1167,9 +1169,15 @@ ipcMain.handle('project:scan', (_event, { zones }: { zones: { path: string; type
 ipcMain.handle('fs:scanFiles', (_event, { dirPath, limit = 100 }) => {
   const SKIP = new Set(['node_modules', '.next', '.cache', '.hive', '__pycache__', '.DS_Store', '.Trash', '.Spotlight-V100'])
   const files: { path: string; mtime: number; size: number }[] = []
+  const MAX_DEPTH = 10
+  const MAX_VISIT = 50_000
+  const MAX_TIME_MS = 3_000
+  const startMs = Date.now()
 
   function walk(dir: string, depth: number) {
-    if (depth > 5 || files.length > limit * 2) return
+    if (depth > MAX_DEPTH) return
+    if (files.length > MAX_VISIT) return
+    if (Date.now() - startMs > MAX_TIME_MS) return
     try {
       const entries = readdirSync(dir, { withFileTypes: true })
       for (const entry of entries) {

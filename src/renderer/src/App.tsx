@@ -1685,7 +1685,11 @@ export default function App() {
                             }}
                             className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer"
                           >🧹 Clear History</button>
-                          <button className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors cursor-pointer">
+                          <button
+                            disabled
+                            title="Pause coming in v0.10.0"
+                            className="px-3 py-1.5 rounded-lg text-xs bg-bg-secondary border border-border text-text-muted opacity-50 cursor-not-allowed"
+                          >
                             ⏸ Pause
                           </button>
                           <button

@@ -14,6 +14,42 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.100] — 2026-05-03
+
+### Fixed
+- **File Explorer now loads the full project tree.** `fs:scanFiles` had a
+  `files.length > limit * 2` early-bail that fired mid-DFS, so any project
+  with >1000 files (e.g. `psle-alex-web-alex-data` at 14k files,
+  `question-bank/` alone at 4.5k) silently dropped every directory walked
+  after the threshold. Refresh re-ran the same broken scan, hence "only
+  two folders" symptom. Replaced with three independent guards —
+  `MAX_DEPTH=10` (was 5), `MAX_VISIT=50000` files-scanned ceiling, and a
+  3s wall-time cutoff — and bumped the renderer-side limit from 500 → 5000
+  so 4.5k-file folders actually render in the tree.
+- **Tasks parse failures now surface in the console.** `listTasks()` was
+  silently swallowing `JSON.parse` errors with `catch { return null }`,
+  meaning corrupted task files vanished from the UI without warning. Now
+  logs `[tasks] parse failed: <file> <message>`.
+
+### Security
+- **Hardened all `git:*` IPC handlers against shell metacharacter
+  injection.** `git:commitHistory`, `git:createTargetBranch`,
+  `git:currentBranch`, `git:worktreeAdd`, `git:worktreeRemove`,
+  `git:worktreeList`, `git:createIntegration`, `git:clone` all migrated
+  from `execSync` with template-literal interpolation (`git -C "${repoPath}"
+  branch ${branch}`) to `execFileSync('git', [...args])` argv form, which
+  bypasses the shell entirely. Branch names, paths, and clone URLs from
+  external sources can no longer break out of arguments. Also clamps `days`
+  on `git:commitHistory` and `batchNum` on `git:createIntegration` to
+  integers to prevent any other unsafe input.
+
+### Changed
+- **Pause button (Task Group toolbar) is now visibly disabled** with a
+  `Pause coming in v0.10.0` tooltip, instead of looking clickable but
+  doing nothing on click.
+
+---
+
 ## [1.7.74] — 2026-04-27
 
 ### Fixed
