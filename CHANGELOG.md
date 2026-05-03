@@ -14,6 +14,21 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.101] — 2026-05-03
+
+### Added
+- **`✦ Start New Session` in the kebab menu (active session).** The
+  `startNewSession()` function existed since the start-chooser was
+  introduced but was only reachable AFTER closing the session — once
+  inside an active session, the kebab only offered Compact + Fork
+  (carries summary as seed) and Resume (carries full context). Neither
+  one corresponds to "clean slate, agent has no memory of prior
+  conversation". Now exposed as a 4th menu item between Resume and
+  Remote Control. `onFork` ≠ `onNewSession`: Fork preserves a compacted
+  summary; New starts blank.
+
+---
+
 ## [1.7.100] — 2026-05-03
 
 ### Fixed

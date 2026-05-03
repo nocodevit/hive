@@ -1431,6 +1431,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             }}
             onFork={() => window.api.chat.startWithSummary(id)}
             onResume={() => window.api.chat.resumeSmart(id)}
+            onNewSession={startNewSession}
             onRemoteControl={async () => {
               const res = await window.api.chat.startRemoteControl(id)
               if (res.ok) setRcState('active')
@@ -2869,7 +2870,7 @@ export function CrushTooltip({ text, children, side = 'top', block = false }: {
  * (Fork, Resume, Remote Control, Close).
  */
 function ActionToolbar({
-  usedTokens, contextSize, onCompact, onFork, onResume, onRemoteControl, onClose, sessionActive,
+  usedTokens, contextSize, onCompact, onFork, onResume, onNewSession, onRemoteControl, onClose, sessionActive,
   rateLimit5h, rateLimit7d, autoContinueAt, onCancelAutoContinue, modelKnown, onViewContext
 }: {
   usedTokens: number
@@ -2877,6 +2878,7 @@ function ActionToolbar({
   onCompact: () => void
   onFork: () => void
   onResume: () => void
+  onNewSession: () => void
   onRemoteControl: () => void
   onClose: () => void
   sessionActive: boolean
@@ -3053,6 +3055,7 @@ function ActionToolbar({
             }}>
               <MenuItem icon="≡" label="Compact + Fork" desc="summary → new sid" onClick={() => { setMenuOpen(false); onFork() }} disabled={!sessionActive} />
               <MenuItem icon="↻" label="Resume Session" desc="--resume <sid>" onClick={() => { setMenuOpen(false); onResume() }} disabled={!sessionActive} />
+              <MenuItem icon="✦" label="Start New Session" desc="clean slate, no memory" onClick={() => { setMenuOpen(false); onNewSession() }} />
               <MenuItem icon="⌽" label="Remote Control" desc="/remote-control" onClick={() => { setMenuOpen(false); onRemoteControl() }} />
               <div style={{ height: 1, background: CRUSH.Charcoal, margin: '3px 0' }} />
               <MenuItem icon="✕" label="Close Session" desc="stop --print" onClick={() => { setMenuOpen(false); onClose() }} danger />

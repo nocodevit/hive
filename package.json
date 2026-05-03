@@ -1,7 +1,7 @@
 {
   "name": "hive",
   "productName": "Hive",
-  "version": "1.7.100",
+  "version": "1.7.101",
   "description": "Multi-agent Claude Code manager with soul",
   "main": "out/main/index.js",
   "build": {
