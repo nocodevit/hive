@@ -83,6 +83,7 @@ export interface Agent {
   worktreeBranch?: string // git branch name
   tagColor?: string       // name tag color (hex), shown in sidebar
   taskGroupRole?: TaskGroupRole
+  note?: string           // free-text label shown under name in sidebar
 }
 
 export const defaultPreferences: AgentPreferences = {

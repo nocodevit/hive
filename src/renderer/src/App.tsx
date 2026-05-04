@@ -101,13 +101,14 @@ export default function App() {
   useEffect(() => { autoApproveRef.current = autoApprove }, [autoApprove])
   const [commitData, setCommitData] = useState<Record<string, Record<string, number>>>({}) // agentId → {date: count}
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null)
+  const [agentContextMenu, setAgentContextMenu] = useState<{ x: number; y: number; agentId: string } | null>(null)
   const [showInbox, setShowInbox] = useState(false)
   const [inboxData, setInboxData] = useState<{ agentId: string; messages: any[] }[]>([])
   const [projectGroupPrompt, setProjectGroupPrompt] = useState<{ projectId: string } | null>(null)
   const [projectGroupInput, setProjectGroupInput] = useState('')
   const [collapsedProjectGroups, setCollapsedProjectGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
-    const close = () => setContextMenu(null)
+    const close = () => { setContextMenu(null); setAgentContextMenu(null) }
     window.addEventListener('click', close)
     return () => window.removeEventListener('click', close)
   }, [])
@@ -527,6 +528,36 @@ export default function App() {
               >✖ Remove from Group</button>
             </div>
           )}
+          {/* Agent context menu */}
+          {agentContextMenu && (() => {
+            const ag = agents.find(a => a.id === agentContextMenu.agentId)
+            if (!ag) return null
+            return (
+              <div
+                className="fixed z-50 bg-bg-secondary border border-border rounded-lg shadow-2xl py-1 min-w-[200px]"
+                style={{ left: agentContextMenu.x, top: agentContextMenu.y }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  onClick={() => {
+                    const v = window.prompt('What is this agent doing?', ag.note || '')
+                    if (v !== null) updateAgent(ag.id, { note: v.trim() || undefined })
+                    setAgentContextMenu(null)
+                  }}
+                  className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer"
+                >📝 {ag.note ? 'Edit note…' : 'Set note…'}</button>
+                {ag.note && (
+                  <button
+                    onClick={() => {
+                      updateAgent(ag.id, { note: undefined })
+                      setAgentContextMenu(null)
+                    }}
+                    className="w-full text-left px-3 py-2 text-[13px] text-red-400/80 hover:bg-bg-hover cursor-pointer"
+                  >✕ Clear note</button>
+                )}
+              </div>
+            )
+          })()}
           {/* Group name prompt */}
           {projectGroupPrompt && (
             <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -713,6 +744,10 @@ export default function App() {
                                 setSelectedAgentId(agent.id)
                                 if (!activeTerminals.has(agent.id)) startAgent(agent)
                               }}
+                              onContextMenu={(e) => {
+                                e.preventDefault()
+                                setAgentContextMenu({ x: e.clientX, y: e.clientY, agentId: agent.id })
+                              }}
                             >
                               <div className="w-6 h-6 flex-shrink-0 relative">
                                 <AvatarPreview config={agent.avatar} size={24} />
@@ -735,7 +770,13 @@ export default function App() {
                                   )}
                                   {agent.name}
                                 </span>
-                                <span className="text-[13px] text-text-muted/60 truncate group-hover:invisible">{agent.role}</span>
+                                <span className="text-[13px] truncate group-hover:invisible" title={agent.note || agent.role}>
+                                  {agent.note ? (
+                                    <span className="italic" style={{ color: '#E8FE96' }}>📝 {agent.note}</span>
+                                  ) : (
+                                    <span className="text-text-muted/60">{agent.role}</span>
+                                  )}
+                                </span>
                               </div>
                               <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2">
                                 <button
