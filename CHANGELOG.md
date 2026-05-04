@@ -14,6 +14,18 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.102] — 2026-05-04
+
+### Added
+- **Right-click an agent in the sidebar to attach a free-text note** —
+  e.g. "fixing flaky test #123", "waiting on Tom's review". The note
+  replaces the role line under the agent's name (Zest italic + 📝 prefix)
+  so you can see at a glance what each agent is mid-flight on.
+  Right-click again → Edit / Clear. Stored on the Agent object alongside
+  `tagColor`, persists with the rest of the agent state.
+
+---
+
 ## [1.7.101] — 2026-05-03
 
 ### Added
