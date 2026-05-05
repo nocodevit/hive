@@ -193,6 +193,34 @@ export default function App() {
     window.api.templates.list().then(setCustomTemplates)
     // Load persisted dispatcher log
     window.api.dispatcher.loadLog().then(setDispatcherLog).catch(() => {})
+    // Rehydrate agentTasks header from on-disk logs. Without this the
+    // "current task" pill next to the agent name stays empty after every
+    // app restart until the agent fires a fresh task_start. We walk each
+    // agent's log JSON, find the last task_start / task_done pair, and
+    // seed { title, active } / { summary, active:false } accordingly.
+    window.api.data.load().then(async (d3) => {
+      const allAgents = (d3.agents || []) as Agent[]
+      const seeded: Record<string, { title?: string; summary?: string; active: boolean }> = {}
+      await Promise.all(allAgents.map(async (ag) => {
+        try {
+          const logs = await window.api.agent.loadLogs(ag.id)
+          if (!Array.isArray(logs)) return
+          let lastStart: any = null
+          let lastDone: any = null
+          for (const e of logs) {
+            if (!e || typeof e !== 'object') continue
+            if (e.type === 'task_start') lastStart = e
+            else if (e.type === 'task_done') lastDone = e
+          }
+          if (lastStart && (!lastDone || new Date(lastStart.time) > new Date(lastDone.time))) {
+            seeded[ag.id] = { title: lastStart.message, active: true }
+          } else if (lastDone) {
+            seeded[ag.id] = { summary: lastDone.message, active: false }
+          }
+        } catch {}
+      }))
+      if (Object.keys(seeded).length) setAgentTasks(seeded)
+    })
     // Load commit history for all agents with worktrees
     window.api.data.load().then((d2) => {
       const allAgents = (d2.agents || []) as Agent[]

@@ -14,6 +14,41 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.103] — 2026-05-05
+
+### Fixed
+- **Ctx % bar now updates from every assistant event, not just turn-end
+  `result` events.** Long-running agents (alex-data, david, hodas all hit
+  this) accumulate hundreds of thousands of context tokens across an
+  agentic turn, but `result` events only fire when the turn completes
+  with `stop_reason=end_turn`. Sessions stuck mid-loop, or sessions read
+  from JSONL replay (which never persists `result`), left the bar at
+  "context —". The early-return that was added to suppress duplicate
+  rendering of cumulative `assistant` snapshots was also skipping usage
+  extraction; moved usage extraction ABOVE the early-return so live and
+  historical events both feed the ctx % counter. Verified against
+  ~/.claude/projects/.../*.jsonl: alex-data 556k tokens, david 557k,
+  hodas 421k — all now visible.
+- **Agent header "current task" pill rehydrates on app restart.** The
+  pill is fed by `agent:report` IPC events (`task_start` / `task_done`
+  emitted by `.claude/hive-report.sh`). State was renderer-only, so a
+  Hive restart wiped it and the header showed empty until the agent
+  fired its next `task_start` — which for long-running agents could be
+  hours or never. App now scans each agent's `~/.hive/logs/<id>.json`
+  on mount, picks the latest `task_start` / `task_done`, and seeds
+  `agentTasks` accordingly.
+
+### Known issue (data, not code)
+- If an agent's `.claude/hive-report.sh` was overwritten with the wrong
+  `AGENT="…"` line (happens when worktrees were briefly cross-linked),
+  reports go to the wrong agent's bucket. Fix: click the "↻ Restart
+  terminal (reloads data)" button in the chat header — that re-runs
+  `writeAgentDefinition` and rewrites the script with the correct ID.
+  Confirmed bad scripts on this machine: `psle-alex-web-david` and
+  `psle-alex-web-drake` (both currently have hodas's id baked in).
+
+---
+
 ## [1.7.102] — 2026-05-04
 
 ### Added
