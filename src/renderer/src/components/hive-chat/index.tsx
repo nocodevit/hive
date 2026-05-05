@@ -580,6 +580,18 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         const msgId = msg?.id
         if (!Array.isArray(content) || !msgId) return
 
+        // Pull usage from EVERY assistant event — live AND historical.
+        // The duplicate-suppression early-return below skips live
+        // snapshot RENDERING (stream_event already produced the entries),
+        // but usage MUST still flow: long-running agents that never
+        // close a turn never emit `result`, so without this the ctx %
+        // bar shows nothing for the entire session. Subagent assistants
+        // are skipped: their usage describes the subagent's window.
+        if (msg?.usage && !isSubagent) {
+          const total = extractCtxTotalFromUsage(msg.usage)
+          if (total > 0) setLatestInputTokens(total)
+        }
+
         // Live assistant events are CUMULATIVE SNAPSHOTS whose content
         // array drops thinking blocks, so the JS `forEach idx` no longer
         // matches the `content_block_delta.index` that stream_event used
@@ -591,19 +603,6 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         // counterpart, so that path still needs to process assistant).
         const isHistorical = (ev as any)._historical === true
         if (!isHistorical) return
-
-        // Replay path also has to seed `latestInputTokens` so the
-        // ctx % bar is non-zero immediately after a resume. Live
-        // `result` events do this for new turns, but JSONL replay
-        // never emits `result` (only user/assistant), so without
-        // this branch the post-resume bar reads "context —" until
-        // the user fires a new turn. last-write-wins because replay
-        // walks oldest → newest. Subagent assistants are skipped:
-        // their usage describes the subagent's window, not parent's.
-        if (msg?.usage && !isSubagent) {
-          const total = extractCtxTotalFromUsage(msg.usage)
-          if (total > 0) setLatestInputTokens(total)
-        }
 
         content.forEach((block: any, idx: number) => {
           if (block.type === 'thinking' || block.type === 'redacted_thinking') return
