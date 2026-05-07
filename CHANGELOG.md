@@ -14,6 +14,22 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.104] — 2026-05-07
+
+### Fixed
+- **"↻ Restart terminal" no longer white-screens.** The button used to
+  remove the agent from `activeTerminals`, then `setTimeout(startAgent,
+  200)` to re-add. During those ~200–400ms (longer if `startAgent` did
+  worktree setup), nothing rendered for that agent slot — on light theme
+  it showed as a white flash. Worse, on remount the HiveChat overlay
+  resurrected with `chooserMode=true`, forcing the user to click Resume
+  again. Refresh now reloads data, rewrites the agent definition file
+  (so soul/skill changes propagate), then dispatches a
+  `hive:pty-respawn` CustomEvent — Terminal listens, kills + recreates
+  its PTY in place, and the chat session above it is left untouched.
+
+---
+
 ## [1.7.103] — 2026-05-05
 
 ### Fixed
