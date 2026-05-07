@@ -951,7 +951,13 @@ export default function App() {
               {mainView === 'terminal' && activeTerminals.has(selectedAgent!.id) && (
                 <button
                   onClick={async () => {
-                    // Reload data.json first
+                    // In-place refresh: reload data + rewrite agent
+                    // definition so soul/skill changes hit disk, then ask
+                    // Terminal to kill+respawn its PTY without unmounting.
+                    // The previous unmount-then-remount approach caused a
+                    // 200ms+ white flash (activeTerminals briefly empty)
+                    // and resurrected HiveChat to chooserMode=true,
+                    // forcing the user to click Resume again.
                     const data = await window.api.data.load()
                     if (data.agents) setAgents(data.agents as Agent[])
                     if (data.projects) setProjects(data.projects as Project[])
@@ -959,16 +965,20 @@ export default function App() {
 
                     const agentId = selectedAgent!.id
                     const agent = (data.agents as Agent[] || agents).find((a: Agent) => a.id === agentId)
-                    window.api.pty.kill(agentId)
-                    setActiveTerminals((prev) => {
-                      const next = new Set(prev)
-                      next.delete(agentId)
-                      return next
-                    })
-                    // Re-create after a tick
-                    setTimeout(() => {
-                      if (agent) startAgent(agent)
-                    }, 200)
+                    if (!agent) return
+                    const proj = (data.projects as Project[] || projects).find(p => p.id === agent.projectId)
+                    const zone = proj?.zones?.find((z: Zone) => z.id === agent.zoneId)
+                    const cwd = agent.worktreePath || zone?.path
+                    if (cwd) {
+                      const defCfg: Record<string, any> = {
+                        agentId: agent.id, name: agent.name, role: agent.role,
+                        department: agent.department, soul: agent.soul,
+                        skills: agent.enabledSkills || [], model: agent.model || 'inherit',
+                        effort: agent.effort || 'high', taskGroupRole: agent.taskGroupRole,
+                      }
+                      try { await window.api.agent.writeDefinition(cwd, defCfg) } catch {}
+                    }
+                    window.dispatchEvent(new CustomEvent('hive:pty-respawn', { detail: { agentId } }))
                   }}
                   className="px-1.5 py-1 rounded-md text-text-muted hover:bg-bg-hover transition-colors cursor-pointer"
                   title="Restart terminal (reloads data)"
