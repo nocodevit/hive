@@ -498,6 +498,54 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
     }
   }, [id])
 
+  // In-place PTY respawn: App's "↻ Restart terminal" button now dispatches
+  // `hive:pty-respawn` instead of unmounting/remounting Terminal. Unmounting
+  // also tears down the HiveChat overlay (which was the actual symptom —
+  // user sees the bg-primary white flash because activeTerminals briefly
+  // has no entry for this id). In-place respawn keeps the chat session
+  // running and just restarts the xterm side, which is the only part that
+  // needs to re-read the (possibly rewritten) agent definition.
+  useEffect(() => {
+    const onRespawn = async (e: Event) => {
+      const ev = e as CustomEvent<{ agentId: string }>
+      if (ev.detail?.agentId !== agentId) return
+      try { await window.api.pty.kill(id) } catch {}
+      termRef.current?.clear()
+      termRef.current?.write('\x1b[33m[restarting…]\x1b[0m\r\n')
+      ptyReady.current = false
+      // Re-run the same create + onData wiring done at mount.
+      try {
+        await window.api.pty.create(id, cwd)
+        ptyReady.current = true
+        const term = termRef.current
+        const fit = fitRef.current
+        if (!term) return
+        window.api.pty.onData(id, (data) => {
+          term.write(data)
+          if (visibleRef.current && isAtBottom.current) term.scrollToBottom()
+          const newLines = data.split('\n')
+          richLinesRef.current = [...richLinesRef.current.slice(-500), ...newLines]
+          setRichLines([...richLinesRef.current])
+        })
+        window.api.pty.onExit(id, () => term.write('\r\n[Process exited]\r\n'))
+        if (fit) {
+          const dims = fit.proposeDimensions()
+          if (dims) window.api.pty.resize(id, dims.cols, dims.rows)
+        }
+        if (autoRunClaude) {
+          const ag = `hive-${agentId}`
+          const base = `claude --agent ${ag} -n "${agentName}"`
+          const cmd = continueSession ? `${base} -c` : base
+          setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
+        }
+      } catch (err) {
+        termRef.current?.write(`\r\nrespawn error: ${err}\r\n`)
+      }
+    }
+    window.addEventListener('hive:pty-respawn', onRespawn as EventListener)
+    return () => window.removeEventListener('hive:pty-respawn', onRespawn as EventListener)
+  }, [id, agentId, cwd, autoRunClaude, agentName, continueSession])
+
   const scrollToBottom = () => {
     termRef.current?.scrollToBottom()
     isAtBottom.current = true
