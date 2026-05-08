@@ -1686,7 +1686,15 @@ export function getPrevSessionInfo(cwd: string): PrevSessionInfo | null {
 export function registerChatIpc() {
   ipcMain.handle('chat:start', async (_e, { id, cwd, agent, name, continueSession, rebaseOnStart, resumeSid, forkSession, forceCompact }) => {
     if (forceCompact && cwd && resumeSid) {
-      if (sessions.has(id)) return { ok: false, error: 'already_started' }
+      // User explicitly clicked Compact + Resume. If a stale child --print
+      // is still tracked under this id (renderer reload, unmount cleanup
+      // didn't fire, etc.), DO NOT bail with already_started — that
+      // silently swallows the entire compact request and leaves context
+      // unchanged. Just kill the stale child; sid + JSONL are untouched
+      // (compact reads/writes the JSONL via runCompactViaPrint, then
+      // startChat spawns a fresh child for the SAME sid). This is still
+      // compact semantics, not fork.
+      if (sessions.has(id)) stopChat(id)
       broadcast(`chat:stderr:${id}`, '⏳ Compacting prior session before resume…\n')
       const r = await runCompactViaPrint(cwd, resumeSid, agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`))
       if (r.ok) {

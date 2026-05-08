@@ -14,6 +14,22 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.106] — 2026-05-08
+
+### Fixed
+- **Compact + Resume no longer silently no-ops when a stale child
+  `--print` is tracked under the same id.** `chat:start` IPC bailed
+  with `already_started` whenever `sessions.has(id)`, which made the
+  entire forceCompact branch unreachable — `compact-log.jsonl` had zero
+  entries today despite repeated user clicks. The full Hive process
+  restart in v1.7.105 cleared the Map by accident, masking the bug.
+  Now `stopChat(id)` runs first to free the stale child; sid + JSONL
+  are untouched (compact still operates on the JSONL via
+  `runCompactViaPrint` with the same sid), so this remains compact
+  semantics, NOT fork.
+
+---
+
 ## [1.7.105] — 2026-05-08
 
 ### Fixed
