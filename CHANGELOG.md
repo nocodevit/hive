@@ -14,6 +14,22 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.105] — 2026-05-08
+
+### Fixed
+- **"↻ Restart terminal" now compacts the live chat too.** v1.7.104 made
+  refresh in-place — which fixed the white flash but silently removed
+  the "click Compact + Resume in chooser" workflow users relied on each
+  refresh, so context never got compacted. `compact-log.jsonl` confirmed:
+  last successful compact 2026-05-07 07:47, zero entries afterward.
+  Refresh now also fires `chat.compact(chat-<agentId>)` after the PTY
+  respawn — runs `/compact` via `--print --resume <sid>` and respawns
+  the chat session at the compacted state. No-op when there's no live
+  session, so it's safe to fire unconditionally. Tooltip updated to
+  "Restart terminal + compact & resume chat".
+
+---
+
 ## [1.7.104] — 2026-05-07
 
 ### Fixed
