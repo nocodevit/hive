@@ -978,10 +978,18 @@ export default function App() {
                       }
                       try { await window.api.agent.writeDefinition(cwd, defCfg) } catch {}
                     }
+                    // Respawn the xterm PTY in place (no unmount).
                     window.dispatchEvent(new CustomEvent('hive:pty-respawn', { detail: { agentId } }))
+                    // Compact + resume the live chat session if one exists.
+                    // v1.7.104 made refresh in-place which removed the chooser
+                    // pop-up — user used to click "Compact + Resume" each
+                    // refresh, that path silently disappeared. compactSession
+                    // is a no-op when there's no active session, so this is
+                    // safe to fire unconditionally.
+                    try { await window.api.chat.compact(`chat-${agentId}`) } catch {}
                   }}
                   className="px-1.5 py-1 rounded-md text-text-muted hover:bg-bg-hover transition-colors cursor-pointer"
-                  title="Restart terminal (reloads data)"
+                  title="Restart terminal + compact & resume chat"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="23 4 23 10 17 10" />
