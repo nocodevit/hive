@@ -1,12 +1,17 @@
 {
   "name": "hive",
   "productName": "Hive",
-  "version": "1.7.106",
+  "version": "1.7.107",
   "description": "Multi-agent Claude Code manager with soul",
   "main": "out/main/index.js",
   "build": {
     "appId": "com.hive.app",
     "productName": "Hive",
+    "files": [
+      "out/**/*",
+      "package.json",
+      "!.claude/**/*"
+    ],
     "mac": {
       "icon": "resources/icon.icns",
       "entitlements": "entitlements.mac.plist",
