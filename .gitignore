@@ -6,3 +6,4 @@ dist/
 theme-preview.html
 resources/icon.iconset/
 coverage/
+.claude/memory
