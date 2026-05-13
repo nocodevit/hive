@@ -19,9 +19,10 @@ interface TerminalProps {
   continueSession?: boolean
   startupCommand?: string
   rebaseOnStart?: boolean
+  onCloseTerminal?: () => void
 }
 
-export default function Terminal({ id, agentId, agentName, cwd, visible, autoRunClaude, continueSession, startupCommand, rebaseOnStart }: TerminalProps) {
+export default function Terminal({ id, agentId, agentName, cwd, visible, autoRunClaude, continueSession, startupCommand, rebaseOnStart, onCloseTerminal }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
@@ -611,6 +612,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
             continueSession={continueSession}
             rebaseOnStart={rebaseOnStart}
             visible={chatMode && visible}
+            onCloseTerminal={onCloseTerminal}
           />
         </div>
       )}

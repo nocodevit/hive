@@ -106,6 +106,8 @@ export default function App() {
   const [inboxData, setInboxData] = useState<{ agentId: string; messages: any[] }[]>([])
   const [projectGroupPrompt, setProjectGroupPrompt] = useState<{ projectId: string } | null>(null)
   const [projectGroupInput, setProjectGroupInput] = useState('')
+  const [agentNotePrompt, setAgentNotePrompt] = useState<{ agentId: string; current: string } | null>(null)
+  const [agentNoteInput, setAgentNoteInput] = useState('')
   const [collapsedProjectGroups, setCollapsedProjectGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
     const close = () => { setContextMenu(null); setAgentContextMenu(null) }
@@ -568,8 +570,8 @@ export default function App() {
               >
                 <button
                   onClick={() => {
-                    const v = window.prompt('What is this agent doing?', ag.note || '')
-                    if (v !== null) updateAgent(ag.id, { note: v.trim() || undefined })
+                    setAgentNoteInput(ag.note || '')
+                    setAgentNotePrompt({ agentId: ag.id, current: ag.note || '' })
                     setAgentContextMenu(null)
                   }}
                   className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer"
@@ -586,6 +588,42 @@ export default function App() {
               </div>
             )
           })()}
+          {/* Agent note prompt */}
+          {agentNotePrompt && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/50" onClick={() => setAgentNotePrompt(null)} />
+              <div className="relative bg-bg-secondary border border-border rounded-xl shadow-2xl p-4 w-[300px]">
+                <h3 className="text-sm font-heading font-bold mb-2">📝 Set Note</h3>
+                <input
+                  autoFocus
+                  value={agentNoteInput}
+                  onChange={(e) => setAgentNoteInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      updateAgent(agentNotePrompt.agentId, { note: agentNoteInput.trim() || undefined })
+                      setAgentNotePrompt(null)
+                    }
+                    if (e.key === 'Escape') setAgentNotePrompt(null)
+                  }}
+                  placeholder="What is this agent doing?"
+                  className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary mb-2"
+                />
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      updateAgent(agentNotePrompt.agentId, { note: agentNoteInput.trim() || undefined })
+                      setAgentNotePrompt(null)
+                    }}
+                    className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-text-on-purple cursor-pointer hover:opacity-90"
+                  >Save</button>
+                  <button
+                    onClick={() => setAgentNotePrompt(null)}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-bg-hover text-text-muted cursor-pointer hover:text-text-primary"
+                  >Cancel</button>
+                </div>
+              </div>
+            </div>
+          )}
           {/* Group name prompt */}
           {projectGroupPrompt && (
             <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -1993,6 +2031,7 @@ export default function App() {
                   continueSession={appPrefs.continueSession && !!agent.worktreePath && !newAgentIds.has(agent.id)}
                   startupCommand={agent.preferences?.startupCommand}
                   rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath && !newAgentIds.has(agent.id)}
+                  onCloseTerminal={() => setActiveTerminals(prev => { const next = new Set(prev); next.delete(agentId); return next })}
                 />
               </div>
             )
