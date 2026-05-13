@@ -1389,10 +1389,12 @@ async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: number; s
           return
         }
         // Stage 1: wait for prompt glyph → send /usage. Require the
-        // model name banner (`Opus 4.7` / `Sonnet 4.6`) to be present
-        // so we know we're past any settings/warning screen.
+        // model name banner to be present so we know we're past any
+        // settings/warning screen. Match both old format ("Opus 4.7" /
+        // "Sonnet 4.6") and new hyphenated format ("claude-sonnet-4-6" /
+        // "claude-opus-4-7") introduced in claude 2.1.x.
         if (!sent) {
-          const hasModelBanner = /(Opus|Sonnet|Haiku)\s+\d/.test(grid)
+          const hasModelBanner = /(Opus|Sonnet|Haiku)\s+\d|claude-(?:opus|sonnet|haiku)/i.test(grid)
           const firstTen = grid.split('\n').slice(0, 20).join('\n')
           if (hasModelBanner && (firstTen.includes('❯') || /^\s*>\s/m.test(firstTen))) {
             sent = true

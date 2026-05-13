@@ -40,6 +40,7 @@ interface Props {
   continueSession?: boolean
   rebaseOnStart?: boolean
   visible: boolean
+  onCloseTerminal?: () => void
 }
 
 /**
@@ -49,7 +50,7 @@ interface Props {
  * We flatten those into a TimelineEntry list and render each entry with
  * a Crush-styled component.
  */
-export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible }: Props) {
+export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible, onCloseTerminal }: Props) {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -1327,6 +1328,24 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 }}
               >⊕ New</button>
             </div>
+            {onCloseTerminal && (
+              <div style={{ marginTop: 6 }}>
+                <button
+                  onClick={onCloseTerminal}
+                  title="Close this agent panel and return to the fleet view"
+                  style={{
+                    width: '100%',
+                    background: 'transparent',
+                    border: `1px solid ${CRUSH.Charcoal}`,
+                    borderRadius: 6,
+                    padding: '6px 8px',
+                    color: CRUSH.Squid,
+                    fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >← Back to Fleet</button>
+              </div>
+            )}
           </div>
         </div>
       ) : rcState === 'active' ? (
