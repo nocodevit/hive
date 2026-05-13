@@ -473,9 +473,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           const m = rawModel.match(/^(.+?)(?:\[(\d+[kKmM])\])?$/)
           if (m) {
             setModelName(m[1])
-            setContextSize((m[2] || '').toUpperCase())
+            // claude 2.1.x dropped the [1M] suffix from system.init model strings.
+            // When absent, infer from model name: haiku = 200K, all others = 1M.
+            const explicitSize = (m[2] || '').toUpperCase()
+            const inferredSize = /haiku/i.test(m[1]) ? '200K' : '1M'
+            setContextSize(explicitSize || inferredSize)
           } else {
             setModelName(rawModel)
+            setContextSize(/haiku/i.test(rawModel) ? '200K' : '1M')
           }
         }
         const sid = (ev as any).session_id as string | undefined

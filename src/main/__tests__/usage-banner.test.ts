@@ -46,7 +46,7 @@ describe('hasModelBanner regex', () => {
     it('rejects plain prompt', () => {
       expect(BANNER_RE.test('❯')).toBe(false)
     })
-    it('rejects model API id without claude- prefix', () => {
+    it('rejects bare model name without claude- prefix', () => {
       // bare "sonnet" without prefix or old "Sonnet N" format should not match
       expect(BANNER_RE.test('sonnet-4-6')).toBe(false)
     })
@@ -92,5 +92,37 @@ describe('/usage scrape regexes', () => {
   it('returns null for missing data', () => {
     expect(fiveNew('no usage here')).toBeNull()
     expect(sevenNew('no usage here')).toBeNull()
+  })
+})
+
+/**
+ * Tests for context window size inference from model name.
+ * Fix: claude 2.1.x dropped the [1M] suffix from system.init model strings,
+ * so contextSize was always '' → ctxPct always null → context % never shown.
+ */
+describe('context window size inference', () => {
+  function inferCtxSize(model: string): string {
+    return /haiku/i.test(model) ? '200K' : '1M'
+  }
+
+  it('infers 1M for claude-sonnet-4-6', () => {
+    expect(inferCtxSize('claude-sonnet-4-6')).toBe('1M')
+  })
+
+  it('infers 1M for claude-opus-4-7', () => {
+    expect(inferCtxSize('claude-opus-4-7')).toBe('1M')
+  })
+
+  it('infers 200K for claude-haiku-4-5', () => {
+    expect(inferCtxSize('claude-haiku-4-5')).toBe('200K')
+  })
+
+  it('infers 200K for Haiku variant spellings', () => {
+    expect(inferCtxSize('claude-haiku-3')).toBe('200K')
+    expect(inferCtxSize('Haiku 4.5')).toBe('200K')
+  })
+
+  it('infers 1M as safe default for unknown model', () => {
+    expect(inferCtxSize('claude-unknown-model')).toBe('1M')
   })
 })
