@@ -1678,6 +1678,11 @@ export function getPrevSessionInfo(cwd: string): PrevSessionInfo | null {
         }
       }
     } catch {}
+    // claude 2.1.x dropped [1M] suffix from model strings in both stream-json
+    // and hive chat-logs. Infer from model name when suffix lookup failed.
+    if (!contextSize && model) {
+      contextSize = /haiku/i.test(model) ? '200K' : '1M'
+    }
 
     return { sid, model, contextSize, peakInputTokens, lastActiveMs: latest.m }
   } catch {
