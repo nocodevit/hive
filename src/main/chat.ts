@@ -342,7 +342,7 @@ export function loadOlderHistory(sessionId: string, batch = DEFAULT_REPLAY_LIMIT
  * from cache-miss + huge context on resume.
  */
 export async function smartStartChat(id: string, opts: StartOpts = {}) {
-  if (sessions.has(id)) return { ok: false, error: 'already_started' }
+  if (sessions.has(id) && sessions.get(id)?.child !== null) return { ok: false, error: 'already_started' }
   if (opts.continueSession && opts.cwd && !opts.resumeSid) {
     try {
       const slug = opts.cwd.replace(/\//g, '-')
@@ -505,7 +505,7 @@ async function runCompactViaPrint(
 }
 
 export function startChat(id: string, opts: StartOpts = {}) {
-  if (sessions.has(id)) return
+  if (sessions.has(id) && sessions.get(id)?.child !== null) return
   const args = [
     '--print',
     '--input-format', 'stream-json',
@@ -1012,8 +1012,7 @@ export async function resumeFromRemoteControl(id: string) {
   try { session.rcPty?.kill() } catch {}
   const opts = session.startOpts
   const sid = session.claudeSid
-  // Drop the session entry so startChat's "if (sessions.has(id)) return"
-  // doesn't short-circuit. startChat recreates with --resume.
+  // Clear the dead session so startChat starts fresh with --resume.
   sessions.delete(id)
   startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
   return { ok: true, sid }
