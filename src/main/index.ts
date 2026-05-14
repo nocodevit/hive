@@ -675,6 +675,15 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // Intercept in-page navigation (plain <a href> clicks) and open in
+  // the system browser instead of replacing the Electron window.
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (url !== mainWindow.webContents.getURL()) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {

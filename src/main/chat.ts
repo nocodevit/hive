@@ -4,7 +4,12 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { ipcMain, BrowserWindow, app } from 'electron'
 import * as pty from 'node-pty'
-import { Terminal as HeadlessTerm } from '@xterm/headless'
+import { queryUsageViaCcusage, queryUsagePctViaPty } from './chat-usage-query'
+import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
+import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
+
+export type { RecentSession, PrevSessionInfo }
+export type { ContextRow, ContextDetailRow, ContextSnapshot } from './chat-context-parser'
 
 /**
  * Spawn a `claude --print --input-format stream-json --output-format stream-json`
@@ -337,7 +342,7 @@ export function loadOlderHistory(sessionId: string, batch = DEFAULT_REPLAY_LIMIT
  * from cache-miss + huge context on resume.
  */
 export async function smartStartChat(id: string, opts: StartOpts = {}) {
-  if (sessions.has(id)) return { ok: false, error: 'already_started' }
+  if (sessions.has(id) && sessions.get(id)?.child !== null) return { ok: false, error: 'already_started' }
   if (opts.continueSession && opts.cwd && !opts.resumeSid) {
     try {
       const slug = opts.cwd.replace(/\//g, '-')
@@ -500,7 +505,7 @@ async function runCompactViaPrint(
 }
 
 export function startChat(id: string, opts: StartOpts = {}) {
-  if (sessions.has(id)) return
+  if (sessions.has(id) && sessions.get(id)?.child !== null) return
   const args = [
     '--print',
     '--input-format', 'stream-json',
@@ -646,11 +651,25 @@ export function startChat(id: string, opts: StartOpts = {}) {
       return
     }
     broadcast(`chat:exit:${id}`, code ?? 0)
-    sessions.delete(id)
+    // Keep the session entry alive (null out the dead child) so that
+    // resumeSmart / startWithSummary can still read claudeSid + startOpts
+    // and the Resume / Compact+Resume buttons in the renderer work.
+    // The entry is cleaned up by stopChat (explicit user close) or when
+    // a new startChat call overwrites it with sessions.set(id, ...).
+    if (sess) {
+      sess.child = null
+    } else {
+      sessions.delete(id)
+    }
   })
   child.on('error', (err) => {
     broadcast(`chat:error:${id}`, String(err))
-    sessions.delete(id)
+    const sess = sessions.get(id)
+    if (sess) {
+      sess.child = null
+    } else {
+      sessions.delete(id)
+    }
   })
 }
 
@@ -993,163 +1012,14 @@ export async function resumeFromRemoteControl(id: string) {
   try { session.rcPty?.kill() } catch {}
   const opts = session.startOpts
   const sid = session.claudeSid
-  // Drop the session entry so startChat's "if (sessions.has(id)) return"
-  // doesn't short-circuit. startChat recreates with --resume.
+  // Clear the dead session so startChat starts fresh with --resume.
   sessions.delete(id)
   startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
   return { ok: true, sid }
 }
 
-export interface ContextRow { name: string; tokens: number; pct: number }
-export interface ContextDetailRow { name: string; source?: string; server?: string; tokens: number }
-export interface ContextSnapshot {
-  model: string
-  totalTokens: number
-  totalLimit: number
-  totalPct: number
-  categories: ContextRow[]
-  mcpTools: ContextDetailRow[]
-  customAgents: ContextDetailRow[]
-  memoryFiles: ContextDetailRow[]
-  skills: ContextDetailRow[]
-  scrapedAtMs: number
-}
-
 const contextCache = new Map<string, ContextSnapshot>()
 const CONTEXT_TTL_MS = 5 * 60 * 1000  // 5 min
-
-/**
- * Parse "9k" / "104.5k" / "685.4k" / "1.2m" / "159" → number of tokens.
- * The slash command emits human-rounded values; we accept m/M/k/K/raw.
- */
-function parseTokenStr(s: string): number {
-  if (!s) return 0
-  const m = s.trim().match(/^([\d.]+)\s*([kKmM]?)$/)
-  if (!m) return 0
-  const n = parseFloat(m[1])
-  const unit = m[2].toLowerCase()
-  return Math.round(unit === 'm' ? n * 1_000_000 : unit === 'k' ? n * 1_000 : n)
-}
-
-/** Parse "28%" / "0.0%" → number. */
-function parsePctStr(s: string): number {
-  const m = (s || '').match(/([\d.]+)\s*%/)
-  return m ? parseFloat(m[1]) : 0
-}
-
-/**
- * Pull rows out of a markdown table whose header is followed by a
- * separator row (`|---|---|...`). Skips `Tool|Server|Tokens` style and
- * generic `Category|Tokens|Percentage` style alike. Returns one
- * { cells: [...] } per row in source order.
- */
-function parseMarkdownTable(markdown: string): { headers: string[], rows: string[][] } | null {
-  const lines = markdown.split('\n').map(l => l.trim()).filter(l => l.startsWith('|'))
-  if (lines.length < 3) return null
-  // Header row, separator row, then data rows.
-  const splitRow = (l: string) => l.replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim())
-  const headers = splitRow(lines[0])
-  if (!/^\|?\s*-+/.test(lines[1].replace(/\|/g, '|'))) {
-    // Not a markdown table after all
-    return null
-  }
-  const rows: string[][] = []
-  for (let i = 2; i < lines.length; i++) rows.push(splitRow(lines[i]))
-  return { headers, rows }
-}
-
-/**
- * Slice the markdown by `### Header` sections. Returns a map of
- * lowercased section name → markdown body (everything until next `###`).
- */
-function sliceMarkdownSections(markdown: string): Record<string, string> {
-  const out: Record<string, string> = {}
-  const re = /^###\s+(.+)$/gm
-  const matches: { name: string; idx: number }[] = []
-  let m: RegExpExecArray | null
-  while ((m = re.exec(markdown)) !== null) {
-    matches.push({ name: m[1].trim().toLowerCase(), idx: m.index })
-  }
-  for (let i = 0; i < matches.length; i++) {
-    const start = matches[i].idx
-    const end = i + 1 < matches.length ? matches[i + 1].idx : markdown.length
-    out[matches[i].name] = markdown.slice(start, end)
-  }
-  return out
-}
-
-/**
- * Convert the markdown produced by `/context` into a structured snapshot.
- * Sections we care about:
- *  - Estimated usage by category    (Category | Tokens | Percentage)
- *  - MCP Tools                       (Tool | Server | Tokens)
- *  - Custom Agents                   (Agent | Tokens) or similar
- *  - Memory Files                    (Path | Tokens)
- *  - Skills                          (Skill | Source | Tokens)
- */
-function parseContextMarkdown(markdown: string): Omit<ContextSnapshot, 'scrapedAtMs'> {
-  // Header line: **Tokens:** 281.6k / 1m (28%)
-  const tokenMatch = markdown.match(/\*\*Tokens:\*\*\s*([\d.]+\s*[kKmM]?)\s*\/\s*([\d.]+\s*[kKmM]?)\s*\((\d+)%/)
-  const totalTokens = tokenMatch ? parseTokenStr(tokenMatch[1]) : 0
-  const totalLimit = tokenMatch ? parseTokenStr(tokenMatch[2]) : 0
-  const totalPct = tokenMatch ? parseInt(tokenMatch[3], 10) : 0
-  const modelMatch = markdown.match(/\*\*Model:\*\*\s*(\S+)/)
-  const model = modelMatch ? modelMatch[1] : ''
-
-  const sections = sliceMarkdownSections(markdown)
-
-  const categories: ContextRow[] = []
-  const catSec = sections['estimated usage by category'] || ''
-  const catTab = parseMarkdownTable(catSec)
-  if (catTab) {
-    for (const r of catTab.rows) {
-      if (r.length < 3) continue
-      categories.push({ name: r[0], tokens: parseTokenStr(r[1]), pct: parsePctStr(r[2]) })
-    }
-  }
-
-  const mcpTools: ContextDetailRow[] = []
-  const mcpTab = parseMarkdownTable(sections['mcp tools'] || '')
-  if (mcpTab) {
-    for (const r of mcpTab.rows) {
-      if (r.length < 3) continue
-      mcpTools.push({ name: r[0], server: r[1], tokens: parseTokenStr(r[2]) })
-    }
-  }
-
-  const customAgents: ContextDetailRow[] = []
-  const agentTab = parseMarkdownTable(sections['custom agents'] || '')
-  if (agentTab) {
-    for (const r of agentTab.rows) {
-      if (r.length < 2) continue
-      // Last column is always tokens; rest joined as name.
-      customAgents.push({
-        name: r[0],
-        tokens: parseTokenStr(r[r.length - 1])
-      })
-    }
-  }
-
-  const memoryFiles: ContextDetailRow[] = []
-  const memTab = parseMarkdownTable(sections['memory files'] || '')
-  if (memTab) {
-    for (const r of memTab.rows) {
-      if (r.length < 2) continue
-      memoryFiles.push({ name: r[0], tokens: parseTokenStr(r[r.length - 1]) })
-    }
-  }
-
-  const skills: ContextDetailRow[] = []
-  const skillTab = parseMarkdownTable(sections['skills'] || '')
-  if (skillTab) {
-    for (const r of skillTab.rows) {
-      if (r.length < 3) continue
-      skills.push({ name: r[0], source: r[1], tokens: parseTokenStr(r[2]) })
-    }
-  }
-
-  return { model, totalTokens, totalLimit, totalPct, categories, mcpTools, customAgents, memoryFiles, skills }
-}
 
 /**
  * Scrape /context for a live session. Steps:
@@ -1251,168 +1121,6 @@ export async function scrapeContextLive(id: string, force = false): Promise<{ ok
   })
 }
 
-/**
- * Query usage via `ccusage blocks --json`. Reads ~/.claude/sessions/* and
- * aggregates into 5-hour billing windows, so no extra API traffic.
- * Returns the active block's cost, burn rate, and projection.
- */
-async function queryUsageViaCcusage(): Promise<{
-  costUSD?: number
-  burnPerHour?: number
-  projectedUSD?: number
-  remainingMinutes?: number
-  totalTokens?: number
-} | null> {
-  return new Promise(resolve => {
-    try {
-      const child = spawn('ccusage', ['blocks', '--json'], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] })
-      let out = ''
-      child.stdout.on('data', (c: Buffer) => { out += c.toString('utf8') })
-      child.on('error', () => resolve(null))
-      child.on('exit', () => {
-        try {
-          const data = JSON.parse(out)
-          const active = (data.blocks || []).find((b: any) => b.isActive)
-          if (!active) return resolve(null)
-          resolve({
-            costUSD: active.costUSD,
-            burnPerHour: active.burnRate?.costPerHour,
-            projectedUSD: active.projection?.totalCost,
-            remainingMinutes: active.projection?.remainingMinutes,
-            totalTokens: active.totalTokens
-          })
-        } catch {
-          resolve(null)
-        }
-      })
-      setTimeout(() => { try { child.kill() } catch {}; resolve(null) }, 10000)
-    } catch {
-      resolve(null)
-    }
-  })
-}
-
-/**
- * Spawn a headless interactive `claude` under a PTY, pipe every byte
- * into `@xterm/headless` so the terminal state machine handles ANSI
- * cursor moves / erase / scroll correctly, then read the TUI's grid as
- * clean text and extract "Current session … NN% used" and
- * "Current week … NN% used" lines.
- *
- * This is the only way to surface the real subscription-tier %% that
- * /usage shows — stream-json doesn't carry them, and --print /usage is
- * short-circuited to a synthetic canned reply. Uses xterm-headless so
- * TUI redraws don't break the regex.
- */
-async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null> {
-  return new Promise(resolve => {
-    let done = false
-    let child: pty.IPty | null = null
-    const finish = (v: { fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null) => {
-      if (done) return
-      done = true
-      try { child?.kill() } catch {}
-      resolve(v)
-    }
-
-    try {
-      // Force a fresh session id so this PTY scrape can never accidentally
-      // attach to an agent's live session (especially Tracy's).
-      const freshSessionId = require('crypto').randomUUID()
-      child = pty.spawn('claude', ['--session-id', freshSessionId], {
-        name: 'xterm-256color',
-        cols: 160, rows: 50,
-        cwd: cwd || process.env.HOME || '/',
-        env: process.env as any
-      })
-    } catch {
-      return finish(null)
-    }
-
-    const term = new HeadlessTerm({ cols: 160, rows: 50, scrollback: 1000, allowProposedApi: true })
-    let sent = false
-    let promptSeenAt = 0
-    let scrapeTimer: NodeJS.Timeout | null = null
-
-    const dumpGrid = (): string => {
-      const buf = term.buffer.active
-      const lines: string[] = []
-      for (let y = 0; y < buf.length; y++) {
-        const line = buf.getLine(y)
-        if (line) lines.push(line.translateToString(true))
-      }
-      return lines.join('\n')
-    }
-
-    const tryScrape = () => {
-      const text = dumpGrid()
-      // Match BOTH old (`Current session ... 23% used`) and new
-      // (`5h: ░░░░░░░░░░ 23% | 7d: 5%`) formats. claude refactored
-      // /usage TUI in v2.1.x to a compact inline string and our old
-      // regex stopped matching → 25s timeout → null pct → ModelUsageBar
-      // displayed `—` instead of an actual percentage.
-      const fiveOld = text.match(/Current session[\s\S]{0,300}?(\d+)\s*%\s*used/)
-      const fiveNew = text.match(/\b5h\b\s*:\s*[░▒▓█▁▂▃▄▅▆▇#=\- ]*\s*(\d+)\s*%/)
-      const sevenOld = text.match(/Current week[\s\S]{0,300}?(\d+)\s*%\s*used/)
-      const sevenNew = text.match(/\b7d\b\s*:?\s*[░▒▓█▁▂▃▄▅▆▇#=\- ]*\s*(\d+)\s*%/)
-      const weekly = text.match(/weekly[^%]*?(\d+(?:\.\d+)?)\s*%/i)
-      const five = fiveOld || fiveNew
-      const seven = sevenOld || sevenNew || weekly
-      // Reset countdown — old format only; new inline format omits
-      // resets entirely, so we surface undefined and ModelUsageBar
-      // simply skips the "· in 4h 12m" suffix.
-      const sessionReset = text.match(/Current session[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
-      const weekReset = text.match(/Current week[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
-      if (five || seven) {
-        finish({
-          fiveHour: five ? parseInt(five[1], 10) : undefined,
-          sevenDay: seven ? parseInt(seven[1], 10) : undefined,
-          fiveHourReset: sessionReset ? sessionReset[1].trim() : undefined,
-          sevenDayReset: weekReset ? weekReset[1].trim() : undefined
-        })
-      }
-    }
-
-    let warningHandled = false
-    child.onData((d: string) => {
-      term.write(d, () => {
-        const grid = dumpGrid()
-        // Settings.json warning page: claude renders a "1. Continue /
-        // 2. Exit and fix manually" menu before the real TUI prompt.
-        // The `❯` glyph in that menu used to fool prompt detection,
-        // making us write `/usage` into the menu (where it's eaten as
-        // input) and the real prompt never gets it. Detect the warning
-        // and send Enter once to acknowledge → real prompt appears.
-        if (!warningHandled && /Settings\s+Warning|Exit and fix manually|Enter to confirm/i.test(grid)) {
-          warningHandled = true
-          setTimeout(() => { try { child?.write('\r') } catch {} }, 200)
-          return
-        }
-        // Stage 1: wait for prompt glyph → send /usage. Require the
-        // model name banner (`Opus 4.7` / `Sonnet 4.6`) to be present
-        // so we know we're past any settings/warning screen.
-        if (!sent) {
-          const hasModelBanner = /(Opus|Sonnet|Haiku)\s+\d/.test(grid)
-          const firstTen = grid.split('\n').slice(0, 20).join('\n')
-          if (hasModelBanner && (firstTen.includes('❯') || /^\s*>\s/m.test(firstTen))) {
-            sent = true
-            promptSeenAt = Date.now()
-            setTimeout(() => { try { child?.write('/usage\r') } catch {} }, 500)
-          }
-          return
-        }
-        // Stage 2: after /usage, let the TUI settle a moment then scrape.
-        if (Date.now() - promptSeenAt < 700) return
-        if (scrapeTimer) clearTimeout(scrapeTimer)
-        scrapeTimer = setTimeout(tryScrape, 300)
-      })
-    })
-    child.onExit(() => finish(null))
-
-    setTimeout(() => finish(null), 25000)
-  })
-}
-
 /** Legacy /usage path — slash command short-circuits in --print mode. Kept for reference. */
 async function queryUsage(cwd?: string): Promise<{ fiveHour?: number; sevenDay?: number } | null> {
   return new Promise(resolve => {
@@ -1475,213 +1183,6 @@ function refreshUsage(session: ChatSession) {
   }).catch(() => {})
 }
 
-export interface RecentSession {
-  sid: string
-  title: string         // first user prompt (truncated)
-  preview: string       // last assistant text (truncated)
-  lastActiveMs: number
-  ctxPct: number        // ctx % at last assistant turn (0 when unknown)
-  totalTokens: number
-}
-
-/**
- * List the N most-recently-active sessions for a given cwd. Used by
- * the StartChooser's session picker (Resume / Compact+Resume / Fork
- * all let the user pick which historical session to act on instead of
- * always grabbing the newest).
- *
- * Each row pulls:
- *   - title    = first `last-prompt` event's lastPrompt (claude logs
- *                the user's message verbatim once per turn). Truncated.
- *   - preview  = last `assistant.message.content[].text` block. Trunc.
- *   - ctx %    = last assistant.usage iterations[-1] / inferred window
- *   - mtime    = file mtime (newest activity)
- *
- * Context window size: Claude's `~/.claude/projects/` JSONL doesn't
- * include the `[1m]` suffix, so we cross-reference Hive's own
- * `~/.hive/chat-logs` for a recent system/init with matching cwd. Same
- * trick `getPrevSessionInfo` uses.
- */
-export function getRecentSessions(cwd: string, limit = 5): RecentSession[] {
-  if (!cwd) return []
-  try {
-    const slug = cwd.replace(/\//g, '-')
-    const dir = join(homedir(), '.claude', 'projects', slug)
-    if (!existsSync(dir)) return []
-    const files = readdirSync(dir)
-      .filter(f => f.endsWith('.jsonl'))
-      .map(f => ({ f, m: statSync(join(dir, f)).mtimeMs }))
-      .sort((a, b) => b.m - a.m)
-      .slice(0, limit)
-
-    // Resolve a context window size for this cwd from Hive logs (best-effort)
-    let contextWindowTokens = 0
-    try {
-      const hiveLogs = join(homedir(), '.hive', 'chat-logs')
-      if (existsSync(hiveLogs)) {
-        const hiveFiles = readdirSync(hiveLogs)
-          .filter(f => f.endsWith('.jsonl'))
-          .map(f => ({ f, m: statSync(join(hiveLogs, f)).mtimeMs }))
-          .sort((a, b) => b.m - a.m)
-        outer: for (const hf of hiveFiles.slice(0, 50)) {
-          const txt = readFileSync(join(hiveLogs, hf.f), 'utf8').split('\n').filter(Boolean)
-          for (const line of txt) {
-            try {
-              const ev = JSON.parse(line)
-              if (ev.type === 'system' && ev.subtype === 'init' && ev.cwd === cwd && typeof ev.model === 'string') {
-                const m = ev.model.match(/\[(\d+)([kKmM])\]/)
-                if (m) {
-                  const n = parseInt(m[1], 10)
-                  contextWindowTokens = m[2].toLowerCase() === 'm' ? n * 1_000_000 : n * 1_000
-                  break outer
-                }
-              }
-            } catch {}
-          }
-        }
-      }
-    } catch {}
-    // Fallback: assume 1M (current Opus/Sonnet 4.x default for this user)
-    if (!contextWindowTokens) contextWindowTokens = 1_000_000
-
-    return files.map(file => {
-      const sid = file.f.replace(/\.jsonl$/, '')
-      let title = ''
-      let preview = ''
-      let lastInputTokens = 0
-      try {
-        const lines = readFileSync(join(dir, file.f), 'utf8').split('\n').filter(Boolean)
-        for (const line of lines) {
-          try {
-            const ev = JSON.parse(line)
-            if (!title && ev.type === 'last-prompt' && typeof ev.lastPrompt === 'string') {
-              const t = ev.lastPrompt.trim()
-              if (t) title = t.length > 120 ? t.slice(0, 120) + '…' : t
-            }
-            if (ev.type === 'assistant') {
-              const blocks = (ev.message?.content || []) as any[]
-              for (const b of blocks) {
-                if (b?.type === 'text' && typeof b.text === 'string' && b.text.trim()) {
-                  const t = b.text.trim()
-                  preview = t.length > 160 ? t.slice(0, 160) + '…' : t
-                }
-              }
-              const u = ev.message?.usage
-              if (u) {
-                const its = Array.isArray(u.iterations) ? u.iterations : []
-                const last = its.length > 0 ? its[its.length - 1] : u
-                const total = (last.input_tokens || 0) + (last.cache_read_input_tokens || 0) + (last.cache_creation_input_tokens || 0)
-                if (total) lastInputTokens = total
-              }
-            }
-          } catch {}
-        }
-      } catch {}
-      const ctxPct = lastInputTokens > 0
-        ? Math.round((lastInputTokens / contextWindowTokens) * 100)
-        : 0
-      return {
-        sid,
-        title: title || '(no title)',
-        preview: preview || '(no preview)',
-        lastActiveMs: file.m,
-        ctxPct,
-        totalTokens: lastInputTokens
-      }
-    })
-  } catch {
-    return []
-  }
-}
-
-export interface PrevSessionInfo {
-  sid: string
-  model: string
-  contextSize: string  // "1M" | "200K" | "" (unknown)
-  peakInputTokens: number
-  lastActiveMs: number
-}
-
-/**
- * Probe ~/.claude/projects/<slug> for the newest .jsonl, pull out sid,
- * last assistant model, peak iteration usage, and mtime. Used by the
- * StartChooser UI to preview the prior session before the user picks
- * a startup mode (Resume / Compact+Resume / Start new / Fork).
- *
- * contextSize is best-effort: ~/.claude/projects/ logs strip the `[1m]`
- * size suffix, so we cross-reference Hive's own ~/.hive/chat-logs for
- * the most recent system/init with a matching cwd to recover it.
- * Falls back to "" when unknowable; chooser then renders a token count
- * instead of a percentage.
- */
-export function getPrevSessionInfo(cwd: string): PrevSessionInfo | null {
-  if (!cwd) return null
-  try {
-    const slug = cwd.replace(/\//g, '-')
-    const dir = join(homedir(), '.claude', 'projects', slug)
-    if (!existsSync(dir)) return null
-    const files = readdirSync(dir)
-      .filter(f => f.endsWith('.jsonl'))
-      .map(f => ({ f, m: statSync(join(dir, f)).mtimeMs }))
-      .sort((a, b) => b.m - a.m)
-    if (!files.length) return null
-    const latest = files[0]
-    const sid = latest.f.replace(/\.jsonl$/, '')
-
-    // Walk forward but track the LAST observed usage, not the peak. After
-    // /compact the session keeps writing to the same JSONL, so old
-    // pre-compact entries still sit in the file with their (now stale)
-    // high token counts. Using the latest assistant.usage matches what
-    // the live chat would show on resume — i.e. post-compact ~12%, not
-    // the 97% peak we hit before the compact.
-    let model = ''
-    let peakInputTokens = 0
-    const lines = readFileSync(join(dir, latest.f), 'utf8').split('\n').filter(Boolean)
-    for (const line of lines) {
-      try {
-        const ev = JSON.parse(line)
-        if (ev.type === 'assistant') {
-          const msg = ev.message || {}
-          if (msg.model) model = msg.model
-          const u = msg.usage
-          if (u) {
-            const its = Array.isArray(u.iterations) ? u.iterations : []
-            const last = its.length > 0 ? its[its.length - 1] : u
-            const total = (last.input_tokens || 0) + (last.cache_read_input_tokens || 0) + (last.cache_creation_input_tokens || 0)
-            peakInputTokens = total  // last-write-wins, so loop end = newest
-          }
-        }
-      } catch {}
-    }
-
-    let contextSize = ''
-    try {
-      const hiveLogs = join(homedir(), '.hive', 'chat-logs')
-      if (existsSync(hiveLogs)) {
-        const hiveFiles = readdirSync(hiveLogs)
-          .filter(f => f.endsWith('.jsonl'))
-          .map(f => ({ f, m: statSync(join(hiveLogs, f)).mtimeMs }))
-          .sort((a, b) => b.m - a.m)
-        outer: for (const hf of hiveFiles.slice(0, 50)) {
-          const txt = readFileSync(join(hiveLogs, hf.f), 'utf8').split('\n').filter(Boolean)
-          for (const line of txt) {
-            try {
-              const ev = JSON.parse(line)
-              if (ev.type === 'system' && ev.subtype === 'init' && ev.cwd === cwd && typeof ev.model === 'string') {
-                const m = ev.model.match(/\[(\d+[kKmM])\]/)
-                if (m) { contextSize = m[1].toUpperCase(); break outer }
-              }
-            } catch {}
-          }
-        }
-      }
-    } catch {}
-
-    return { sid, model, contextSize, peakInputTokens, lastActiveMs: latest.m }
-  } catch {
-    return null
-  }
-}
 
 export function registerChatIpc() {
   ipcMain.handle('chat:start', async (_e, { id, cwd, agent, name, continueSession, rebaseOnStart, resumeSid, forkSession, forceCompact }) => {

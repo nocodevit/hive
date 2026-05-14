@@ -12,7 +12,7 @@ const mdComponents = {
   ul: (props: ComponentPropsWithoutRef<'ul'>) => <ul style={{ paddingLeft: 24, marginBottom: 12, listStyleType: 'disc' }} {...props} />,
   ol: (props: ComponentPropsWithoutRef<'ol'>) => <ol style={{ paddingLeft: 24, marginBottom: 12, listStyleType: 'decimal' }} {...props} />,
   li: (props: ComponentPropsWithoutRef<'li'>) => <li style={{ marginBottom: 4, lineHeight: 1.6 }} {...props} />,
-  a: (props: ComponentPropsWithoutRef<'a'>) => <a style={{ color: 'var(--accent)', textDecoration: 'underline' }} {...props} />,
+  a: (props: ComponentPropsWithoutRef<'a'>) => <a target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)', textDecoration: 'underline' }} {...props} />,
   strong: (props: ComponentPropsWithoutRef<'strong'>) => <strong style={{ fontWeight: 600 }} {...props} />,
   blockquote: (props: ComponentPropsWithoutRef<'blockquote'>) => <blockquote style={{ borderLeft: '3px solid var(--accent)', paddingLeft: 16, margin: '12px 0', opacity: 0.8, fontStyle: 'italic' }} {...props} />,
   code: ({ children, className, ...props }: ComponentPropsWithoutRef<'code'> & { className?: string }) => {

@@ -40,6 +40,7 @@ interface Props {
   continueSession?: boolean
   rebaseOnStart?: boolean
   visible: boolean
+  onCloseTerminal?: () => void
 }
 
 /**
@@ -49,7 +50,7 @@ interface Props {
  * We flatten those into a TimelineEntry list and render each entry with
  * a Crush-styled component.
  */
-export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible }: Props) {
+export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible, onCloseTerminal }: Props) {
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -472,9 +473,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           const m = rawModel.match(/^(.+?)(?:\[(\d+[kKmM])\])?$/)
           if (m) {
             setModelName(m[1])
-            setContextSize((m[2] || '').toUpperCase())
+            // claude 2.1.x dropped the [1M] suffix from system.init model strings.
+            // When absent, infer from model name: haiku = 200K, all others = 1M.
+            const explicitSize = (m[2] || '').toUpperCase()
+            const inferredSize = /haiku/i.test(m[1]) ? '200K' : '1M'
+            setContextSize(explicitSize || inferredSize)
           } else {
             setModelName(rawModel)
+            setContextSize(/haiku/i.test(rawModel) ? '200K' : '1M')
           }
         }
         const sid = (ev as any).session_id as string | undefined
@@ -1279,35 +1285,31 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             <div style={{ display: 'flex', gap: 6 }}>
               <button
                 onClick={resumeClosedSession}
-                disabled={!sessionId}
-                title={sessionId ? 'Re-spawn claude with --resume <sid>; auto /compact if prior turn used > 50% context' : 'No session-id captured yet'}
+                title="Re-spawn claude with --resume <sid>; auto /compact if prior turn used > 50% context"
                 style={{
                   flex: 1,
-                  background: sessionId ? CRUSH.Bok : 'rgba(104,255,214,0.2)',
+                  background: CRUSH.Bok,
                   border: 'none',
                   borderRadius: 6,
                   padding: '8px 8px',
                   color: CRUSH.Pepper,
                   fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
-                  cursor: sessionId ? 'pointer' : 'not-allowed',
-                  opacity: sessionId ? 1 : 0.5,
+                  cursor: 'pointer',
                   whiteSpace: 'nowrap' as const
                 }}
               >↻ Resume</button>
               <button
                 onClick={startSessionWithSummary}
-                disabled={!sessionId}
-                title={sessionId ? '/compact + --resume <sid> --fork-session: new session-id, summary preserved' : 'No session-id captured yet'}
+                title="/compact + --resume <sid> --fork-session: new session-id, summary preserved"
                 style={{
                   flex: 1,
-                  background: sessionId ? CRUSH.Charple : 'rgba(107,80,255,0.2)',
+                  background: CRUSH.Charple,
                   border: 'none',
                   borderRadius: 6,
                   padding: '8px 8px',
                   color: CRUSH.Butter,
                   fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
-                  cursor: sessionId ? 'pointer' : 'not-allowed',
-                  opacity: sessionId ? 1 : 0.5,
+                  cursor: 'pointer',
                   whiteSpace: 'nowrap' as const
                 }}
               >≡ With summary</button>
@@ -1327,6 +1329,24 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 }}
               >⊕ New</button>
             </div>
+            {onCloseTerminal && (
+              <div style={{ marginTop: 6 }}>
+                <button
+                  onClick={onCloseTerminal}
+                  title="Close this agent panel and return to the fleet view"
+                  style={{
+                    width: '100%',
+                    background: 'transparent',
+                    border: `1px solid ${CRUSH.Charcoal}`,
+                    borderRadius: 6,
+                    padding: '6px 8px',
+                    color: CRUSH.Squid,
+                    fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >← Back to Fleet</button>
+              </div>
+            )}
           </div>
         </div>
       ) : rcState === 'active' ? (
