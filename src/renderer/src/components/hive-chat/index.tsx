@@ -188,10 +188,6 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // composition confirms the candidate, not sends the message.
   const composingRef = useRef(false)
 
-  // Set to true in confirmClose() so we know the exit was user-initiated
-  // and should NOT auto-resume.
-  const intentionalCloseRef = useRef(false)
-
   // Recall is now a per-bubble click action (UserMessage's ↺ icon)
   // instead of ↑/↓ keys. Kept the recall.ts pure helpers in tree for
   // potential keyboard re-enable down the road, but not wired here.
@@ -920,7 +916,6 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const cancelClose = () => { setCloseConfirming(false) }
   const confirmClose = async () => {
     setCloseConfirming(false)
-    intentionalCloseRef.current = true
     addEntry({ kind: 'system', text: 'Session closed by user. Timeline kept; click Start new session below to continue with the same agent.' })
     await window.api.chat.stop(id)
     // main's stopChat fires chat:exit which flips `exited` state; the
@@ -968,18 +963,6 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       addEntry({ kind: 'system', text: '✓ Auto-compacted before resume (context > 50%)' })
     }
   }
-
-  // Auto-resume when the subprocess exits with SIGTERM (143) and the
-  // user did NOT explicitly close the session. This covers crashes and
-  // OS-level kills without forcing the user to click ↻ every time.
-  useEffect(() => {
-    if (exited === 143 && !intentionalCloseRef.current) {
-      resumeClosedSession()
-    } else {
-      // Reset for the next cycle (intentional close already consumed).
-      intentionalCloseRef.current = false
-    }
-  }, [exited]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const startSessionWithSummary = async () => {
     // Compact current context into a summary, fork to new session-id.
@@ -1302,35 +1285,31 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             <div style={{ display: 'flex', gap: 6 }}>
               <button
                 onClick={resumeClosedSession}
-                disabled={!sessionId}
-                title={sessionId ? 'Re-spawn claude with --resume <sid>; auto /compact if prior turn used > 50% context' : 'No session-id captured yet'}
+                title="Re-spawn claude with --resume <sid>; auto /compact if prior turn used > 50% context"
                 style={{
                   flex: 1,
-                  background: sessionId ? CRUSH.Bok : 'rgba(104,255,214,0.2)',
+                  background: CRUSH.Bok,
                   border: 'none',
                   borderRadius: 6,
                   padding: '8px 8px',
                   color: CRUSH.Pepper,
                   fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
-                  cursor: sessionId ? 'pointer' : 'not-allowed',
-                  opacity: sessionId ? 1 : 0.5,
+                  cursor: 'pointer',
                   whiteSpace: 'nowrap' as const
                 }}
               >↻ Resume</button>
               <button
                 onClick={startSessionWithSummary}
-                disabled={!sessionId}
-                title={sessionId ? '/compact + --resume <sid> --fork-session: new session-id, summary preserved' : 'No session-id captured yet'}
+                title="/compact + --resume <sid> --fork-session: new session-id, summary preserved"
                 style={{
                   flex: 1,
-                  background: sessionId ? CRUSH.Charple : 'rgba(107,80,255,0.2)',
+                  background: CRUSH.Charple,
                   border: 'none',
                   borderRadius: 6,
                   padding: '8px 8px',
                   color: CRUSH.Butter,
                   fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
-                  cursor: sessionId ? 'pointer' : 'not-allowed',
-                  opacity: sessionId ? 1 : 0.5,
+                  cursor: 'pointer',
                   whiteSpace: 'nowrap' as const
                 }}
               >≡ With summary</button>
