@@ -188,6 +188,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // composition confirms the candidate, not sends the message.
   const composingRef = useRef(false)
 
+  // Set to true in confirmClose() so we know the exit was user-initiated
+  // and should NOT auto-resume.
+  const intentionalCloseRef = useRef(false)
+
   // Recall is now a per-bubble click action (UserMessage's ↺ icon)
   // instead of ↑/↓ keys. Kept the recall.ts pure helpers in tree for
   // potential keyboard re-enable down the road, but not wired here.
@@ -916,6 +920,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const cancelClose = () => { setCloseConfirming(false) }
   const confirmClose = async () => {
     setCloseConfirming(false)
+    intentionalCloseRef.current = true
     addEntry({ kind: 'system', text: 'Session closed by user. Timeline kept; click Start new session below to continue with the same agent.' })
     await window.api.chat.stop(id)
     // main's stopChat fires chat:exit which flips `exited` state; the
@@ -963,6 +968,18 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       addEntry({ kind: 'system', text: '✓ Auto-compacted before resume (context > 50%)' })
     }
   }
+
+  // Auto-resume when the subprocess exits with SIGTERM (143) and the
+  // user did NOT explicitly close the session. This covers crashes and
+  // OS-level kills without forcing the user to click ↻ every time.
+  useEffect(() => {
+    if (exited === 143 && !intentionalCloseRef.current) {
+      resumeClosedSession()
+    } else {
+      // Reset for the next cycle (intentional close already consumed).
+      intentionalCloseRef.current = false
+    }
+  }, [exited]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const startSessionWithSummary = async () => {
     // Compact current context into a summary, fork to new session-id.
