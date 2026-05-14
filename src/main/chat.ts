@@ -646,11 +646,25 @@ export function startChat(id: string, opts: StartOpts = {}) {
       return
     }
     broadcast(`chat:exit:${id}`, code ?? 0)
-    sessions.delete(id)
+    // Keep the session entry alive (null out the dead child) so that
+    // resumeSmart / startWithSummary can still read claudeSid + startOpts
+    // and the Resume / Compact+Resume buttons in the renderer work.
+    // The entry is cleaned up by stopChat (explicit user close) or when
+    // a new startChat call overwrites it with sessions.set(id, ...).
+    if (sess) {
+      sess.child = null
+    } else {
+      sessions.delete(id)
+    }
   })
   child.on('error', (err) => {
     broadcast(`chat:error:${id}`, String(err))
-    sessions.delete(id)
+    const sess = sessions.get(id)
+    if (sess) {
+      sess.child = null
+    } else {
+      sessions.delete(id)
+    }
   })
 }
 
