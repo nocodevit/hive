@@ -18,6 +18,22 @@ import type { TimelineEntry } from './types'
  */
 export const HiveChatPausedContext = React.createContext<boolean>(true)
 
+/**
+ * Carries the live AskUserQuestion control_request callback into deeply
+ * nested tool renderers (ToolHeader → AskUserQuestionInline). Without a
+ * context the requestId + IPC reply would have to drill through ~5
+ * stateless layers (TimelineList → TimelineRow → ToolBlock → ToolHeader).
+ *
+ * `requestId` matches the control_request that arrived from claude.
+ * `submit(answers)` replies via chat.respondPermission with
+ * `decision='allow'` + `updatedInput={questions, answers}` so claude's
+ * SDK can resume the agent loop with the user's choices.
+ */
+export const AskUserQuestionContext = React.createContext<{
+  requestId: string
+  submit: (answers: Record<string, string | string[]>) => void
+} | null>(null)
+
 const DEFAULT_EXPANDED_LINES = 12
 const LONG_ASSISTANT_THRESHOLD = 30
 
@@ -655,6 +671,7 @@ function ToolHeader({ name, input }: { name: string; input: Record<string, unkno
     return <McpHeader server={server} fn={fn} input={input} />
   }
   if (name === 'TodoWrite') return <TodoInline input={input} />
+  if (name === 'AskUserQuestion') return <AskUserQuestionInline input={input} />
   if (name === 'Bash') return <HeaderLine tool={name} color={CRUSH.Malibu} tail={String(input.command ?? '').replace(/\n/g, ' ').slice(0, 200)} tailStyle="ash" />
   if (name === 'Read' || name === 'View') return <HeaderLine tool="Read" color={CRUSH.Julep} tail={String(input.file_path ?? input.path ?? '')} tailStyle="link" />
   if (name === 'Edit') return <EditHeader input={input} />
@@ -1112,7 +1129,13 @@ export function argSummary(input: Record<string, unknown>): string {
 /* TodoWrite — rendered inside a ToolBlock so the Dolly bar frames the whole group */
 interface Todo { content: string; status: 'pending' | 'in_progress' | 'completed'; activeForm?: string }
 function TodoInline({ input }: { input: Record<string, unknown> }) {
-  const todos = (input.todos as Todo[]) || []
+  // Defensive: during streaming, claude emits `input_json_delta` chunks
+  // that get assembled into `input` over multiple events. Mid-stream,
+  // `input.todos` can be a partial string ('[', '[{"id":'), a plain
+  // object, or undefined — and a truthy non-array would slip past the
+  // old `|| []` fallback and crash `.map()` with "is not a function",
+  // which black-screened the whole timeline before HiveChatErrorBoundary.
+  const todos: Todo[] = Array.isArray(input.todos) ? (input.todos as Todo[]) : []
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
@@ -1133,6 +1156,150 @@ function TodoInline({ input }: { input: Record<string, unknown> }) {
           </div>
         )
       })}
+    </div>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────
+ *  AskUserQuestion — inline tool with clickable options
+ *
+ *  claude SDK emits AskUserQuestion as a normal tool_use, then a matching
+ *  `control_request` with subtype=can_use_tool. Hive's chat component
+ *  listens for the control_request and exposes the requestId + submit
+ *  callback via AskUserQuestionContext. This component reads questions
+ *  from `input` (so timeline renders correctly even during stream / replay)
+ *  and reads the live submit callback from the context (so user clicks
+ *  reply to the right requestId).
+ *
+ *  KEY shape: `answers[question.question]` — claude SDK keys by the full
+ *  question text, not the header. Verified from claude-code binary:
+ *    mapToolResultToToolResultBlockParam looks up answers[T] where
+ *    T = question.question. Using `q.header` silently produced
+ *    "(no option selected)" in claude's tool_result.
+ * ──────────────────────────────────────────────────────────── */
+export interface AskQuestion {
+  question: string
+  header: string
+  options: Array<{ label: string; description?: string; preview?: string }>
+  multiSelect: boolean
+}
+export function AskUserQuestionInline({ input }: { input: Record<string, unknown> }) {
+  const ctx = useContext(AskUserQuestionContext)
+  const questions: AskQuestion[] = Array.isArray(input.questions) ? (input.questions as AskQuestion[]) : []
+  const [selected, setSelected] = useState<Record<number, string | string[] | undefined>>({})
+  const [submitted, setSubmitted] = useState(false)
+  const interactive = !!ctx && !submitted
+
+  const submitAll = (final: Record<number, string | string[] | undefined>) => {
+    if (!ctx || submitted) return
+    const answers: Record<string, string | string[]> = {}
+    questions.forEach((q, i) => {
+      const v = final[i]
+      if (v !== undefined && (typeof v === 'string' || (Array.isArray(v) && v.length > 0))) {
+        answers[q.question] = v
+      }
+    })
+    ctx.submit(answers)
+    setSubmitted(true)
+  }
+
+  const pickSingle = (qIdx: number, label: string) => {
+    if (!interactive) return
+    const next = { ...selected, [qIdx]: label }
+    setSelected(next)
+    if (questions.every((q, i) => {
+      const v = next[i]
+      if (q.multiSelect) return Array.isArray(v) && v.length > 0
+      return typeof v === 'string'
+    })) {
+      submitAll(next)
+    }
+  }
+  const toggleMulti = (qIdx: number, label: string) => {
+    if (!interactive) return
+    setSelected(prev => {
+      const cur = (prev[qIdx] as string[] | undefined) || []
+      const has = cur.includes(label)
+      return { ...prev, [qIdx]: has ? cur.filter(l => l !== label) : [...cur, label] }
+    })
+  }
+
+  return (
+    <div style={{
+      border: `1px solid ${CRUSH.Charple}`,
+      borderRadius: 8,
+      padding: '10px 12px',
+      background: CRUSH.BBQ,
+      marginTop: 4
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>?</span>
+        <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>AskUserQuestion</span>
+        {!ctx && !submitted && <span style={{ color: CRUSH.Squid, fontSize: 11 }}>(awaiting request — read-only)</span>}
+        {submitted && <span style={{ color: CRUSH.Bok, fontSize: 11 }}>✓ submitted</span>}
+      </div>
+      {questions.map((q, qIdx) => {
+        const sel = selected[qIdx]
+        return (
+          <div key={qIdx} style={{ marginBottom: qIdx < questions.length - 1 ? 12 : 4 }}>
+            <div style={{ marginBottom: 6 }}>
+              <span style={{
+                color: CRUSH.Dolly, fontWeight: 700, fontSize: 11,
+                textTransform: 'uppercase' as const, letterSpacing: '0.05em',
+                marginRight: 8
+              }}>{q.header}</span>
+              <span style={{ color: CRUSH.Ash, fontSize: 13 }}>{q.question}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
+              {q.options.map((opt, oIdx) => {
+                const picked = q.multiSelect ? Array.isArray(sel) && sel.includes(opt.label) : sel === opt.label
+                return (
+                  <button
+                    key={oIdx}
+                    disabled={!interactive}
+                    onClick={() => q.multiSelect ? toggleMulti(qIdx, opt.label) : pickSingle(qIdx, opt.label)}
+                    style={{
+                      textAlign: 'left' as const,
+                      background: picked ? CRUSH.Charple : 'transparent',
+                      border: `1px solid ${picked ? CRUSH.Charple : CRUSH.Charcoal}`,
+                      borderRadius: 4,
+                      padding: '6px 10px',
+                      color: picked ? CRUSH.Butter : CRUSH.Ash,
+                      fontFamily: 'inherit',
+                      fontSize: 12,
+                      cursor: interactive ? 'pointer' : 'default',
+                      opacity: interactive ? 1 : 0.7
+                    }}
+                  >
+                    <span style={{ marginRight: 8 }}>{picked ? '◉' : '○'}</span>
+                    <span style={{ fontWeight: 600 }}>{opt.label}</span>
+                    {opt.description && (
+                      <span style={{ color: picked ? CRUSH.Ash : CRUSH.Squid, marginLeft: 8, fontWeight: 400 }}>— {opt.description}</span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+      {questions.some(q => q.multiSelect) && interactive && (
+        <div style={{ marginTop: 8, display: 'flex', justifyContent: 'flex-end' }}>
+          <button
+            onClick={() => submitAll(selected)}
+            disabled={!questions.every((q, i) => {
+              const v = selected[i]
+              if (q.multiSelect) return Array.isArray(v) && v.length > 0
+              return typeof v === 'string'
+            })}
+            style={{
+              background: CRUSH.Charple, border: 'none',
+              color: CRUSH.Butter, padding: '6px 14px', borderRadius: 4,
+              fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer'
+            }}
+          >Submit →</button>
+        </div>
+      )}
     </div>
   )
 }

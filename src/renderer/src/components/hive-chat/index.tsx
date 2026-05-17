@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
-import { TimelineRow, ThinkingSpinner, HiveChatPausedContext } from './renderers'
+import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
 import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
@@ -146,13 +146,46 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     const t = setTimeout(() => setThinking(null), 60_000)
     return () => clearTimeout(t)
   }, [thinking])
-  const [pendingPermission, setPendingPermission] = useState<{
+  // Queue (not single slot) — claude SDK fires multiple control_requests
+  // in parallel when an assistant turn uses several tools at once (e.g.
+  // Glob + Read + Grep simultaneously). The old single-slot setState was
+  // overwritten by each new request so only the LAST one reached the user;
+  // the rest left claude blocked on stdin forever waiting for control_response.
+  // We append on arrival, render head, and shift after user replies.
+  const [pendingPermissions, setPendingPermissions] = useState<Array<{
     requestId: string
     toolName: string
     displayName?: string
     input: Record<string, unknown>
     suggestions?: Array<{ type: string; rules: { toolName: string; ruleContent: string }[]; behavior: string; destination: string }>
+  }>>([])
+  // Existing render/reply code reads `pendingPermission.foo` — keep that
+  // working by exposing the queue head as a derived var. `null` when empty.
+  const pendingPermission = pendingPermissions[0] || null
+
+  // AskUserQuestion is technically a tool call (claude SDK emits it as a
+  // can_use_tool control_request) but its semantics are "ask the user a
+  // structured question with selectable options", NOT "allow tool to
+  // run?". Tracked separately so renderers/index.tsx AskUserQuestionInline
+  // can read the requestId via Context and reply via chat.respondPermission.
+  const [pendingQuestion, setPendingQuestion] = useState<{
+    requestId: string
+    questions: Array<{
+      question: string
+      header: string
+      options: Array<{ label: string; description?: string; preview?: string }>
+      multiSelect: boolean
+    }>
   } | null>(null)
+
+  // Sign-in modal — flipped to 'needed' when claude --print returns
+  // result.error='authentication_failed' (a.k.a. "Not logged in"). The
+  // modal spawns `claude auth login` via IPC, streams its stdout (with
+  // device-code URL) into authOutput. On exit 0 → 'success'.
+  const [authState, setAuthState] = useState<'idle' | 'needed' | 'in-progress' | 'success' | 'failed'>('idle')
+  const [authOutput, setAuthOutput] = useState('')
+  const [authError, setAuthError] = useState<string | null>(null)
+
   const [streamingMode, setStreamingMode] = useState<boolean>(true)
   const [username, setUsername] = useState<string>('')
   // Fetch OS username + persisted streamingMode once; configure the
@@ -713,15 +746,44 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         const req = (ev as any).request
         const requestId = (ev as any).request_id
         if (requestId && req?.subtype === 'can_use_tool') {
-          setPendingPermission({
+          // AskUserQuestion → routed to AskUserQuestionInline (inline in
+          // timeline) via context, NOT the allow/deny modal — semantics
+          // are "answer the user's structured question", not "allow tool
+          // to run". claude SDK routes it through can_use_tool just like
+          // any tool, but the input has `questions` array.
+          if (req.tool_name === 'AskUserQuestion' && Array.isArray(req.input?.questions)) {
+            setPendingQuestion({
+              requestId,
+              questions: req.input.questions
+            })
+            return
+          }
+          // Permission queue: append, never overwrite. Parallel tool use
+          // (Glob × 6 in one turn) fires multiple control_requests within
+          // the same JS tick; single-slot setState used to drop all but
+          // the last, leaving claude stuck waiting for control_response
+          // on the dropped ones forever.
+          setPendingPermissions(prev => [...prev, {
             requestId,
             toolName: req.tool_name,
             displayName: req.display_name,
             input: req.input || {},
             suggestions: req.permission_suggestions
-          })
+          }])
         }
         return
+      }
+      // result event: detect "Not logged in" → surface sign-in modal
+      // so the user can authenticate without leaving the app. claude
+      // --print emits this as a synthetic result with
+      // error='authentication_failed'.
+      if (ev.type === 'result') {
+        const e = ev as any
+        if (e.is_error && (e.error === 'authentication_failed' || (typeof e.result === 'string' && e.result.includes('Not logged in')))) {
+          setAuthState('needed')
+          setAuthOutput('')
+          setAuthError(null)
+        }
       }
       // stream_event / system.init / system.status / rate_limit_event are
       // intentionally suppressed — they're protocol housekeeping, not content.
@@ -862,6 +924,29 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     return () => window.removeEventListener('hive:voice-final', handler)
   }, [id])
 
+  // Listen for App.tsx's refresh button — `hive:reopen-chooser` event
+  // flips this panel back to StartChooser so the user can pick Resume /
+  // Compact+Resume / Start new / Fork. Without this listener, the old
+  // behavior was an unconditional `chat.compact()` that surfaced
+  // "Compact failed: no_session" after close-session.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined
+      // agentId matches our `id` modulo the `chat-` prefix used elsewhere
+      // (App.tsx uses `chat-${agentId}` for IPC namespacing but the
+      // detail.agentId is the bare id; HiveChat's `id` is `chat-<agentId>`).
+      if (!detail?.agentId) return
+      if (id !== `chat-${detail.agentId}` && id !== detail.agentId) return
+      setExited(null)
+      setPendingPermissions([])
+      setPendingQuestion(null)
+      setAuthState('idle')
+      setChooserMode(true)
+    }
+    window.addEventListener('hive:reopen-chooser', handler)
+    return () => window.removeEventListener('hive:reopen-chooser', handler)
+  }, [id])
+
   // Snap the textarea back to 1-line height after sending. Pairs with
   // the auto-grow handler in onChange — value going to '' doesn't fire
   // onChange so we must reset the inline height ourselves.
@@ -923,6 +1008,29 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     // session button panel off `exited !== null`.
   }
 
+  const startAuthLogin = async () => {
+    setAuthState('in-progress')
+    setAuthOutput('')
+    setAuthError(null)
+    // Subscribe to streaming output (auth URL etc.) BEFORE invoking, so
+    // we never miss the first stdout chunk.
+    const off = window.api.auth.onOutput((p) => {
+      setAuthOutput(prev => prev + p.text)
+    })
+    try {
+      const r = await window.api.auth.login()
+      if (r.ok) setAuthState('success')
+      else { setAuthState('failed'); setAuthError(r.error || `exit ${r.code}`) }
+    } catch (err: any) {
+      // TS strict mode catch param defaults to `unknown`; widen to `any`
+      // for the common Error case so .message is readable.
+      setAuthState('failed')
+      setAuthError(err?.message || String(err))
+    } finally {
+      off()
+    }
+  }
+
   const startNewSession = async () => {
     // Fresh session with the same agent — no -c, no --resume. System/init
     // will emit a new session_id; timeline is preserved and a divider is
@@ -934,7 +1042,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setRateLimit5h(null); setRateLimit7d(null)
     setUsage({})
     setThinking(null)
-    setPendingPermission(null)
+    setPendingPermissions([])
+    setPendingQuestion(null)
     setHasOlderOnDisk(false)
     setTrimmedCount(0)
     setLatestInputTokens(0)
@@ -954,7 +1063,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setRateLimit5h(null); setRateLimit7d(null)
     setUsage({})
     setThinking(null)
-    setPendingPermission(null)
+    setPendingPermissions([])
+    setPendingQuestion(null)
     setLatestInputTokens(0)
     const res = await window.api.chat.resumeSmart(id)
     if (!res.ok) {
@@ -975,7 +1085,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setRateLimit5h(null); setRateLimit7d(null)
     setUsage({})
     setThinking(null)
-    setPendingPermission(null)
+    setPendingPermissions([])
+    setPendingQuestion(null)
     setHasOlderOnDisk(false)
     setTrimmedCount(0)
     setLatestInputTokens(0)
@@ -1060,6 +1171,25 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
 
   return (
     <HiveChatPausedContext.Provider value={!visible}>
+    <AskUserQuestionContext.Provider value={pendingQuestion ? {
+      requestId: pendingQuestion.requestId,
+      submit: (answers) => {
+        // Reply via the same control_request channel claude is blocked on.
+        // updatedInput shape: keep the original `questions` array AND add
+        // an `answers` map (question text → selected label[s]). claude SDK
+        // keys answers[T] where T = question.question (verified from binary
+        // strings). Using `q.header` silently produced "(no option selected)"
+        // in claude's tool_result.
+        window.api.chat.respondPermission(
+          id,
+          pendingQuestion.requestId,
+          'allow',
+          { questions: pendingQuestion.questions, answers },
+          undefined
+        )
+      }
+    } : null}>
+    <HiveChatErrorBoundary>
     <div
       onDragOver={e => e.preventDefault()}
       onDrop={handleDrop}
@@ -1448,8 +1578,26 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               const res = await window.api.chat.compact(id)
               addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
             }}
-            onFork={() => window.api.chat.startWithSummary(id)}
-            onResume={() => window.api.chat.resumeSmart(id)}
+            onFork={async () => {
+              // Surface IPC failure so the user sees what happened. The
+              // bare `() => api.chat.startWithSummary(id)` was a silent
+              // fire-and-forget: backend `{ok:false, error}` returns were
+              // dropped, leaving the user staring at an unchanged panel
+              // with no clue why nothing happened (e.g. spawn ENOENT after
+              // claude symlink broke). pr-review skill Gate 12 enforces.
+              const res = await window.api.chat.startWithSummary(id).catch(e => ({ ok: false as const, error: String(e) }))
+              if (!('ok' in res) || !res.ok) {
+                const err = (res as any).error || 'unknown'
+                addEntry({ kind: 'system', text: `Fork failed: ${err}` })
+              }
+            }}
+            onResume={async () => {
+              const res = await window.api.chat.resumeSmart(id).catch(e => ({ ok: false as const, error: String(e) }))
+              if (!('ok' in res) || !res.ok) {
+                const err = (res as any).error || 'unknown'
+                addEntry({ kind: 'system', text: `Resume failed: ${err}` })
+              }
+            }}
             onNewSession={startNewSession}
             onRemoteControl={async () => {
               const res = await window.api.chat.startRemoteControl(id)
@@ -1567,7 +1715,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   decision === 'allow' ? pendingPermission.input : undefined,
                   decision === 'deny' ? 'Denied by user' : undefined
                 )
-                setPendingPermission(null)
+                // Shift this answered request off the head; next queued
+                // request (if any) auto-renders. Don't clear whole queue.
+                setPendingPermissions(prev => prev.slice(1))
               }}
             />
           }
@@ -1595,7 +1745,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               decision === 'allow' ? pendingPermission.input : undefined,
               decision === 'deny' ? 'Denied by user' : undefined
             )
-            setPendingPermission(null)
+            // Shift this answered request off the head; next queued
+            // request (if any) auto-renders.
+            setPendingPermissions(prev => prev.slice(1))
           }}
         />
         </PermissionErrorBoundary>
@@ -1611,7 +1763,101 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           onClose={() => setContextModal(prev => ({ ...prev, open: false }))}
         />
       )}
+      {authState !== 'idle' && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          background: 'rgba(15,10,26,0.7)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          zIndex: 9999, fontFamily: FONT_MONO
+        }}>
+          <div style={{
+            background: CRUSH.BBQ,
+            border: `1px solid ${authState === 'failed' ? CRUSH.Sriracha : CRUSH.Bok}`,
+            borderRadius: 10, padding: '18px 22px 16px',
+            width: 520, maxWidth: '90%', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
+          }}>
+            <div style={{
+              color: authState === 'failed' ? CRUSH.Sriracha : CRUSH.Bok,
+              fontWeight: 700, fontSize: 12, textTransform: 'uppercase' as const,
+              letterSpacing: '0.08em', marginBottom: 10
+            }}>
+              {authState === 'needed' && '🔒 Sign in to Claude'}
+              {authState === 'in-progress' && '⏳ Signing in…'}
+              {authState === 'success' && '✓ Signed in'}
+              {authState === 'failed' && '✕ Sign-in failed'}
+            </div>
+            {authState === 'needed' && (
+              <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
+                Claude Code needs to authenticate before it can chat. This opens a browser
+                to anthropic.com for your subscription login — no API key required.
+              </div>
+            )}
+            {(authState === 'in-progress' || authState === 'failed') && (
+              <div style={{
+                color: CRUSH.Ash, background: CRUSH.Pepper,
+                border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 4,
+                padding: '8px 12px', fontSize: 11, marginBottom: 12,
+                fontFamily: FONT_MONO, whiteSpace: 'pre-wrap',
+                maxHeight: 220, overflowY: 'auto', wordBreak: 'break-all'
+              }}>{authOutput || (authState === 'in-progress' ? 'Waiting for claude auth login…' : '(no output)')}</div>
+            )}
+            {authState === 'failed' && authError && (
+              <div style={{ color: CRUSH.Sriracha, fontSize: 12, marginBottom: 12 }}>{authError}</div>
+            )}
+            {authState === 'success' && (
+              <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
+                You're signed in. Click <strong style={{ color: CRUSH.Bok }}>Resume</strong> on
+                the session below to retry, or close this dialog.
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              {authState === 'needed' && (
+                <>
+                  <button onClick={() => setAuthState('idle')} style={{
+                    background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 6,
+                    fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer'
+                  }}>Not now</button>
+                  <button onClick={startAuthLogin} style={{
+                    background: CRUSH.Bok, border: 'none',
+                    color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 6,
+                    fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                  }}>Sign in →</button>
+                </>
+              )}
+              {authState === 'in-progress' && (
+                <div style={{ color: CRUSH.Squid, fontSize: 11, alignSelf: 'center' }}>
+                  Browser should open automatically. Complete auth there.
+                </div>
+              )}
+              {authState === 'failed' && (
+                <>
+                  <button onClick={() => setAuthState('idle')} style={{
+                    background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 6,
+                    fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer'
+                  }}>Close</button>
+                  <button onClick={startAuthLogin} style={{
+                    background: CRUSH.Bok, border: 'none',
+                    color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 6,
+                    fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                  }}>Retry</button>
+                </>
+              )}
+              {authState === 'success' && (
+                <button onClick={() => setAuthState('idle')} style={{
+                  background: CRUSH.Bok, border: 'none',
+                  color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 6,
+                  fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+                }}>Done</button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+    </HiveChatErrorBoundary>
+    </AskUserQuestionContext.Provider>
     </HiveChatPausedContext.Provider>
   )
 }
@@ -1624,6 +1870,72 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
  * Why a class component: React's getDerivedStateFromError/componentDidCatch
  * only exists on class components. There's no hook equivalent yet.
  */
+/**
+ * Outer boundary for the HiveChat component itself. Without this, any
+ * render throw inside the chat surface — a corrupt timeline entry, a
+ * tool-result with an unexpected shape, a modal that references a
+ * missing prop — black-screens the whole panel with no clue why.
+ * Catches the throw, ships {message, stack, componentStack} to main
+ * via window.api.crash.report (lands in ~/.hive/crash-log.jsonl), and
+ * shows a minimal recovery card with a copy-stack button + reload.
+ */
+class HiveChatErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; err?: Error; info?: React.ErrorInfo }
+> {
+  constructor(props: any) { super(props); this.state = { hasError: false } }
+  static getDerivedStateFromError(err: Error) { return { hasError: true, err } }
+  componentDidCatch(err: Error, info: React.ErrorInfo) {
+    this.setState({ info })
+    try {
+      window.api.crash.report('renderer-hive-chat-throw', {
+        message: err.message,
+        stack: err.stack,
+        componentStack: info.componentStack
+      }).catch(() => {})
+    } catch {}
+    // eslint-disable-next-line no-console
+    console.error('[HiveChat] render threw:', err, info)
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children
+    const stack = `${this.state.err?.message}\n${this.state.err?.stack}\n--- component ---\n${this.state.info?.componentStack || ''}`
+    return (
+      <div style={{
+        width: '100%', height: '100%', background: '#150e24',
+        color: CRUSH.Ash, fontFamily: FONT_MONO, fontSize: 13,
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        padding: 24, gap: 12
+      }}>
+        <div style={{ color: CRUSH.Sriracha, fontWeight: 700, fontSize: 14 }}>
+          ✕ HiveChat render failed
+        </div>
+        <div style={{ color: CRUSH.Squid, fontSize: 12, maxWidth: 600, textAlign: 'center' }}>
+          The chat panel hit an exception. A crash report was written to{' '}
+          <code style={{ color: CRUSH.Bok }}>~/.hive/crash-log.jsonl</code>.
+        </div>
+        <pre style={{
+          background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`,
+          padding: 10, borderRadius: 6, fontSize: 11, color: CRUSH.Ash,
+          maxWidth: 720, maxHeight: 280, overflow: 'auto', whiteSpace: 'pre-wrap'
+        }}>{stack}</pre>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button onClick={() => { try { navigator.clipboard.writeText(stack) } catch {} }} style={{
+            background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+            color: CRUSH.Ash, padding: '8px 14px', borderRadius: 6,
+            fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer'
+          }}>Copy stack</button>
+          <button onClick={() => window.location.reload()} style={{
+            background: CRUSH.Bok, border: 'none',
+            color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 6,
+            fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer'
+          }}>Reload</button>
+        </div>
+      </div>
+    )
+  }
+}
+
 class PermissionErrorBoundary extends React.Component<
   { children: React.ReactNode; fallback: React.ReactNode },
   { hasError: boolean; err?: Error }

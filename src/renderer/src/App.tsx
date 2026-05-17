@@ -1018,16 +1018,17 @@ export default function App() {
                     }
                     // Respawn the xterm PTY in place (no unmount).
                     window.dispatchEvent(new CustomEvent('hive:pty-respawn', { detail: { agentId } }))
-                    // Compact + resume the live chat session if one exists.
-                    // v1.7.104 made refresh in-place which removed the chooser
-                    // pop-up — user used to click "Compact + Resume" each
-                    // refresh, that path silently disappeared. compactSession
-                    // is a no-op when there's no active session, so this is
-                    // safe to fire unconditionally.
-                    try { await window.api.chat.compact(`chat-${agentId}`) } catch {}
+                    // Restore the chooser pop-up that v1.7.104's in-place
+                    // refresh silently removed. HiveChat listens for this
+                    // event and flips chooserMode→true, so the user gets
+                    // back the 4-way Resume / Compact+Resume / Start new /
+                    // Fork picker instead of an unconditional `chat.compact`
+                    // (which surfaced "Compact failed: no_session" after
+                    // close-session, and silently no-op'd otherwise).
+                    window.dispatchEvent(new CustomEvent('hive:reopen-chooser', { detail: { agentId } }))
                   }}
                   className="px-1.5 py-1 rounded-md text-text-muted hover:bg-bg-hover transition-colors cursor-pointer"
-                  title="Restart terminal + compact & resume chat"
+                  title="Restart terminal + reopen chat chooser"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="23 4 23 10 17 10" />
