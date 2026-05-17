@@ -2,6 +2,30 @@
 
 Electron desktop app for managing multiple Claude Code agents.
 
+## Dev workflow (NON-NEGOTIABLE — every change must follow)
+
+For ANY code change, the loop is:
+
+1. **Pull**: `git pull --rebase origin <branch>` — branch must be up to date before editing
+2. **Branch hygiene**: never leave uncommitted changes accumulating over multiple sessions. If a fix is started, it must end in a commit OR be reverted in the same session
+3. **Implement** the fix
+4. **Test gate (BOTH required, NO exceptions):**
+   - `vitest run` — green (556+ passing). New code MUST be covered: add a unit test for any new function / branch / IPC handler / React component / regex / state transition. PR is rejected if `git diff` adds lines without corresponding `__tests__` lines.
+   - For UI / IPC / chat flow changes: `npx playwright test` — green. The e2e config MUST point at an isolated `HIVE_DATA_DIR` and a dev server on a non-default port so it never touches the user's running Hive.app or real projects.
+5. **Bump version** (see Version section)
+6. **Commit** — one logical fix per commit, message starts with `fix:` / `feat:` / `refactor:` etc. Include test coverage in the same commit (not "tests next PR")
+7. **PR review skill** (`/.claude/skills/pr-review/SKILL.md`) — run before opening any PR. Refuse-to-PR conditions are absolute
+
+NEVER ship a fix that:
+- Has no test exercising it
+- Lives only in the working tree (uncommitted) across sessions — uncommitted state vanishes if the directory is deleted/moved
+- Was "manually verified" instead of test-covered. "manually verified" alone is grounds for revert
+
+If a fix genuinely cannot be unit-tested (macOS GUI behavior, OAuth flow, keychain), it MUST have:
+- An explicit comment `// UNTESTABLE: <reason>` above the code
+- A `docs/manual-test-plan.md` entry with reproducer steps
+- A Playwright e2e if the surface is reachable through the UI
+
 ## Version
 
 MUST ALWAYS bump version before commit. Single source of truth: `package.json`. x+1 for big upgrade, y+1 for feature, z+1 for bugfix. NEVER hardcode version. Also update `.release-please-manifest.json`.
