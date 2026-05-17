@@ -642,6 +642,16 @@ export function startChat(id: string, opts: StartOpts = {}) {
     // useState<number|null>(null), `exited !== null` stays false and
     // the close-session panel never renders. Coerce null → 0.
     const sess = sessions.get(id)
+    // Stale exit: this child has been replaced (resumeSmart's
+    // delete-then-startChat cycle, or stopChat→startChat). The Map
+    // entry now points to a live newer child, and we're firing for an
+    // older, already-killed process. If we ran the rest of this
+    // handler, we'd broadcast a phantom chat:exit (renderer flips to
+    // close-panel even though the new session is happily streaming)
+    // AND null out the live child's reference. internalRecycle alone
+    // doesn't protect against this — that flag lives on the OLD
+    // session object, but `sess` is the NEW one after sessions.set().
+    if (sess && sess.child !== child) return
     if (sess?.internalRecycle) {
       // Caller (compactSession / resumeSmart / scrapeContextLive) is
       // killing the --print intentionally and will spawn a fresh one
@@ -663,8 +673,12 @@ export function startChat(id: string, opts: StartOpts = {}) {
     }
   })
   child.on('error', (err) => {
-    broadcast(`chat:error:${id}`, String(err))
     const sess = sessions.get(id)
+    // Same stale-handler protection as 'exit' above. A spawn-time
+    // ENOENT for an already-replaced child must not clobber the live
+    // session's child reference.
+    if (sess && sess.child !== child) return
+    broadcast(`chat:error:${id}`, String(err))
     if (sess) {
       sess.child = null
     } else {

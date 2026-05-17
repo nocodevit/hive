@@ -4,7 +4,37 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rea
 import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
-import { execSync, execFileSync } from 'child_process'
+import { execSync, execFileSync, spawn } from 'child_process'
+
+// GUI apps launched from Finder/Dock inherit launchd's minimal PATH
+// (/usr/bin:/bin:/usr/sbin:/sbin), so spawn('claude') ENOENTs even though
+// the binary exists in nvm/Homebrew. Terminal panels work because they go
+// through `pty.spawn('zsh', ['-l'])`, but Chat panels call spawn directly
+// and would silently fail (chat:error has no renderer listener). Hydrate
+// process.env.PATH from the user's rc files once at boot.
+//
+// Implementation notes:
+//   - `-i` (interactive) requires a controlling TTY; in launchd context
+//     it exits non-zero, throws, and we'd silently fall back to launchd
+//     PATH. So we use `-c` and source rc files explicitly.
+//   - rc-file output (oh-my-zsh banners, nvm completion that prints help
+//     when sourced wrong, etc.) is redirected to /dev/null so PATH stdout
+//     stays clean.
+//   - We accept the result only if it looks like a PATH (starts with `/`
+//     and contains `:`) to defend against any remaining stdout pollution.
+;(function hydratePathFromShell() {
+  try {
+    const shell = process.env.SHELL || '/bin/zsh'
+    const cmd = '[ -f ~/.zshrc ] && . ~/.zshrc >/dev/null 2>&1; [ -f ~/.bash_profile ] && . ~/.bash_profile >/dev/null 2>&1; printenv PATH'
+    const out = execFileSync(shell, ['-c', cmd], { encoding: 'utf-8', timeout: 5000 }).trim()
+    if (out.startsWith('/') && out.includes(':')) process.env.PATH = out
+  } catch {
+    // Shell hydration failed. Leave PATH alone; user can launchctl
+    // setenv or symlink as a fallback. Not worth surfacing — a noisy
+    // dialog at boot would alarm.
+  }
+})()
+
 import { createTask, readTask, updateTask, listTasks } from './tasks'
 import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
@@ -16,6 +46,42 @@ import { registerStorageIpc } from './storage'
 // Data persistence — HIVE_DATA_DIR env allows E2E tests to use isolated directory
 const DATA_DIR = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
 const DATA_FILE = join(DATA_DIR, 'data.json')
+
+// Crash log — append-only JSONL at ~/.hive/crash-log.jsonl. Captures:
+//   - main process uncaught exceptions / unhandled promise rejections
+//   - renderer process gone (crash, hang, oom-killed)
+//   - child process gone (utility/gpu/network helper crashes)
+//   - explicit IPC report from renderer ErrorBoundary
+// Without this, Hive crashes have no observable trace — stderr is /dev/null
+// in a packaged .app, and macOS only writes DiagnosticReports for native
+// crashes (not JS throws). Every entry has ts + kind + a stack/details
+// blob; tail the file after a crash to see what blew up.
+function writeCrashLog(kind: string, info: Record<string, unknown>) {
+  try {
+    if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
+    appendFileSync(join(DATA_DIR, 'crash-log.jsonl'),
+      JSON.stringify({ ts: new Date().toISOString(), kind, ...info }) + '\n')
+  } catch {
+    // Last-ditch fallback — crash logging itself failed. Nothing left to do.
+  }
+}
+
+process.on('uncaughtException', (err) => {
+  writeCrashLog('main-uncaught-exception', {
+    message: err?.message,
+    stack: err?.stack,
+    name: err?.name
+  })
+})
+process.on('unhandledRejection', (reason) => {
+  // `reason` is `unknown` per Node's signature. Cast to `any` to read
+  // .message/.stack for the common Error-like case; String(reason) is
+  // the fallback when reason is a plain value (e.g. throw 'oops').
+  writeCrashLog('main-unhandled-rejection', {
+    message: (reason as any)?.message || String(reason),
+    stack: (reason as any)?.stack
+  })
+})
 
 function ensureDataDir() {
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true })
@@ -1374,6 +1440,59 @@ ipcMain.handle('skills:scan', () => {
 app.whenReady().then(() => {
   app.setName('Hive')
   electronApp.setAppUserModelId('com.hive.app')
+
+  // Catch every way a renderer or helper can die — these fire even when
+  // there is no JS exception (SIGKILL, OOM, GPU process abort, etc.).
+  // `render-process-gone` replaces the deprecated `crashed` event.
+  app.on('render-process-gone', (_event, webContents, details) => {
+    writeCrashLog('renderer-gone', {
+      reason: details.reason,
+      exitCode: details.exitCode,
+      url: webContents.getURL?.()
+    })
+  })
+  app.on('child-process-gone', (_event, details) => {
+    writeCrashLog('child-process-gone', {
+      type: details.type,
+      reason: details.reason,
+      exitCode: details.exitCode,
+      name: details.name,
+      serviceName: details.serviceName
+    })
+  })
+
+  // IPC entry so a renderer ErrorBoundary (or any caught throw) can
+  // forward a stack trace into the same crash-log.jsonl. Without this,
+  // a React render-throw caught by the boundary would leave no trace.
+  ipcMain.handle('crash:report', (_e, payload: { kind: string; info: Record<string, unknown> }) => {
+    writeCrashLog(payload?.kind || 'renderer-reported', payload?.info || {})
+    return { ok: true }
+  })
+
+  // OAuth sign-in. Spawns `claude auth login` and streams stdout/stderr
+  // to the renderer as `auth:output` events so the user can see the
+  // device-code URL (and click it if claude's auto-open doesn't fire).
+  // Resolves with the final exit code; renderer treats 0 as success.
+  ipcMain.handle('auth:login', () => {
+    return new Promise<{ ok: boolean; code: number; error?: string }>((resolve) => {
+      const child = spawn('claude', ['auth', 'login'], {
+        env: process.env,
+        stdio: ['pipe', 'pipe', 'pipe']
+      })
+      const broadcastAuth = (kind: 'stdout' | 'stderr', s: string) => {
+        for (const win of BrowserWindow.getAllWindows()) {
+          win.webContents.send('auth:output', { kind, text: s })
+        }
+        const m = s.match(/https:\/\/[^\s)>'"]+/)
+        if (m) shell.openExternal(m[0]).catch(() => {})
+      }
+      child.stdout.on('data', (c: Buffer) => broadcastAuth('stdout', c.toString('utf-8')))
+      child.stderr.on('data', (c: Buffer) => broadcastAuth('stderr', c.toString('utf-8')))
+      child.on('error', (err) => resolve({ ok: false, code: -1, error: err.message }))
+      child.on('exit', (code) => resolve({ ok: code === 0, code: code ?? -1 }))
+    })
+  })
+
   registerChatIpc()
   registerStorageIpc()
 
