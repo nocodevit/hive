@@ -375,6 +375,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
     pendingStartRef.current = opts
     setLaunchedMode(mode)
+    // Clear exited BEFORE flipping chooserMode false — otherwise the
+    // auto-open-chooser-on-exit useEffect would immediately flip
+    // chooserMode back to true (because exited is still non-null) and
+    // trap the user in the chooser. Same applies to pending* state.
+    setExited(null)
+    setPendingPermissions([])
+    setPendingQuestion(null)
+    setAuthState('idle')
     setChooserMode(false)
   }
 
@@ -946,6 +954,19 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     window.addEventListener('hive:reopen-chooser', handler)
     return () => window.removeEventListener('hive:reopen-chooser', handler)
   }, [id])
+
+  // Auto-open chooser whenever the session exits — user shouldn't have
+  // to hunt for the abbreviated 3-button close panel; they get the full
+  // 4-way picker (Resume / Compact+Resume / Start new / Fork) with the
+  // session list right away. Also covers the "session gone + user keeps
+  // typing" case: input box is hidden when chooser is up, so any next
+  // user action goes through the picker. Triggers on any non-null exit
+  // (user close, OOM kill, claude crash) — recovery flow is identical.
+  useEffect(() => {
+    if (exited !== null && !chooserMode) {
+      setChooserMode(true)
+    }
+  }, [exited, chooserMode])
 
   // Snap the textarea back to 1-line height after sending. Pairs with
   // the auto-grow handler in onChange — value going to '' doesn't fire

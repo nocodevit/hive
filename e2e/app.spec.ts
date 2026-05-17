@@ -1,18 +1,25 @@
 import { test, expect, ElectronApplication, Page } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import { join } from 'path'
+import { mkdtempSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
 
 let app: ElectronApplication
 let page: Page
+let dataDir: string
 
 test.beforeAll(async () => {
   // Build first
   const { execSync } = require('child_process')
   execSync('npx electron-vite build', { cwd: join(__dirname, '..'), stdio: 'pipe', timeout: 60000 })
 
+  // Isolated data dir so e2e never touches the user's running Hive.app
+  // (~/.hive). HIVE_PORT also off-default. CLAUDE.md mandates this for e2e.
+  dataDir = mkdtempSync(join(tmpdir(), 'hive-e2e-'))
+
   app = await electron.launch({
     args: [join(__dirname, '..', 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: '17799' }
+    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: '17799', HIVE_DATA_DIR: dataDir }
   })
   page = await app.firstWindow({ timeout: 60000 })
   await page.waitForLoadState('domcontentloaded')
@@ -21,6 +28,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close()
+  if (dataDir) rmSync(dataDir, { recursive: true, force: true })
 })
 
 test.describe('App Launch', () => {

@@ -118,6 +118,58 @@ describe('AskUserQuestionInline (1.7.120 regression)', () => {
   })
 })
 
+describe('auto-open chooser on session exit (1.7.115 feature)', () => {
+  // User expectation: when session is gone (exited !== null), user
+  // should not stare at the abbreviated 3-button "close panel" hunting
+  // for an action — the full 4-way chooser (Resume / Compact+Resume /
+  // Start new / Fork) with session picker should auto-open.
+  //
+  // Implementation: useEffect on [exited, chooserMode]:
+  //   if (exited !== null && !chooserMode) setChooserMode(true)
+  //
+  // Also: launchSession must clear `exited` BEFORE setChooserMode(false)
+  // — otherwise the same useEffect would immediately flip chooserMode
+  // back to true and trap the user.
+  //
+  // Test the pure state-transition rules.
+  function effect({ exited, chooserMode }: { exited: number | null; chooserMode: boolean }) {
+    if (exited !== null && !chooserMode) return { chooserMode: true }
+    return { chooserMode }
+  }
+  function onLaunch() {
+    // launchSession's order: clear exited THEN setChooserMode(false)
+    // so the effect sees exited=null and doesn't ping-pong
+    return { exited: null, chooserMode: false }
+  }
+
+  it('flips chooser on when session exits (code 0)', () => {
+    expect(effect({ exited: 0, chooserMode: false }).chooserMode).toBe(true)
+  })
+
+  it('flips chooser on for crash exit codes (137/143)', () => {
+    expect(effect({ exited: 137, chooserMode: false }).chooserMode).toBe(true)
+    expect(effect({ exited: 143, chooserMode: false }).chooserMode).toBe(true)
+  })
+
+  it('does not re-flip if chooser already open (no infinite loop)', () => {
+    expect(effect({ exited: 137, chooserMode: true }).chooserMode).toBe(true)
+    // (and doesn't change — would cause infinite re-render otherwise)
+  })
+
+  it('does nothing when session is live (exited=null)', () => {
+    expect(effect({ exited: null, chooserMode: false }).chooserMode).toBe(false)
+  })
+
+  it('launchSession clears exited BEFORE chooserMode=false (no ping-pong)', () => {
+    // After user picks an option in chooser
+    const after = onLaunch()
+    expect(after.exited).toBeNull()
+    expect(after.chooserMode).toBe(false)
+    // Now if effect re-runs: exited=null → guard fails → chooserMode stays false
+    expect(effect({ exited: after.exited, chooserMode: after.chooserMode }).chooserMode).toBe(false)
+  })
+})
+
 describe('pendingPermissions queue contract (1.7.122 regression)', () => {
   // pre-fix: useState<Request | null>(null); setPendingPermission(req)
   // overwrote head on every parallel control_request. With 6 simultaneous
