@@ -62,6 +62,18 @@ const api = {
   system: {
     username: () => ipcRenderer.invoke('system:username') as Promise<string>
   },
+  auth: {
+    login: () => ipcRenderer.invoke('auth:login') as Promise<{ ok: boolean; code: number; error?: string }>,
+    onOutput: (cb: (payload: { kind: 'stdout' | 'stderr'; text: string }) => void) => {
+      const handler = (_e: any, data: { kind: 'stdout' | 'stderr'; text: string }) => cb(data)
+      ipcRenderer.on('auth:output', handler)
+      return () => ipcRenderer.removeListener('auth:output', handler)
+    }
+  },
+  crash: {
+    report: (kind: string, info: Record<string, unknown>) =>
+      ipcRenderer.invoke('crash:report', { kind, info }) as Promise<{ ok: boolean }>
+  },
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', { key }) as Promise<any>,
     set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', { key, value }) as Promise<boolean>,
