@@ -186,6 +186,34 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // escape hatch.
   const [compactStuck, setCompactStuck] = useState<{ elapsedMs: number; lastOutputAgeMs: number } | null>(null)
 
+  // True while a /compact run is mid-flight (start signal observed, no
+  // end signal yet). Drives:
+  //   - Send button disabled state (sending the message right now would
+  //     target the dead pre-compact child)
+  //   - Pending permission/question buttons greyed out (they'd reply to
+  //     the killed child too)
+  //   - Textarea placeholder swap + Enter-key intercept (user can still
+  //     compose and we queue the draft for auto-send post-compact)
+  // Started: visible at `setCompactStartedAt` (timestamp) so the
+  // placeholder can show an elapsed-seconds counter without re-fetching.
+  // Cleared on: ✅/❌ stderr, chat:exit, Cancel.
+  const [compactStartedAt, setCompactStartedAt] = useState<number | null>(null)
+  // Draft saved while compact is running. Auto-sent when compact ends
+  // (and !pendingDraft cleared by Cancel — no auto-send on user bail).
+  const [pendingDraft, setPendingDraft] = useState<string | null>(null)
+  // Tick state so the "compacting — Ns elapsed" placeholder updates 1Hz
+  // without re-render on every keystroke. Resets when compactStartedAt
+  // is null.
+  const [, setCompactElapsedTick] = useState(0)
+  useEffect(() => {
+    if (compactStartedAt === null) return
+    const iv = setInterval(() => setCompactElapsedTick(t => t + 1), 1000)
+    return () => clearInterval(iv)
+  }, [compactStartedAt])
+  // Derived (also true while the stuck banner is up, since compactStuck
+  // implies compact is still alive — main only fires it before settle).
+  const compactInProgress = compactStartedAt !== null || compactStuck !== null
+
   // Sign-in modal — flipped to 'needed' when claude --print returns
   // result.error='authentication_failed' (a.k.a. "Not logged in"). The
   // modal spawns `claude auth login` via IPC, streams its stdout (with
@@ -809,6 +837,33 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       // conversation rather than lurking above the input forever.
       const text = line.replace(/\s+$/, '')
       if (text) addEntry({ kind: 'system', text })
+      // Detect compact lifecycle so the input/permission UI can switch
+      // into "paused" mode without us threading a new IPC channel. The
+      // exact phrases are stable (see main/chat.ts compactSession +
+      // forceCompact branch + runCompactViaPrint progress callback) so
+      // this is a cheap, no-new-IPC contract.
+      if (
+        text.includes('Compacting context — pausing chat') ||
+        text.includes('Compacting prior session before resume')
+      ) {
+        setCompactStartedAt(Date.now())
+        // The pre-compact --print child is being killed; any
+        // outstanding control_request is now an orphan. Clearing
+        // here means the Allow/Deny modal disappears as soon as
+        // the user sees the "Compacting…" banner instead of
+        // looking clickable but secretly no-op'ing.
+        setPendingPermissions([])
+        setPendingQuestion(null)
+      } else if (
+        text.includes('/compact done') ||
+        (text.includes('/compact ') && text.includes('context UNCHANGED'))
+      ) {
+        // Either success or failure path emits a settle line; both
+        // mean the child is being respawned so the input is usable
+        // again.
+        setCompactStartedAt(null)
+        setCompactStuck(null)
+      }
     })
     const offExit = window.api.chat.onExit(id, (code: number) => {
       // claude --print exited → any pending control_request is orphaned
@@ -823,6 +878,15 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       setPendingQuestion(null)
       // Child is dead — any stuck-compact banner is meaningless now.
       setCompactStuck(null)
+      // Also clear the compact-in-progress gate so the next session
+      // (started from the chooser) doesn't open with a disabled Send.
+      // pendingDraft is intentionally NOT cleared here: if the user
+      // typed something before claude died, we still want to surface
+      // it on the next session — but the auto-send useEffect below
+      // only fires when compactInProgress transitions true→false
+      // AND a fresh session is alive, so this is a no-op until the
+      // child respawns.
+      setCompactStartedAt(null)
     })
     const offUsage = window.api.chat.onUsage(id, (u) => { setUsage(u as any) })
     // Stuck-compact watchdog fires once when /compact has been alive
@@ -1005,6 +1069,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const send = async () => {
     const text = input.trim()
     if (!text || sending) return
+    // Compact is mid-flight — claude --print is dead and the next child
+    // hasn't spawned yet. Sending now would silently drop the message
+    // (or worse, fire it at a stale stdin and the user sees nothing
+    // happen). Stash the draft so the auto-send useEffect picks it
+    // up when ✅/❌ /compact arrives.
+    if (compactInProgress) {
+      setPendingDraft(text)
+      setInput(''); resetInputHeight()
+      return
+    }
     // Intercept session-scoped slash commands that don't work in --print
     // mode (each handler takes over; no stream-json frame goes out).
     if (text === '/remote-control') {
@@ -1029,6 +1103,23 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     await window.api.chat.send(id, text)
     setSending(false)
   }
+
+  // When /compact settles AND a draft was queued, flush it to the
+  // freshly-respawned --print child. We wait one tick so React has
+  // already cleared compactStartedAt before we re-enter send(); without
+  // the timeout, send() would still see compactInProgress=true and
+  // re-stash the same draft into pendingDraft.
+  useEffect(() => {
+    if (!compactInProgress && pendingDraft !== null && exited === null) {
+      const draft = pendingDraft
+      setPendingDraft(null)
+      addEntry({ kind: 'system', text: '✓ Sent queued draft' })
+      setSending(true)
+      addEntry({ kind: 'user', text: draft })
+      window.api.chat.send(id, draft).finally(() => setSending(false))
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compactInProgress])
 
   const resumeFromRc = async () => {
     addEntry({ kind: 'system', text: 'Resuming session — picking up any mobile turns…' })
@@ -1395,8 +1486,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               // and pendingQuestion via offExit. Also clear them
               // synchronously here in case exit is delayed.
               setCompactStuck(null)
+              setCompactStartedAt(null)
               setPendingPermissions([])
               setPendingQuestion(null)
+              // User explicitly bailed → drop any draft they queued
+              // while waiting. We do NOT auto-send a draft after a
+              // cancel-then-restart; that would be surprising.
+              setPendingDraft(null)
               await window.api.chat.stop(id).catch(() => {})
             }}
             style={{
@@ -1728,8 +1824,20 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 // ↑/↓ left as native textarea cursor navigation. Recall is
                 // a click-the-↺-icon action on each past UserMessage now.
               }}
+              // Stay enabled during compact: user can keep composing.
+              // send() itself routes the text into pendingDraft instead
+              // of firing at the dead --print child.
               disabled={sending || exited !== null}
-              placeholder="Message Claude… (Enter to send, Shift+Enter for newline)"
+              data-testid="hive-chat-input"
+              placeholder={
+                compactInProgress
+                  ? `Compacting — message will send after summary is ready${
+                      compactStartedAt
+                        ? ` (${Math.round((Date.now() - compactStartedAt) / 1000)}s)`
+                        : ''
+                    }`
+                  : 'Message Claude… (Enter to send, Shift+Enter for newline)'
+              }
               style={{
                 flex: 1, resize: 'none',
                 background: 'transparent', color: CRUSH.Butter,
@@ -1745,8 +1853,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             {/* Stop button — appears at the right of the input while
                 claude is generating (sending or thinking). Sends a
                 control_request {subtype:"interrupt"} on stdin which
-                cancels the current turn without ending the session. */}
-            {(sending || thinking) && (
+                cancels the current turn without ending the session.
+                Hidden during compact since the --print child is dead;
+                we show a disabled Send glyph instead so the user has
+                a visual signal that Enter will be queued, not sent. */}
+            {!compactInProgress && (sending || thinking) && (
               <button
                 onClick={() => {
                   window.api.chat.interrupt(id).catch(() => {})
@@ -1774,7 +1885,52 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 }}
               >■</button>
             )}
+            {/* Disabled Send-while-compacting glyph. aria-disabled so
+                screen readers announce the gated state; visually a
+                muted spinner so the user can see why Enter just
+                stashed their text instead of firing. */}
+            {compactInProgress && (
+              <span
+                data-testid="hive-chat-send-disabled"
+                role="button"
+                aria-disabled={true}
+                aria-label="Send disabled — compacting"
+                title="Compact running — your draft will auto-send when done"
+                style={{
+                  flexShrink: 0,
+                  background: 'transparent',
+                  border: `1px solid ${CRUSH.Squid}`,
+                  color: CRUSH.Squid,
+                  width: 22, height: 22,
+                  borderRadius: 4,
+                  fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
+                  cursor: 'not-allowed',
+                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                  opacity: 0.7
+                }}
+              >⏳</span>
+            )}
           </div>
+          {/* Inline draft-queued indicator — confirms to the user that
+              their Enter while compacting wasn't lost. The auto-send
+              useEffect clears pendingDraft when it dispatches, so this
+              banner disappears the moment the queued message is sent. */}
+          {compactInProgress && pendingDraft !== null && (
+            <div
+              data-testid="hive-chat-draft-queued"
+              style={{
+                marginTop: 6,
+                padding: '4px 10px',
+                background: 'rgba(255,204,51,0.08)',
+                border: `1px solid ${CRUSH.Julep}`,
+                borderRadius: 6,
+                color: CRUSH.Julep,
+                fontFamily: FONT_MONO, fontSize: 11
+              }}
+            >
+              Draft saved — will send after compact completes
+            </div>
+          )}
         </div>
       )}
 
