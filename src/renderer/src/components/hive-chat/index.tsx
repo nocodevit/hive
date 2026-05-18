@@ -802,7 +802,18 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       const text = line.replace(/\s+$/, '')
       if (text) addEntry({ kind: 'system', text })
     })
-    const offExit = window.api.chat.onExit(id, (code: number) => { setExited(code) })
+    const offExit = window.api.chat.onExit(id, (code: number) => {
+      // claude --print exited → any pending control_request is orphaned
+      // (claude is gone, no one will receive control_response we'd send).
+      // Clear queues so the UI doesn't show stale permission/question
+      // prompts that look clickable but silently no-op. The Pink stuck
+      // incident (16 control_requests, 15 replies, last AskUserQuestion
+      // hanging) — claude had died, AskUserQuestionInline was still
+      // shown with ctx live, user clicked but reply went nowhere.
+      setExited(code)
+      setPendingPermissions([])
+      setPendingQuestion(null)
+    })
     const offUsage = window.api.chat.onUsage(id, (u) => { setUsage(u as any) })
 
     // Load-older: backend emits a batch of historical events to prepend.
@@ -2639,6 +2650,18 @@ export function StartChooser({
     setPicker({ action, sessions: [], selectedSid: '', loading: true })
     try {
       const list = await window.api.chat.getRecentSessions(cwd || '', 5)
+      // UX shortcut: when only one session is on disk, skip the picker
+      // step entirely and launch with that sid. Users were hitting
+      // "click Compact+Resume → picker opens → click row → click
+      // Confirm" 3-step friction and reporting "Compact+Resume 没反应"
+      // because they didn't realize the picker required a Confirm tap.
+      // Hide the picker, fire onPick directly. Two or more sessions
+      // still need the picker (user has a real choice to make).
+      if (list.length === 1) {
+        setPicker(null)
+        onPick(action, list[0].sid)
+        return
+      }
       setPicker({
         action,
         sessions: list,
