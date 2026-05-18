@@ -357,7 +357,7 @@ export async function smartStartChat(id: string, opts: StartOpts = {}) {
           const pct = readContextPctFromJsonl(opts.cwd, sid)
           if (pct !== null && pct > 0.5) {
             broadcast(`chat:stderr:${id}`, `⏳ Smart-startup: prior session ${(pct * 100).toFixed(0)}% context — running /compact first…\n`)
-            const r = await runCompactViaPrint(opts.cwd, sid, opts.agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`))
+            const r = await runCompactViaPrint(opts.cwd, sid, opts.agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`), id)
             if (r.ok) {
               broadcast(`chat:stderr:${id}`, `✅ /compact done in ${(r.durationMs / 1000).toFixed(1)}s\n`)
             } else {
@@ -408,12 +408,32 @@ export async function smartStartChat(id: string, opts: StartOpts = {}) {
  * resolves. Persists every attempt to ~/.hive/compact-log.jsonl for
  * post-hoc debugging — no more "did my compact actually run?".
  */
+// Watchdog: when /compact has run >5min AND claude hasn't emitted a
+// byte in >60s, the child is almost certainly stuck (claude `--print`
+// has gone unresponsive — observed Pink at 1050s+ with no UI escape).
+// We broadcast a one-time `chat:compactStuck:<id>` so the renderer can
+// show a Cancel button. Cancel calls window.api.chat.stop(id) which
+// kills the entire chat (including this `--print` child) and clears
+// pendingPermissions/pendingQuestion in HiveChat.
+export const COMPACT_STUCK_ELAPSED_MS = 300_000
+export const COMPACT_STUCK_IDLE_MS = 60_000
+
+/**
+ * Pure predicate — tests don't need to spawn a child. Returns true iff
+ * the watchdog should broadcast a stuck signal given the elapsed time
+ * since /compact started and the time since claude last emitted a byte.
+ */
+export function isCompactStuck(elapsedMs: number, lastOutputAgeMs: number): boolean {
+  return elapsedMs > COMPACT_STUCK_ELAPSED_MS && lastOutputAgeMs > COMPACT_STUCK_IDLE_MS
+}
+
 async function runCompactViaPrint(
   cwd: string,
   sid: string,
   agent: string | undefined,
   timeoutMs = 600_000,
-  onProgress?: (msg: string) => void
+  onProgress?: (msg: string) => void,
+  chatId?: string
 ): Promise<{ ok: boolean; error?: string; durationMs: number; resultEvent?: any }> {
   const startedAt = Date.now()
   return new Promise(resolve => {
@@ -421,13 +441,24 @@ async function runCompactViaPrint(
     let buffer = ''
     let resultEvent: any = null
     let lastByteAt = startedAt
+    let stuckBroadcast = false
     // 30s heartbeat: if no result yet, broadcast `still running…Xs` so
-    // the user sees the chat isn't hung. Resets when settled.
+    // the user sees the chat isn't hung. Resets when settled. After
+    // COMPACT_STUCK_ELAPSED_MS + COMPACT_STUCK_IDLE_MS of no output,
+    // also fire a one-time `chat:compactStuck:<id>` for the renderer
+    // to expose a Cancel button.
     const progressTimer = setInterval(() => {
       if (settled) return
       const elapsed = Date.now() - startedAt
       const sinceLastByte = Date.now() - lastByteAt
       onProgress?.(`/compact still running · ${Math.round(elapsed / 1000)}s elapsed${sinceLastByte > 30_000 ? ` · last claude output ${Math.round(sinceLastByte / 1000)}s ago` : ''}`)
+      if (!stuckBroadcast && chatId && isCompactStuck(elapsed, sinceLastByte)) {
+        stuckBroadcast = true
+        broadcast(`chat:compactStuck:${chatId}`, {
+          elapsedMs: elapsed,
+          lastOutputAgeMs: sinceLastByte
+        })
+      }
     }, 30_000)
 
     const finish = (ok: boolean, error?: string) => {
@@ -938,7 +969,7 @@ export async function startWithSummary(id: string) {
   session.internalRecycle = true
   try { session.child?.kill() } catch {}
   session.child = null
-  const r = await runCompactViaPrint(cwd, sid, opts.agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`))
+  const r = await runCompactViaPrint(cwd, sid, opts.agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`), id)
   // Always respawn — even on compact failure the user asked to fork,
   // and a fork without compact still creates the new sid (just with
   // unsummarized history).
@@ -983,7 +1014,7 @@ export async function compactSession(id: string) {
   // path. claude streams a `result` event when done — far more reliable
   // than the prior PTY-and-grep approach, which routinely timed out at
   // 25s on 12k-line sessions and silently failed.
-  const r = await runCompactViaPrint(cwd, sid, opts.agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`))
+  const r = await runCompactViaPrint(cwd, sid, opts.agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`), id)
 
   // Always respawn the chat regardless of compact outcome — user is
   // mid-conversation, they want their session back.
@@ -1211,7 +1242,7 @@ export function registerChatIpc() {
       // compact semantics, not fork.
       if (sessions.has(id)) stopChat(id)
       broadcast(`chat:stderr:${id}`, '⏳ Compacting prior session before resume…\n')
-      const r = await runCompactViaPrint(cwd, resumeSid, agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`))
+      const r = await runCompactViaPrint(cwd, resumeSid, agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`), id)
       if (r.ok) {
         broadcast(`chat:stderr:${id}`, `✅ /compact done in ${(r.durationMs / 1000).toFixed(1)}s\n`)
       } else {

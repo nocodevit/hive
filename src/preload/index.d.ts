@@ -110,6 +110,7 @@ declare global {
           remainingMinutes?: number
           totalTokens?: number
         }) => void) => () => void
+        onCompactStuck: (id: string, cb: (payload: { elapsedMs: number; lastOutputAgeMs: number }) => void) => () => void
       }
       getFilePath: (file: File) => string | null
       project: {

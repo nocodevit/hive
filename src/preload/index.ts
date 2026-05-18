@@ -178,6 +178,15 @@ const api = {
       const handler = (_e: any, data: any) => cb(data)
       ipcRenderer.on(`chat:usage:${id}`, handler)
       return () => ipcRenderer.removeListener(`chat:usage:${id}`, handler)
+    },
+    // Watchdog signal: emitted once when /compact has been running
+    // > 5 min AND claude hasn't output a byte in > 60s. Renderer shows
+    // a Cancel button — onClick should `window.api.chat.stop(id)` and
+    // clear pendingPermissions / pendingQuestion.
+    onCompactStuck: (id: string, cb: (payload: { elapsedMs: number; lastOutputAgeMs: number }) => void) => {
+      const handler = (_e: any, data: any) => cb(data)
+      ipcRenderer.on(`chat:compactStuck:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:compactStuck:${id}`, handler)
     }
   },
   storage: {

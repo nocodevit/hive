@@ -178,6 +178,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }>
   } | null>(null)
 
+  // Watchdog state: main fires `chat:compactStuck:<id>` once when a
+  // /compact run has been alive >5min AND claude has been silent >60s.
+  // Renderer shows an inline Cancel button. Clicking it hard-stops the
+  // chat (which kills the stuck --print child) and clears the pending
+  // queues — preventing the Pink-1050s wedge where the user had no
+  // escape hatch.
+  const [compactStuck, setCompactStuck] = useState<{ elapsedMs: number; lastOutputAgeMs: number } | null>(null)
+
   // Sign-in modal — flipped to 'needed' when claude --print returns
   // result.error='authentication_failed' (a.k.a. "Not logged in"). The
   // modal spawns `claude auth login` via IPC, streams its stdout (with
@@ -813,8 +821,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       setExited(code)
       setPendingPermissions([])
       setPendingQuestion(null)
+      // Child is dead — any stuck-compact banner is meaningless now.
+      setCompactStuck(null)
     })
     const offUsage = window.api.chat.onUsage(id, (u) => { setUsage(u as any) })
+    // Stuck-compact watchdog fires once when /compact has been alive
+    // > 5min AND silent > 60s. We surface a Cancel button below the
+    // input. See main/chat.ts → runCompactViaPrint.
+    const offCompactStuck = window.api.chat.onCompactStuck(id, (payload) => {
+      setCompactStuck(payload)
+    })
 
     // Load-older: backend emits a batch of historical events to prepend.
     // We flatten them into TimelineEntry[] mirroring the live handler and
@@ -869,6 +885,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       offRcOutput()
       offRcExit()
       offAutoContinue()
+      offCompactStuck()
       window.api.chat.stop(id)
     }
   }, [id, cwd, agent, agentName, continueSession, rebaseOnStart, chooserMode])
@@ -1349,6 +1366,47 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
          at least one Task tool is running. Spinner + per-subagent line. */}
       {Object.keys(activeSubagents).length > 0 && (
         <SubagentBanner subs={activeSubagents} />
+      )}
+      {/* Stuck-compact watchdog banner. Visible only when main has
+         emitted chat:compactStuck (>5min elapsed + >60s of silence).
+         Cancel hard-stops the child + clears pending queues so the
+         user isn't wedged with no escape (Pink-1050s incident). */}
+      {compactStuck && exited === null && (
+        <div
+          data-testid="compact-stuck-banner"
+          style={{
+            borderBottom: `1px solid ${CRUSH.Charcoal}`,
+            background: 'rgba(235,66,104,0.06)',
+            padding: '8px 12px',
+            display: 'flex', alignItems: 'center', gap: 12
+          }}
+        >
+          <div style={{ flex: 1, color: CRUSH.Sriracha, fontSize: 12, fontFamily: FONT_MONO }}>
+            <strong style={{ fontWeight: 700 }}>/compact appears stuck</strong>
+            <span style={{ color: CRUSH.Squid, marginLeft: 8 }}>
+              {Math.round(compactStuck.elapsedMs / 1000)}s elapsed · {Math.round(compactStuck.lastOutputAgeMs / 1000)}s since last output
+            </span>
+          </div>
+          <button
+            data-testid="compact-stuck-cancel"
+            onClick={async () => {
+              // Hard-stop the chat — backend stopChat kills the --print
+              // child and fires chat:exit, which clears pendingPermissions
+              // and pendingQuestion via offExit. Also clear them
+              // synchronously here in case exit is delayed.
+              setCompactStuck(null)
+              setPendingPermissions([])
+              setPendingQuestion(null)
+              await window.api.chat.stop(id).catch(() => {})
+            }}
+            style={{
+              background: CRUSH.Sriracha, border: 'none', color: CRUSH.Pepper,
+              padding: '6px 14px', borderRadius: 6,
+              fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >Cancel</button>
+        </div>
       )}
       {/* Rate-limit + Compact + kebab live in a single ActionToolbar row
          below — see line ~1264. RateLimitBar is no longer rendered as a
