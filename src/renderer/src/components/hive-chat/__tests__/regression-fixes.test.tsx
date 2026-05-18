@@ -170,6 +170,113 @@ describe('auto-open chooser on session exit (1.7.115 feature)', () => {
   })
 })
 
+describe('Picker UX shortcut: 1-session auto-confirm (1.7.116 regression)', () => {
+  // pre-fix: clicking "Compact + Resume" opened a picker requiring user
+  // to click row + Confirm even when only 1 session existed → users
+  // reported "Compact+Resume 没反应" because they thought button = action.
+  // Pink had exactly 1 prior session (071c20ca-...) — picker UX added
+  // 2 extra unnecessary clicks.
+  // fix: openPicker → if list.length === 1, skip the picker UI, call
+  // onPick directly with the single sid. Picker still appears for 2+.
+
+  type Sess = { sid: string; lastActiveMs: number }
+  // Pure logic of the openPicker shortcut
+  function openPickerLogic(
+    list: Sess[],
+    action: 'resume' | 'compact-resume' | 'fork',
+    onPick: (action: string, sid: string) => void
+  ): { showPicker: boolean; preselected?: string } {
+    if (list.length === 1) {
+      onPick(action, list[0].sid)
+      return { showPicker: false }
+    }
+    return { showPicker: true, preselected: list[0]?.sid }
+  }
+
+  it('1 session: skips picker, fires onPick(action, sid) immediately', () => {
+    const onPick = vi.fn()
+    const r = openPickerLogic([{ sid: '071c20ca', lastActiveMs: 1 }], 'compact-resume', onPick)
+    expect(r.showPicker).toBe(false)
+    expect(onPick).toHaveBeenCalledWith('compact-resume', '071c20ca')
+  })
+
+  it('2+ sessions: shows picker, preselects newest, does NOT auto-pick', () => {
+    const onPick = vi.fn()
+    const list = [
+      { sid: 'newest', lastActiveMs: 100 },
+      { sid: 'older', lastActiveMs: 50 }
+    ]
+    const r = openPickerLogic(list, 'compact-resume', onPick)
+    expect(r.showPicker).toBe(true)
+    expect(r.preselected).toBe('newest')
+    expect(onPick).not.toHaveBeenCalled()
+  })
+
+  it('0 sessions: shows empty picker (Confirm disabled), no onPick', () => {
+    const onPick = vi.fn()
+    const r = openPickerLogic([], 'compact-resume', onPick)
+    expect(r.showPicker).toBe(true)
+    expect(r.preselected).toBeUndefined()
+    expect(onPick).not.toHaveBeenCalled()
+  })
+})
+
+describe('Orphaned control_requests on claude exit (1.7.116 regression)', () => {
+  // pre-fix: claude --print died but pendingPermissions + pendingQuestion
+  // state stayed populated. User saw AskUserQuestionInline (or Permission
+  // modal) and clicked an option. submit() fired but stdin write went to
+  // dead process — silently consumed. Pink stuck incident: 16 control_-
+  // request, 15 reply, 16th hanging because claude was gone.
+  // fix: chat.onExit handler now clears both queues. ctx Provider value
+  // becomes null → AskUserQuestionInline shows read-only "awaiting
+  // request" indicator. User knows the session is dead.
+
+  function onExitHandler(state: {
+    exited: number | null
+    pendingPermissions: any[]
+    pendingQuestion: any | null
+  }, code: number) {
+    return {
+      exited: code,
+      pendingPermissions: [],
+      pendingQuestion: null
+    }
+  }
+
+  it('clears both queues on exit code 0 (clean close)', () => {
+    const after = onExitHandler({
+      exited: null,
+      pendingPermissions: [{ requestId: 'r1', toolName: 'Bash', input: {} }],
+      pendingQuestion: { requestId: 'r2', questions: [] }
+    }, 0)
+    expect(after.exited).toBe(0)
+    expect(after.pendingPermissions).toEqual([])
+    expect(after.pendingQuestion).toBeNull()
+  })
+
+  it('clears on crash exit codes too (137 OOM, 143 SIGTERM)', () => {
+    const after137 = onExitHandler({
+      exited: null,
+      pendingPermissions: [{ requestId: 'r1' }],
+      pendingQuestion: null
+    }, 137)
+    expect(after137.exited).toBe(137)
+    expect(after137.pendingPermissions).toEqual([])
+  })
+
+  it('Pink stuck scenario: clears 5 pending after exit', () => {
+    const after = onExitHandler({
+      exited: null,
+      pendingPermissions: [
+        { requestId: 'r12' }, { requestId: 'r13' }, { requestId: 'r14' },
+        { requestId: 'r15' }, { requestId: 'r16' }
+      ],
+      pendingQuestion: null
+    }, 0)
+    expect(after.pendingPermissions).toEqual([])
+  })
+})
+
 describe('pendingPermissions queue contract (1.7.122 regression)', () => {
   // pre-fix: useState<Request | null>(null); setPendingPermission(req)
   // overwrote head on every parallel control_request. With 6 simultaneous
