@@ -236,6 +236,12 @@ const api = {
       ipcRenderer.invoke('agent:deleteDefinition', { cwd, agentId }),
     loadLogs: (agentId: string) => ipcRenderer.invoke('agent:loadLogs', { agentId }),
     clearLogs: (agentId: string) => ipcRenderer.invoke('agent:clearLogs', { agentId }),
+    // Returns { active: boolean } — true when any subagent JSONL under
+    // this agent's cwd has been touched within SUBAGENT_ACTIVE_WINDOW_MS.
+    // Used by the right-panel status badge to override 'waiting' →
+    // 'working' while a Task tool is mid-flight (see App.tsx poller).
+    checkSubagentActivity: (agentId: string) =>
+      ipcRenderer.invoke('agent:checkSubagentActivity', { agentId }) as Promise<{ active: boolean }>,
     send: (agentId: string, type: string, payload: object) =>
       ipcRenderer.invoke('agent:send', { agentId, type, payload }),
     onStatus: (cb: (data: { agentId: string; status: string }) => void) => {

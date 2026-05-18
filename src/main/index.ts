@@ -39,6 +39,7 @@ import { createTask, readTask, updateTask, listTasks } from './tasks'
 import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
 import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './helpers'
+import { isSubagentActiveForCwd } from './subagent-activity'
 import { generateReportScript } from './utils'
 import { registerChatIpc } from './chat'
 import { registerStorageIpc } from './storage'
@@ -1363,6 +1364,16 @@ ipcMain.handle('agent:clearLogs', (_event, { agentId }) => {
   const logFile = join(LOGS_DIR, `${agentId}.json`)
   try { writeFileSync(logFile, '[]') } catch {}
   return true
+})
+
+// Subagent (Task tool) liveness — overrides the hook-driven badge so
+// a parent agent that's currently delegating to a sub-agent shows
+// 'working' (green) instead of 'waiting' (yellow). Hook semantics
+// can't see this on their own because the parent claude process
+// genuinely IS in Stop state while the sub-agent runs.
+ipcMain.handle('agent:checkSubagentActivity', (_event, { agentId }) => {
+  const cwd = findAgentWorktree(agentId)
+  return { active: isSubagentActiveForCwd(cwd) }
 })
 
 // Skills scanning — recursively find all SKILL.md files

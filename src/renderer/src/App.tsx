@@ -115,10 +115,30 @@ export default function App() {
     return () => window.removeEventListener('click', close)
   }, [])
 
+  // Agents whose parent claude is in Stop state (hook flipped status →
+  // 'waiting' / yellow) BUT whose subagents/ dir has a JSONL touched
+  // within the last ~10s — meaning a Task tool is mid-flight and the
+  // user-visible badge should read 'working' / green. Polled from main
+  // every SUBAGENT_POLL_MS so we don't poll the FS on a tight loop
+  // and don't introduce a chokidar watcher (overkill for this signal).
+  const [subagentActiveIds, setSubagentActiveIds] = useState<Set<string>>(new Set())
+
+  // Override badge color without mutating the underlying hook-driven
+  // status — the next Stop / PreToolUse hook fires legitimately and
+  // would otherwise be in a flapping race with our poller. Display-
+  // only fork keeps the source of truth clean.
+  const displayAgents = subagentActiveIds.size === 0
+    ? agents
+    : agents.map(a =>
+        a.status === 'waiting' && subagentActiveIds.has(a.id)
+          ? { ...a, status: 'working' as const }
+          : a
+      )
+
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || null
-  const selectedAgent = agents.find((a) => a.id === selectedAgentId) || null
+  const selectedAgent = displayAgents.find((a) => a.id === selectedAgentId) || null
   const projectScan = selectedProjectId ? projectScans[selectedProjectId] || null : null
-  const projectAgents = agents.filter((a) => a.projectId === selectedProjectId).sort((a, b) => (a.order || 0) - (b.order || 0))
+  const projectAgents = displayAgents.filter((a) => a.projectId === selectedProjectId).sort((a, b) => (a.order || 0) - (b.order || 0))
   const departments = [...new Set(projectAgents.map((a) => a.department))]
 
   useEffect(() => {
@@ -374,6 +394,44 @@ export default function App() {
     })
     return () => { removeStatus(); removeReport(); removeTaskUpdate(); removeManagerReport(); removeBatchProposal(); removeDispatcherLog() }
   }, [])
+
+  // Subagent-activity poller — every 5s, ask main which 'waiting'
+  // agents are actually running a sub-agent right now. Main checks
+  // mtime on ~/.claude/projects/<slug>/<sid>/subagents/*.jsonl with
+  // a 10s window (see src/main/subagent-activity.ts). Only 'waiting'
+  // agents are candidates — 'working' is already green, 'done' is
+  // terminal. No tight loop, no chokidar watcher.
+  useEffect(() => {
+    let cancelled = false
+    const tick = async () => {
+      const candidates = agents.filter(a => a.status === 'waiting')
+      if (candidates.length === 0) {
+        if (!cancelled) setSubagentActiveIds(prev => prev.size === 0 ? prev : new Set())
+        return
+      }
+      const results = await Promise.all(
+        candidates.map(async a => {
+          try {
+            const r = await window.api.agent.checkSubagentActivity(a.id)
+            return r?.active ? a.id : null
+          } catch { return null }
+        })
+      )
+      if (cancelled) return
+      const active = new Set(results.filter((x): x is string => !!x))
+      setSubagentActiveIds(prev => {
+        // Cheap equality check so identical results don't re-render
+        // the whole agents grid every 5s.
+        if (prev.size === active.size && [...active].every(id => prev.has(id))) {
+          return prev
+        }
+        return active
+      })
+    }
+    tick()  // run once on mount/state change
+    const iv = setInterval(tick, 5000)
+    return () => { cancelled = true; clearInterval(iv) }
+  }, [agents])
 
   // Auto-cleanup stale toast notifications
   useEffect(() => {
