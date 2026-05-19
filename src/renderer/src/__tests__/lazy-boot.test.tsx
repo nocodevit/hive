@@ -14,6 +14,14 @@
 // → project.scan, AgentDetail mount → agent.loadLogs + git.commitHistory,
 // taskgroup tab → dispatcher.loadLog, etc).
 //
+// NO PER-ID CACHE: project.scan / agent.loadLogs / git.commitHistory
+// re-fire on every mount of the matching detail view. The user's hardware
+// is fast and each fetch is scoped (one project, one agent), so stale-data
+// risk after git changes / .md edits outweighs the few-second re-fetch
+// cost. session-stable caches (skillsScanned / templatesLoaded /
+// dispatcherLoaded / tasks.list-per-project) are kept — those sources
+// don't drift mid-session in normal use.
+//
 // Mounting the full App in jsdom is multi-second + flaky (3000-line
 // component, huge import tree). Instead we test the lazy-fetch CONTRACT
 // via pure predicate helpers that mirror the gating conditions in
@@ -26,33 +34,23 @@ import { describe, it, expect } from 'vitest'
 // app's selection state. App.tsx's useEffects implement exactly these
 // predicates — keep them in sync.
 
-function shouldProjectScanFetch(
-  selectedProjectId: string | null,
-  cachedScans: Record<string, unknown>
-): boolean {
+function shouldProjectScanFetch(selectedProjectId: string | null): boolean {
   if (!selectedProjectId) return false
-  if (cachedScans[selectedProjectId]) return false
   return true
 }
 
-function shouldAgentLogsFetch(
-  selectedAgentId: string | null,
-  cachedTasks: Record<string, unknown>
-): boolean {
+function shouldAgentLogsFetch(selectedAgentId: string | null): boolean {
   if (!selectedAgentId) return false
-  if (cachedTasks[selectedAgentId]) return false
   return true
 }
 
 function shouldGitCommitHistoryFetch(
   selectedAgentId: string | null,
-  agents: { id: string; worktreePath?: string }[],
-  cachedCommits: Record<string, unknown>
+  agents: { id: string; worktreePath?: string }[]
 ): boolean {
   if (!selectedAgentId) return false
   const ag = agents.find((a) => a.id === selectedAgentId)
   if (!ag?.worktreePath) return false
-  if (cachedCommits[selectedAgentId]) return false
   return true
 }
 
@@ -93,40 +91,46 @@ function shouldTasksListFetch(
 
 describe('project.scan lazy gate (per ProjectDetail mount)', () => {
   it('does NOT fetch when no project selected — fixes boot fan-out', () => {
-    expect(shouldProjectScanFetch(null, {})).toBe(false)
+    expect(shouldProjectScanFetch(null)).toBe(false)
   })
   it('FETCHES first time the user opens a project', () => {
-    expect(shouldProjectScanFetch('p1', {})).toBe(true)
+    expect(shouldProjectScanFetch('p1')).toBe(true)
   })
-  it('does NOT re-fetch when cached', () => {
-    expect(shouldProjectScanFetch('p1', { p1: { projectStage: 'active', todos: [] } })).toBe(false)
+  it('FETCHES on every mount (no session cache — stage/todos may have drifted from git or .md edits)', () => {
+    // Repeat-mount of the same project must re-fire so stale scan results
+    // never linger after the user edits files / commits in the worktree.
+    expect(shouldProjectScanFetch('p1')).toBe(true)
+    expect(shouldProjectScanFetch('p1')).toBe(true)
   })
 })
 
 describe('agent.loadLogs lazy gate (per AgentDetail mount)', () => {
   it('does NOT fetch when no agent selected', () => {
-    expect(shouldAgentLogsFetch(null, {})).toBe(false)
+    expect(shouldAgentLogsFetch(null)).toBe(false)
   })
   it('FETCHES first time the user clicks an agent', () => {
-    expect(shouldAgentLogsFetch('a1', {})).toBe(true)
+    expect(shouldAgentLogsFetch('a1')).toBe(true)
   })
-  it('does NOT re-fetch when task pill already rehydrated', () => {
-    expect(shouldAgentLogsFetch('a1', { a1: { title: 'doing X', active: true } })).toBe(false)
+  it('FETCHES on every mount (no session cache — log JSONL is the source of truth, real-time IPC also overwrites)', () => {
+    expect(shouldAgentLogsFetch('a1')).toBe(true)
+    expect(shouldAgentLogsFetch('a1')).toBe(true)
   })
 })
 
 describe('git.commitHistory lazy gate (per AgentDetail mount)', () => {
   it('does NOT fetch when no agent selected', () => {
-    expect(shouldGitCommitHistoryFetch(null, [], {})).toBe(false)
+    expect(shouldGitCommitHistoryFetch(null, [])).toBe(false)
   })
   it('does NOT fetch when selected agent has no worktree (no git → nothing to query)', () => {
-    expect(shouldGitCommitHistoryFetch('a1', [{ id: 'a1' }], {})).toBe(false)
+    expect(shouldGitCommitHistoryFetch('a1', [{ id: 'a1' }])).toBe(false)
   })
   it('FETCHES first time for a worktree-backed agent', () => {
-    expect(shouldGitCommitHistoryFetch('a1', [{ id: 'a1', worktreePath: '/tmp/wt-a1' }], {})).toBe(true)
+    expect(shouldGitCommitHistoryFetch('a1', [{ id: 'a1', worktreePath: '/tmp/wt-a1' }])).toBe(true)
   })
-  it('does NOT re-fetch when cached', () => {
-    expect(shouldGitCommitHistoryFetch('a1', [{ id: 'a1', worktreePath: '/tmp/wt-a1' }], { a1: {} })).toBe(false)
+  it('FETCHES on every mount (no session cache — new commits since last view should surface)', () => {
+    const agents = [{ id: 'a1', worktreePath: '/tmp/wt-a1' }]
+    expect(shouldGitCommitHistoryFetch('a1', agents)).toBe(true)
+    expect(shouldGitCommitHistoryFetch('a1', agents)).toBe(true)
   })
 })
 

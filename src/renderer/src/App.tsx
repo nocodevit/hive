@@ -233,10 +233,11 @@ export default function App() {
   // project.scan is the worst boot-time offender: execSync `git log` per
   // zone plus recursive readFileSync of every .md/.txt in the project
   // tree (thousands of files on big repos). Scanning every project on
-  // boot froze the main thread ~60s. Cache per id so revisits are free.
+  // boot froze the main thread ~60s. Re-fetch on every mount so git
+  // changes / .md edits surface immediately — no session cache. Fetch is
+  // scoped to ONE project's zones (≈2-3s on click), acceptable.
   useEffect(() => {
     if (!selectedProjectId) return
-    if (projectScans[selectedProjectId]) return // already scanned this session
     const p = projects.find((x) => x.id === selectedProjectId)
     if (!p) return
     window.api.project.scan(p.zones.map((z: Zone) => ({ path: z.path, type: z.type })))
@@ -247,9 +248,11 @@ export default function App() {
   // AgentDetail mount — rehydrate task pill + load logs only for the
   // agent the user clicked. Boot used to walk every agent's log JSONL
   // (multi-MB on long-running agents) blocking the renderer event loop.
+  // Re-fetch on every mount so freshly-written task_start / task_done
+  // entries surface (real-time IPC also updates this; per-mount overwrite
+  // is the source-of-truth replay from disk).
   useEffect(() => {
     if (!selectedAgentId) return
-    if (agentTasks[selectedAgentId]) return // already rehydrated this session
     window.api.agent.loadLogs(selectedAgentId).then((logs) => {
       if (!Array.isArray(logs)) return
       let lastStart: any = null
@@ -268,12 +271,12 @@ export default function App() {
 
   // AgentDetail mount — load commit history (last 7 days) only for the
   // selected agent. Boot used to git-log every worktree which is slow on
-  // remote-backed filesystems.
+  // remote-backed filesystems. Re-fetch on every mount so commits made
+  // since the last view surface immediately — no session cache.
   useEffect(() => {
     if (!selectedAgentId) return
     const ag = agents.find((a) => a.id === selectedAgentId)
     if (!ag?.worktreePath) return
-    if (commitData[selectedAgentId]) return
     window.api.git.commitHistory(ag.worktreePath, 7)
       .then((data) => setCommitData((prev) => ({ ...prev, [selectedAgentId]: data })))
       .catch(() => {})
