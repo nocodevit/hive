@@ -95,6 +95,16 @@ async function deleteTestAgent(page: Page, name: string) {
 // ============================================================
 
 test.beforeAll(async () => {
+  // Preflight: tests 2-4 drive a real `claude` CLI through PTY input
+  // and wait up to 20 min/test for model output. If the binary isn't
+  // on PATH (or is broken) we'd otherwise burn 80 min of timeouts
+  // before learning anything. Fail fast with a clear message.
+  try {
+    require('child_process').execSync('claude --version', { stdio: 'pipe', timeout: 5000 })
+  } catch (e: any) {
+    throw new Error(`integration spec requires a working \`claude\` CLI on PATH (\`claude --version\` failed: ${e?.message || e}). Install / re-auth Claude Code before running this spec.`)
+  }
+
   mkdirSync(REPORT_DIR, { recursive: true })
   log('# Integration Test (3 tasks)\n')
 
