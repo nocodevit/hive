@@ -115,17 +115,45 @@ export default function App() {
     return () => window.removeEventListener('click', close)
   }, [])
 
+  // Agents whose parent claude is in Stop state (hook flipped status →
+  // 'waiting' / yellow) BUT whose subagents/ dir has a JSONL touched
+  // within the last ~10s — meaning a Task tool is mid-flight and the
+  // user-visible badge should read 'working' / green. Polled from main
+  // every SUBAGENT_POLL_MS so we don't poll the FS on a tight loop
+  // and don't introduce a chokidar watcher (overkill for this signal).
+  const [subagentActiveIds, setSubagentActiveIds] = useState<Set<string>>(new Set())
+
+  // Override badge color without mutating the underlying hook-driven
+  // status — the next Stop / PreToolUse hook fires legitimately and
+  // would otherwise be in a flapping race with our poller. Display-
+  // only fork keeps the source of truth clean.
+  const displayAgents = subagentActiveIds.size === 0
+    ? agents
+    : agents.map(a =>
+        a.status === 'waiting' && subagentActiveIds.has(a.id)
+          ? { ...a, status: 'working' as const }
+          : a
+      )
+
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || null
-  const selectedAgent = agents.find((a) => a.id === selectedAgentId) || null
+  const selectedAgent = displayAgents.find((a) => a.id === selectedAgentId) || null
   const projectScan = selectedProjectId ? projectScans[selectedProjectId] || null : null
-  const projectAgents = agents.filter((a) => a.projectId === selectedProjectId).sort((a, b) => (a.order || 0) - (b.order || 0))
+  const projectAgents = displayAgents.filter((a) => a.projectId === selectedProjectId).sort((a, b) => (a.order || 0) - (b.order || 0))
   const departments = [...new Set(projectAgents.map((a) => a.department))]
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  // Load data on mount — reset all agents to idle (terminals disconnected on restart)
+  // Lazy boot: single data.load() pulls the project/agent skeleton + task
+  // groups + appPrefs (14 KB JSON, ~ms). EVERYTHING else — skills scan,
+  // template list, dispatcher log, per-agent log rehydration, per-agent git
+  // commit history, per-project scan (execSync git + recursive readFileSync
+  // of every .md/.txt — multi-second on big trees), per-task-group task
+  // list — is deferred to the view that actually needs it (see effects
+  // below keyed on selectedProjectId / selectedAgentId / projectTab /
+  // editorTab). On cold open this drops main-thread block from ~60s to
+  // sub-second. Per-view fetches re-fire only on user navigation.
   useEffect(() => {
     window.api.data.load().then((data) => {
       if (data.projects) setProjects(data.projects as Project[])
@@ -179,59 +207,7 @@ export default function App() {
         setAgents(resetAgents)
       }
       if (data.appPrefs) setAppPrefs((prev) => ({ ...prev, ...(data.appPrefs as Record<string, unknown>) }))
-      if (tgs.length) {
-        setTaskGroups(tgs)
-        // Load existing tasks from disk for each task group's project
-        const loaded: Record<string, any[]> = {}
-        Promise.all(tgs.map(async (tg) => {
-          try {
-            const tasks = await window.api.tasks.list(tg.projectId)
-            loaded[tg.projectId] = tasks
-          } catch {}
-        })).then(() => setBatchTasks(loaded))
-      }
-    })
-    window.api.skills.scan().then(setAvailableSkills)
-    window.api.templates.list().then(setCustomTemplates)
-    // Load persisted dispatcher log
-    window.api.dispatcher.loadLog().then(setDispatcherLog).catch(() => {})
-    // Rehydrate agentTasks header from on-disk logs. Without this the
-    // "current task" pill next to the agent name stays empty after every
-    // app restart until the agent fires a fresh task_start. We walk each
-    // agent's log JSON, find the last task_start / task_done pair, and
-    // seed { title, active } / { summary, active:false } accordingly.
-    window.api.data.load().then(async (d3) => {
-      const allAgents = (d3.agents || []) as Agent[]
-      const seeded: Record<string, { title?: string; summary?: string; active: boolean }> = {}
-      await Promise.all(allAgents.map(async (ag) => {
-        try {
-          const logs = await window.api.agent.loadLogs(ag.id)
-          if (!Array.isArray(logs)) return
-          let lastStart: any = null
-          let lastDone: any = null
-          for (const e of logs) {
-            if (!e || typeof e !== 'object') continue
-            if (e.type === 'task_start') lastStart = e
-            else if (e.type === 'task_done') lastDone = e
-          }
-          if (lastStart && (!lastDone || new Date(lastStart.time) > new Date(lastDone.time))) {
-            seeded[ag.id] = { title: lastStart.message, active: true }
-          } else if (lastDone) {
-            seeded[ag.id] = { summary: lastDone.message, active: false }
-          }
-        } catch {}
-      }))
-      if (Object.keys(seeded).length) setAgentTasks(seeded)
-    })
-    // Load commit history for all agents with worktrees
-    window.api.data.load().then((d2) => {
-      const allAgents = (d2.agents || []) as Agent[]
-      const commitPromises: Record<string, Promise<Record<string, number>>> = {}
-      for (const ag of allAgents) {
-        if (ag.worktreePath) commitPromises[ag.id] = window.api.git.commitHistory(ag.worktreePath, 7)
-      }
-      Promise.all(Object.entries(commitPromises).map(async ([id, p]) => [id, await p.catch(() => ({}))] as const))
-        .then(results => setCommitData(Object.fromEntries(results)))
+      if (tgs.length) setTaskGroups(tgs)
     })
   }, [])
 
@@ -253,20 +229,123 @@ export default function App() {
     setAgents((prev) => [...prev, agent])
   }
 
-  // Scan all projects on load and when selected
+  // ProjectDetail mount — only scan the project the user actually opens.
+  // project.scan is the worst boot-time offender: execSync `git log` per
+  // zone plus recursive readFileSync of every .md/.txt in the project
+  // tree (thousands of files on big repos). Scanning every project on
+  // boot froze the main thread ~60s. Re-fetch on every mount so git
+  // changes / .md edits surface immediately — no session cache. Fetch is
+  // scoped to ONE project's zones (≈2-3s on click), acceptable.
   useEffect(() => {
-    projects.forEach((p) => {
-      window.api.project.scan(p.zones.map((z: Zone) => ({ path: z.path, type: z.type })))
-        .then((scan) => setProjectScans((prev) => ({ ...prev, [p.id]: scan })))
-    })
-  }, [projects.length])
+    if (!selectedProjectId) return
+    const p = projects.find((x) => x.id === selectedProjectId)
+    if (!p) return
+    window.api.project.scan(p.zones.map((z: Zone) => ({ path: z.path, type: z.type })))
+      .then((scan) => setProjectScans((prev) => ({ ...prev, [p.id]: scan })))
+      .catch(() => {}) // fire-and-forget: stage badge falls back to "—"
+  }, [selectedProjectId, projects])
 
-  // Load logs when switching to logs view
+  // AgentDetail mount — rehydrate task pill + load logs only for the
+  // agent the user clicked. Boot used to walk every agent's log JSONL
+  // (multi-MB on long-running agents) blocking the renderer event loop.
+  // Re-fetch on every mount so freshly-written task_start / task_done
+  // entries surface (real-time IPC also updates this; per-mount overwrite
+  // is the source-of-truth replay from disk).
+  useEffect(() => {
+    if (!selectedAgentId) return
+    window.api.agent.loadLogs(selectedAgentId).then((logs) => {
+      if (!Array.isArray(logs)) return
+      let lastStart: any = null
+      let lastDone: any = null
+      for (const e of logs) {
+        if (!e || typeof e !== 'object') continue
+        if (e.type === 'task_start') lastStart = e
+        else if (e.type === 'task_done') lastDone = e
+      }
+      const next = lastStart && (!lastDone || new Date(lastStart.time) > new Date(lastDone.time))
+        ? { title: lastStart.message, active: true }
+        : lastDone ? { summary: lastDone.message, active: false } : null
+      if (next) setAgentTasks((prev) => ({ ...prev, [selectedAgentId]: next }))
+    }).catch(() => {})
+  }, [selectedAgentId])
+
+  // AgentDetail mount — load commit history (last 7 days) only for the
+  // selected agent. Boot used to git-log every worktree which is slow on
+  // remote-backed filesystems. Re-fetch on every mount so commits made
+  // since the last view surface immediately — no session cache.
+  useEffect(() => {
+    if (!selectedAgentId) return
+    const ag = agents.find((a) => a.id === selectedAgentId)
+    if (!ag?.worktreePath) return
+    window.api.git.commitHistory(ag.worktreePath, 7)
+      .then((data) => setCommitData((prev) => ({ ...prev, [selectedAgentId]: data })))
+      .catch(() => {})
+  }, [selectedAgentId, agents])
+
+  // Load logs when switching to logs view (sets the *full* log array
+  // for the on-screen log viewer; the rehydration effect above only
+  // sets the task pill summary).
   useEffect(() => {
     if (mainView === 'logs' && selectedAgentId) {
       window.api.agent.loadLogs(selectedAgentId).then(setAgentLogs)
     }
   }, [mainView, selectedAgentId])
+
+  // Skills panel mount — scan ~/.claude/skills only when user opens the
+  // Skills tab (or any modal that exposes skill toggles). Fires once
+  // per session — Hive scan walks every skill dir + reads frontmatter.
+  const [skillsScanned, setSkillsScanned] = useState(false)
+  useEffect(() => {
+    if (skillsScanned) return
+    const needsSkills = editorTab === 'skills' || showCreateAgent || editingTemplate !== null
+    if (!needsSkills) return
+    setSkillsScanned(true)
+    window.api.skills.scan().then(setAvailableSkills).catch(() => {})
+  }, [editorTab, showCreateAgent, editingTemplate, skillsScanned])
+
+  // Template picker mount — list custom templates only when user opens
+  // the agent-creation or template-edit modal.
+  const [templatesLoaded, setTemplatesLoaded] = useState(false)
+  useEffect(() => {
+    if (templatesLoaded) return
+    if (!showCreateAgent && editingTemplate === null) return
+    setTemplatesLoaded(true)
+    window.api.templates.list().then(setCustomTemplates).catch(() => {})
+  }, [showCreateAgent, editingTemplate, templatesLoaded])
+
+  // Dispatcher panel mount — load persisted log only when the task-group
+  // tab (which renders the dispatcher feed) is first opened.
+  const [dispatcherLoaded, setDispatcherLoaded] = useState(false)
+  useEffect(() => {
+    if (dispatcherLoaded) return
+    if (projectTab !== 'taskgroup') return
+    setDispatcherLoaded(true)
+    window.api.dispatcher.loadLog().then(setDispatcherLog).catch(() => {})
+  }, [projectTab, dispatcherLoaded])
+
+  // TasksView mount — fetch on-disk tasks for the selected project's
+  // task group(s) only when the user opens that project. Previously
+  // fired N times at boot (one per task group).
+  useEffect(() => {
+    if (!selectedProjectId) return
+    const tgs = taskGroups.filter((tg) => tg.projectId === selectedProjectId)
+    if (tgs.length === 0) return
+    if (batchTasks[selectedProjectId]) return
+    Promise.all(tgs.map(async (tg) => {
+      try {
+        const tasks = await window.api.tasks.list(tg.projectId)
+        return [tg.projectId, tasks] as const
+      } catch {
+        return [tg.projectId, []] as const
+      }
+    })).then((results) => {
+      setBatchTasks((prev) => {
+        const next = { ...prev }
+        for (const [pid, tasks] of results) next[pid] = tasks
+        return next
+      })
+    })
+  }, [selectedProjectId, taskGroups])
 
   // Listen for agent status + report updates from hooks
   useEffect(() => {
@@ -318,6 +397,44 @@ export default function App() {
     })
     return () => { removeStatus(); removeReport(); removeTaskUpdate(); removeManagerReport(); removeBatchProposal(); removeDispatcherLog() }
   }, [])
+
+  // Subagent-activity poller — every 5s, ask main which 'waiting'
+  // agents are actually running a sub-agent right now. Main checks
+  // mtime on ~/.claude/projects/<slug>/<sid>/subagents/*.jsonl with
+  // a 10s window (see src/main/subagent-activity.ts). Only 'waiting'
+  // agents are candidates — 'working' is already green, 'done' is
+  // terminal. No tight loop, no chokidar watcher.
+  useEffect(() => {
+    let cancelled = false
+    const tick = async () => {
+      const candidates = agents.filter(a => a.status === 'waiting')
+      if (candidates.length === 0) {
+        if (!cancelled) setSubagentActiveIds(prev => prev.size === 0 ? prev : new Set())
+        return
+      }
+      const results = await Promise.all(
+        candidates.map(async a => {
+          try {
+            const r = await window.api.agent.checkSubagentActivity(a.id)
+            return r?.active ? a.id : null
+          } catch { return null }
+        })
+      )
+      if (cancelled) return
+      const active = new Set(results.filter((x): x is string => !!x))
+      setSubagentActiveIds(prev => {
+        // Cheap equality check so identical results don't re-render
+        // the whole agents grid every 5s.
+        if (prev.size === active.size && [...active].every(id => prev.has(id))) {
+          return prev
+        }
+        return active
+      })
+    }
+    tick()  // run once on mount/state change
+    const iv = setInterval(tick, 5000)
+    return () => { cancelled = true; clearInterval(iv) }
+  }, [agents])
 
   // Auto-cleanup stale toast notifications
   useEffect(() => {
@@ -1018,16 +1135,17 @@ export default function App() {
                     }
                     // Respawn the xterm PTY in place (no unmount).
                     window.dispatchEvent(new CustomEvent('hive:pty-respawn', { detail: { agentId } }))
-                    // Compact + resume the live chat session if one exists.
-                    // v1.7.104 made refresh in-place which removed the chooser
-                    // pop-up — user used to click "Compact + Resume" each
-                    // refresh, that path silently disappeared. compactSession
-                    // is a no-op when there's no active session, so this is
-                    // safe to fire unconditionally.
-                    try { await window.api.chat.compact(`chat-${agentId}`) } catch {}
+                    // Restore the chooser pop-up that v1.7.104's in-place
+                    // refresh silently removed. HiveChat listens for this
+                    // event and flips chooserMode→true, so the user gets
+                    // back the 4-way Resume / Compact+Resume / Start new /
+                    // Fork picker instead of an unconditional `chat.compact`
+                    // (which surfaced "Compact failed: no_session" after
+                    // close-session, and silently no-op'd otherwise).
+                    window.dispatchEvent(new CustomEvent('hive:reopen-chooser', { detail: { agentId } }))
                   }}
                   className="px-1.5 py-1 rounded-md text-text-muted hover:bg-bg-hover transition-colors cursor-pointer"
-                  title="Restart terminal + compact & resume chat"
+                  title="Restart terminal + reopen chat chooser"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="23 4 23 10 17 10" />
@@ -1122,17 +1240,22 @@ export default function App() {
                 </div>
                 <div className="flex items-center gap-2 ml-auto">
                   <h1 className="text-sm font-heading font-semibold text-text-primary">{selectedProject.name}</h1>
-                  {projectScan && (
-                    <span className={`px-2 py-0.5 rounded-full text-[13px] font-heading font-bold uppercase tracking-wider ${
-                      projectScan.projectStage === 'active-online' || projectScan.projectStage === 'active'
+                  {/* Stage badge: em-dash placeholder while project.scan
+                      runs (lazy fetch — see effect keyed on
+                      selectedProjectId). Avoids the prior boot-time
+                      freeze where we scanned every project up-front. */}
+                  <span
+                    data-testid="project-stage-badge"
+                    className={`px-2 py-0.5 rounded-full text-[13px] font-heading font-bold uppercase tracking-wider ${
+                      projectScan?.projectStage === 'active-online' || projectScan?.projectStage === 'active'
                         ? 'bg-status-working/20 text-status-working'
-                        : projectScan.projectStage === 'incubating'
+                        : projectScan?.projectStage === 'incubating'
                         ? 'bg-status-waiting/20 text-status-waiting'
                         : 'bg-bg-hover text-text-muted'
-                    }`}>
-                      {projectScan.projectStage.replace('-', ' ')}
-                    </span>
-                  )}
+                    }`}
+                  >
+                    {projectScan ? projectScan.projectStage.replace('-', ' ') : '—'}
+                  </span>
                 </div>
               </div>
 
@@ -1375,7 +1498,14 @@ export default function App() {
                       </div>
                     )
                   })()}
-                  {/* Unified Todo List */}
+                  {/* Unified Todo List — em-dash placeholder while
+                      lazy project.scan IPC is in flight. */}
+                  {!projectScan && (
+                    <div className="glass-card p-5 text-center" data-testid="todos-loading">
+                      <span className="text-2xl font-heading font-bold text-text-muted">—</span>
+                      <span className="text-[11px] text-text-muted ml-1">todos</span>
+                    </div>
+                  )}
                   {projectScan && (() => {
                     const allTodos = projectScan.todos
                     const openTodos = allTodos.filter((t) => !t.done)
@@ -2563,6 +2693,7 @@ export default function App() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="font-heading font-semibold text-base text-text-primary">App Settings</h2>
               <button onClick={() => setShowAppSettings(false)}
+                aria-label="Close"
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:bg-bg-hover transition-colors cursor-pointer">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>

@@ -44,7 +44,7 @@ test.beforeAll(async () => {
 
   app = await electron.launch({
     args: [join(__dirname, '..', 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: '17798', HIVE_DATA_DIR: TEST_DATA_DIR }
+    env: { ...process.env, NODE_ENV: 'test', HEADLESS: '1', HIVE_PORT: '17798', HIVE_DATA_DIR: TEST_DATA_DIR }
   })
   page = await app.firstWindow({ timeout: 60000 })
   await page.waitForLoadState('domcontentloaded')
@@ -96,7 +96,10 @@ test.describe('Task Group Tab', () => {
   test('Dashboard has Task Group status card', async () => {
     await page.getByRole('button', { name: 'Dashboard', exact: true }).click()
     await page.waitForTimeout(500)
-    await expect(page.locator('h3:has-text("Task Group")')).toBeVisible()
+    // Inactive card is anchored by the unique "+ Create Task Group" button
+    // (the Task Group label itself is a <span>, not an <h3>, and the text
+    // "Task Group" also appears in the tab nav so isn't unique on its own).
+    await expect(page.getByRole('button', { name: '+ Create Task Group' })).toBeVisible()
     await expect(page.getByText('inactive')).toBeVisible()
   })
 })
@@ -149,9 +152,11 @@ test.describe('Task Group Creation Flow', () => {
     await expect(page.getByText('Diana').first()).toBeVisible()
   })
 
-  test('batch panel shows idle status', async () => {
-    await expect(page.getByText('idle')).toBeVisible()
-    await expect(page.getByText('/manager-whip-start')).toBeVisible()
+  test('batch panel shows empty state', async () => {
+    // The "Current Batch" status pill (with 'idle' text) only renders
+    // when batch tasks exist (App.tsx ~1735 guards on bTasks.length > 0).
+    // Without a batch, the empty-state copy is the user-visible signal.
+    await expect(page.getByText('No tasks yet. Use /manager-whip-start to begin.')).toBeVisible()
   })
 
   test('control buttons are visible', async () => {
@@ -171,8 +176,12 @@ test.describe('Task Group Creation Flow', () => {
   test('Dashboard status card updates to active', async () => {
     await page.getByRole('button', { name: 'Dashboard', exact: true }).click()
     await page.waitForTimeout(500)
-    // Task Group card should show status (not "inactive" anymore)
-    await expect(page.getByText('→ Go to Task Group')).toBeVisible()
+    // Once a task group exists, the inactive card (with "+ Create Task
+    // Group") disappears. The active progress card only renders when
+    // totalTasks > 0, so at this point (TG created, no batches yet) we
+    // verify by asserting the inactive markers are gone.
+    await expect(page.getByRole('button', { name: '+ Create Task Group' })).not.toBeVisible()
+    await expect(page.getByText('inactive')).not.toBeVisible()
   })
 
   test('dissolve removes task group', async () => {
