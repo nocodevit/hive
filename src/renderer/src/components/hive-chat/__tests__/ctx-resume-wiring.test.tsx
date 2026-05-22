@@ -51,7 +51,10 @@ beforeEach(() => {
       onPrepend: (_id: string, _cb: any) => noop(),
       onRcOutput: (_id: string, _cb: any) => noop(),
       onRcExit: (_id: string, _cb: any) => noop(),
-      onAutoContinue: (_id: string, _cb: any) => noop()
+      onAutoContinue: (_id: string, _cb: any) => noop(),
+      // v1.7.117: stuck-compact watchdog. Not driven from this test
+      // suite — stub returns the noop unsubscribe.
+      onCompactStuck: (_id: string, _cb: any) => noop()
     },
     settings: { get: async () => undefined, set: vi.fn(), addClaudeAllowRule: vi.fn(noopAsync) },
     fs: { readFile: vi.fn(async () => '') },

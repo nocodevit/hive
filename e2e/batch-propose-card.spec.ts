@@ -40,7 +40,7 @@ test('batch-propose HTTP triggers UI proposal card', async () => {
 
   const app = await electron.launch({
     args: [join(PROJECT_ROOT, 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: String(HIVE_PORT), HIVE_DATA_DIR: TEST_DATA_DIR }
+    env: { ...process.env, NODE_ENV: 'test', HEADLESS: '1', HIVE_PORT: String(HIVE_PORT), HIVE_DATA_DIR: TEST_DATA_DIR }
   })
   const page = await app.firstWindow({ timeout: 120000 })
   await page.waitForLoadState('domcontentloaded')
@@ -84,7 +84,8 @@ test('batch-propose HTTP triggers UI proposal card', async () => {
   await page.screenshot({ path: join(PROJECT_ROOT, 'test-multi-agent-report', 'propose-after.png') })
 
   // HARD ASSERTION: proposal card should be visible
-  const approveBtn = page.getByRole('button', { name: 'Approve' })
+  // exact:true to disambiguate from the sibling "Always Approve" button.
+  const approveBtn = page.getByRole('button', { name: 'Approve', exact: true })
   const isVisible = await approveBtn.isVisible().catch(() => false)
 
   // Also check for proposal text
