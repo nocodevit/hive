@@ -71,6 +71,13 @@ declare global {
       system: {
         username: () => Promise<string>
       }
+      auth: {
+        login: () => Promise<{ ok: boolean; code: number; error?: string }>
+        onOutput: (cb: (payload: { kind: 'stdout' | 'stderr'; text: string }) => void) => () => void
+      }
+      crash: {
+        report: (kind: string, info: Record<string, unknown>) => Promise<{ ok: boolean }>
+      }
       settings: {
         get: (key: string) => Promise<any>
         set: (key: string, value: unknown) => Promise<boolean>
@@ -103,6 +110,7 @@ declare global {
           remainingMinutes?: number
           totalTokens?: number
         }) => void) => () => void
+        onCompactStuck: (id: string, cb: (payload: { elapsedMs: number; lastOutputAgeMs: number }) => void) => () => void
       }
       getFilePath: (file: File) => string | null
       project: {

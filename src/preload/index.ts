@@ -62,6 +62,18 @@ const api = {
   system: {
     username: () => ipcRenderer.invoke('system:username') as Promise<string>
   },
+  auth: {
+    login: () => ipcRenderer.invoke('auth:login') as Promise<{ ok: boolean; code: number; error?: string }>,
+    onOutput: (cb: (payload: { kind: 'stdout' | 'stderr'; text: string }) => void) => {
+      const handler = (_e: any, data: { kind: 'stdout' | 'stderr'; text: string }) => cb(data)
+      ipcRenderer.on('auth:output', handler)
+      return () => ipcRenderer.removeListener('auth:output', handler)
+    }
+  },
+  crash: {
+    report: (kind: string, info: Record<string, unknown>) =>
+      ipcRenderer.invoke('crash:report', { kind, info }) as Promise<{ ok: boolean }>
+  },
   settings: {
     get: (key: string) => ipcRenderer.invoke('settings:get', { key }) as Promise<any>,
     set: (key: string, value: unknown) => ipcRenderer.invoke('settings:set', { key, value }) as Promise<boolean>,
@@ -166,6 +178,15 @@ const api = {
       const handler = (_e: any, data: any) => cb(data)
       ipcRenderer.on(`chat:usage:${id}`, handler)
       return () => ipcRenderer.removeListener(`chat:usage:${id}`, handler)
+    },
+    // Watchdog signal: emitted once when /compact has been running
+    // > 5 min AND claude hasn't output a byte in > 60s. Renderer shows
+    // a Cancel button — onClick should `window.api.chat.stop(id)` and
+    // clear pendingPermissions / pendingQuestion.
+    onCompactStuck: (id: string, cb: (payload: { elapsedMs: number; lastOutputAgeMs: number }) => void) => {
+      const handler = (_e: any, data: any) => cb(data)
+      ipcRenderer.on(`chat:compactStuck:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:compactStuck:${id}`, handler)
     }
   },
   storage: {
@@ -215,6 +236,12 @@ const api = {
       ipcRenderer.invoke('agent:deleteDefinition', { cwd, agentId }),
     loadLogs: (agentId: string) => ipcRenderer.invoke('agent:loadLogs', { agentId }),
     clearLogs: (agentId: string) => ipcRenderer.invoke('agent:clearLogs', { agentId }),
+    // Returns { active: boolean } — true when any subagent JSONL under
+    // this agent's cwd has been touched within SUBAGENT_ACTIVE_WINDOW_MS.
+    // Used by the right-panel status badge to override 'waiting' →
+    // 'working' while a Task tool is mid-flight (see App.tsx poller).
+    checkSubagentActivity: (agentId: string) =>
+      ipcRenderer.invoke('agent:checkSubagentActivity', { agentId }) as Promise<{ active: boolean }>,
     send: (agentId: string, type: string, payload: object) =>
       ipcRenderer.invoke('agent:send', { agentId, type, payload }),
     onStatus: (cb: (data: { agentId: string; status: string }) => void) => {
