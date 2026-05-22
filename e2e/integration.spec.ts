@@ -95,13 +95,6 @@ async function deleteTestAgent(page: Page, name: string) {
 // ============================================================
 
 test.beforeAll(async () => {
-  // Gate: tests 2-4 drive a real `claude` CLI through PTY input and
-  // wait for model output. Each test has a 20-min budget; if `claude`
-  // isn't installed / isn't authed / is rate-limited, the test
-  // silently waits up to 20 min before timing out — 4 tests = 80 min
-  // of dead air on routine `playwright test` runs. Opt-in only.
-  test.skip(process.env.RUN_INTEGRATION_E2E !== '1', 'integration spec needs a working `claude` CLI; set RUN_INTEGRATION_E2E=1 to enable')
-
   mkdirSync(REPORT_DIR, { recursive: true })
   log('# Integration Test (3 tasks)\n')
 
