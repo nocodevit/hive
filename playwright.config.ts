@@ -9,6 +9,10 @@ export default defineConfig({
   // don't lose 30 specs to "did not run" when the build is slow.
   timeout: 120000,
   retries: 0,
+  // Serial execution — each spec spawns its own Electron app + isolated
+  // HIVE_DATA_DIR. Parallel workers race on PTY state and (where ports
+  // overlap) on HIVE_PORT. Keep at 1.
+  workers: 1,
   use: {
     trace: 'on-first-retry',
   },

@@ -42,7 +42,7 @@ test.beforeAll(async () => {
 
   app = await electron.launch({
     args: [join(__dirname, '..', 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: String(HIVE_PORT), HIVE_DATA_DIR: TEST_DATA_DIR }
+    env: { ...process.env, NODE_ENV: 'test', HEADLESS: '1', HIVE_PORT: String(HIVE_PORT), HIVE_DATA_DIR: TEST_DATA_DIR }
   })
   page = await app.firstWindow({ timeout: 60000 })
   await page.waitForLoadState('domcontentloaded')

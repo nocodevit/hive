@@ -5,6 +5,7 @@ import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
 import { execSync, execFileSync, spawn } from 'child_process'
+import { isHeadlessMode } from './headless'
 
 // GUI apps launched from Finder/Dock inherit launchd's minimal PATH
 // (/usr/bin:/bin:/usr/sbin:/sbin), so spawn('claude') ENOENTs even though
@@ -733,7 +734,10 @@ function createWindow(): void {
   })
 
   mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+    // HEADLESS=1: e2e runs leave the BrowserWindow hidden so they don't
+    // steal focus from the user's running Hive.app. Playwright still
+    // drives the renderer via app.firstWindow().
+    if (!isHeadlessMode(process.env)) mainWindow.show()
     if (is.dev) mainWindow.webContents.openDevTools({ mode: 'bottom' })
   })
 

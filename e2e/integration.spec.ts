@@ -95,6 +95,13 @@ async function deleteTestAgent(page: Page, name: string) {
 // ============================================================
 
 test.beforeAll(async () => {
+  // Gate: tests 2-4 drive a real `claude` CLI through PTY input and
+  // wait for model output. Each test has a 20-min budget; if `claude`
+  // isn't installed / isn't authed / is rate-limited, the test
+  // silently waits up to 20 min before timing out — 4 tests = 80 min
+  // of dead air on routine `playwright test` runs. Opt-in only.
+  test.skip(process.env.RUN_INTEGRATION_E2E !== '1', 'integration spec needs a working `claude` CLI; set RUN_INTEGRATION_E2E=1 to enable')
+
   mkdirSync(REPORT_DIR, { recursive: true })
   log('# Integration Test (3 tasks)\n')
 
@@ -192,7 +199,7 @@ test.beforeAll(async () => {
   execSync('npx electron-vite build', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 60000 })
   app = await electron.launch({
     args: [join(PROJECT_ROOT, 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: String(HIVE_PORT), HIVE_DATA_DIR }
+    env: { ...process.env, NODE_ENV: 'test', HEADLESS: '1', HIVE_PORT: String(HIVE_PORT), HIVE_DATA_DIR }
   })
   page = await app.firstWindow({ timeout: 120000 })
   await page.waitForLoadState('domcontentloaded')
@@ -239,15 +246,6 @@ test.beforeAll(async () => {
         }
       } catch {}
     }
-  }
-
-  // Also restore skill if it was disabled by a previous failed run
-  const skillPath = join(require('os').homedir(), '.claude', 'skills', 'manager-whip-start', 'SKILL.md')
-  const skillBackup = skillPath + '.test-disabled'
-  if (existsSync(skillBackup) && !existsSync(skillPath)) {
-    cpSync(skillBackup, skillPath)
-    rmSync(skillBackup)
-    log('Restored skill from previous failed teardown')
   }
 
   // Isolated dir is fresh — no residual tasks to clean

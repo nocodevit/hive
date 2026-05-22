@@ -2693,6 +2693,7 @@ export default function App() {
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="font-heading font-semibold text-base text-text-primary">App Settings</h2>
               <button onClick={() => setShowAppSettings(false)}
+                aria-label="Close"
                 className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:bg-bg-hover transition-colors cursor-pointer">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>

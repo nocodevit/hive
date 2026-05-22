@@ -19,7 +19,7 @@ test.beforeAll(async () => {
 
   app = await electron.launch({
     args: [join(__dirname, '..', 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HIVE_PORT: '17799', HIVE_DATA_DIR: dataDir }
+    env: { ...process.env, NODE_ENV: 'test', HEADLESS: '1', HIVE_PORT: '17799', HIVE_DATA_DIR: dataDir }
   })
   page = await app.firstWindow({ timeout: 60000 })
   await page.waitForLoadState('domcontentloaded')
@@ -53,6 +53,9 @@ test.describe('App Launch', () => {
     await settingsBtn.click()
     await expect(page.locator('text=Auto-run Claude')).toBeVisible()
     await expect(page.locator('text=Resume session')).toBeVisible()
+    // Close so the modal doesn't block subsequent tests (Theme Toggle).
+    await page.getByRole('button', { name: 'Close' }).click()
+    await expect(page.locator('text=Auto-run Claude')).not.toBeVisible()
   })
 })
 
