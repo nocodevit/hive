@@ -3,6 +3,7 @@ import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
 import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
+import { mergeUsage, preserveAccountUsage } from './usage-state'
 import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
 
@@ -888,7 +889,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       // child respawns.
       setCompactStartedAt(null)
     })
-    const offUsage = window.api.chat.onUsage(id, (u) => { setUsage(u as any) })
+    // MERGE rather than replace: chat.ts:622 broadcasts `{ ...(cc||{}), ...(pct||{}) }`
+    // and can fire with cc-only when /usage TUI scrape (queryUsagePctViaPty) returns
+    // null. A wholesale replace wiped fiveHour/sevenDay every time → bar showed `—`
+    // for ~30s after every refresh, longer if the next scrape also failed. See
+    // usage-state.ts for the contract + tests.
+    const offUsage = window.api.chat.onUsage(id, (u) => {
+      setUsage(prev => mergeUsage(prev, u as any))
+    })
     // Stuck-compact watchdog fires once when /compact has been alive
     // > 5min AND silent > 60s. We surface a Cancel button below the
     // input. See main/chat.ts → runCompactViaPrint.
@@ -1180,7 +1188,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setExited(null)
     setSessionId('')
     setRateLimit5h(null); setRateLimit7d(null)
-    setUsage({})
+    // Preserve account-level subscription %% across the reset — they're
+    // account-scoped (not session-scoped), so dropping them only causes the
+    // bar to briefly show `—` while the new session's startup refresh runs.
+    setUsage(preserveAccountUsage)
     setThinking(null)
     setPendingPermissions([])
     setPendingQuestion(null)
@@ -1201,7 +1212,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     addEntry({ kind: 'system', text: '── resuming session ──' })
     setExited(null)
     setRateLimit5h(null); setRateLimit7d(null)
-    setUsage({})
+    // See note above: keep account-level %% so the post-resume refresh can
+    // overlay fresh numbers without a transient `—` flicker.
+    setUsage(preserveAccountUsage)
     setThinking(null)
     setPendingPermissions([])
     setPendingQuestion(null)
@@ -1223,7 +1236,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setExited(null)
     setSessionId('')
     setRateLimit5h(null); setRateLimit7d(null)
-    setUsage({})
+    // See note above: keep account-level %% across the fork-with-summary reset.
+    setUsage(preserveAccountUsage)
     setThinking(null)
     setPendingPermissions([])
     setPendingQuestion(null)
