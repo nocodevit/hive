@@ -5,6 +5,7 @@ import { homedir } from 'node:os'
 import { ipcMain, BrowserWindow, app } from 'electron'
 import * as pty from 'node-pty'
 import { queryUsageViaCcusage, queryUsagePctViaPty } from './chat-usage-query'
+import { UsageCache } from './usage-cache'
 import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
 import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
 
@@ -213,40 +214,39 @@ const DEFAULT_REPLAY_LIMIT = 500
  * cache holds the last result for `USAGE_TTL_MS`; concurrent callers
  * during a cold scrape await the in-flight promise rather than racing
  * extra PTYs of their own.
+ *
+ * Issue #7: TTL raised 30s → 5min because `ccusage blocks --json` scans
+ * ALL `~/.claude/projects/*.jsonl` from scratch on every invocation; on
+ * a large history (~790MB, ~1200 files) it takes ~12s at 100%+ CPU.
+ * Account-level usage changes slowly enough that 5-minute staleness is
+ * fine, and the rare bursts of activity are caught by the in-flight
+ * dedup. UsageCache also now caches null results (pre-fix the cache was
+ * skipped when pct was null → thundering-herd re-spawns).
  */
-const USAGE_TTL_MS = 30_000
-interface CachedUsage {
-  cc: any | null
-  pct: { fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null
-  ts: number
-}
-let usageCache: CachedUsage | null = null
-let usageInFlight: Promise<CachedUsage> | null = null
+const USAGE_TTL_MS = 5 * 60_000
+type CcUsage = Awaited<ReturnType<typeof queryUsageViaCcusage>>
+type PctUsage = Awaited<ReturnType<typeof queryUsagePctViaPty>>
+const usageCaches = new Map<string, UsageCache<NonNullable<CcUsage>, NonNullable<PctUsage>>>()
 
-async function getSharedUsage(scrapeCwd?: string): Promise<CachedUsage> {
-  if (usageCache && Date.now() - usageCache.ts < USAGE_TTL_MS) {
-    return usageCache
+async function getSharedUsage(scrapeCwd?: string) {
+  // Subscription %% IS account-level (same answer regardless of cwd),
+  // BUT the interactive `claude` PTY we spawn here gates input on a
+  // workspace-trust dialog the first time it sees an unfamiliar dir.
+  // $HOME is unfamiliar → trust dialog blocks → /usage never sent →
+  // scrape times out and caches a null. Key the cache by the cwd so
+  // that an agent in a known-trusted dir can populate it; subsequent
+  // agents in the same dir reuse the value.
+  const key = scrapeCwd || process.env.HOME || '/'
+  let cache = usageCaches.get(key)
+  if (!cache) {
+    cache = new UsageCache({
+      ttlMs: USAGE_TTL_MS,
+      fetchCc: queryUsageViaCcusage,
+      fetchPct: () => queryUsagePctViaPty(key)
+    })
+    usageCaches.set(key, cache)
   }
-  if (usageInFlight) return usageInFlight
-  usageInFlight = (async () => {
-    const [cc, pct] = await Promise.all([
-      queryUsageViaCcusage(),
-      // Subscription %% IS account-level (same answer regardless of cwd),
-      // BUT the interactive `claude` PTY we spawn here gates input on a
-      // workspace-trust dialog the first time it sees an unfamiliar dir.
-      // $HOME is unfamiliar → trust dialog blocks → /usage never sent →
-      // scrape times out and caches a null. Use the caller's cwd (an
-      // already-trusted agent project dir) so the dialog never fires.
-      queryUsagePctViaPty(scrapeCwd || process.env.HOME || '/')
-    ])
-    const result: CachedUsage = { cc, pct, ts: Date.now() }
-    // Don't cache a null pct — short-circuit so the next agent that
-    // refreshes (likely with a different cwd) gets a fresh chance.
-    if (pct) usageCache = result
-    usageInFlight = null
-    return result
-  })()
-  return usageInFlight
+  return cache.get()
 }
 
 function replaySessionHistory(sessionId: string, cwd: string | undefined, limit = DEFAULT_REPLAY_LIMIT) {
