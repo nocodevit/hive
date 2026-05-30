@@ -205,6 +205,16 @@ const api = {
         deletedFiles: number; deletedBytes: number; removedDirs: number; errors: string[]
       }>
   },
+  claude: {
+    status: () =>
+      ipcRenderer.invoke('claude:status') as Promise<{ installed: boolean; installCommand: string }>,
+    install: () => ipcRenderer.invoke('claude:install') as Promise<{ ok: boolean }>,
+    onInstallOutput: (cb: (data: { kind: 'stdout' | 'stderr'; text: string }) => void) => {
+      const handler = (_: any, data: { kind: 'stdout' | 'stderr'; text: string }) => cb(data)
+      ipcRenderer.on('claude:install:output', handler)
+      return () => ipcRenderer.removeListener('claude:install:output', handler)
+    }
+  },
   speech: {
     start: () => ipcRenderer.invoke('speech:start') as Promise<{ ok: boolean; error?: string }>,
     stop: () => ipcRenderer.invoke('speech:stop') as Promise<{ ok: boolean }>,

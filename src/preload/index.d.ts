@@ -54,6 +54,11 @@ declare global {
         stop: () => Promise<{ ok: boolean }>
         onTranscript: (cb: (line: string) => void) => () => void
       }
+      claude: {
+        status: () => Promise<{ installed: boolean; installCommand: string }>
+        install: () => Promise<{ ok: boolean }>
+        onInstallOutput: (cb: (data: { kind: 'stdout' | 'stderr'; text: string }) => void) => () => void
+      }
       storage: {
         claudeLogStats: (retentionDays: number) => Promise<{
           totalFiles: number; totalBytes: number
