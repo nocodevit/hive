@@ -37,6 +37,16 @@ test.describe('App Launch', () => {
     expect(title).toContain('Hive')
   })
 
+  test('claude:status IPC resolves installed in headless (gate bypassed)', async () => {
+    // Full round-trip: preload bridge → main handler → claude-env. Under
+    // HEADLESS the handler short-circuits to installed:true so the ClaudeGate
+    // never blocks the e2e renderer. The three-column layout being visible at
+    // all already proves the gate didn't intercept boot.
+    const status = await page.evaluate(() => window.api.claude.status())
+    expect(status.installed).toBe(true)
+    expect(status.installCommand).toContain('claude.ai/install.sh')
+  })
+
   test('three-column layout is visible', async () => {
     // Projects sidebar
     const projects = page.locator('text=PROJECTS')
