@@ -11,6 +11,7 @@ import FilesPanel from './components/FilesPanel'
 import MarkdownPreviewModal from './components/MarkdownPreviewModal'
 import OfficeView from './components/OfficeView'
 import CreateTaskGroupModal from './components/CreateTaskGroupModal'
+import ClaudeGate from './components/ClaudeGate'
 import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES } from './types'
@@ -50,6 +51,9 @@ export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
+  // Claude CLI gate: null = checking, then { installed, installCommand }.
+  // Block the app until claude is runnable (or the user clicks "Continue").
+  const [claudeEnv, setClaudeEnv] = useState<{ installed: boolean; installCommand: string } | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
@@ -99,6 +103,9 @@ export default function App() {
   const [autoApprove, setAutoApprove] = useState(false)
   const autoApproveRef = useRef(false)
   useEffect(() => { autoApproveRef.current = autoApprove }, [autoApprove])
+  useEffect(() => {
+    window.api.claude.status().then(setClaudeEnv)
+  }, [])
   const [commitData, setCommitData] = useState<Record<string, Record<string, number>>>({}) // agentId → {date: count}
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; projectId: string } | null>(null)
   const [agentContextMenu, setAgentContextMenu] = useState<{ x: number; y: number; agentId: string } | null>(null)
@@ -535,6 +542,15 @@ export default function App() {
   const RND_ROLES = ['Engineering', 'Product', 'QA', 'Design']
   const NON_RND_ROLES = ['Admin', 'HR', 'Marketing', 'BA', 'Operations', 'GM']
   const ALL_DEPARTMENTS = ['R&D', 'Non-R&D']
+
+  if (claudeEnv && !claudeEnv.installed) {
+    return (
+      <ClaudeGate
+        installCommand={claudeEnv.installCommand}
+        onReady={() => setClaudeEnv({ ...claudeEnv, installed: true })}
+      />
+    )
+  }
 
   return (
     <div className="flex h-screen bg-bg-primary text-text-primary">
