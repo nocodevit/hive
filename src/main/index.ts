@@ -44,6 +44,7 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { generateReportScript } from './utils'
 import { registerChatIpc } from './chat'
 import { registerStorageIpc } from './storage'
+import { CLAUDE_INSTALL_COMMAND, claudeStatus, type ClaudeStatus } from './claude-env'
 
 // Data persistence — HIVE_DATA_DIR env allows E2E tests to use isolated directory
 const DATA_DIR = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
@@ -1505,6 +1506,58 @@ app.whenReady().then(() => {
       child.stderr.on('data', (c: Buffer) => broadcastAuth('stderr', c.toString('utf-8')))
       child.on('error', (err) => resolve({ ok: false, code: -1, error: err.message }))
       child.on('exit', (code) => resolve({ ok: code === 0, code: code ?? -1 }))
+    })
+  })
+
+  // Is the claude CLI runnable by Hive? This is the only environment fact Hive
+  // gates on. PATH was already hydrated at boot (hydratePathFromShell), so a
+  // plain spawn is the truth. Headless (e2e) short-circuits to installed so the
+  // gate never blocks the test renderer.
+  function claudeCanRun(): boolean {
+    try {
+      execFileSync('claude', ['--version'], { timeout: 5000 })
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  ipcMain.handle('claude:status', (): ClaudeStatus => {
+    if (isHeadlessMode(process.env)) return claudeStatus(true)
+    return claudeStatus(claudeCanRun())
+  })
+
+  // "Install for me" — run the official native installer (no node/npm), stream
+  // its output to the renderer, then re-check. The installer drops claude at
+  // ~/.local/bin/claude, so we make sure that dir is on the live PATH before
+  // the re-check (mirrors what the user's shell rc would do on next launch).
+  // UNTESTABLE: actually runs the official installer (network + writes to
+  // ~/.local/bin). Can't run in unit/e2e without downloading. Component-side
+  // behavior is covered by claude-gate.test.tsx; the subprocess is in
+  // docs/manual-test-plan.md.
+  ipcMain.handle('claude:install', (): Promise<{ ok: boolean }> => {
+    return new Promise((resolve) => {
+      const child = spawn('bash', ['-lc', CLAUDE_INSTALL_COMMAND], {
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe']
+      })
+      const broadcast = (kind: 'stdout' | 'stderr', text: string) => {
+        for (const w of BrowserWindow.getAllWindows()) {
+          w.webContents.send('claude:install:output', { kind, text })
+        }
+      }
+      child.stdout.on('data', (c: Buffer) => broadcast('stdout', c.toString('utf-8')))
+      child.stderr.on('data', (c: Buffer) => broadcast('stderr', c.toString('utf-8')))
+      child.on('error', (err) => {
+        broadcast('stderr', err.message)
+        resolve({ ok: false })
+      })
+      child.on('exit', () => {
+        const localBin = join(app.getPath('home'), '.local', 'bin')
+        const parts = (process.env.PATH ?? '').split(':')
+        if (!parts.includes(localBin)) process.env.PATH = [localBin, ...parts].join(':')
+        resolve({ ok: claudeCanRun() })
+      })
     })
   })
 
