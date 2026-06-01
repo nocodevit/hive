@@ -3,6 +3,18 @@ import * as pty from 'node-pty'
 import { Terminal as HeadlessTerm } from '@xterm/headless'
 
 /**
+ * Hard ceiling on how long we wait for `ccusage blocks --json` to finish.
+ * Issue #7 observation: on a 790MB / 1183-file `~/.claude/projects/`
+ * history, ccusage takes ~12s at 100%+ CPU because it scans every jsonl
+ * from scratch with zero caching. The pre-fix value (10s) was BELOW that
+ * runtime — we killed ccusage right before it would have returned, then
+ * the unstored null result triggered another spawn on the next refresh,
+ * pegging a core indefinitely. 60s gives 5x headroom; the outer
+ * UsageCache (5min TTL) means we tolerate this latency on cold scrapes.
+ */
+const CCUSAGE_TIMEOUT_MS = 60_000
+
+/**
  * Query usage via `ccusage blocks --json`. Reads ~/.claude/sessions/* and
  * aggregates into 5-hour billing windows, so no extra API traffic.
  * Returns the active block's cost, burn rate, and projection.
@@ -15,17 +27,30 @@ export async function queryUsageViaCcusage(): Promise<{
   totalTokens?: number
 } | null> {
   return new Promise(resolve => {
+    let settled = false
+    const finish = (v: any) => { if (settled) return; settled = true; resolve(v) }
     try {
-      const child = spawn('ccusage', ['blocks', '--json'], { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] })
+      // detached:true puts ccusage in its own process group so a SIGTERM
+      // to -child.pid kills the whole tree on timeout. Without this, our
+      // child.kill() only signals the npm/node shim and the real worker
+      // keeps scanning jsonl files, draining CPU after we've moved on.
+      const child = spawn('ccusage', ['blocks', '--json'], {
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        detached: true
+      })
       let out = ''
+      let killTimer: NodeJS.Timeout | null = null
+      const cleanupTimer = () => { if (killTimer) { clearTimeout(killTimer); killTimer = null } }
       child.stdout.on('data', (c: Buffer) => { out += c.toString('utf8') })
-      child.on('error', () => resolve(null))
+      child.on('error', () => { cleanupTimer(); finish(null) })
       child.on('exit', () => {
+        cleanupTimer()
         try {
           const data = JSON.parse(out)
           const active = (data.blocks || []).find((b: any) => b.isActive)
-          if (!active) return resolve(null)
-          resolve({
+          if (!active) return finish(null)
+          finish({
             costUSD: active.costUSD,
             burnPerHour: active.burnRate?.costPerHour,
             projectedUSD: active.projection?.totalCost,
@@ -33,12 +58,23 @@ export async function queryUsageViaCcusage(): Promise<{
             totalTokens: active.totalTokens
           })
         } catch {
-          resolve(null)
+          finish(null)
         }
       })
-      setTimeout(() => { try { child.kill() } catch {}; resolve(null) }, 10000)
+      killTimer = setTimeout(() => {
+        try {
+          // Negative pid = process-group kill. Falls back to single-pid
+          // kill if the group send fails (group leader may already be
+          // gone). Both attempts swallow errors — we're abandoning the
+          // result either way.
+          if (child.pid) {
+            try { process.kill(-child.pid, 'SIGTERM') } catch { try { child.kill('SIGTERM') } catch {} }
+          }
+        } catch {}
+        finish(null)
+      }, CCUSAGE_TIMEOUT_MS)
     } catch {
-      resolve(null)
+      finish(null)
     }
   })
 }
