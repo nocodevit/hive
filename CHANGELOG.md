@@ -13,6 +13,24 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.7.126] — 2026-06-01
+
+### Documentation
+- **docs/lessons-learnt.md** expanded from a one-line Version-Bump note
+  into a structured reference covering Testing (wiring vs pure helpers,
+  negative testing, e2e for chat lifecycle, untestable surfaces),
+  Subprocess management (cache-every-result, timeout headroom,
+  process-group kill, single-flight dedup), Git workflow
+  (`--force-with-lease`, post-squash content verification, `--amend`
+  safety, worktree-before-branch-delete, squash-merge version
+  collapsing), Hive-specific gotchas (Node version mismatch, `.claude/`
+  backup, test-worker branch pruning), and Working-with-Claude rules
+  (no question-trap UI, "manually verified" ≠ fix, don't conflate
+  similar function names). Distilled from the v1.7.121–125 incident
+  series.
+
+---
+
 ## [1.7.125] — 2026-06-01
 
 ### Documentation
