@@ -7,3 +7,11 @@ theme-preview.html
 resources/icon.iconset/
 coverage/
 .claude/memory
+
+# Test artifacts — never commit, regenerated on every test run
+# (note: a handful of legacy files are still tracked from before this
+# rule existed; the ignore here only stops NEW ones from accumulating.)
+.claude/agents/hive-agent-*.md
+test-multi-agent-report/screenshots/
+test-results/
+playwright-report/

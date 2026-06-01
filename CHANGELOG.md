@@ -9,8 +9,202 @@ This log was back-filled from git history at v1.7.28.
 
 ## [Unreleased]
 
-### Added
 - *nothing yet*
+
+---
+
+## [1.7.125] — 2026-06-01
+
+### Documentation
+- **CHANGELOG.md** back-filled v1.7.107 → v1.7.124 (versions had
+  shipped via PR #3 / #4 / #9 / #10 / #8 squashes but the changelog
+  stopped at v1.7.106).
+- **docs/todo.md** updated to reflect actual issue/PR state.
+- **.gitignore** extended for new test-artifact patterns
+  (`.claude/agents/hive-agent-*.md`, `test-multi-agent-report/screenshots/`,
+  `test-results/`, `playwright-report/`).
+
+---
+
+## [1.7.124] — 2026-06-01  (PR #8, closes #7)
+
+### Fixed
+- **ccusage no longer pegs the CPU on large `~/.claude/projects/`
+  histories.** On a 790MB / 1183-file history, `ccusage blocks
+  --json` takes ~12s at 100%+ CPU because it scans every jsonl
+  from scratch with zero caching. Pre-fix Hive amplified this into
+  a continuous CPU-burn loop:
+  1. Spawn timeout was **10s** → ccusage was killed RIGHT before
+     completing, so we never got a result and never cached one;
+     every refresh re-spawned from scratch.
+  2. `child.kill()` only signaled the npm/node shim — the heavy
+     worker kept scanning jsonl files after we'd moved on, leaking
+     CPU after the timeout.
+  3. Cache was skipped when `pct` returned null (`if (pct)
+     usageCache = result`) → if the PTY scrape was failing on the
+     user's setup, every refresh re-spawned ccusage even though
+     `cc` had completed.
+  4. TTL was 30s → on a slow box the ratio of ccusage runtime to
+     cache window pegged a core continuously.
+
+  Fix: timeout 10s → **60s** (5x headroom), spawn `detached:true`
+  and SIGTERM the whole process group on timeout, extract a new
+  `usage-cache.ts` pure helper that **always** caches the result
+  (even all-null) to break the thundering-herd loop, bump TTL
+  30s → **5min** (account-level usage changes slowly; in-flight
+  dedup catches bursts).
+
+### Tests
+- 13 new tests across `usage-cache.test.ts` (TTL, single-flight,
+  null-caching regression, partial caching, error swallowing) and
+  `chat-usage-query.test.ts` (shim-based PATH override for
+  spawn/parse/ENOENT paths). Negative test verified.
+
+---
+
+## [1.7.123] — 2026-06-01  (PR #10, squash of v1.7.121–123)
+
+### Fixed
+- **5h/7d %% no longer wiped to `—` by cc-only chat:usage
+  broadcasts.** `setUsage(u as any)` in HiveChat was a wholesale
+  replace; chat.ts emits cc-only broadcasts (`{ ...(cc||{}),
+  ...(pct||{}) }`) after compact when the PTY scrape returns
+  null, which wiped fiveHour/sevenDay every refresh and showed
+  `—` in the bar. Fix: merge incoming partial usage into prev
+  state (`setUsage(prev => mergeUsage(prev, u))`), preserve
+  account-level fields on explicit reset
+  (`preserveAccountUsage`). Negative-test verified.
+
+### Tests
+- New `usage-state.ts` pure helpers (`mergeUsage` /
+  `preserveAccountUsage`) with `usage-state.test.ts` (10 unit
+  tests) and `usage-merge-wiring.test.tsx` (3 integration tests
+  on the actual wired component — mount HiveChat, mock
+  `window.api`, verify cc-only broadcast does NOT wipe).
+- **New e2e chat lifecycle coverage** (4 specs / 7 tests, closes
+  the gap that let three regressions ship in v1.7.103 / .108 /
+  .115):
+  - `project-lifecycle.spec.ts` — Add → Create → Delete (no claude)
+  - `agent-lifecycle.spec.ts` — New Agent wizard → Delete (no claude)
+  - `chat-basic.spec.ts` — open agent → send → assistant reply
+    + 5h/7d %% numeric (1 claude turn)
+  - `chat-compact-resume.spec.ts` — compact + close, asserts the
+    5h %% does NOT blank to `—` (2 claude turns; the exact
+    regression v1.7.121 closes)
+
+---
+
+## [1.7.121] — 2026-05-30  (PR #9)
+
+### Added
+- **Startup gates on `claude` CLI presence with a one-click
+  install screen.** For open-source distribution: if the `claude`
+  binary can't be run, Hive shows a single **ClaudeGate** screen
+  instead of silently failing. Check via PATH only
+  (`execFileSync('claude', ['--version'])` — no node/npm/nvm,
+  no version policing). Two install paths: copyable official
+  `curl … | bash`, or an "Install for me" button that runs the
+  same node-free installer, streams output, and re-checks.
+  "Continue anyway" escape hatch always available. Headless/e2e
+  short-circuits `claude:status` to `installed` so the gate
+  never blocks tests.
+
+---
+
+## [1.7.120] — 2026-05-23  (PR #4 squash of v1.7.114 → v1.7.120)
+
+### Fixed
+- **E2E suite is now headless + serial.** `HEADLESS=1` env var
+  prevents Playwright/Electron from popping windows during CI/local
+  runs. `playwright.config.ts` pinned to `workers: 1` so concurrent
+  e2e runs never compete for ports / HIVE_DATA_DIR / IPC handlers.
+  Repaired 3 test-drift bugs that had crept in since v1.7.113.
+- **Integration spec** preflights `claude --version` so missing-CLI
+  failures surface as a clear error message instead of a 60s timeout.
+
+### Added (v1.7.117–v1.7.118 inside the squash)
+- **Lazy boot fetch + compact watchdog cancel** — renderer no longer
+  blocks on a full data load before the first paint. Compact-in-progress
+  watchdog cancels cleanly when the user cancels the operation.
+- **Send button + draft queue disabled during /compact** so user input
+  isn't silently lost while the session is reloading.
+- **Agent status reflects the running sub-agent** in the sidebar.
+
+### Added (v1.7.115–v1.7.116 inside the squash)
+- **Auto-open chooser on session exit** so the user immediately sees
+  resumable sessions instead of a blank chat surface.
+- **Picker auto-confirms when only one session is available**; clears
+  orphaned pending state when `claude` exits unexpectedly.
+- **E2E isolation hardening** + 120s test timeout for slower CI boxes.
+
+### Added (v1.7.114 inside the squash)
+- **AskUserQuestion inline rendering** in the chat timeline (no modal
+  popup), permission-request queue, sign-in modal, `ErrorBoundary`
+  around the chat surface, IPC error surface with structured `{ok,
+  error}` returns, `isArray` defensive guards in renderer reducers.
+- **PATH hydration on main start** so child processes inherit the user's
+  shell PATH; crash-log persisted to `~/.hive/crash-log.jsonl`; new
+  auth IPC; fixed a stale-handler race in `ipcMain.removeHandler`.
+- **Dev workflow doc** (`58650ba`) enforcing test coverage + commit
+  hygiene + isolated e2e.
+
+### Infrastructure
+- `.nvmrc` pins Node 22 for Vite 6 / vitest 4 compatibility
+  (`crypto.hash` API, std-env ESM/CJS conflict).
+- `vitest.config.ts` → `.mts` to bypass the same ESM/CJS resolution
+  issue.
+- `chat.ts` split into focused modules (`chat-usage-query.ts`,
+  `chat-context-parser.ts`, `chat-recent-sessions.ts`).
+
+---
+
+## [1.7.113] — 2026-05-14  (PR #3 squash of v1.7.108 → v1.7.113)
+
+### Fixed
+- **Links open in the system browser** instead of inside the Electron
+  shell window (`shell.openExternal` wired correctly).
+- **Resume + Compact+Resume buttons are always actionable** — pre-fix
+  they stayed disabled after a child exit 143, leaving a session
+  permanently unrecoverable.
+- **`startChat` ignores dead session entries** (child=null) when
+  starting a new chat, so a stale Map entry no longer blocks `chat:start`.
+
+### Refactored
+- **`chat.ts` split into focused modules** for maintainability (the
+  groundwork for the loading-ux landing in v1.7.114+).
+
+### Fixed (v1.7.111 inside the squash)
+- **`Compact + Resume` no longer disabled after exit 143.** The
+  renderer's `sessionActive` state didn't reset cleanly after `claude`
+  was SIGTERM'd, so the action toolbar stayed greyed out.
+
+### Fixed (v1.7.110 inside the squash)
+- **Auto-resume on unexpected SIGTERM** — when `claude` is killed by
+  the OS (OOM, signal from another process), Hive now offers an inline
+  Resume action instead of leaving the user with a dead chat surface.
+
+### Fixed (v1.7.109 inside the squash)
+- **Context % was not showing on initial paint.** Now inferred from
+  the model name when stream-json hasn't yet emitted the first
+  rate_limit_event.
+
+### Fixed (v1.7.108 inside the squash)
+- **Subscription %% banner regex** updated to match both old and new
+  `/usage` TUI formats (Claude refactored to inline `5h: ░░░░ 23%` in
+  2.1.x).
+- **"close" sidebar action returns the user to the fleet view** instead
+  of stranding them on an empty chat surface.
+- **"Set note" modal** for right-click → attach free-text note.
+
+---
+
+## [1.7.107] — 2026-05-08
+
+### Fixed
+- **Dropped committed runtime symlink** that broke `npm install` on
+  clean checkouts.
+- **`electron-builder.files`** scoped to actual ship-artifacts so the
+  packaged `.dmg` is no longer ~3× the necessary size.
 
 ---
 
