@@ -1,5 +1,30 @@
 # Hive Todo
 
+Last reviewed: 2026-06-01 (master @ v1.7.125).
+
+## Recently shipped (master)
+
+- **[PR #8](https://github.com/nocodevit/hive/pull/8)** — v1.7.124,
+  ccusage no longer pegs CPU on large jsonl histories
+  (closes [#7](https://github.com/nocodevit/hive/issues/7))
+- **[PR #10](https://github.com/nocodevit/hive/pull/10)** — v1.7.123,
+  5h/7d %% wipe fix + IPC-wiring tests + 4 e2e specs
+  (project / agent / chat-basic / chat-compact-resume lifecycles)
+- **[PR #9](https://github.com/nocodevit/hive/pull/9)** — v1.7.121,
+  ClaudeGate startup screen with one-click install
+- **PR (this branch, #11)** — v1.7.125, CHANGELOG back-fill +
+  todo cleanup + gitignore test artifacts
+
+## Open GitHub issues
+
+- **[#5](https://github.com/nocodevit/hive/issues/5)** (feat) — Click
+  Hive logo → dashboard panel showing trend line + GitHub-style commit
+  heatmap of all recently-active R&D projects. Design only.
+- **[#6](https://github.com/nocodevit/hive/issues/6)** (test) — E2E
+  coverage gap audit. Partially addressed by PR #10's 4 new specs.
+  Remaining gaps: resume-from-closed-panel, fork session,
+  jsonl-fixture resume.
+
 ## v0.10.0 — QA/Critic Pipeline + UI Polish
 
 - [ ] QA auto-trigger: dispatcher detects all batch tasks done → create QA task + assign to QA agent
