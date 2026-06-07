@@ -15,6 +15,22 @@ import ClaudeGate from './components/ClaudeGate'
 import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES } from './types'
+import { noteTagColor } from './noteTag'
+
+// Note shown as a tag after the agent name: translucent light fill + saturated
+// border, color derived from the agent id so tags differ between agents.
+function NoteTag({ id, note }: { id: string; note: string }) {
+  const color = noteTagColor(id)
+  return (
+    <span
+      className="inline-flex items-center px-1.5 py-px rounded text-[11px] leading-none font-medium flex-shrink-0 max-w-[140px] truncate border"
+      style={{ color, borderColor: color, background: `${color}1F` }}
+      title={note}
+    >
+      {note}
+    </span>
+  )
+}
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
@@ -967,14 +983,11 @@ export default function App() {
                                   {agent.tagColor && (
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
-                                  {agent.name}
+                                  <span className="truncate">{agent.name}</span>
+                                  {agent.note && <NoteTag id={agent.id} note={agent.note} />}
                                 </span>
-                                <span className="text-[13px] truncate group-hover:invisible" title={agent.note || agent.role}>
-                                  {agent.note ? (
-                                    <span className="italic" style={{ color: '#E8FE96' }}>📝 {agent.note}</span>
-                                  ) : (
-                                    <span className="text-text-muted/60">{agent.role}</span>
-                                  )}
+                                <span className="text-[13px] truncate group-hover:invisible text-text-muted/60" title={agent.role}>
+                                  {agent.role}
                                 </span>
                               </div>
                               <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2">
