@@ -16,6 +16,7 @@ import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES } from './types'
 import { NoteTag } from './noteTag'
+import { projectListState } from './projectListState'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
@@ -56,6 +57,9 @@ export default function App() {
   // Block the app until claude is runnable (or the user clicks "Continue").
   const [claudeEnv, setClaudeEnv] = useState<{ installed: boolean; installCommand: string } | null>(null)
   const [projects, setProjects] = useState<Project[]>([])
+  // false until the initial data.load() settles, so the sidebar shows a
+  // "scanning" state instead of flashing "No projects yet" on cold open.
+  const [projectsLoaded, setProjectsLoaded] = useState(false)
   const [agents, setAgents] = useState<Agent[]>([])
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
@@ -216,7 +220,7 @@ export default function App() {
       }
       if (data.appPrefs) setAppPrefs((prev) => ({ ...prev, ...(data.appPrefs as Record<string, unknown>) }))
       if (tgs.length) setTaskGroups(tgs)
-    })
+    }).finally(() => setProjectsLoaded(true))
   }, [])
 
   // Save data on change
@@ -655,7 +659,13 @@ export default function App() {
               )
             })
           })()}
-          {projects.length === 0 && (
+          {projectListState(projectsLoaded, projects.length) === 'loading' && (
+            <p className="text-xs text-text-muted text-center py-6 flex items-center justify-center gap-2">
+              <span className="inline-block w-3 h-3 rounded-full border-2 border-text-muted border-t-transparent animate-spin" />
+              Scanning projects…
+            </p>
+          )}
+          {projectListState(projectsLoaded, projects.length) === 'empty' && (
             <p className="text-xs text-text-muted text-center py-6">No projects yet</p>
           )}
           {/* Project context menu */}
