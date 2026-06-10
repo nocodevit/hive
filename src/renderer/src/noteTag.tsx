@@ -21,3 +21,18 @@ export function noteTagColor(seed: string): string {
   }
   return NOTE_TAG_COLORS[Math.abs(hash) % NOTE_TAG_COLORS.length]
 }
+
+// Note shown as a tag after the agent name: translucent light fill + saturated
+// border, color derived from the agent id so tags differ between agents.
+export function NoteTag({ id, note }: { id: string; note: string }) {
+  const color = noteTagColor(id)
+  return (
+    <span
+      className="inline-flex items-center px-1.5 py-px rounded text-[11px] leading-none font-medium flex-shrink-0 max-w-[140px] truncate border"
+      style={{ color, borderColor: color, background: `${color}1F` }}
+      title={note}
+    >
+      {note}
+    </span>
+  )
+}

@@ -15,22 +15,7 @@ import ClaudeGate from './components/ClaudeGate'
 import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES } from './types'
-import { noteTagColor } from './noteTag'
-
-// Note shown as a tag after the agent name: translucent light fill + saturated
-// border, color derived from the agent id so tags differ between agents.
-function NoteTag({ id, note }: { id: string; note: string }) {
-  const color = noteTagColor(id)
-  return (
-    <span
-      className="inline-flex items-center px-1.5 py-px rounded text-[11px] leading-none font-medium flex-shrink-0 max-w-[140px] truncate border"
-      style={{ color, borderColor: color, background: `${color}1F` }}
-      title={note}
-    >
-      {note}
-    </span>
-  )
-}
+import { NoteTag } from './noteTag'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
