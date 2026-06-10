@@ -354,7 +354,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // session → Start new; otherwise → Resume.
   const [chooserMode, setChooserMode] = useState(true)
   const [prevInfo, setPrevInfo] = useState<{
-    sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number
+    sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number; cwd: string
   } | null>(null)
   const [prevInfoLoaded, setPrevInfoLoaded] = useState(false)
   // Picked-mode opts buffer. launchSession stores the desired chat.start
@@ -380,7 +380,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     let cancelled = false
     ;(async () => {
       try {
-        const info = await window.api.chat.getPrevSessionInfo(cwd || '')
+        // Pass the chat id so the backend can recover a session that lives in
+        // a different bucket than this agent's worktree cwd (worktree↔session
+        // mismatch — see main/session-locator.ts).
+        const info = await window.api.chat.getPrevSessionInfo(cwd || '', id)
         if (!cancelled) { setPrevInfo(info); setPrevInfoLoaded(true) }
       } catch {
         if (!cancelled) setPrevInfoLoaded(true)
@@ -397,16 +400,23 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     // hands us an explicit sid; without one we still want a sensible
     // default (latest sid via -c, which behaves like our pre-picker code).
     const sid = chosenSid || prevInfo?.sid
+    // Resume/compact/fork must spawn claude in the SAME cwd the session was
+    // created under, or claude looks in the wrong ~/.claude/projects bucket
+    // and reports "No conversation found". prevInfo.cwd carries the recovered
+    // cwd when the session lives outside this agent's worktree bucket; it
+    // equals `cwd` in the normal case. A fresh "new" session stays in the
+    // worktree.
+    const resumeCwd = prevInfo?.cwd || cwd
     let opts: typeof pendingStartRef.current
     if (mode === 'resume') {
       // Explicit sid → --resume <sid>. No sid → -c (latest).
       opts = sid
-        ? { cwd, agent, name: agentName, resumeSid: sid, rebaseOnStart }
-        : { cwd, agent, name: agentName, continueSession: true, rebaseOnStart }
+        ? { cwd: resumeCwd, agent, name: agentName, resumeSid: sid, rebaseOnStart }
+        : { cwd: resumeCwd, agent, name: agentName, continueSession: true, rebaseOnStart }
     } else if (mode === 'compact-resume' && sid) {
-      opts = { cwd, agent, name: agentName, resumeSid: sid, forceCompact: true }
+      opts = { cwd: resumeCwd, agent, name: agentName, resumeSid: sid, forceCompact: true }
     } else if (mode === 'fork' && sid) {
-      opts = { cwd, agent, name: agentName, resumeSid: sid, forkSession: true }
+      opts = { cwd: resumeCwd, agent, name: agentName, resumeSid: sid, forkSession: true }
     } else {
       opts = { cwd, agent, name: agentName, continueSession: false, rebaseOnStart: false }
     }
@@ -2847,7 +2857,7 @@ export function StartChooser({
 }: {
   cwd?: string
   loaded: boolean
-  info: { sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number } | null
+  info: { sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number; cwd: string } | null
   onPick: (mode: 'resume' | 'compact-resume' | 'new' | 'fork', chosenSid?: string) => void
 }) {
   const ctxTotal = info ? parseContextSize(info.contextSize) : 0
@@ -2877,7 +2887,20 @@ export function StartChooser({
   const openPicker = async (action: PickerMode) => {
     setPicker({ action, sessions: [], selectedSid: '', loading: true })
     try {
-      const list = await window.api.chat.getRecentSessions(cwd || '', 5)
+      let list = await window.api.chat.getRecentSessions(cwd || '', 5)
+      // getRecentSessions only lists the cwd bucket. When that's empty but the
+      // backend recovered a session cross-bucket (worktree↔session mismatch),
+      // `info` still holds it — surface it so the user can resume.
+      if (list.length === 0 && info?.sid) {
+        list = [{
+          sid: info.sid,
+          title: '(recovered session)',
+          preview: '',
+          lastActiveMs: info.lastActiveMs,
+          ctxPct: 0,
+          totalTokens: info.peakInputTokens
+        }]
+      }
       // UX shortcut: when only one session is on disk, skip the picker
       // step entirely and launch with that sid. Users were hitting
       // "click Compact+Resume → picker opens → click row → click

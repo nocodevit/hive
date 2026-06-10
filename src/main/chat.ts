@@ -1253,7 +1253,7 @@ export function registerChatIpc() {
     }
     return smartStartChat(id, { cwd, agent, name, continueSession, rebaseOnStart, resumeSid, forkSession })
   })
-  ipcMain.handle('chat:getPrevSessionInfo', (_e, { cwd }) => getPrevSessionInfo(cwd))
+  ipcMain.handle('chat:getPrevSessionInfo', (_e, { cwd, chatId }) => getPrevSessionInfo(cwd, chatId))
   ipcMain.handle('chat:getRecentSessions', (_e, { cwd, limit }) => getRecentSessions(cwd, limit ?? 5))
   ipcMain.handle('chat:scrapeContext', (_e, { id, force }) => scrapeContextLive(id, !!force))
   ipcMain.handle('chat:send', (_e, { id, text }) => sendUserMessage(id, text))
