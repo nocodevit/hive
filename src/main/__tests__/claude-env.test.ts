@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { CLAUDE_INSTALL_COMMAND, claudeStatus } from '../claude-env'
+import {
+  CLAUDE_INSTALL_COMMAND,
+  claudeStatus,
+  pickPathLine,
+  pathHydrationStrategies,
+  claudeProbeStrategies
+} from '../claude-env'
 
 describe('CLAUDE_INSTALL_COMMAND', () => {
   it('is the official native installer', () => {
@@ -26,5 +32,62 @@ describe('claudeStatus', () => {
     const s = claudeStatus(false)
     expect(s.installed).toBe(false)
     expect(s.installCommand).toBe(CLAUDE_INSTALL_COMMAND)
+  })
+})
+
+describe('pickPathLine', () => {
+  it('returns an absolute colon-separated PATH', () => {
+    expect(pickPathLine('/usr/local/bin:/usr/bin:/bin')).toBe('/usr/local/bin:/usr/bin:/bin')
+  })
+
+  it('takes the LAST PATH-shaped line, ignoring leading interactive-shell noise', () => {
+    // An interactive shell may print banners/rc output before `printenv PATH`.
+    const out = 'Welcome banner\nsome rc echo\n/Users/me/.nvm/versions/node/v22/bin:/usr/bin:/bin'
+    expect(pickPathLine(out)).toBe('/Users/me/.nvm/versions/node/v22/bin:/usr/bin:/bin')
+  })
+
+  it('returns null for empty or non-PATH output', () => {
+    expect(pickPathLine('')).toBeNull()
+    expect(pickPathLine('   \n  ')).toBeNull()
+    expect(pickPathLine('command not found')).toBeNull()
+    // A single dir with no colon is not a usable multi-entry PATH.
+    expect(pickPathLine('/usr/bin')).toBeNull()
+  })
+})
+
+describe('pathHydrationStrategies', () => {
+  it('tries an INTERACTIVE login shell first so nvm rc-guards still run', () => {
+    const [first] = pathHydrationStrategies('/bin/zsh')
+    expect(first.file).toBe('/bin/zsh')
+    // -lic = login + interactive + command — interactive is what defeats the
+    // `[[ -o interactive ]] || return` guard that hides nvm's node bin.
+    expect(first.args[0]).toBe('-lic')
+    expect(first.args).toContain('printenv PATH')
+  })
+
+  it('provides ordered fallbacks (login, then explicit rc sourcing)', () => {
+    const strat = pathHydrationStrategies('/bin/zsh')
+    expect(strat.map((s) => s.args[0])).toEqual(['-lic', '-lc', '-c'])
+    // The last resort explicitly sources rc files.
+    expect(strat[2].args[1]).toMatch(/\.zshrc/)
+  })
+
+  it('honors the caller-provided shell', () => {
+    expect(pathHydrationStrategies('/bin/bash').every((s) => s.file === '/bin/bash')).toBe(true)
+  })
+})
+
+describe('claudeProbeStrategies', () => {
+  it('probes the bare PATH first (fast path once hydrated)', () => {
+    const [first] = claudeProbeStrategies('/bin/zsh')
+    expect(first.file).toBe('claude')
+    expect(first.args).toEqual(['--version'])
+  })
+
+  it('falls back to an interactive login shell to avoid a false not-found', () => {
+    const [, second] = claudeProbeStrategies('/bin/zsh')
+    expect(second.file).toBe('/bin/zsh')
+    expect(second.args[0]).toBe('-lic')
+    expect(second.args).toContain('claude --version')
   })
 })

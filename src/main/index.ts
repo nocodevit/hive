@@ -24,15 +24,24 @@ import { isHeadlessMode } from './headless'
 //   - We accept the result only if it looks like a PATH (starts with `/`
 //     and contains `:`) to defend against any remaining stdout pollution.
 ;(function hydratePathFromShell() {
-  try {
-    const shell = process.env.SHELL || '/bin/zsh'
-    const cmd = '[ -f ~/.zshrc ] && . ~/.zshrc >/dev/null 2>&1; [ -f ~/.bash_profile ] && . ~/.bash_profile >/dev/null 2>&1; printenv PATH'
-    const out = execFileSync(shell, ['-c', cmd], { encoding: 'utf-8', timeout: 5000 }).trim()
-    if (out.startsWith('/') && out.includes(':')) process.env.PATH = out
-  } catch {
-    // Shell hydration failed. Leave PATH alone; user can launchctl
-    // setenv or symlink as a fallback. Not worth surfacing — a noisy
-    // dialog at boot would alarm.
+  // GUI launch (Finder/Dock) inherits a minimal PATH; nvm/homebrew/~/.local/bin
+  // live behind the user's shell rc. Try interactive-login first so an rc with
+  // an `[[ -o interactive ]] || return` guard still runs nvm (otherwise claude,
+  // which lives in an nvm node bin, stays invisible and the install gate fires
+  // a false "not found"). See pathHydrationStrategies for the ordered fallbacks.
+  const shell = process.env.SHELL || '/bin/zsh'
+  for (const { file, args } of pathHydrationStrategies(shell)) {
+    try {
+      const out = execFileSync(file, args, { encoding: 'utf-8', timeout: 7000 })
+      const path = pickPathLine(out)
+      if (path) {
+        process.env.PATH = path
+        return
+      }
+    } catch {
+      // Try the next strategy. If all fail, leave PATH alone; user can
+      // launchctl setenv or symlink as a fallback. Not worth a boot dialog.
+    }
   }
 })()
 
@@ -44,7 +53,14 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { generateReportScript } from './utils'
 import { registerChatIpc } from './chat'
 import { registerStorageIpc } from './storage'
-import { CLAUDE_INSTALL_COMMAND, claudeStatus, type ClaudeStatus } from './claude-env'
+import {
+  CLAUDE_INSTALL_COMMAND,
+  claudeStatus,
+  pickPathLine,
+  pathHydrationStrategies,
+  claudeProbeStrategies,
+  type ClaudeStatus
+} from './claude-env'
 
 // Data persistence — HIVE_DATA_DIR env allows E2E tests to use isolated directory
 const DATA_DIR = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
@@ -1510,16 +1526,22 @@ app.whenReady().then(() => {
   })
 
   // Is the claude CLI runnable by Hive? This is the only environment fact Hive
-  // gates on. PATH was already hydrated at boot (hydratePathFromShell), so a
-  // plain spawn is the truth. Headless (e2e) short-circuits to installed so the
-  // gate never blocks the test renderer.
+  // gates on. PATH is hydrated at boot (hydratePathFromShell), so the bare spawn
+  // is usually the truth — but as defense-in-depth we also probe via an
+  // interactive login shell, so a stale/failed hydration can never produce a
+  // FALSE "not found" that wrongly blocks the app behind the install gate.
+  // Headless (e2e) short-circuits to installed so the gate never blocks tests.
   function claudeCanRun(): boolean {
-    try {
-      execFileSync('claude', ['--version'], { timeout: 5000 })
-      return true
-    } catch {
-      return false
+    const shell = process.env.SHELL || '/bin/zsh'
+    for (const { file, args } of claudeProbeStrategies(shell)) {
+      try {
+        execFileSync(file, args, { timeout: 7000, stdio: 'ignore' })
+        return true
+      } catch {
+        // Try the next probe strategy.
+      }
     }
+    return false
   }
 
   ipcMain.handle('claude:status', (): ClaudeStatus => {

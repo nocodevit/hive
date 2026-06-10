@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { resolveAgentSession } from './session-locator'
 
 export interface RecentSession {
   sid: string
@@ -17,6 +18,11 @@ export interface PrevSessionInfo {
   contextSize: string  // "1M" | "200K" | "" (unknown)
   peakInputTokens: number
   lastActiveMs: number
+  // The cwd the session actually ran under. Usually == the input cwd, but for
+  // a worktree agent whose session was created under the MAIN repo it points
+  // at that real bucket so resume can spawn claude in the right place. See
+  // session-locator.ts for the recovery path.
+  cwd: string
 }
 
 /**
@@ -141,19 +147,46 @@ export function getRecentSessions(cwd: string, limit = 5): RecentSession[] {
  * Falls back to "" when unknowable; chooser then renders a token count
  * instead of a percentage.
  */
-export function getPrevSessionInfo(cwd: string): PrevSessionInfo | null {
+export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInfo | null {
   if (!cwd) return null
   try {
+    // Resolve the session file + sid + the cwd it actually ran under. Normally
+    // that's the newest .jsonl in the cwd-derived bucket. But a worktree agent
+    // whose session was created under the MAIN repo has an EMPTY worktree
+    // bucket; recover its real session cross-bucket via its Hive chat-log so
+    // resume isn't falsely reported as "No conversation found".
+    let sessionFile: string | null = null
+    let sid = ''
+    let effectiveCwd = cwd
+    let lastActiveMs = 0
+
     const slug = cwd.replace(/\//g, '-')
     const dir = join(homedir(), '.claude', 'projects', slug)
-    if (!existsSync(dir)) return null
-    const files = readdirSync(dir)
-      .filter(f => f.endsWith('.jsonl'))
-      .map(f => ({ f, m: statSync(join(dir, f)).mtimeMs }))
-      .sort((a, b) => b.m - a.m)
-    if (!files.length) return null
-    const latest = files[0]
-    const sid = latest.f.replace(/\.jsonl$/, '')
+    if (existsSync(dir)) {
+      const files = readdirSync(dir)
+        .filter(f => f.endsWith('.jsonl'))
+        .map(f => ({ f, m: statSync(join(dir, f)).mtimeMs }))
+        .sort((a, b) => b.m - a.m)
+      if (files.length) {
+        sessionFile = join(dir, files[0].f)
+        sid = files[0].f.replace(/\.jsonl$/, '')
+        lastActiveMs = files[0].m
+      }
+    }
+    if (!sessionFile && chatId) {
+      const resolved = resolveAgentSession(
+        join(homedir(), '.claude', 'projects'),
+        join(homedir(), '.hive', 'chat-logs'),
+        chatId
+      )
+      if (resolved) {
+        sessionFile = resolved.file
+        sid = resolved.sid
+        effectiveCwd = resolved.cwd
+        try { lastActiveMs = statSync(resolved.file).mtimeMs } catch {}
+      }
+    }
+    if (!sessionFile) return null
 
     // Walk forward but track the LAST observed usage, not the peak. After
     // /compact the session keeps writing to the same JSONL, so old
@@ -163,7 +196,7 @@ export function getPrevSessionInfo(cwd: string): PrevSessionInfo | null {
     // the 97% peak we hit before the compact.
     let model = ''
     let peakInputTokens = 0
-    const lines = readFileSync(join(dir, latest.f), 'utf8').split('\n').filter(Boolean)
+    const lines = readFileSync(sessionFile, 'utf8').split('\n').filter(Boolean)
     for (const line of lines) {
       try {
         const ev = JSON.parse(line)
@@ -194,7 +227,7 @@ export function getPrevSessionInfo(cwd: string): PrevSessionInfo | null {
           for (const line of txt) {
             try {
               const ev = JSON.parse(line)
-              if (ev.type === 'system' && ev.subtype === 'init' && ev.cwd === cwd && typeof ev.model === 'string') {
+              if (ev.type === 'system' && ev.subtype === 'init' && ev.cwd === effectiveCwd && typeof ev.model === 'string') {
                 const m = ev.model.match(/\[(\d+[kKmM])\]/)
                 if (m) { contextSize = m[1].toUpperCase(); break outer }
               }
@@ -209,7 +242,7 @@ export function getPrevSessionInfo(cwd: string): PrevSessionInfo | null {
       contextSize = /haiku/i.test(model) ? '200K' : '1M'
     }
 
-    return { sid, model, contextSize, peakInputTokens, lastActiveMs: latest.m }
+    return { sid, model, contextSize, peakInputTokens, lastActiveMs, cwd: effectiveCwd }
   } catch {
     return null
   }
