@@ -90,8 +90,8 @@ const api = {
   chat: {
     start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean; resumeSid?: string; forkSession?: boolean; forceCompact?: boolean }) =>
       ipcRenderer.invoke('chat:start', { id, ...opts }) as Promise<{ ok: boolean; compacted?: boolean; error?: string }>,
-    getPrevSessionInfo: (cwd: string) =>
-      ipcRenderer.invoke('chat:getPrevSessionInfo', { cwd }) as Promise<{ sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number } | null>,
+    getPrevSessionInfo: (cwd: string, chatId?: string) =>
+      ipcRenderer.invoke('chat:getPrevSessionInfo', { cwd, chatId }) as Promise<{ sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number; cwd: string } | null>,
     getRecentSessions: (cwd: string, limit?: number) =>
       ipcRenderer.invoke('chat:getRecentSessions', { cwd, limit }) as Promise<{
         sid: string

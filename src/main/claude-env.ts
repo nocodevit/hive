@@ -22,3 +22,63 @@ export interface ClaudeStatus {
 export function claudeStatus(canRun: boolean): ClaudeStatus {
   return { installed: canRun, installCommand: CLAUDE_INSTALL_COMMAND }
 }
+
+/** A shell invocation: an executable plus its argv. */
+export interface ShellCmd {
+  file: string
+  args: string[]
+}
+
+/**
+ * Pick a usable PATH out of shell stdout. Takes the LAST non-empty line that
+ * looks like a PATH (absolute + colon-separated), so leading noise an
+ * interactive shell may print (banners, `printf` from rc) is ignored.
+ * Returns null when nothing PATH-shaped is present.
+ */
+export function pickPathLine(shellOutput: string): string | null {
+  const line = shellOutput
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .pop()
+  if (!line) return null
+  return line.startsWith('/') && line.includes(':') ? line : null
+}
+
+/**
+ * Ordered strategies to recover a GUI-launched app's real PATH. A Finder/Dock
+ * launch inherits only a minimal PATH (/usr/bin:/bin); the user's real PATH
+ * (nvm node bin, ~/.local/bin, homebrew) lives behind their shell rc.
+ *
+ * Crucially, many ~/.zshrc start with an interactive guard
+ * (`[[ -o interactive ]] || return`), so sourcing rc from a plain `-c` shell
+ * bails before nvm runs — PATH never gains the node bin that holds `claude`.
+ * So we try an INTERACTIVE login shell (-lic) first; that runs the full rc and
+ * exposes nvm. Fallbacks degrade to login (-lc) and explicit rc sourcing.
+ */
+export function pathHydrationStrategies(shell: string): ShellCmd[] {
+  return [
+    { file: shell, args: ['-lic', 'printenv PATH'] },
+    { file: shell, args: ['-lc', 'printenv PATH'] },
+    {
+      file: shell,
+      args: [
+        '-c',
+        '[ -f ~/.zshrc ] && . ~/.zshrc >/dev/null 2>&1; [ -f ~/.bash_profile ] && . ~/.bash_profile >/dev/null 2>&1; printenv PATH'
+      ]
+    }
+  ]
+}
+
+/**
+ * Ordered strategies to decide "is claude runnable?". Try the fast bare-PATH
+ * spawn first (correct once PATH is hydrated); fall back to an interactive
+ * login shell so a stale/failed hydration can't produce a FALSE "not found"
+ * that wrongly blocks the app behind the install gate.
+ */
+export function claudeProbeStrategies(shell: string): ShellCmd[] {
+  return [
+    { file: 'claude', args: ['--version'] },
+    { file: shell, args: ['-lic', 'claude --version'] }
+  ]
+}
