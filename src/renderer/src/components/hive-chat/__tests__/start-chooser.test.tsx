@@ -3,7 +3,7 @@ import React from 'react'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup, act, within } from '@testing-library/react'
 
-import { StartChooser, SessionPickerInline, ContextModal, CrushTooltip } from '../index'
+import { StartChooser, SessionPickerInline, ContextModal, CrushTooltip, chooserKeyMode } from '../index'
 
 /**
  * Minimal window.api mock. Each test calls `setApi(overrides)` to swap
@@ -88,6 +88,57 @@ describe('StartChooser button highlight', () => {
     expect(onPick).toHaveBeenCalledWith('new')
     // Picker not rendered for Start new
     expect(screen.queryByText(/Pick a session to/)).not.toBeInTheDocument()
+  })
+})
+
+describe('chooserKeyMode — digit-3 swallow regression', () => {
+  // Bug: backgrounded chat panels stay mounted; their StartChooser window
+  // keydown listener swallowed '3' (→ 'new', the only mode with no !hasPrev
+  // guard), forcing the user to press '3' once per lingering background
+  // chooser before it would type into the focused panel's textarea.
+
+  it('inactive panel ignores ALL keys (3 included) so they reach the textarea', () => {
+    for (const key of ['Enter', '1', '2', '3', '4']) {
+      expect(chooserKeyMode(key, false, false, 'new')).toBeNull()
+      expect(chooserKeyMode(key, false, true, 'resume')).toBeNull()
+    }
+  })
+
+  it('active panel with no prior session only consumes 3 (→ new); 1/2/4 pass through', () => {
+    expect(chooserKeyMode('1', true, false, 'new')).toBeNull() // resume needs prev
+    expect(chooserKeyMode('2', true, false, 'new')).toBeNull() // compact needs prev
+    expect(chooserKeyMode('3', true, false, 'new')).toBe('new')
+    expect(chooserKeyMode('4', true, false, 'new')).toBeNull() // fork needs prev
+  })
+
+  it('active panel with a prior session maps every digit to its mode', () => {
+    expect(chooserKeyMode('1', true, true, 'resume')).toBe('resume')
+    expect(chooserKeyMode('2', true, true, 'resume')).toBe('compact-resume')
+    expect(chooserKeyMode('3', true, true, 'resume')).toBe('new')
+    expect(chooserKeyMode('4', true, true, 'resume')).toBe('fork')
+  })
+
+  it('Enter picks the smart default; non-digit keys fall through', () => {
+    expect(chooserKeyMode('Enter', true, true, 'compact-resume')).toBe('compact-resume')
+    expect(chooserKeyMode('Enter', true, false, 'new')).toBe('new')
+    expect(chooserKeyMode('a', true, true, 'resume')).toBeNull()
+    expect(chooserKeyMode('5', true, true, 'resume')).toBeNull()
+  })
+})
+
+describe('StartChooser active guard (live window listener)', () => {
+  it('active=false: pressing 3 on window does NOT launch a session', () => {
+    const onPick = vi.fn()
+    render(<StartChooser cwd="/x" loaded={true} info={null} onPick={onPick} active={false} />)
+    fireEvent.keyDown(window, { key: '3' })
+    expect(onPick).not.toHaveBeenCalled()
+  })
+
+  it('active=true (default): pressing 3 launches new session', () => {
+    const onPick = vi.fn()
+    render(<StartChooser cwd="/x" loaded={true} info={null} onPick={onPick} />)
+    fireEvent.keyDown(window, { key: '3' })
+    expect(onPick).toHaveBeenCalledWith('new')
   })
 })
 

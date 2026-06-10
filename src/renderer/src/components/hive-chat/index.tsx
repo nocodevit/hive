@@ -1375,6 +1375,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           loaded={prevInfoLoaded}
           info={prevInfo}
           onPick={launchSession}
+          active={visible}
         />
       ) : (<>
       {/* Timeline — grows naturally with content. When empty, height is
@@ -2836,6 +2837,36 @@ function CtxDetail({
   )
 }
 
+export type ChooserMode = 'resume' | 'compact-resume' | 'new' | 'fork'
+
+/**
+ * Decide what a StartChooser top-level (no picker open) keystroke should do.
+ * Returns the mode to launch, or null to let the key fall through untouched.
+ *
+ * CRITICAL: `active` is false for backgrounded chat panels. HiveChat keeps
+ * every agent's panel mounted (visibility toggled via CSS), and StartChooser
+ * registers a *global* window keydown listener. Without this guard a
+ * backgrounded chooser swallows digit keys from the focused panel's textarea —
+ * notably '3' (→ 'new'), the only mode with no `!hasPrev` pass-through — so the
+ * user had to press '3' once per lingering background chooser before it would
+ * finally type. Inactive panels must ignore ALL keys.
+ */
+export function chooserKeyMode(
+  key: string,
+  active: boolean,
+  hasPrev: boolean,
+  defaultMode: ChooserMode
+): ChooserMode | null {
+  if (!active) return null
+  if (key === 'Enter') return defaultMode
+  const orderedModes: ChooserMode[] = ['resume', 'compact-resume', 'new', 'fork']
+  const idx = '1234'.indexOf(key)
+  if (idx < 0) return null
+  const m = orderedModes[idx]
+  if ((m === 'resume' || m === 'compact-resume' || m === 'fork') && !hasPrev) return null
+  return m
+}
+
 /**
  * StartChooser — replaces the chat surface when HiveChat first mounts
  * (or until the user picks a startup mode). Shows the prior session's
@@ -2853,12 +2884,13 @@ function CtxDetail({
  * Keyboard: ↵ fires the focused button; 1-4 picks by index.
  */
 export function StartChooser({
-  cwd, loaded, info, onPick
+  cwd, loaded, info, onPick, active = true
 }: {
   cwd?: string
   loaded: boolean
   info: { sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number; cwd: string } | null
   onPick: (mode: 'resume' | 'compact-resume' | 'new' | 'fork', chosenSid?: string) => void
+  active?: boolean
 }) {
   const ctxTotal = info ? parseContextSize(info.contextSize) : 0
   const pct = ctxTotal > 0 && info && info.peakInputTokens > 0
@@ -2931,9 +2963,10 @@ export function StartChooser({
 
   // Keyboard shortcuts: ↵ activates default, 1-4 pick by index.
   // While picker is open: ↵ confirms, Esc closes, ↑↓ navigates.
-  const orderedModes: Array<'resume' | 'compact-resume' | 'new' | 'fork'> = ['resume', 'compact-resume', 'new', 'fork']
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // Backgrounded panels must never consume keys (see chooserKeyMode docs).
+      if (!active) return
       if (picker) {
         if (e.key === 'Escape') { e.preventDefault(); setPicker(null); return }
         if (e.key === 'Enter' && picker.selectedSid) {
@@ -2952,19 +2985,12 @@ export function StartChooser({
         }
         return
       }
-      if (e.key === 'Enter') { e.preventDefault(); handlePick(defaultMode); return }
-      const idx = '1234'.indexOf(e.key)
-      if (idx >= 0) {
-        const m = orderedModes[idx]
-        if (m === 'resume' && !hasPrev) return
-        if (m === 'compact-resume' && !hasPrev) return
-        if (m === 'fork' && !hasPrev) return
-        e.preventDefault(); handlePick(m)
-      }
+      const mode = chooserKeyMode(e.key, active, hasPrev, defaultMode)
+      if (mode) { e.preventDefault(); handlePick(mode) }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [defaultMode, hasPrev, onPick, picker])
+  }, [active, defaultMode, hasPrev, onPick, picker])
 
   const cwdLabel = (cwd || '').replace(/^\/Users\/[^/]+/, '~')
   const sidShort = info?.sid?.slice(0, 8) ?? ''
