@@ -6,6 +6,7 @@ import '@xterm/xterm/css/xterm.css'
 import RichTerminal from './RichTerminal'
 import { crushifyColors } from '../lib/crushify-colors'
 import HiveChat from './hive-chat'
+import { shouldAutoRunClaude, buildTerminalClaudeCmd } from '../terminalAutoRun'
 
 type ViewMode = 'raw' | 'pretty'
 
@@ -28,6 +29,11 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   const termRef = useRef<XTerm | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
   const ptyReady = useRef(false)
+  // Bumped once the PTY's data/exit handlers are wired up, so the deferred
+  // claude auto-run effect knows it's safe to write to the shell.
+  const [ptyReadyTick, setPtyReadyTick] = useState(0)
+  // Guards the deferred claude auto-run so opening Term twice can't double-spawn.
+  const termClaudeRan = useRef(false)
   const isAtBottom = useRef(true)
   const visibleRef = useRef(visible)
   const [showScrollDown, setShowScrollDown] = useState(false)
@@ -422,21 +428,16 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
               window.api.pty.resize(id, dims.cols, dims.rows)
             }
 
-            // Auto-run claude with native --agent flag
+            // startupCommand owns the boot path when present (custom command).
             if (startupCommand) {
               setTimeout(() => window.api.pty.write(id, startupCommand + '\r'), 500)
-            } else if (autoRunClaude) {
-              const agent = `hive-${agentId}`
-              const base = `claude --agent ${agent} -n "${agentName}"`
-              const claudeCmd = continueSession ? `${base} -c` : base
-              if (rebaseOnStart) {
-                // Detect base branch: prefer develop > main > master, only if remote tracking exists
-                const rebaseCmd = `git fetch origin 2>/dev/null && BASE=$(for b in develop main master; do git rev-parse --verify origin/$b >/dev/null 2>&1 && echo $b && break; done) && [ -n "$BASE" ] && echo "⏳ Rebasing from origin/$BASE..." && git rebase origin/$BASE && echo "✅ Rebase done" || echo "⏭️ Rebase skipped"`
-                setTimeout(() => window.api.pty.write(id, `${rebaseCmd} && ${claudeCmd}\r`), 500)
-              } else {
-                setTimeout(() => window.api.pty.write(id, claudeCmd + '\r'), 500)
-              }
             }
+            // The default `claude --agent` auto-run is NOT fired here. Chat is
+            // the default view, so booting claude on mount spawned a second,
+            // unused claude per agent (HiveChat already runs claude --print).
+            // The deferred effect below launches it only when the user opens
+            // the Term tab. Signal readiness so that effect can fire.
+            setPtyReadyTick((t) => t + 1)
           })
           .catch((err) => {
             term.write(`\r\nError: ${err}\r\n`)
@@ -457,6 +458,23 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
       disposeAllToolDecorations()
     }
   }, [id, cwd])
+
+  // Defer the agent's `claude --agent` launch until the user actually opens the
+  // Term tab (chatMode === false). Chat is the default view and runs its own
+  // claude --print, so firing this on mount spawned a second, idle claude per
+  // agent — doubling memory on small machines. Fires at most once per Terminal.
+  useEffect(() => {
+    if (!shouldAutoRunClaude({
+      autoRunClaude: !!autoRunClaude,
+      hasStartupCommand: !!startupCommand,
+      chatMode,
+      alreadyRan: termClaudeRan.current,
+      ptyReady: ptyReady.current
+    })) return
+    termClaudeRan.current = true
+    const cmd = buildTerminalClaudeCmd({ agentId, agentName, continueSession, rebaseOnStart })
+    setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
+  }, [chatMode, ptyReadyTick, autoRunClaude, startupCommand, id, agentId, agentName, continueSession, rebaseOnStart])
 
   // Re-run decoration logic when the Pretty toggle flips.
   useEffect(() => {
