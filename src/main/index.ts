@@ -53,6 +53,7 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { generateReportScript } from './utils'
 import { registerChatIpc } from './chat'
 import { registerStorageIpc } from './storage'
+import { parsePsRows, hasClaudeDescendant } from './ptyProcessTree'
 import {
   CLAUDE_INSTALL_COMMAND,
   claudeStatus,
@@ -868,6 +869,28 @@ ipcMain.handle('pty:kill', (_event, { id }) => {
   if (term) {
     term.kill()
     terminals.delete(id)
+  }
+})
+
+// "Is there a live claude agent session inside this terminal's shell?"
+// The Term pane uses this to decide whether to launch claude on open: if a
+// session already exists (shell still has a claude child) it reuses it; if not
+// (first open, or claude was exited) it starts one. Scoped to the shell's pid
+// descendants so it never sees another terminal's claude or the Desktop app.
+ipcMain.handle('pty:hasAgentSession', (_event, { id }) => {
+  const term = terminals.get(id)
+  if (!term) return { alive: false }
+  try {
+    const stdout = execFileSync('ps', ['-Ao', 'pid=,ppid=,command='], {
+      encoding: 'utf-8',
+      timeout: 5000,
+      maxBuffer: 8 * 1024 * 1024
+    })
+    return { alive: hasClaudeDescendant(parsePsRows(stdout), term.pid) }
+  } catch (err) {
+    // ps failed (vanishingly rare). Report unknown via error so the renderer
+    // can choose NOT to spawn — avoids a duplicate claude on a transient hiccup.
+    return { alive: false, error: String(err) }
   }
 })
 

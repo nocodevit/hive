@@ -6,6 +6,7 @@ declare global {
         write: (id: string, data: string) => Promise<void>
         resize: (id: string, cols: number, rows: number) => Promise<void>
         kill: (id: string) => Promise<void>
+        hasAgentSession: (id: string) => Promise<{ alive: boolean; error?: string }>
         onData: (id: string, cb: (data: string) => void) => () => void
         onExit: (id: string, cb: (code: number) => void) => () => void
       }
