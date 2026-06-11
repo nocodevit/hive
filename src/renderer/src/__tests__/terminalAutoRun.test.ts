@@ -1,37 +1,37 @@
 import { describe, it, expect } from 'vitest'
-import { shouldAutoRunClaude, buildTerminalClaudeCmd } from '../terminalAutoRun'
+import { shouldCheckAgentSession, buildTerminalClaudeCmd } from '../terminalAutoRun'
 
 const base = {
   autoRunClaude: true,
   hasStartupCommand: false,
   chatMode: false,
-  alreadyRan: false,
-  ptyReady: true
+  ptyReady: true,
+  launching: false
 }
 
-describe('shouldAutoRunClaude', () => {
-  it('runs when on the Term tab with a ready pty and nothing has run yet', () => {
-    expect(shouldAutoRunClaude(base)).toBe(true)
+describe('shouldCheckAgentSession', () => {
+  it('checks when on the Term tab with a ready pty and no launch in flight', () => {
+    expect(shouldCheckAgentSession(base)).toBe(true)
   })
 
-  it('does NOT run while Chat is the active view (the double-claude fix)', () => {
-    expect(shouldAutoRunClaude({ ...base, chatMode: true })).toBe(false)
+  it('does NOT check while Chat is the active view (the double-claude fix)', () => {
+    expect(shouldCheckAgentSession({ ...base, chatMode: true })).toBe(false)
   })
 
-  it('does NOT run when autoRunClaude is off', () => {
-    expect(shouldAutoRunClaude({ ...base, autoRunClaude: false })).toBe(false)
+  it('does NOT check when autoRunClaude is off', () => {
+    expect(shouldCheckAgentSession({ ...base, autoRunClaude: false })).toBe(false)
   })
 
-  it('does NOT run when a startupCommand owns the boot path', () => {
-    expect(shouldAutoRunClaude({ ...base, hasStartupCommand: true })).toBe(false)
+  it('does NOT check when a startupCommand owns the boot path', () => {
+    expect(shouldCheckAgentSession({ ...base, hasStartupCommand: true })).toBe(false)
   })
 
-  it('does NOT run twice once it has already fired', () => {
-    expect(shouldAutoRunClaude({ ...base, alreadyRan: true })).toBe(false)
+  it('does NOT check while a launch is already in flight (debounce)', () => {
+    expect(shouldCheckAgentSession({ ...base, launching: true })).toBe(false)
   })
 
-  it('waits for the pty to be ready before firing', () => {
-    expect(shouldAutoRunClaude({ ...base, ptyReady: false })).toBe(false)
+  it('waits for the pty to be ready before checking', () => {
+    expect(shouldCheckAgentSession({ ...base, ptyReady: false })).toBe(false)
   })
 })
 

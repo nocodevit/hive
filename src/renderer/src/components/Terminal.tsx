@@ -6,7 +6,7 @@ import '@xterm/xterm/css/xterm.css'
 import RichTerminal from './RichTerminal'
 import { crushifyColors } from '../lib/crushify-colors'
 import HiveChat from './hive-chat'
-import { shouldAutoRunClaude, buildTerminalClaudeCmd } from '../terminalAutoRun'
+import { shouldCheckAgentSession, buildTerminalClaudeCmd } from '../terminalAutoRun'
 
 type ViewMode = 'raw' | 'pretty'
 
@@ -32,8 +32,10 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   // Bumped once the PTY's data/exit handlers are wired up, so the deferred
   // claude auto-run effect knows it's safe to write to the shell.
   const [ptyReadyTick, setPtyReadyTick] = useState(0)
-  // Guards the deferred claude auto-run so opening Term twice can't double-spawn.
-  const termClaudeRan = useRef(false)
+  // True while a claude launch is mid-flight — between writing the command and
+  // claude showing up in the process table — so a rapid Chat/Term toggle in
+  // that window can't fire a second launch before the session check would see it.
+  const launchInFlight = useRef(false)
   const isAtBottom = useRef(true)
   const visibleRef = useRef(visible)
   const [showScrollDown, setShowScrollDown] = useState(false)
@@ -459,21 +461,43 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
     }
   }, [id, cwd])
 
-  // Defer the agent's `claude --agent` launch until the user actually opens the
-  // Term tab (chatMode === false). Chat is the default view and runs its own
-  // claude --print, so firing this on mount spawned a second, idle claude per
-  // agent — doubling memory on small machines. Fires at most once per Terminal.
+  // Launch the agent's `claude --agent` session only when the user opens the
+  // Term tab (chatMode === false) AND no session is already running there. Chat
+  // is the default view and runs its own claude --print, so launching on mount
+  // spawned a second, idle claude per agent — doubling memory on small machines.
+  //
+  // We don't track a "did we start one" flag; we ask the main process whether a
+  // claude child is actually alive in this terminal's shell. So: first Term-open
+  // creates it, later opens reuse it, and if it was exited, reopening recreates.
   useEffect(() => {
-    if (!shouldAutoRunClaude({
+    if (!shouldCheckAgentSession({
       autoRunClaude: !!autoRunClaude,
       hasStartupCommand: !!startupCommand,
       chatMode,
-      alreadyRan: termClaudeRan.current,
-      ptyReady: ptyReady.current
+      ptyReady: ptyReady.current,
+      launching: launchInFlight.current
     })) return
-    termClaudeRan.current = true
-    const cmd = buildTerminalClaudeCmd({ agentId, agentName, continueSession, rebaseOnStart })
-    setTimeout(() => window.api.pty.write(id, cmd + '\r'), 500)
+    let cancelled = false
+    launchInFlight.current = true
+    ;(async () => {
+      try {
+        const res = await window.api.pty.hasAgentSession(id)
+        // res.alive === false → no session, create one. On an error result
+        // (ps hiccup) alive is false but res.error is set; skip launching to
+        // avoid spawning a duplicate when we can't actually tell.
+        if (!cancelled && res && res.alive === false && !res.error) {
+          const cmd = buildTerminalClaudeCmd({ agentId, agentName, continueSession, rebaseOnStart })
+          window.api.pty.write(id, cmd + '\r')
+        }
+      } catch {
+        // IPC unreachable — do nothing; a later toggle will retry.
+      } finally {
+        // Hold the in-flight lock briefly so a freshly-spawned claude appears in
+        // the process table before the next check could run.
+        setTimeout(() => { launchInFlight.current = false }, 3000)
+      }
+    })()
+    return () => { cancelled = true }
   }, [chatMode, ptyReadyTick, autoRunClaude, startupCommand, id, agentId, agentName, continueSession, rebaseOnStart])
 
   // Re-run decoration logic when the Pretty toggle flips.
