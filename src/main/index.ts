@@ -877,6 +877,11 @@ ipcMain.handle('pty:kill', (_event, { id }) => {
 // session already exists (shell still has a claude child) it reuses it; if not
 // (first open, or claude was exited) it starts one. Scoped to the shell's pid
 // descendants so it never sees another terminal's claude or the Desktop app.
+// UNTESTABLE: thin shell over live `ps` + a node-pty handle (like the other
+// pty:* handlers, none of which are unit-tested). All real logic — ps parsing
+// and the descendant tree walk — lives in ptyProcessTree.ts and is unit-tested
+// (src/main/__tests__/ptyProcessTree.test.ts). Manual reproducer in
+// docs/manual-test-plan.md ("Term claude reuse vs recreate").
 ipcMain.handle('pty:hasAgentSession', (_event, { id }) => {
   const term = terminals.get(id)
   if (!term) return { alive: false }
