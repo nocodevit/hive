@@ -7,6 +7,8 @@ const api = {
     resize: (id: string, cols: number, rows: number) =>
       ipcRenderer.invoke('pty:resize', { id, cols, rows }),
     kill: (id: string) => ipcRenderer.invoke('pty:kill', { id }),
+    hasAgentSession: (id: string) =>
+      ipcRenderer.invoke('pty:hasAgentSession', { id }) as Promise<{ alive: boolean; error?: string }>,
     onData: (id: string, cb: (data: string) => void) => {
       const handler = (_event: Electron.IpcRendererEvent, data: string) => cb(data)
       ipcRenderer.on(`pty:data:${id}`, handler)
