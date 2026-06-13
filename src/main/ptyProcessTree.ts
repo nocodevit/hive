@@ -36,6 +36,33 @@ export function commandIsClaudeCli(command: string): boolean {
   return CLAUDE_CLI_RE.test(command)
 }
 
+// BFS the descendants of rootPid and return their pids (deepest-last order is
+// not guaranteed; callers that kill should signal the whole set). Used on
+// terminal teardown / app quit to nuke an ENTIRE shell subtree, not just the
+// login shell — a wedged `claude` child (99% busy-loop, ignoring SIGHUP) would
+// otherwise be orphaned to launchd (PPID 1) and spin forever. rootPid itself is
+// NOT included; the caller signals the shell separately via node-pty's kill().
+export function collectDescendantPids(rows: PsRow[], rootPid: number): number[] {
+  const childrenByPpid = new Map<number, PsRow[]>()
+  for (const r of rows) {
+    const arr = childrenByPpid.get(r.ppid)
+    if (arr) arr.push(r)
+    else childrenByPpid.set(r.ppid, [r])
+  }
+  const queue: PsRow[] = [...(childrenByPpid.get(rootPid) || [])]
+  const seen = new Set<number>()
+  const pids: number[] = []
+  while (queue.length) {
+    const cur = queue.shift()!
+    if (seen.has(cur.pid)) continue
+    seen.add(cur.pid)
+    pids.push(cur.pid)
+    const kids = childrenByPpid.get(cur.pid)
+    if (kids) queue.push(...kids)
+  }
+  return pids
+}
+
 // BFS the descendants of rootPid; true if any runs the claude CLI.
 export function hasClaudeDescendant(rows: PsRow[], rootPid: number): boolean {
   const childrenByPpid = new Map<number, PsRow[]>()

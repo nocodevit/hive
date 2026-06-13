@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { parsePsRows, commandIsClaudeCli, hasClaudeDescendant } from '../ptyProcessTree'
+import {
+  parsePsRows,
+  commandIsClaudeCli,
+  hasClaudeDescendant,
+  collectDescendantPids
+} from '../ptyProcessTree'
 
 describe('parsePsRows', () => {
   it('parses pid / ppid / command from `ps -Ao pid=,ppid=,command=` output', () => {
@@ -76,5 +81,45 @@ describe('hasClaudeDescendant', () => {
 
   it('returns false for an unknown root pid', () => {
     expect(hasClaudeDescendant(rows, 99999)).toBe(false)
+  })
+})
+
+describe('collectDescendantPids', () => {
+  const rows = parsePsRows([
+    '  500     1 /Applications/Hive.app/Contents/MacOS/Hive',
+    '  900   500 -zsh',                                   // term A shell
+    '  901   900 claude --agent hive-alex -n "Alex"',     // claude in term A
+    '  902   901 node /some/tool.js',                     // grandchild of claude
+    '  950   500 -zsh',                                   // term B shell (bare)
+    '  633     1 /Applications/Claude.app/Contents/MacOS/Claude'
+  ].join('\n'))
+
+  it('returns every descendant pid of the shell, excluding the shell itself', () => {
+    // The whole point of the orphan fix: we must reach claude (901) AND its own
+    // child (902), not just the direct child — a wedged grandchild was the leak.
+    expect(collectDescendantPids(rows, 900).sort()).toEqual([901, 902])
+  })
+
+  it('returns an empty list for a shell with no children', () => {
+    expect(collectDescendantPids(rows, 950)).toEqual([])
+  })
+
+  it('does not leak across terminals (rootPid scoping)', () => {
+    // Tearing down term B must not collect term A's claude (901).
+    expect(collectDescendantPids(rows, 950)).not.toContain(901)
+  })
+
+  it('returns an empty list for an unknown root pid', () => {
+    expect(collectDescendantPids(rows, 99999)).toEqual([])
+  })
+
+  it('handles a deep chain without duplicating pids', () => {
+    const deep = parsePsRows([
+      '  900   500 -zsh',
+      '  910   900 sh -c wrapper',
+      '  920   910 claude --agent hive-pink',
+      '  930   920 grandchild'
+    ].join('\n'))
+    expect(collectDescendantPids(deep, 900).sort()).toEqual([910, 920, 930])
   })
 })
