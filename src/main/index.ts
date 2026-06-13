@@ -53,7 +53,7 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { generateReportScript } from './utils'
 import { registerChatIpc } from './chat'
 import { registerStorageIpc } from './storage'
-import { parsePsRows, hasClaudeDescendant } from './ptyProcessTree'
+import { parsePsRows, hasClaudeDescendant, collectDescendantPids } from './ptyProcessTree'
 import {
   CLAUDE_INSTALL_COMMAND,
   claudeStatus,
@@ -864,10 +864,50 @@ ipcMain.handle('pty:resize', (_event, { id, cols, rows }) => {
   if (term) term.resize(cols, rows)
 })
 
+// Tear down a PTY's ENTIRE process subtree, not just the login shell.
+// node-pty's term.kill() only signals the shell (SIGHUP); a healthy `claude`
+// child then exits on its own when the tty closes. But a *wedged* claude
+// (busy-loop, ignoring SIGHUP) survives, gets orphaned to launchd (PPID 1), and
+// spins at ~99% CPU forever — observed: 5 agents stuck 2+ days after Hive quit.
+// So we explicitly: (1) snapshot the shell's descendants via `ps`, (2) SIGTERM
+// the shell + every descendant, (3) after a grace period SIGKILL whatever
+// ignored SIGTERM.
+// UNTESTABLE: sends real OS signals to live pids. The pure part — collecting
+// descendant pids from `ps` output — is collectDescendantPids() in
+// ptyProcessTree.ts, unit-tested in __tests__/ptyProcessTree.test.ts. Manual
+// reproducer in docs/manual-test-plan.md ("Quit cleanup kills wedged children").
+function killProcessTree(term: pty.IPty): void {
+  let descendants: number[] = []
+  try {
+    const stdout = execFileSync('ps', ['-Ao', 'pid=,ppid=,command='], {
+      encoding: 'utf-8',
+      timeout: 5000,
+      maxBuffer: 8 * 1024 * 1024
+    })
+    descendants = collectDescendantPids(parsePsRows(stdout), term.pid)
+  } catch {
+    // ps failed (vanishingly rare) — fall back to just killing the shell below.
+  }
+  // Graceful pass: SIGHUP the shell (node-pty default), SIGTERM each descendant.
+  try { term.kill() } catch { /* already dead */ }
+  for (const pid of descendants) {
+    try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ }
+  }
+  // Escalation: SIGKILL anything that ignored SIGTERM (the wedged-claude case).
+  if (descendants.length) {
+    const timer = setTimeout(() => {
+      for (const pid of descendants) {
+        try { process.kill(pid, 'SIGKILL') } catch { /* gone */ }
+      }
+    }, 2000)
+    timer.unref()
+  }
+}
+
 ipcMain.handle('pty:kill', (_event, { id }) => {
   const term = terminals.get(id)
   if (term) {
-    term.kill()
+    killProcessTree(term)
     terminals.delete(id)
   }
 })
@@ -1747,9 +1787,10 @@ app.whenReady().then(() => {
 })
 
 app.on('window-all-closed', () => {
-  // Kill all terminals
+  // Kill all terminals — full subtree, so a wedged claude can't outlive Hive
+  // as an orphaned 99%-CPU process (see killProcessTree).
   for (const [, term] of terminals) {
-    term.kill()
+    killProcessTree(term)
   }
   terminals.clear()
   // Remove port lock
