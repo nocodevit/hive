@@ -3,6 +3,39 @@
 Cases that can't be unit- or e2e-tested (network, real installers, GUI dialogs,
 keychain). Each entry: why it's untestable + reproducer steps.
 
+## Chat resume "Not logged in" in Hive's clean launchd env
+
+**Why untestable:** depends on the macOS login keychain ACL + the minimal
+environment a Finder/Dock-launched app inherits from launchd — neither is
+reproducible in CI. The pure part (the exact `claude --print … --resume <sid>`
+argv we spawn and log) is `buildChatArgs` in `src/main/chat.ts`, unit-tested in
+`src/main/__tests__/chat-args.test.ts`. The forensic spawn/stderr/exit records
+that make this failure visible are written in `startChat`'s spawn path.
+
+**Background (the bug this guards against):** Claude Code stores its OAuth token
+in the login keychain, whose ACL authorises only the specific binary that saved
+it. If that binary is swapped (e.g. a CLI upgrade re-points `~/.local/bin/claude`
+to a new path) the new binary can't read the keychain in headless `--print` mode
+(no GUI prompt) and claude returns `Not logged in · Please run /login` /
+`authentication_failed`, then exits before any stream-json. Hive's spawned claude
+runs in launchd's minimal env with no Claude-Desktop host-managed auth, so it
+hits this on EVERY agent resume. The fallback that fixes it: a populated
+`~/.claude/.credentials.json` (read regardless of keychain ACL or env).
+
+**Reproducer:**
+
+1. Confirm creds are present: `ls -l ~/.claude/.credentials.json` exists and is
+   valid JSON with `claudeAiOauth.refreshToken`. If missing, export from keychain:
+   `security find-generic-password -s "Claude Code-credentials" -w > ~/.claude/.credentials.json && chmod 600 ~/.claude/.credentials.json`.
+2. Simulate Hive's env and resume a real session:
+   `env -i HOME="$HOME" PATH="$HOME/.local/bin:/usr/bin:/bin" claude --print --output-format json --resume <sid> -p "say OK"`
+   → must return `"result":"OK","is_error":false`. If it returns
+   `"Not logged in"`, the creds file is missing/stale (re-do step 1).
+3. In Hive: open any agent with a prior session, click **Resume**. The chat must
+   stream a reply, not flash an auth error. A new
+   `~/.hive/chat-logs/<id>-<ts>.jsonl` appears whose first line is
+   `{"_meta":"spawn",...}` and, on failure, contains `_meta:"stderr"` / `_meta:"exit"`.
+
 ## Claude CLI gate — "Install for me" (`claude:install`)
 
 **Why untestable:** the handler runs the official installer
