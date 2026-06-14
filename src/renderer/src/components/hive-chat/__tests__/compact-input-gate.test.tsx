@@ -97,6 +97,81 @@ describe('send() during /compact', () => {
 })
 
 /**
+ * Mirror of the send() handler's result-handling tail (v1.7.137). After
+ * a Resume, replaySessionHistory shows the conversation from the local
+ * JSONL even when the live `claude --print --resume` child died, so the
+ * UI looks "loaded" but `chat.send` returns {ok:false}. Pre-fix that
+ * failure was swallowed and the user saw NOTHING after typing. Post-fix
+ * we surface a system entry AND re-open the StartChooser so they can
+ * relaunch.
+ */
+function makeSendWithResult(deps: {
+  chatSend: (text: string) => Promise<{ ok: boolean; error?: string }>
+  addEntry: (e: { kind: string; text: string }) => void
+  setChooserMode: (v: boolean) => void
+}) {
+  return async (text: string) => {
+    const res = await deps.chatSend(text)
+    if (!res?.ok) {
+      deps.addEntry({
+        kind: 'system',
+        text: `⚠️ Message not sent (${res?.error ?? 'unknown error'}). The session is no longer running — pick Resume or Start new below to relaunch.`
+      })
+      deps.setChooserMode(true)
+    }
+  }
+}
+
+describe('send() surfaces a failed send (no silent swallow)', () => {
+  it('on {ok:false} adds a system entry with the error AND reopens the chooser', async () => {
+    const addEntry = vi.fn()
+    const setChooserMode = vi.fn()
+    const chatSend = vi.fn(async () => ({ ok: false, error: 'not_in_print_mode' }))
+    const send = makeSendWithResult({ chatSend, addEntry, setChooserMode })
+    await send('hello after dead resume')
+
+    expect(addEntry).toHaveBeenCalledTimes(1)
+    const entry = addEntry.mock.calls[0][0]
+    expect(entry.kind).toBe('system')
+    expect(entry.text).toContain('not_in_print_mode')
+    expect(entry.text).toContain('Message not sent')
+    expect(setChooserMode).toHaveBeenCalledWith(true)
+  })
+
+  it('on no_session (no live child after resume) still surfaces + reopens chooser', async () => {
+    const addEntry = vi.fn()
+    const setChooserMode = vi.fn()
+    const chatSend = vi.fn(async () => ({ ok: false, error: 'no_session' }))
+    const send = makeSendWithResult({ chatSend, addEntry, setChooserMode })
+    await send('still nothing happens')
+
+    expect(addEntry.mock.calls[0][0].text).toContain('no_session')
+    expect(setChooserMode).toHaveBeenCalledWith(true)
+  })
+
+  it('on {ok:true} does NOT add a system entry or reopen the chooser', async () => {
+    const addEntry = vi.fn()
+    const setChooserMode = vi.fn()
+    const chatSend = vi.fn(async () => ({ ok: true }))
+    const send = makeSendWithResult({ chatSend, addEntry, setChooserMode })
+    await send('normal working send')
+
+    expect(addEntry).not.toHaveBeenCalled()
+    expect(setChooserMode).not.toHaveBeenCalled()
+  })
+
+  it('falls back to "unknown error" when the result has no error field', async () => {
+    const addEntry = vi.fn()
+    const setChooserMode = vi.fn()
+    const chatSend = vi.fn(async () => ({ ok: false }))
+    const send = makeSendWithResult({ chatSend, addEntry, setChooserMode })
+    await send('failure without an error string')
+
+    expect(addEntry.mock.calls[0][0].text).toContain('unknown error')
+  })
+})
+
+/**
  * Mirror of the stderr→compact-state side effect. The renderer
  * watches stderr lines for known begin/end phrases and flips
  * `compactStartedAt` / clears pending queues. The contract MUST

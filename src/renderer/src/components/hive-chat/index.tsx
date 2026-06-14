@@ -1118,7 +1118,22 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setSending(true)
     addEntry({ kind: 'user', text })
     setInput(''); resetInputHeight()
-    await window.api.chat.send(id, text)
+    // Surface a failed send instead of silently swallowing it. After a
+    // Resume, replaySessionHistory shows the conversation from the local
+    // JSONL even when the live `claude --print --resume` child died (auth
+    // / "No conversation found" / instant exit). sendUserMessage then
+    // returns {ok:false, error:'no_session'|'not_in_print_mode'} and the
+    // user previously saw NOTHING after typing — this is the "Resume
+    // loaded the conversation but sending got no response" bug. Show the
+    // error and re-open the StartChooser so they can relaunch. (v1.7.137)
+    const res = await window.api.chat.send(id, text)
+    if (!res?.ok) {
+      addEntry({
+        kind: 'system',
+        text: `⚠️ Message not sent (${res?.error ?? 'unknown error'}). The session is no longer running — pick Resume or Start new below to relaunch.`
+      })
+      setChooserMode(true)
+    }
     setSending(false)
   }
 

@@ -3,38 +3,48 @@
 Cases that can't be unit- or e2e-tested (network, real installers, GUI dialogs,
 keychain). Each entry: why it's untestable + reproducer steps.
 
-## Chat resume "Not logged in" in Hive's clean launchd env
+## Chat resume auth failures are now logged (`_meta` spawn/stderr/exit)
 
-**Why untestable:** depends on the macOS login keychain ACL + the minimal
-environment a Finder/Dock-launched app inherits from launchd — neither is
-reproducible in CI. The pure part (the exact `claude --print … --resume <sid>`
-argv we spawn and log) is `buildChatArgs` in `src/main/chat.ts`, unit-tested in
+**Why untestable:** real Anthropic-API auth outcomes (a transient
+`403 Request not allowed`, an expired OAuth token, keychain access) depend on the
+live server + the macOS login keychain — none reproducible in CI. The pure part
+(the exact `claude --print … --resume <sid>` argv we spawn AND log verbatim) is
+`buildChatArgs` in `src/main/chat.ts`, unit-tested in
 `src/main/__tests__/chat-args.test.ts`. The forensic spawn/stderr/exit records
-that make this failure visible are written in `startChat`'s spawn path.
+are written in `startChat`'s spawn path.
 
-**Background (the bug this guards against):** Claude Code stores its OAuth token
-in the login keychain, whose ACL authorises only the specific binary that saved
-it. If that binary is swapped (e.g. a CLI upgrade re-points `~/.local/bin/claude`
-to a new path) the new binary can't read the keychain in headless `--print` mode
-(no GUI prompt) and claude returns `Not logged in · Please run /login` /
-`authentication_failed`, then exits before any stream-json. Hive's spawned claude
-runs in launchd's minimal env with no Claude-Desktop host-managed auth, so it
-hits this on EVERY agent resume. The fallback that fixes it: a populated
-`~/.claude/.credentials.json` (read regardless of keychain ACL or env).
+**Background (the observability gap this closes):** the session log file is only
+created on the first *stdout* stream-json event. If claude exits BEFORE any
+stdout — e.g. an auth rejection prints to stderr and the process exits non-zero —
+the failure left ZERO trace (no log file, stderr only flashed in the renderer).
+A user hit `403 Request not allowed` across all agents on resume with nothing in
+the logs to explain it. We now write a `{_meta:"spawn",command,args,cwd}` record
+immediately at spawn, and tee stderr + exit(code/signal)/spawn_error into the log.
 
-**Reproducer:**
+**Verified facts about keychain auth (do NOT re-derive the wrong way):**
+- claude reads the OAuth token from the login keychain fine in any process that
+  has the user's **securityd session** (`SECURITYSESSIONID` set) — which a
+  Finder/Dock/launchd-launched Hive.app DOES have (verified: PID had
+  `SECURITYSESSIONID` + launchd parent). The binary version is irrelevant
+  (v16/v18/v22 all behave identically).
+- The ONLY way to make keychain reads fail is to strip the security session,
+  e.g. `env -i` in a test harness. **`env -i` is therefore an INVALID
+  reproduction of Hive's real environment** — it manufactures a "Not logged in"
+  that the real app never sees. Don't use it to "prove" an auth bug.
+- `~/.claude/.credentials.json` is a legitimate fallback claude reads when the
+  keychain is unreadable, but it is NOT required when the security session is
+  present.
 
-1. Confirm creds are present: `ls -l ~/.claude/.credentials.json` exists and is
-   valid JSON with `claudeAiOauth.refreshToken`. If missing, export from keychain:
-   `security find-generic-password -s "Claude Code-credentials" -w > ~/.claude/.credentials.json && chmod 600 ~/.claude/.credentials.json`.
-2. Simulate Hive's env and resume a real session:
-   `env -i HOME="$HOME" PATH="$HOME/.local/bin:/usr/bin:/bin" claude --print --output-format json --resume <sid> -p "say OK"`
-   → must return `"result":"OK","is_error":false`. If it returns
-   `"Not logged in"`, the creds file is missing/stale (re-do step 1).
-3. In Hive: open any agent with a prior session, click **Resume**. The chat must
-   stream a reply, not flash an auth error. A new
-   `~/.hive/chat-logs/<id>-<ts>.jsonl` appears whose first line is
-   `{"_meta":"spawn",...}` and, on failure, contains `_meta:"stderr"` / `_meta:"exit"`.
+**Reproducer (confirm a resume actually authenticates):**
+
+1. With the security session intact (a normal Terminal, NOT `env -i`), strip the
+   Claude-Desktop host-managed vars so claude is forced onto keychain OAuth:
+   `( unset ANTHROPIC_API_KEY ANTHROPIC_BASE_URL CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST CLAUDE_CODE_ENTRYPOINT; claude --print --output-format json --resume <sid> -p "say OK" )`
+   → must return `"result":"OK","is_error":false","apiKeySource":"none"`.
+2. In Hive: open any agent with a prior session, click **Resume** — chat must
+   stream a reply. A new `~/.hive/chat-logs/<id>-<ts>.jsonl` appears whose first
+   line is `{"_meta":"spawn",...}`; on any failure it also contains
+   `_meta:"stderr"` / `_meta:"exit"` capturing the real error (e.g. a 403).
 
 ## Claude CLI gate — "Install for me" (`claude:install`)
 
