@@ -535,28 +535,40 @@ async function runCompactViaPrint(
   })
 }
 
-export function startChat(id: string, opts: StartOpts = {}) {
-  if (sessions.has(id) && sessions.get(id)?.child !== null) return
+/**
+ * Build the exact `claude` argv for a chat --print spawn. Pure so the
+ * spawned "system command" can be unit-tested AND logged verbatim (the
+ * forensic spawn record below logs whatever this returns, so the log can
+ * never drift from what actually ran).
+ *
+ * `-c` = continue most recent session; `--resume <sid>` = resume a specific
+ * session id (used by resumeFromRemoteControl after the interactive TUI
+ * round-trip). `--resume` wins if both are set.
+ */
+export function buildChatArgs(opts: StartOpts): string[] {
   const args = [
     '--print',
     '--input-format', 'stream-json',
     '--output-format', 'stream-json',
     '--include-partial-messages',
     '--include-hook-events',
-    '--permission-prompt-tool', 'stdio', // claude emits control_request on stdout; we must reply with control_response on stdin (handled below)
+    '--permission-prompt-tool', 'stdio', // claude emits control_request on stdout; we reply with control_response on stdin
     '--verbose'
   ]
   if (opts.agent) args.push('--agent', opts.agent)
   if (opts.name) args.push('-n', opts.name)
-  // `-c` = continue most recent session; `--resume <sid>` = resume a
-  // specific session id (used by resumeFromRemoteControl after the
-  // interactive TUI round-trip). `--resume` wins if both are set.
   if (opts.resumeSid) {
     args.push('--resume', opts.resumeSid)
     if (opts.forkSession) args.push('--fork-session')
   } else if (opts.continueSession) {
     args.push('-c')
   }
+  return args
+}
+
+export function startChat(id: string, opts: StartOpts = {}) {
+  if (sessions.has(id) && sessions.get(id)?.child !== null) return
+  const args = buildChatArgs(opts)
 
   // Mirror Term's rebase-on-start: fetch + rebase onto first of
   // develop/main/master that the remote has. Only if explicitly enabled
@@ -585,6 +597,18 @@ export function startChat(id: string, opts: StartOpts = {}) {
     mode: 'print', startOpts: opts, claudeSid: opts.resumeSid
   }
   sessions.set(id, session)
+
+  // Forensic spawn record. Written IMMEDIATELY (before any stdout) so that
+  // even an instant-fail — e.g. claude exits with "Not logged in · Please
+  // run /login" before emitting a single stream-json event — still leaves a
+  // log file with the exact command + cwd that ran. Previously such failures
+  // produced ZERO log (the file is only created on the first stdout append),
+  // so an auth/resume failure was completely invisible. (v1.7.136)
+  try {
+    appendFileSync(session.logPath, JSON.stringify({
+      _meta: 'spawn', t: Date.now(), command: 'claude', args, cwd: opts.cwd ?? null
+    }) + '\n')
+  } catch {}
 
   // Hydrate any pending auto-continue timer from disk. If app died after
   // we scheduled but before it fired, pick the timer back up. Stale
@@ -665,9 +689,18 @@ export function startChat(id: string, opts: StartOpts = {}) {
     }
   })
   child.stderr.on('data', (chunk: Buffer) => {
-    broadcast(`chat:stderr:${id}`, chunk.toString('utf8'))
+    const s = chunk.toString('utf8')
+    broadcast(`chat:stderr:${id}`, s)
+    // Tee stderr to the session log too — auth errors ("Not logged in",
+    // 403, ENOENT) land here, and the renderer-only broadcast left no
+    // durable trace once the panel scrolled. (v1.7.136)
+    try { appendFileSync(session.logPath, JSON.stringify({ _meta: 'stderr', t: Date.now(), data: s }) + '\n') } catch {}
   })
-  child.on('exit', (code) => {
+  child.on('exit', (code, signal) => {
+    // Record every exit (code + signal) before the stale-handler guards
+    // below can early-return — a non-zero/early exit is exactly the
+    // forensic signal we were missing. (v1.7.136)
+    try { appendFileSync(session.logPath, JSON.stringify({ _meta: 'exit', t: Date.now(), code, signal }) + '\n') } catch {}
     // When killed by signal (SIGTERM from stopChat), code is null.
     // Renderer's onExit sets state to that code; if null lands on
     // useState<number|null>(null), `exited !== null` stays false and
@@ -704,6 +737,9 @@ export function startChat(id: string, opts: StartOpts = {}) {
     }
   })
   child.on('error', (err) => {
+    // Durable trace of spawn-time failures (ENOENT = claude not on PATH,
+    // EACCES, etc.) — written before the stale-handler guard. (v1.7.136)
+    try { appendFileSync(session.logPath, JSON.stringify({ _meta: 'spawn_error', t: Date.now(), error: String(err) }) + '\n') } catch {}
     const sess = sessions.get(id)
     // Same stale-handler protection as 'exit' above. A spawn-time
     // ENOENT for an already-replaced child must not clobber the live
