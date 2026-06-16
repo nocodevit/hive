@@ -172,6 +172,89 @@ describe('send() surfaces a failed send (no silent swallow)', () => {
 })
 
 /**
+ * Mirror of the runCompact re-entry guard (v1.7.138). The Compact
+ * button(s) and the /compact slash command all route through a single
+ * runCompact() entry point. Pre-fix the button had no disabled state
+ * and `compactInProgress` only flips true once claude echoes its
+ * compact-begin stderr line — a multi-second window in which the user
+ * could click Compact again and fire a SECOND concurrent /compact.
+ * Post-fix a synchronous `compactBusyRef` flips the instant the first
+ * click lands, so re-entry is rejected before any second IPC goes out.
+ */
+function makeRunCompact(deps: {
+  busyRef: { current: boolean }
+  compactInProgress: boolean
+  setCompactBusy: (v: boolean) => void
+  addEntry: (e: { kind: string; text: string }) => void
+  chatCompact: () => Promise<{ ok: boolean; error?: string }>
+}) {
+  return async () => {
+    if (deps.busyRef.current || deps.compactInProgress) return
+    deps.busyRef.current = true
+    deps.setCompactBusy(true)
+    try {
+      const res = await deps.chatCompact()
+      deps.addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
+    } catch (e) {
+      deps.addEntry({ kind: 'system', text: `Compact failed: ${String(e)}` })
+    } finally {
+      deps.busyRef.current = false
+      deps.setCompactBusy(false)
+    }
+  }
+}
+
+describe('runCompact re-entry guard (Compact button can only fire once)', () => {
+  it('a second click while the first is still running is a no-op — only ONE chat.compact', async () => {
+    const busyRef = { current: false }
+    let resolveFirst: (v: { ok: boolean }) => void = () => {}
+    const chatCompact = vi.fn(() => new Promise<{ ok: boolean }>(r => { resolveFirst = r }))
+    const setCompactBusy = vi.fn()
+    const runCompact = makeRunCompact({ busyRef, compactInProgress: false, setCompactBusy, addEntry: vi.fn(), chatCompact })
+
+    const first = runCompact()        // starts, flips busyRef synchronously
+    const second = runCompact()       // must bail immediately
+    await second
+    expect(chatCompact).toHaveBeenCalledTimes(1)
+
+    resolveFirst({ ok: true })
+    await first
+    expect(busyRef.current).toBe(false)
+    expect(setCompactBusy).toHaveBeenNthCalledWith(1, true)
+    expect(setCompactBusy).toHaveBeenLastCalledWith(false)
+  })
+
+  it('does not fire when compactInProgress is already true (stderr-confirmed run)', async () => {
+    const busyRef = { current: false }
+    const chatCompact = vi.fn(async () => ({ ok: true }))
+    const runCompact = makeRunCompact({ busyRef, compactInProgress: true, setCompactBusy: vi.fn(), addEntry: vi.fn(), chatCompact })
+    await runCompact()
+    expect(chatCompact).not.toHaveBeenCalled()
+  })
+
+  it('clears the busy guard even when chat.compact throws (finally runs, no rethrow)', async () => {
+    const busyRef = { current: false }
+    const setCompactBusy = vi.fn()
+    const addEntry = vi.fn()
+    const chatCompact = vi.fn(async () => { throw new Error('boom') })
+    const runCompact = makeRunCompact({ busyRef, compactInProgress: false, setCompactBusy, addEntry, chatCompact })
+    await runCompact()
+    expect(busyRef.current).toBe(false)
+    expect(setCompactBusy).toHaveBeenLastCalledWith(false)
+    expect(addEntry.mock.calls[0][0].text).toContain('boom')
+  })
+
+  it('allows a fresh compact AFTER the previous one settled', async () => {
+    const busyRef = { current: false }
+    const chatCompact = vi.fn(async () => ({ ok: true }))
+    const runCompact = makeRunCompact({ busyRef, compactInProgress: false, setCompactBusy: vi.fn(), addEntry: vi.fn(), chatCompact })
+    await runCompact()
+    await runCompact()
+    expect(chatCompact).toHaveBeenCalledTimes(2)
+  })
+})
+
+/**
  * Mirror of the stderr→compact-state side effect. The renderer
  * watches stderr lines for known begin/end phrases and flips
  * `compactStartedAt` / clears pending queues. The contract MUST

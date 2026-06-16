@@ -214,6 +214,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // Derived (also true while the stuck banner is up, since compactStuck
   // implies compact is still alive — main only fires it before settle).
   const compactInProgress = compactStartedAt !== null || compactStuck !== null
+  // Re-entry guard for the Compact button(s). compactInProgress only flips
+  // once the backend's "Compacting…" stderr line echoes back — there's a
+  // window between the click and that echo where a user could click Compact
+  // again and fire a SECOND concurrent /compact (two PTY round-trips racing
+  // on the same session). The ref blocks re-entry synchronously (before any
+  // setState commits); the state drives the disabled visual. (v1.7.138)
+  const compactBusyRef = useRef(false)
+  const [compactBusy, setCompactBusy] = useState(false)
 
   // Sign-in modal — flipped to 'needed' when claude --print returns
   // result.error='authentication_failed' (a.k.a. "Not logged in"). The
@@ -1110,9 +1118,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
     if (text === '/compact') {
       setInput(''); resetInputHeight()
-      addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
-      const res = await window.api.chat.compact(id)
-      addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
+      await runCompact()  // shares the re-entry guard with the Compact buttons
       return
     }
     setSending(true)
@@ -1228,6 +1234,25 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       continueSession: false,
       rebaseOnStart: false
     })
+  }
+
+  // Single guarded entry point for BOTH Compact buttons (ActionToolbar +
+  // CtxNagBanner) and the /compact slash command. Re-entrant calls are
+  // dropped so the button can't fire multiple concurrent /compact runs.
+  const runCompact = async () => {
+    if (compactBusyRef.current || compactInProgress) return
+    compactBusyRef.current = true
+    setCompactBusy(true)
+    addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
+    try {
+      const res = await window.api.chat.compact(id)
+      addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
+    } catch (e) {
+      addEntry({ kind: 'system', text: `Compact failed: ${String(e)}` })
+    } finally {
+      compactBusyRef.current = false
+      setCompactBusy(false)
+    }
   }
 
   const resumeClosedSession = async () => {
@@ -1487,11 +1512,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         dismissed={ctxNagDismissed}
         onDismissWarn={() => setCtxNagDismissed(prev => ({ ...prev, warn: true }))}
         onDismissUrgent={() => setCtxNagDismissed(prev => ({ ...prev, urgent: true }))}
-        onCompact={async () => {
-          addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
-          const res = await window.api.chat.compact(id)
-          addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
-        }}
+        onCompact={runCompact}
       />
       {/* Subagent active banner — sticky above rate-limit, only when
          at least one Task tool is running. Spinner + per-subagent line. */}
@@ -1799,11 +1820,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             onCancelAutoContinue={() => window.api.chat.cancelAutoContinue(id)}
             modelKnown={!!modelName}
             onViewContext={openContextModal}
-            onCompact={async () => {
-              addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
-              const res = await window.api.chat.compact(id)
-              addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
-            }}
+            compacting={compactBusy || compactInProgress}
+            onCompact={runCompact}
             onFork={async () => {
               // Surface IPC failure so the user sees what happened. The
               // bare `() => api.chat.startWithSummary(id)` was a silent
@@ -3537,12 +3555,13 @@ export function CrushTooltip({ text, children, side = 'top', block = false }: {
  * (Fork, Resume, Remote Control, Close).
  */
 function ActionToolbar({
-  usedTokens, contextSize, onCompact, onFork, onResume, onNewSession, onRemoteControl, onClose, sessionActive,
+  usedTokens, contextSize, onCompact, compacting, onFork, onResume, onNewSession, onRemoteControl, onClose, sessionActive,
   rateLimit5h, rateLimit7d, autoContinueAt, onCancelAutoContinue, modelKnown, onViewContext
 }: {
   usedTokens: number
   contextSize: string
   onCompact: () => void
+  compacting: boolean
   onFork: () => void
   onResume: () => void
   onNewSession: () => void
@@ -3671,9 +3690,10 @@ function ActionToolbar({
           <span style={{ color: CRUSH.Oyster }}>context —</span>
         )}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-        <CrushTooltip text="Run /compact · summarize history into a smaller prompt · up to 10 min">
+        <CrushTooltip text={compacting ? 'Compacting in progress — please wait (up to 10 min)' : 'Run /compact · summarize history into a smaller prompt · up to 10 min'}>
           <button
             onClick={onCompact}
+            disabled={compacting}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               background: compactBg,
@@ -3682,13 +3702,14 @@ function ActionToolbar({
               fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600,
               padding: '2px 8px',
               borderRadius: 4,
-              cursor: 'pointer',
+              cursor: compacting ? 'not-allowed' : 'pointer',
+              opacity: compacting ? 0.5 : 1,
               transition: 'all 120ms'
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = compactColor; e.currentTarget.style.color = CRUSH.Pepper }}
-            onMouseLeave={e => { e.currentTarget.style.background = compactBg; e.currentTarget.style.color = compactColor }}
+            onMouseEnter={e => { if (compacting) return; e.currentTarget.style.background = compactColor; e.currentTarget.style.color = CRUSH.Pepper }}
+            onMouseLeave={e => { if (compacting) return; e.currentTarget.style.background = compactBg; e.currentTarget.style.color = compactColor }}
           >
-            <span style={{ fontSize: 11, lineHeight: 1 }}>⎙</span>{compactLabel}
+            <span style={{ fontSize: 11, lineHeight: 1 }}>⎙</span>{compacting ? 'Compacting…' : compactLabel}
           </button>
         </CrushTooltip>
         <div ref={menuRef} style={{ position: 'relative' as const }}>
