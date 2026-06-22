@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
-import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext, SignInContext, classifyResultError } from './renderers'
+import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext, SignInContext, classifyResultError, dismissActionForAuthState } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
 import { mergeUsage, preserveAccountUsage } from './usage-state'
 import { shortenPath } from '../../lib/path-display'
@@ -1227,6 +1227,34 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
   }
 
+  // Always-available escape hatch out of the sign-in modal. The critical case
+  // is 'in-progress': `claude auth login` can hang forever (browser closed, or
+  // a region block that re-login can't fix), so we SIGTERM the child via
+  // auth:cancel before dropping back to idle. Other states just close.
+  const dismissAuthModal = () => {
+    const action = dismissActionForAuthState(authState)
+    if (!action) return
+    // Best-effort kill: we always close the modal regardless of the result, so
+    // a failed/no-op cancel can't re-trap the user. (Gate 12: fire-and-forget
+    // is intentional here — there is no recovery action on cancel failure.)
+    if (action.killProcess) window.api.auth.cancel().catch(() => {})
+    setAuthState('idle')
+    setAuthOutput('')
+    setAuthError(null)
+  }
+
+  // Esc closes the sign-in modal from ANY non-idle state — a hard guarantee
+  // the user is never trapped, even if a future state forgets its button.
+  useEffect(() => {
+    if (authState === 'idle') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') dismissAuthModal()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authState])
+
   const startNewSession = async () => {
     // Fresh session with the same agent — no -c, no --resume. System/init
     // will emit a new session_id; timeline is preserved and a divider is
@@ -2148,9 +2176,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 </>
               )}
               {authState === 'in-progress' && (
-                <div style={{ color: CRUSH.Squid, fontSize: 11, alignSelf: 'center' }}>
-                  Browser should open automatically. Complete auth there.
-                </div>
+                <>
+                  <div style={{ color: CRUSH.Squid, fontSize: 11, alignSelf: 'center', marginRight: 'auto' }}>
+                    Browser should open automatically. Complete auth there.
+                  </div>
+                  <button onClick={dismissAuthModal} style={{
+                    background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 6,
+                    fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer'
+                  }}>Cancel</button>
+                </>
               )}
               {authState === 'failed' && (
                 <>

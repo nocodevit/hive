@@ -1573,12 +1573,19 @@ app.whenReady().then(() => {
   // to the renderer as `auth:output` events so the user can see the
   // device-code URL (and click it if claude's auto-open doesn't fire).
   // Resolves with the final exit code; renderer treats 0 as success.
+  // The live `claude auth login` child, if one is running. `claude auth login`
+  // is interactive: it waits on a paste-code that may never come (the user
+  // closes the browser, or — for a region/country block — login can't help).
+  // Without a handle to kill it, the renderer's promise never resolves and the
+  // sign-in modal traps the user in 'in-progress' forever. auth:cancel kills it.
+  let authChild: ReturnType<typeof spawn> | null = null
   ipcMain.handle('auth:login', () => {
     return new Promise<{ ok: boolean; code: number; error?: string }>((resolve) => {
       const child = spawn('claude', ['auth', 'login'], {
         env: process.env,
         stdio: ['pipe', 'pipe', 'pipe']
       })
+      authChild = child
       const broadcastAuth = (kind: 'stdout' | 'stderr', s: string) => {
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send('auth:output', { kind, text: s })
@@ -1588,9 +1595,21 @@ app.whenReady().then(() => {
       }
       child.stdout.on('data', (c: Buffer) => broadcastAuth('stdout', c.toString('utf-8')))
       child.stderr.on('data', (c: Buffer) => broadcastAuth('stderr', c.toString('utf-8')))
-      child.on('error', (err) => resolve({ ok: false, code: -1, error: err.message }))
-      child.on('exit', (code) => resolve({ ok: code === 0, code: code ?? -1 }))
+      child.on('error', (err) => { authChild = null; resolve({ ok: false, code: -1, error: err.message }) })
+      child.on('exit', (code) => { authChild = null; resolve({ ok: code === 0, code: code ?? -1 }) })
     })
+  })
+
+  // Kill a hung `claude auth login` so the renderer can always escape the
+  // sign-in modal. Best-effort: SIGTERM the child (its 'exit' handler resolves
+  // the pending login promise). Safe to call when nothing is running.
+  ipcMain.handle('auth:cancel', (): { ok: boolean } => {
+    if (authChild) {
+      try { authChild.kill('SIGTERM') } catch { /* already gone */ }
+      authChild = null
+      return { ok: true }
+    }
+    return { ok: false }
   })
 
   // Is the claude CLI runnable by Hive? This is the only environment fact Hive

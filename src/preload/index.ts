@@ -66,6 +66,7 @@ const api = {
   },
   auth: {
     login: () => ipcRenderer.invoke('auth:login') as Promise<{ ok: boolean; code: number; error?: string }>,
+    cancel: () => ipcRenderer.invoke('auth:cancel') as Promise<{ ok: boolean }>,
     onOutput: (cb: (payload: { kind: 'stdout' | 'stderr'; text: string }) => void) => {
       const handler = (_e: any, data: { kind: 'stdout' | 'stderr'; text: string }) => cb(data)
       ipcRenderer.on('auth:output', handler)

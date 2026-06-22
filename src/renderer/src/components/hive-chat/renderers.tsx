@@ -88,6 +88,29 @@ export function classifyResultError(e: {
   return { kind: 'generic', message: result || (status ? `API error ${status}` : 'Request failed') }
 }
 
+export type AuthModalState = 'idle' | 'needed' | 'in-progress' | 'success' | 'failed'
+
+/**
+ * Decide what "dismiss / escape" should do for a given sign-in modal state.
+ *
+ * Invariant this enforces (the bug this fixes): EVERY non-idle state must be
+ * escapable. Previously the 'in-progress' state rendered only descriptive text
+ * with NO button, so if `claude auth login` hung (user closed the browser, or
+ * a region/country block that re-login can't fix), the modal trapped the user
+ * forever. Now both the Escape key and a Cancel button route through here.
+ *
+ *  - returns null when there's nothing to dismiss ('idle').
+ *  - `killProcess` is true ONLY for 'in-progress', where a live
+ *    `claude auth login` child must be SIGTERM'd (via auth:cancel) before we
+ *    drop back to idle. Other states have no running child to kill.
+ */
+export function dismissActionForAuthState(
+  state: AuthModalState
+): { killProcess: boolean } | null {
+  if (state === 'idle') return null
+  return { killProcess: state === 'in-progress' }
+}
+
 const DEFAULT_EXPANDED_LINES = 12
 const LONG_ASSISTANT_THRESHOLD = 30
 
