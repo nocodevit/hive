@@ -1614,8 +1614,11 @@ export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, 
           >Sign in →</button>
         )}
         {err.kind === 'region_blocked' && (
-          <div style={{ color: CRUSH.Squid, fontSize: 10 }}>
-            Re-signing in won&apos;t help — Claude isn&apos;t available in this region.
+          <div style={{ color: CRUSH.Squid, fontSize: 10, lineHeight: 1.5 }}>
+            Looks like a country/region restriction — Claude may not be
+            available where this request came from. Switch back to a supported
+            country/region, then restart Hive. Re-signing in is unlikely to
+            help.
           </div>
         )}
       </div>
