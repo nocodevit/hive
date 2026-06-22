@@ -77,7 +77,18 @@ export function classifyResultError(e: {
   const text = `${e.error ?? ''} ${result}`.toLowerCase()
   const status = e.api_error_status
   // Region / country / territory restriction — re-login will NOT help.
-  if (/unsupported[\s_-]*(country|region|territory)|not\s+available\s+in\s+your|in\s+your\s+(country|region|territory)|(country|region|territory)\s+is\s+not/.test(text)) {
+  //
+  // Anthropic geo-blocks requests from unsupported countries with a
+  // 403 "Request not allowed" — and the CLI mislabels that result as
+  // `error:"authentication_failed"` (observed in the wild: a Cutis run where
+  // the caller's country changed produced `is_error:true`,
+  // `api_error_status:403`, `error:"authentication_failed"`,
+  // result "Failed to authenticate. API Error: 403 Request not allowed",
+  // `inference_geo:"not_available"`). Without catching it here it falls through
+  // to the auth-expired branch below and wrongly pops the sign-in modal.
+  if (/unsupported[\s_-]*(country|region|territory)|not\s+available\s+in\s+your|in\s+your\s+(country|region|territory)|(country|region|territory)\s+is\s+not/.test(text) ||
+      /request\s+not\s+allowed/.test(text) ||
+      status === 403) {
     return { kind: 'region_blocked', message: result || 'Claude is not available in your current country/region.' }
   }
   // Expired / invalid credentials — re-login fixes it.

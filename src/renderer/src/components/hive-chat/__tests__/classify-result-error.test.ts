@@ -60,6 +60,38 @@ describe('classifyResultError', () => {
       })
       expect(r?.kind).toBe('region_blocked')
     })
+
+    it('THE Cutis country-change incident: 403 "Request not allowed" mislabeled authentication_failed', () => {
+      // Verbatim shape from Cutis chat log (2026-06-22 15:16, chat-agent-
+      // 1780455224061): the caller's country changed, Anthropic geo-blocked the
+      // request with 403 "Request not allowed", and the CLI mislabeled it
+      // `error:"authentication_failed"`. This previously fell through to the
+      // auth-expired branch and popped the sign-in modal — which a country
+      // change can NEVER fix, stranding the user. It MUST be region_blocked.
+      const r = classifyResultError({
+        is_error: true,
+        api_error_status: 403,
+        error: 'authentication_failed',
+        result: 'Failed to authenticate. API Error: 403 Request not allowed'
+      })
+      expect(r?.kind).toBe('region_blocked')
+      // and we surface the REAL CLI text, not a generic placeholder
+      expect(r?.message).toContain('Request not allowed')
+    })
+
+    it('catches "Request not allowed" even without an explicit 403 status', () => {
+      const r = classifyResultError({
+        is_error: true,
+        error: 'authentication_failed',
+        result: 'Request not allowed'
+      })
+      expect(r?.kind).toBe('region_blocked')
+    })
+
+    it('any 403 is treated as region (re-login cannot fix a 403)', () => {
+      const r = classifyResultError({ is_error: true, api_error_status: 403 })
+      expect(r?.kind).toBe('region_blocked')
+    })
   })
 
   describe('generic — surface the real message, no sign-in', () => {
