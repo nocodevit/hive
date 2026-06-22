@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
-import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext } from './renderers'
+import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext, SignInContext, classifyResultError } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
 import { mergeUsage, preserveAccountUsage } from './usage-state'
 import { shortenPath } from '../../lib/path-display'
@@ -798,6 +798,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           // pause_turn, model_context_window_exceeded, etc.) so the
           // user notices when claude didn't simply finish normally.
           stopReason: typeof e.stop_reason === 'string' ? e.stop_reason : undefined,
+          // Carry the real error so the card renders the actual message
+          // (+ inline Sign-in for auth_expired) instead of the misleading
+          // "stopped: stop_sequence" that a rejected OAuth credential emits.
+          isError: e.is_error === true,
+          apiErrorStatus: typeof e.api_error_status === 'number' ? e.api_error_status : undefined,
+          errorText: typeof e.result === 'string' ? e.result : undefined,
           isSubagent: isSubagentResult
         } as any)
       }
@@ -836,13 +842,24 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }
         return
       }
-      // result event: detect "Not logged in" → surface sign-in modal
-      // so the user can authenticate without leaving the app. claude
-      // --print emits this as a synthetic result with
-      // error='authentication_failed'.
+      // result event: classify any error. Only auth_expired (rejected/
+      // expired OAuth credential — 401, "Not logged in", "Failed to
+      // authenticate") pops the global sign-in panel, because re-login
+      // actually fixes it. region_blocked / generic errors do NOT pop it
+      // (re-auth won't help) — they're surfaced inline by ResultSummaryCard
+      // with the real message. This replaces the old detection that only
+      // matched error==='authentication_failed' / "Not logged in" and so
+      // silently missed the 401 shape, leaving users stuck on a cryptic
+      // "stopped: stop_sequence".
       if (ev.type === 'result') {
         const e = ev as any
-        if (e.is_error && (e.error === 'authentication_failed' || (typeof e.result === 'string' && e.result.includes('Not logged in')))) {
+        const classified = classifyResultError({
+          is_error: e.is_error,
+          api_error_status: e.api_error_status,
+          error: e.error,
+          result: e.result
+        })
+        if (classified?.kind === 'auth_expired') {
           setAuthState('needed')
           setAuthOutput('')
           setAuthError(null)
@@ -1375,6 +1392,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
 
   return (
     <HiveChatPausedContext.Provider value={!visible}>
+    <SignInContext.Provider value={startAuthLogin}>
     <AskUserQuestionContext.Provider value={pendingQuestion ? {
       requestId: pendingQuestion.requestId,
       submit: (answers) => {
@@ -2162,6 +2180,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     </div>
     </HiveChatErrorBoundary>
     </AskUserQuestionContext.Provider>
+    </SignInContext.Provider>
     </HiveChatPausedContext.Provider>
   )
 }
