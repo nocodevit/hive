@@ -5,7 +5,10 @@ describe('classifyResultError', () => {
   it('returns null when the result is not an error', () => {
     expect(classifyResultError({ is_error: false, result: 'all good' })).toBeNull()
     expect(classifyResultError({})).toBeNull()
-    // is_error undefined → treated as not-an-error
+    // is_error undefined → treated as not-an-error.
+    // `as any`: deliberately pass an extra `stop_reason` field the typed
+    // signature doesn't declare, to prove a real stream result (which carries
+    // stop_reason) with no is_error is ignored.
     expect(classifyResultError({ result: 'done', stop_reason: 'end_turn' } as any)).toBeNull()
   })
 

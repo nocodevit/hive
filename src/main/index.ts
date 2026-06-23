@@ -1603,6 +1603,9 @@ app.whenReady().then(() => {
   // Kill a hung `claude auth login` so the renderer can always escape the
   // sign-in modal. Best-effort: SIGTERM the child (its 'exit' handler resolves
   // the pending login promise). Safe to call when nothing is running.
+  // UNTESTABLE: spawns/kills a real `claude auth login` child + keychain OAuth;
+  // the *decision* of when to kill is unit-tested via dismissActionForAuthState
+  // (dismiss-auth-state.test.ts). Manual reproducer in docs/manual-test-plan.md.
   ipcMain.handle('auth:cancel', (): { ok: boolean } => {
     if (authChild) {
       try { authChild.kill('SIGTERM') } catch { /* already gone */ }

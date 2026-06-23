@@ -46,6 +46,35 @@ immediately at spawn, and tee stderr + exit(code/signal)/spawn_error into the lo
    line is `{"_meta":"spawn",...}`; on any failure it also contains
    `_meta:"stderr"` / `_meta:"exit"` capturing the real error (e.g. a 403).
 
+## Sign-in modal is always escapable + 403 never asks to sign in (`auth:cancel`)
+
+**Why untestable (the GUI/OAuth parts):** `auth:cancel` SIGTERMs a real
+`claude auth login` child and the modal flow drives the macOS browser OAuth
+hand-off — neither runs in CI. The *pure* parts are unit-tested:
+`dismissActionForAuthState` (`dismiss-auth-state.test.ts`) proves every non-idle
+state is dismissable and that only `in-progress` kills the child;
+`classifyResultError` (`classify-result-error.test.ts`) proves a
+`403 Request not allowed` classifies as `region_blocked`, not `auth_expired`;
+and `ResultSummaryCard` (`result-summary-card.test.tsx`) proves a 403 renders
+NO Sign-in button even when a handler is wired, while a 401 does.
+
+**Background (the Cutis incident):** a country/IP change made Anthropic return
+`403 Request not allowed`, which the CLI mislabels `error:"authentication_failed"`.
+Hive used to (a) pop the sign-in modal for it — useless, re-login can't fix a geo
+block — and (b) the `in-progress` modal had no Cancel button, so a login that
+never completes trapped the user forever.
+
+**Reproducer:**
+
+1. **403 path:** force a region block (e.g. run from a blocked country / VPN) and
+   send a message in an agent. The result card must read **REGION BLOCKED** with
+   the real `403 Request not allowed` text and restart-Hive guidance — and
+   **no Sign-in button**. The sign-in modal must NOT appear.
+2. **401 / escape path:** trigger a genuine auth expiry (or click the inline
+   **Sign in →** on a 401 card). When the sign-in modal is `in-progress`, press
+   **Esc** OR click **Cancel** — the modal closes immediately and the hung
+   `claude auth login` child is gone (`ps aux | grep "auth login"` shows none).
+
 ## Claude CLI gate — "Install for me" (`claude:install`)
 
 **Why untestable:** the handler runs the official installer
