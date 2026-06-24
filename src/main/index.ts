@@ -54,6 +54,7 @@ import { generateReportScript } from './utils'
 import { registerChatIpc } from './chat'
 import { registerStorageIpc } from './storage'
 import { parsePsRows, hasClaudeDescendant, collectDescendantPids } from './ptyProcessTree'
+import { authUrlToOpen } from './authUrl'
 import {
   CLAUDE_INSTALL_COMMAND,
   claudeStatus,
@@ -1586,12 +1587,18 @@ app.whenReady().then(() => {
         stdio: ['pipe', 'pipe', 'pipe']
       })
       authChild = child
+      // Dedupe browser-opens: claude prints the sign-in URL on stdout AND
+      // stderr (and across chunks), so without this the browser opened twice.
+      const openedUrls = new Set<string>()
       const broadcastAuth = (kind: 'stdout' | 'stderr', s: string) => {
         for (const win of BrowserWindow.getAllWindows()) {
           win.webContents.send('auth:output', { kind, text: s })
         }
-        const m = s.match(/https:\/\/[^\s)>'"]+/)
-        if (m) shell.openExternal(m[0]).catch(() => {})
+        const url = authUrlToOpen(s, openedUrls)
+        if (url) {
+          openedUrls.add(url)
+          shell.openExternal(url).catch(() => {})
+        }
       }
       child.stdout.on('data', (c: Buffer) => broadcastAuth('stdout', c.toString('utf-8')))
       child.stderr.on('data', (c: Buffer) => broadcastAuth('stderr', c.toString('utf-8')))

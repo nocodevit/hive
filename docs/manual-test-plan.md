@@ -74,6 +74,11 @@ never completes trapped the user forever.
    **Sign in →** on a 401 card). When the sign-in modal is `in-progress`, press
    **Esc** OR click **Cancel** — the modal closes immediately and the hung
    `claude auth login` child is gone (`ps aux | grep "auth login"` shows none).
+3. **Single browser open:** when sign-in starts, the claude.ai page must open in
+   the browser **exactly once**, not twice. (`claude auth login` echoes the URL
+   on both stdout and stderr; `authUrlToOpen` dedupes by URL so
+   `shell.openExternal` fires once. Pure dedupe covered by
+   `src/main/__tests__/authUrl.test.ts`; the actual browser launch is GUI.)
 
 ## Claude CLI gate — "Install for me" (`claude:install`)
 
