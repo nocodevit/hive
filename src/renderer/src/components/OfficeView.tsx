@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Agent } from '../types'
+import { shouldDrawFrame, shouldAnimate } from './officeAnimation'
 
 interface Props {
   agents: Agent[]
@@ -48,13 +49,16 @@ export default function OfficeView({ agents, onAgentClick }: Props) {
     canvas.height = ROWS * S
 
     let tick = 0
-    let rafId: number
+    let rafId = 0
 
     // Assign desks
     const agentDesks = new Map<string, { x: number; y: number }>()
     agents.forEach((a, i) => {
       if (i < DESK_POSITIONS.length) agentDesks.set(a.id, DESK_POSITIONS[i])
     })
+    // Stable per-`agents` list of only the agents that actually got a desk.
+    // Computed ONCE here instead of `agents.filter(...)` on every frame.
+    const deskedAgents = agents.filter(a => agentDesks.has(a.id))
 
     const px = (x: number, y: number, w: number, h: number, color: string) => {
       ctx.fillStyle = color
@@ -256,7 +260,7 @@ export default function OfficeView({ agents, onAgentClick }: Props) {
     }
 
     function updateWanderers() {
-      agents.forEach((a, i) => {
+      deskedAgents.forEach((a) => {
         if (a.status === 'working') { wanderState.current.delete(a.id); return }
         const desk = agentDesks.get(a.id)
         if (!desk) return
@@ -294,7 +298,7 @@ export default function OfficeView({ agents, onAgentClick }: Props) {
       })
     }
 
-    function render() {
+    function draw() {
       tick++
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       renderAgents.current = []
@@ -331,15 +335,16 @@ export default function OfficeView({ agents, onAgentClick }: Props) {
       drawPlant(1, 1.8); drawPlant(0.8, 7)
 
       // Desks + Gaming chairs
-      agents.forEach((a) => {
-        const desk = agentDesks.get(a.id)
-        if (desk) { drawDesk(desk.x, desk.y); if (a.status === 'working') drawGamingChair(desk.x, desk.y) }
+      deskedAgents.forEach((a) => {
+        const desk = agentDesks.get(a.id)!
+        drawDesk(desk.x, desk.y)
+        if (a.status === 'working') drawGamingChair(desk.x, desk.y)
       })
 
       updateWanderers()
 
-      // Draw agents sorted by Y
-      const sorted = agents.filter(a => agentDesks.has(a.id)).sort((a, b) => {
+      // Draw agents sorted by Y (copy the stable list so we don't mutate it)
+      const sorted = [...deskedAgents].sort((a, b) => {
         const ad = agentDesks.get(a.id)!, bd = agentDesks.get(b.id)!
         const ay2 = a.status === 'working' ? ad.y : (wanderState.current.get(a.id)?.y || ad.y * S) / S
         const by2 = b.status === 'working' ? bd.y : (wanderState.current.get(b.id)?.y || bd.y * S) / S
@@ -360,13 +365,56 @@ export default function OfficeView({ agents, onAgentClick }: Props) {
         ctx.textAlign = 'center'
         ctx.fillText(text, (COLS / 2 - 3 + i * 3) * S, 1.2 * S)
       })
-
-      rafId = requestAnimationFrame(render)
     }
 
-    render()
+    // Throttled, pausable rAF loop.
+    //  - 30fps cap: rAF fires ~60fps; we only redraw when an interval elapsed.
+    //  - pause when the tab is backgrounded or the canvas is off-screen, so a
+    //    parked Office tab stops burning CPU/GC.
+    let lastDrawn = 0
+    let running = false
+    let visible = true
 
-    return () => cancelAnimationFrame(rafId)
+    function frame(now: number) {
+      if (!running) return
+      if (shouldDrawFrame(now, lastDrawn)) {
+        lastDrawn = now
+        draw()
+      }
+      rafId = requestAnimationFrame(frame)
+    }
+    function startLoop() {
+      if (running) return
+      running = true
+      lastDrawn = 0
+      rafId = requestAnimationFrame(frame)
+    }
+    function stopLoop() {
+      running = false
+      if (rafId) cancelAnimationFrame(rafId)
+    }
+    function evaluate() {
+      if (shouldAnimate(document.hidden, visible)) startLoop()
+      else stopLoop()
+    }
+
+    // Pause when the canvas scrolls / toggles off-screen.
+    const io = new IntersectionObserver((entries) => {
+      visible = entries[0]?.isIntersecting ?? true
+      evaluate()
+    })
+    io.observe(canvas)
+    // Pause when the whole window/tab is hidden.
+    const onVisibility = () => evaluate()
+    document.addEventListener('visibilitychange', onVisibility)
+
+    evaluate()
+
+    return () => {
+      stopLoop()
+      io.disconnect()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [agents])
 
   // Click handler
