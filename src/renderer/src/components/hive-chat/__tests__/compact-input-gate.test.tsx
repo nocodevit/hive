@@ -97,6 +97,164 @@ describe('send() during /compact', () => {
 })
 
 /**
+ * Mirror of the send() handler's result-handling tail (v1.7.137). After
+ * a Resume, replaySessionHistory shows the conversation from the local
+ * JSONL even when the live `claude --print --resume` child died, so the
+ * UI looks "loaded" but `chat.send` returns {ok:false}. Pre-fix that
+ * failure was swallowed and the user saw NOTHING after typing. Post-fix
+ * we surface a system entry AND re-open the StartChooser so they can
+ * relaunch.
+ */
+function makeSendWithResult(deps: {
+  chatSend: (text: string) => Promise<{ ok: boolean; error?: string }>
+  addEntry: (e: { kind: string; text: string }) => void
+  setChooserMode: (v: boolean) => void
+}) {
+  return async (text: string) => {
+    const res = await deps.chatSend(text)
+    if (!res?.ok) {
+      deps.addEntry({
+        kind: 'system',
+        text: `⚠️ Message not sent (${res?.error ?? 'unknown error'}). The session is no longer running — pick Resume or Start new below to relaunch.`
+      })
+      deps.setChooserMode(true)
+    }
+  }
+}
+
+describe('send() surfaces a failed send (no silent swallow)', () => {
+  it('on {ok:false} adds a system entry with the error AND reopens the chooser', async () => {
+    const addEntry = vi.fn()
+    const setChooserMode = vi.fn()
+    const chatSend = vi.fn(async () => ({ ok: false, error: 'not_in_print_mode' }))
+    const send = makeSendWithResult({ chatSend, addEntry, setChooserMode })
+    await send('hello after dead resume')
+
+    expect(addEntry).toHaveBeenCalledTimes(1)
+    const entry = addEntry.mock.calls[0][0]
+    expect(entry.kind).toBe('system')
+    expect(entry.text).toContain('not_in_print_mode')
+    expect(entry.text).toContain('Message not sent')
+    expect(setChooserMode).toHaveBeenCalledWith(true)
+  })
+
+  it('on no_session (no live child after resume) still surfaces + reopens chooser', async () => {
+    const addEntry = vi.fn()
+    const setChooserMode = vi.fn()
+    const chatSend = vi.fn(async () => ({ ok: false, error: 'no_session' }))
+    const send = makeSendWithResult({ chatSend, addEntry, setChooserMode })
+    await send('still nothing happens')
+
+    expect(addEntry.mock.calls[0][0].text).toContain('no_session')
+    expect(setChooserMode).toHaveBeenCalledWith(true)
+  })
+
+  it('on {ok:true} does NOT add a system entry or reopen the chooser', async () => {
+    const addEntry = vi.fn()
+    const setChooserMode = vi.fn()
+    const chatSend = vi.fn(async () => ({ ok: true }))
+    const send = makeSendWithResult({ chatSend, addEntry, setChooserMode })
+    await send('normal working send')
+
+    expect(addEntry).not.toHaveBeenCalled()
+    expect(setChooserMode).not.toHaveBeenCalled()
+  })
+
+  it('falls back to "unknown error" when the result has no error field', async () => {
+    const addEntry = vi.fn()
+    const setChooserMode = vi.fn()
+    const chatSend = vi.fn(async () => ({ ok: false }))
+    const send = makeSendWithResult({ chatSend, addEntry, setChooserMode })
+    await send('failure without an error string')
+
+    expect(addEntry.mock.calls[0][0].text).toContain('unknown error')
+  })
+})
+
+/**
+ * Mirror of the runCompact re-entry guard (v1.7.138). The Compact
+ * button(s) and the /compact slash command all route through a single
+ * runCompact() entry point. Pre-fix the button had no disabled state
+ * and `compactInProgress` only flips true once claude echoes its
+ * compact-begin stderr line — a multi-second window in which the user
+ * could click Compact again and fire a SECOND concurrent /compact.
+ * Post-fix a synchronous `compactBusyRef` flips the instant the first
+ * click lands, so re-entry is rejected before any second IPC goes out.
+ */
+function makeRunCompact(deps: {
+  busyRef: { current: boolean }
+  compactInProgress: boolean
+  setCompactBusy: (v: boolean) => void
+  addEntry: (e: { kind: string; text: string }) => void
+  chatCompact: () => Promise<{ ok: boolean; error?: string }>
+}) {
+  return async () => {
+    if (deps.busyRef.current || deps.compactInProgress) return
+    deps.busyRef.current = true
+    deps.setCompactBusy(true)
+    try {
+      const res = await deps.chatCompact()
+      deps.addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
+    } catch (e) {
+      deps.addEntry({ kind: 'system', text: `Compact failed: ${String(e)}` })
+    } finally {
+      deps.busyRef.current = false
+      deps.setCompactBusy(false)
+    }
+  }
+}
+
+describe('runCompact re-entry guard (Compact button can only fire once)', () => {
+  it('a second click while the first is still running is a no-op — only ONE chat.compact', async () => {
+    const busyRef = { current: false }
+    let resolveFirst: (v: { ok: boolean }) => void = () => {}
+    const chatCompact = vi.fn(() => new Promise<{ ok: boolean }>(r => { resolveFirst = r }))
+    const setCompactBusy = vi.fn()
+    const runCompact = makeRunCompact({ busyRef, compactInProgress: false, setCompactBusy, addEntry: vi.fn(), chatCompact })
+
+    const first = runCompact()        // starts, flips busyRef synchronously
+    const second = runCompact()       // must bail immediately
+    await second
+    expect(chatCompact).toHaveBeenCalledTimes(1)
+
+    resolveFirst({ ok: true })
+    await first
+    expect(busyRef.current).toBe(false)
+    expect(setCompactBusy).toHaveBeenNthCalledWith(1, true)
+    expect(setCompactBusy).toHaveBeenLastCalledWith(false)
+  })
+
+  it('does not fire when compactInProgress is already true (stderr-confirmed run)', async () => {
+    const busyRef = { current: false }
+    const chatCompact = vi.fn(async () => ({ ok: true }))
+    const runCompact = makeRunCompact({ busyRef, compactInProgress: true, setCompactBusy: vi.fn(), addEntry: vi.fn(), chatCompact })
+    await runCompact()
+    expect(chatCompact).not.toHaveBeenCalled()
+  })
+
+  it('clears the busy guard even when chat.compact throws (finally runs, no rethrow)', async () => {
+    const busyRef = { current: false }
+    const setCompactBusy = vi.fn()
+    const addEntry = vi.fn()
+    const chatCompact = vi.fn(async () => { throw new Error('boom') })
+    const runCompact = makeRunCompact({ busyRef, compactInProgress: false, setCompactBusy, addEntry, chatCompact })
+    await runCompact()
+    expect(busyRef.current).toBe(false)
+    expect(setCompactBusy).toHaveBeenLastCalledWith(false)
+    expect(addEntry.mock.calls[0][0].text).toContain('boom')
+  })
+
+  it('allows a fresh compact AFTER the previous one settled', async () => {
+    const busyRef = { current: false }
+    const chatCompact = vi.fn(async () => ({ ok: true }))
+    const runCompact = makeRunCompact({ busyRef, compactInProgress: false, setCompactBusy: vi.fn(), addEntry: vi.fn(), chatCompact })
+    await runCompact()
+    await runCompact()
+    expect(chatCompact).toHaveBeenCalledTimes(2)
+  })
+})
+
+/**
  * Mirror of the stderr→compact-state side effect. The renderer
  * watches stderr lines for known begin/end phrases and flips
  * `compactStartedAt` / clears pending queues. The contract MUST
