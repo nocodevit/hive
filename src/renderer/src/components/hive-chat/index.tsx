@@ -1,7 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
-import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext } from './renderers'
+import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext, SignInContext, classifyResultError, dismissActionForAuthState } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
 import { mergeUsage, preserveAccountUsage } from './usage-state'
 import { shortenPath } from '../../lib/path-display'
@@ -214,6 +214,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // Derived (also true while the stuck banner is up, since compactStuck
   // implies compact is still alive — main only fires it before settle).
   const compactInProgress = compactStartedAt !== null || compactStuck !== null
+  // Re-entry guard for the Compact button(s). compactInProgress only flips
+  // once the backend's "Compacting…" stderr line echoes back — there's a
+  // window between the click and that echo where a user could click Compact
+  // again and fire a SECOND concurrent /compact (two PTY round-trips racing
+  // on the same session). The ref blocks re-entry synchronously (before any
+  // setState commits); the state drives the disabled visual. (v1.7.138)
+  const compactBusyRef = useRef(false)
+  const [compactBusy, setCompactBusy] = useState(false)
 
   // Sign-in modal — flipped to 'needed' when claude --print returns
   // result.error='authentication_failed' (a.k.a. "Not logged in"). The
@@ -790,6 +798,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           // pause_turn, model_context_window_exceeded, etc.) so the
           // user notices when claude didn't simply finish normally.
           stopReason: typeof e.stop_reason === 'string' ? e.stop_reason : undefined,
+          // Carry the real error so the card renders the actual message
+          // (+ inline Sign-in for auth_expired) instead of the misleading
+          // "stopped: stop_sequence" that a rejected OAuth credential emits.
+          isError: e.is_error === true,
+          apiErrorStatus: typeof e.api_error_status === 'number' ? e.api_error_status : undefined,
+          errorText: typeof e.result === 'string' ? e.result : undefined,
           isSubagent: isSubagentResult
         } as any)
       }
@@ -828,13 +842,24 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }
         return
       }
-      // result event: detect "Not logged in" → surface sign-in modal
-      // so the user can authenticate without leaving the app. claude
-      // --print emits this as a synthetic result with
-      // error='authentication_failed'.
+      // result event: classify any error. Only auth_expired (rejected/
+      // expired OAuth credential — 401, "Not logged in", "Failed to
+      // authenticate") pops the global sign-in panel, because re-login
+      // actually fixes it. region_blocked / generic errors do NOT pop it
+      // (re-auth won't help) — they're surfaced inline by ResultSummaryCard
+      // with the real message. This replaces the old detection that only
+      // matched error==='authentication_failed' / "Not logged in" and so
+      // silently missed the 401 shape, leaving users stuck on a cryptic
+      // "stopped: stop_sequence".
       if (ev.type === 'result') {
         const e = ev as any
-        if (e.is_error && (e.error === 'authentication_failed' || (typeof e.result === 'string' && e.result.includes('Not logged in')))) {
+        const classified = classifyResultError({
+          is_error: e.is_error,
+          api_error_status: e.api_error_status,
+          error: e.error,
+          result: e.result
+        })
+        if (classified?.kind === 'auth_expired') {
           setAuthState('needed')
           setAuthOutput('')
           setAuthError(null)
@@ -1110,15 +1135,28 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
     if (text === '/compact') {
       setInput(''); resetInputHeight()
-      addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
-      const res = await window.api.chat.compact(id)
-      addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
+      await runCompact()  // shares the re-entry guard with the Compact buttons
       return
     }
     setSending(true)
     addEntry({ kind: 'user', text })
     setInput(''); resetInputHeight()
-    await window.api.chat.send(id, text)
+    // Surface a failed send instead of silently swallowing it. After a
+    // Resume, replaySessionHistory shows the conversation from the local
+    // JSONL even when the live `claude --print --resume` child died (auth
+    // / "No conversation found" / instant exit). sendUserMessage then
+    // returns {ok:false, error:'no_session'|'not_in_print_mode'} and the
+    // user previously saw NOTHING after typing — this is the "Resume
+    // loaded the conversation but sending got no response" bug. Show the
+    // error and re-open the StartChooser so they can relaunch. (v1.7.137)
+    const res = await window.api.chat.send(id, text)
+    if (!res?.ok) {
+      addEntry({
+        kind: 'system',
+        text: `⚠️ Message not sent (${res?.error ?? 'unknown error'}). The session is no longer running — pick Resume or Start new below to relaunch.`
+      })
+      setChooserMode(true)
+    }
     setSending(false)
   }
 
@@ -1189,6 +1227,34 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
   }
 
+  // Always-available escape hatch out of the sign-in modal. The critical case
+  // is 'in-progress': `claude auth login` can hang forever (browser closed, or
+  // a region block that re-login can't fix), so we SIGTERM the child via
+  // auth:cancel before dropping back to idle. Other states just close.
+  const dismissAuthModal = () => {
+    const action = dismissActionForAuthState(authState)
+    if (!action) return
+    // Best-effort kill: we always close the modal regardless of the result, so
+    // a failed/no-op cancel can't re-trap the user. (Gate 12: fire-and-forget
+    // is intentional here — there is no recovery action on cancel failure.)
+    if (action.killProcess) window.api.auth.cancel().catch(() => {})
+    setAuthState('idle')
+    setAuthOutput('')
+    setAuthError(null)
+  }
+
+  // Esc closes the sign-in modal from ANY non-idle state — a hard guarantee
+  // the user is never trapped, even if a future state forgets its button.
+  useEffect(() => {
+    if (authState === 'idle') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') dismissAuthModal()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authState])
+
   const startNewSession = async () => {
     // Fresh session with the same agent — no -c, no --resume. System/init
     // will emit a new session_id; timeline is preserved and a divider is
@@ -1213,6 +1279,25 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       continueSession: false,
       rebaseOnStart: false
     })
+  }
+
+  // Single guarded entry point for BOTH Compact buttons (ActionToolbar +
+  // CtxNagBanner) and the /compact slash command. Re-entrant calls are
+  // dropped so the button can't fire multiple concurrent /compact runs.
+  const runCompact = async () => {
+    if (compactBusyRef.current || compactInProgress) return
+    compactBusyRef.current = true
+    setCompactBusy(true)
+    addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
+    try {
+      const res = await window.api.chat.compact(id)
+      addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
+    } catch (e) {
+      addEntry({ kind: 'system', text: `Compact failed: ${String(e)}` })
+    } finally {
+      compactBusyRef.current = false
+      setCompactBusy(false)
+    }
   }
 
   const resumeClosedSession = async () => {
@@ -1335,6 +1420,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
 
   return (
     <HiveChatPausedContext.Provider value={!visible}>
+    <SignInContext.Provider value={startAuthLogin}>
     <AskUserQuestionContext.Provider value={pendingQuestion ? {
       requestId: pendingQuestion.requestId,
       submit: (answers) => {
@@ -1472,11 +1558,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         dismissed={ctxNagDismissed}
         onDismissWarn={() => setCtxNagDismissed(prev => ({ ...prev, warn: true }))}
         onDismissUrgent={() => setCtxNagDismissed(prev => ({ ...prev, urgent: true }))}
-        onCompact={async () => {
-          addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
-          const res = await window.api.chat.compact(id)
-          addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
-        }}
+        onCompact={runCompact}
       />
       {/* Subagent active banner — sticky above rate-limit, only when
          at least one Task tool is running. Spinner + per-subagent line. */}
@@ -1784,11 +1866,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             onCancelAutoContinue={() => window.api.chat.cancelAutoContinue(id)}
             modelKnown={!!modelName}
             onViewContext={openContextModal}
-            onCompact={async () => {
-              addEntry({ kind: 'system', text: '⏳ Compacting context — running /compact (up to 10 min)…' })
-              const res = await window.api.chat.compact(id)
-              addEntry({ kind: 'system', text: res.ok ? '✓ Context compacted, session resumed' : `Compact failed: ${res.error}` })
-            }}
+            compacting={compactBusy || compactInProgress}
+            onCompact={runCompact}
             onFork={async () => {
               // Surface IPC failure so the user sees what happened. The
               // bare `() => api.chat.startWithSummary(id)` was a silent
@@ -2097,9 +2176,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 </>
               )}
               {authState === 'in-progress' && (
-                <div style={{ color: CRUSH.Squid, fontSize: 11, alignSelf: 'center' }}>
-                  Browser should open automatically. Complete auth there.
-                </div>
+                <>
+                  <div style={{ color: CRUSH.Squid, fontSize: 11, alignSelf: 'center', marginRight: 'auto' }}>
+                    Browser should open automatically. Complete auth there.
+                  </div>
+                  <button onClick={dismissAuthModal} style={{
+                    background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 6,
+                    fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer'
+                  }}>Cancel</button>
+                </>
               )}
               {authState === 'failed' && (
                 <>
@@ -2129,6 +2215,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     </div>
     </HiveChatErrorBoundary>
     </AskUserQuestionContext.Provider>
+    </SignInContext.Provider>
     </HiveChatPausedContext.Provider>
   )
 }
@@ -3522,12 +3609,13 @@ export function CrushTooltip({ text, children, side = 'top', block = false }: {
  * (Fork, Resume, Remote Control, Close).
  */
 function ActionToolbar({
-  usedTokens, contextSize, onCompact, onFork, onResume, onNewSession, onRemoteControl, onClose, sessionActive,
+  usedTokens, contextSize, onCompact, compacting, onFork, onResume, onNewSession, onRemoteControl, onClose, sessionActive,
   rateLimit5h, rateLimit7d, autoContinueAt, onCancelAutoContinue, modelKnown, onViewContext
 }: {
   usedTokens: number
   contextSize: string
   onCompact: () => void
+  compacting: boolean
   onFork: () => void
   onResume: () => void
   onNewSession: () => void
@@ -3656,9 +3744,10 @@ function ActionToolbar({
           <span style={{ color: CRUSH.Oyster }}>context —</span>
         )}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
-        <CrushTooltip text="Run /compact · summarize history into a smaller prompt · up to 10 min">
+        <CrushTooltip text={compacting ? 'Compacting in progress — please wait (up to 10 min)' : 'Run /compact · summarize history into a smaller prompt · up to 10 min'}>
           <button
             onClick={onCompact}
+            disabled={compacting}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
               background: compactBg,
@@ -3667,13 +3756,14 @@ function ActionToolbar({
               fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600,
               padding: '2px 8px',
               borderRadius: 4,
-              cursor: 'pointer',
+              cursor: compacting ? 'not-allowed' : 'pointer',
+              opacity: compacting ? 0.5 : 1,
               transition: 'all 120ms'
             }}
-            onMouseEnter={e => { e.currentTarget.style.background = compactColor; e.currentTarget.style.color = CRUSH.Pepper }}
-            onMouseLeave={e => { e.currentTarget.style.background = compactBg; e.currentTarget.style.color = compactColor }}
+            onMouseEnter={e => { if (compacting) return; e.currentTarget.style.background = compactColor; e.currentTarget.style.color = CRUSH.Pepper }}
+            onMouseLeave={e => { if (compacting) return; e.currentTarget.style.background = compactBg; e.currentTarget.style.color = compactColor }}
           >
-            <span style={{ fontSize: 11, lineHeight: 1 }}>⎙</span>{compactLabel}
+            <span style={{ fontSize: 11, lineHeight: 1 }}>⎙</span>{compacting ? 'Compacting…' : compactLabel}
           </button>
         </CrushTooltip>
         <div ref={menuRef} style={{ position: 'relative' as const }}>

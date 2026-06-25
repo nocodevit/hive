@@ -34,6 +34,94 @@ export const AskUserQuestionContext = React.createContext<{
   submit: (answers: Record<string, string | string[]>) => void
 } | null>(null)
 
+/**
+ * Carries the "start interactive sign-in" callback (window.api.auth.login via
+ * startAuthLogin) into the deeply-nested ResultSummaryCard so an auth-expiry
+ * error can render an inline "Sign in →" button right under the failed turn.
+ * null when no handler is wired (the button is then hidden).
+ */
+export const SignInContext = React.createContext<(() => void) | null>(null)
+
+export type ResultErrorKind = 'auth_expired' | 'region_blocked' | 'generic'
+
+/**
+ * Classify a stream `result` event's error so the UI can react correctly.
+ *
+ * Background (the incident this fixes): when the Claude OAuth credential is
+ * rejected, the CLI emits a result with `is_error:true`,
+ * `api_error_status:401`, result text "Failed to authenticate. API Error:
+ * 401 …" AND a junk `stop_reason:"stop_sequence"`. Hive used to read only
+ * `stop_reason` and render a cryptic "stopped: stop_sequence", never telling
+ * the user their session expired nor offering a way to re-auth.
+ *
+ *  - auth_expired   → credentials rejected (401 / "Not logged in" / "Failed
+ *                     to authenticate"). Re-login FIXES it → offer Sign-in.
+ *  - region_blocked → Claude unavailable in the caller's country/region.
+ *                     Re-login does NOT help → show reason, NO sign-in button.
+ *  - generic        → any other API error. Surface the REAL message instead
+ *                     of the misleading stop_reason.
+ *
+ * Returns null when the result is not an error.
+ *
+ * NOTE: the region check runs FIRST on purpose — a geo block can also carry a
+ * 401/403, and telling the user to "sign in again" there would be wrong.
+ */
+export function classifyResultError(e: {
+  is_error?: boolean
+  api_error_status?: number
+  error?: string
+  result?: string
+}): { kind: ResultErrorKind; message: string } | null {
+  if (!e || !e.is_error) return null
+  const result = typeof e.result === 'string' ? e.result : ''
+  const text = `${e.error ?? ''} ${result}`.toLowerCase()
+  const status = e.api_error_status
+  // Region / country / territory restriction — re-login will NOT help.
+  //
+  // Anthropic geo-blocks requests from unsupported countries with a
+  // 403 "Request not allowed" — and the CLI mislabels that result as
+  // `error:"authentication_failed"` (observed in the wild: a Cutis run where
+  // the caller's country changed produced `is_error:true`,
+  // `api_error_status:403`, `error:"authentication_failed"`,
+  // result "Failed to authenticate. API Error: 403 Request not allowed",
+  // `inference_geo:"not_available"`). Without catching it here it falls through
+  // to the auth-expired branch below and wrongly pops the sign-in modal.
+  if (/unsupported[\s_-]*(country|region|territory)|not\s+available\s+in\s+your|in\s+your\s+(country|region|territory)|(country|region|territory)\s+is\s+not/.test(text) ||
+      /request\s+not\s+allowed/.test(text) ||
+      status === 403) {
+    return { kind: 'region_blocked', message: result || 'Claude is not available in your current country/region.' }
+  }
+  // Expired / invalid credentials — re-login fixes it.
+  if (e.error === 'authentication_failed' || status === 401 ||
+      /not\s+logged\s+in|invalid\s+authentication|failed\s+to\s+authenticate|unauthorized/.test(text)) {
+    return { kind: 'auth_expired', message: result || 'Authentication failed — please sign in again.' }
+  }
+  return { kind: 'generic', message: result || (status ? `API error ${status}` : 'Request failed') }
+}
+
+export type AuthModalState = 'idle' | 'needed' | 'in-progress' | 'success' | 'failed'
+
+/**
+ * Decide what "dismiss / escape" should do for a given sign-in modal state.
+ *
+ * Invariant this enforces (the bug this fixes): EVERY non-idle state must be
+ * escapable. Previously the 'in-progress' state rendered only descriptive text
+ * with NO button, so if `claude auth login` hung (user closed the browser, or
+ * a region/country block that re-login can't fix), the modal trapped the user
+ * forever. Now both the Escape key and a Cancel button route through here.
+ *
+ *  - returns null when there's nothing to dismiss ('idle').
+ *  - `killProcess` is true ONLY for 'in-progress', where a live
+ *    `claude auth login` child must be SIGTERM'd (via auth:cancel) before we
+ *    drop back to idle. Other states have no running child to kill.
+ */
+export function dismissActionForAuthState(
+  state: AuthModalState
+): { killProcess: boolean } | null {
+  if (state === 'idle') return null
+  return { killProcess: state === 'in-progress' }
+}
+
 const DEFAULT_EXPANDED_LINES = 12
 const LONG_ASSISTANT_THRESHOLD = 30
 
@@ -1466,11 +1554,76 @@ export function fmtK(n?: number): string {
   return String(n)
 }
 
-export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, outputTokens, cacheReadTokens, stopReason }: {
+export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, outputTokens, cacheReadTokens, stopReason, isError, apiErrorStatus, errorText }: {
   costUSD?: number; durationMs?: number; numTurns?: number
   inputTokens?: number; outputTokens?: number; cacheReadTokens?: number
   stopReason?: string
+  isError?: boolean; apiErrorStatus?: number; errorText?: string
 }) {
+  const onSignIn = React.useContext(SignInContext)
+  // First: did this turn fail with a real error? If so, classify it and
+  // render the ACTUAL message (+ a Sign-in button when re-auth would fix
+  // it) instead of the misleading "stopped: stop_sequence".
+  const err = classifyResultError({ is_error: isError, api_error_status: apiErrorStatus, error: undefined, result: errorText })
+  if (err) {
+    // auth_expired → red + offer Sign-in. region_blocked → red, NO Sign-in
+    // (re-login won't help). generic → red, real message only.
+    const showSignIn = err.kind === 'auth_expired' && onSignIn != null
+    const label = err.kind === 'auth_expired'
+      ? 'authentication failed'
+      : err.kind === 'region_blocked'
+        ? 'region blocked'
+        : `error${apiErrorStatus ? ` ${apiErrorStatus}` : ''}`
+    return (
+      <div style={{
+        margin: '8px 0',
+        borderLeft: `3px solid ${CRUSH.Sriracha}`,
+        background: CRUSH.BBQ,
+        borderRadius: 4,
+        padding: '8px 12px',
+        fontFamily: FONT_MONO, fontSize: 11,
+        color: CRUSH.Ash,
+        display: 'flex', flexDirection: 'column' as const, gap: 6
+      }}>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', alignItems: 'center' }}>
+          <span style={{
+            color: CRUSH.Sriracha,
+            fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: 10
+          }}>{label}</span>
+          {durationMs != null && (
+            <span style={{ color: CRUSH.Squid }}>
+              <span style={{ color: CRUSH.Oyster }}>dur </span>{fmtMs(durationMs)}
+            </span>
+          )}
+        </div>
+        <div style={{ color: CRUSH.Ash, lineHeight: 1.4, whiteSpace: 'pre-wrap' as const }}>{err.message}</div>
+        {showSignIn && (
+          <button
+            onClick={() => onSignIn?.()}
+            style={{
+              alignSelf: 'flex-start',
+              marginTop: 2,
+              background: CRUSH.Sriracha,
+              color: CRUSH.Butter,
+              border: 'none',
+              borderRadius: 4,
+              padding: '4px 12px',
+              fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
+              cursor: 'pointer'
+            }}
+          >Sign in →</button>
+        )}
+        {err.kind === 'region_blocked' && (
+          <div style={{ color: CRUSH.Squid, fontSize: 10, lineHeight: 1.5 }}>
+            Looks like a country/region restriction — Claude may not be
+            available where this request came from. Switch back to a supported
+            country/region, then restart Hive. Re-signing in is unlikely to
+            help.
+          </div>
+        )}
+      </div>
+    )
+  }
   // `end_turn` is the normal "claude finished naturally" stop. Anything
   // else is worth surfacing — refusal especially is otherwise easy to miss.
   const abnormal = stopReason && stopReason !== 'end_turn'
@@ -1563,6 +1716,7 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
       costUSD={entry.costUSD} durationMs={entry.durationMs} numTurns={entry.numTurns}
       inputTokens={entry.inputTokens} outputTokens={entry.outputTokens}
       cacheReadTokens={entry.cacheReadTokens} stopReason={entry.stopReason}
+      isError={entry.isError} apiErrorStatus={entry.apiErrorStatus} errorText={entry.errorText}
     />; break
     case 'compact_boundary': row = <CompactBoundary previousTokens={entry.previousTokens} newTokens={entry.newTokens} turnsSummarized={entry.turnsSummarized} />; break
   }
