@@ -3,6 +3,7 @@ import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
 import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext, SignInContext, classifyResultError, dismissActionForAuthState } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
+import { createFrameCoalescer } from './streamCoalescer'
 import { mergeUsage, preserveAccountUsage } from './usage-state'
 import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
@@ -482,6 +483,24 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       })
     }
 
+    // Coalesce high-frequency streaming text deltas into at most one timeline
+    // update per animation frame. claude emits a content_block_delta every few
+    // tokens; calling replaceEntry (→ full ReactMarkdown reparse of the WHOLE
+    // accumulated message) on each one is O(N²) per message and runs per active
+    // agent — that pegged the renderer when several agents streamed at once.
+    // The pending map holds the latest entry per id; the flush drains it. We
+    // flushNow() at block boundaries (content_block_start) and message_stop so
+    // ordering and final text stay exact even if no frame has fired.
+    const streamPending = new Map<string, TimelineEntry>()
+    const streamCoalescer = createFrameCoalescer({
+      raf: (cb) => requestAnimationFrame(cb),
+      caf: (h) => cancelAnimationFrame(h)
+    })
+    const flushStreamPending = () => {
+      for (const [eid, entry] of streamPending) replaceEntry(eid, entry)
+      streamPending.clear()
+    }
+
     const offEv = window.api.chat.onEvent(id, (ev: StreamEvent) => {
       // ── Active subagent tracking ───────────────────────────────
       // Run before any early-return branch so we never miss a
@@ -626,11 +645,15 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           return
         }
         if (e?.type === 'message_stop') {
+          streamCoalescer.flushNow() // ensure the final accumulated text lands
           setThinking(null)
           return
         }
 
         if (e?.type === 'content_block_start') {
+          // Settle the previous block's pending text before this block creates
+          // its entry, so deferred text never lands after a later block's row.
+          streamCoalescer.flushNow()
           const idx = e.index
           const block = e.content_block
           if (!acc.currentMsgId) return
@@ -653,7 +676,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           if (e.delta.type === 'text_delta' && block.kind === 'text') {
             block.text = (block.text || '') + e.delta.text
             const entryId = `msg:${acc.currentMsgId}:${idx}`
-            replaceEntry(entryId, { kind: 'assistant', text: block.text, id: entryId })
+            // Defer the heavy replaceEntry/markdown reparse to the next frame;
+            // many deltas within one frame collapse to a single render.
+            streamPending.set(entryId, { kind: 'assistant', text: block.text, id: entryId })
+            streamCoalescer.schedule(flushStreamPending)
             setThinking(null) // visible text started → hide spinner
           } else if (e.delta.type === 'input_json_delta' && block.kind === 'tool_use') {
             block.inputJson = (block.inputJson || '') + e.delta.partial_json
@@ -984,6 +1010,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
 
     return () => {
+      streamCoalescer.cancel()
       offEv()
       offErr()
       offExit()
