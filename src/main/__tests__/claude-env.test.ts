@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import {
   CLAUDE_INSTALL_COMMAND,
+  CLAUDE_BIN_ENV,
   claudeStatus,
+  claudeBin,
   pickPathLine,
+  pickClaudeBinPath,
   pathHydrationStrategies,
+  claudeBinStrategies,
   claudeProbeStrategies
 } from '../claude-env'
 
@@ -89,5 +93,76 @@ describe('claudeProbeStrategies', () => {
     expect(second.file).toBe('/bin/zsh')
     expect(second.args[0]).toBe('-lic')
     expect(second.args).toContain('claude --version')
+  })
+})
+
+describe('claudeBin', () => {
+  afterEach(() => {
+    delete process.env[CLAUDE_BIN_ENV]
+  })
+
+  it('falls back to the bare name when no absolute path was resolved', () => {
+    delete process.env[CLAUDE_BIN_ENV]
+    expect(claudeBin()).toBe('claude')
+  })
+
+  it('uses the absolute path resolved at boot when present', () => {
+    process.env[CLAUDE_BIN_ENV] = '/Users/me/.nvm/versions/node/v22/bin/claude'
+    expect(claudeBin()).toBe('/Users/me/.nvm/versions/node/v22/bin/claude')
+  })
+
+  it('ignores a blank env value (never spawns an empty string)', () => {
+    process.env[CLAUDE_BIN_ENV] = '   '
+    expect(claudeBin()).toBe('claude')
+  })
+})
+
+describe('claudeBinStrategies', () => {
+  it('asks an interactive login shell for the absolute path first', () => {
+    const [first] = claudeBinStrategies('/bin/zsh')
+    expect(first.file).toBe('/bin/zsh')
+    expect(first.args[0]).toBe('-lic')
+    expect(first.args).toContain('command -v claude')
+  })
+
+  it('falls back to a non-interactive login shell', () => {
+    const [, second] = claudeBinStrategies('/bin/zsh')
+    expect(second.args[0]).toBe('-lc')
+  })
+})
+
+describe('pickClaudeBinPath', () => {
+  it('extracts a plain absolute claude path', () => {
+    expect(pickClaudeBinPath('/Users/me/.nvm/versions/node/v22/bin/claude')).toBe(
+      '/Users/me/.nvm/versions/node/v22/bin/claude'
+    )
+  })
+
+  it('accepts the npm-shipped claude.exe binary name', () => {
+    expect(pickClaudeBinPath('/Users/me/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe')).toBe(
+      '/Users/me/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe'
+    )
+  })
+
+  it('takes the LAST claude path when rc noise precedes it (the real bug)', () => {
+    // Reproduces the exact failure: a broken ~/.zshrc ran `nvm bash completion`,
+    // dumping nvm's help text to stdout BEFORE `command -v claude`'s answer.
+    // Scanning last-first must still recover the real binary path.
+    const polluted = [
+      'Node Version Manager (v0.39.0)',
+      '  nvm which [current | <version>]   Display path to installed node version.',
+      '  nvm cache dir                     Display path to the cache directory for nvm',
+      '/Users/me/.nvm/versions/node/v16.20.2/bin/claude'
+    ].join('\n')
+    expect(pickClaudeBinPath(polluted)).toBe('/Users/me/.nvm/versions/node/v16.20.2/bin/claude')
+  })
+
+  it('returns null when claude is genuinely absent', () => {
+    expect(pickClaudeBinPath('')).toBeNull()
+    expect(pickClaudeBinPath('claude not found')).toBeNull()
+    // A directory that merely CONTAINS "claude" mid-path is not an executable.
+    expect(pickClaudeBinPath('/opt/claude-tools/bin/other')).toBeNull()
+    // Relative paths are not trustworthy to spawn.
+    expect(pickClaudeBinPath('./claude')).toBeNull()
   })
 })
