@@ -45,6 +45,58 @@ import { isHeadlessMode } from './headless'
   }
 })()
 
+// Resolve claude's ABSOLUTE path once at boot and stash it in the environment
+// so every spawn (chat.ts, PTY, gate) uses the same concrete binary instead of
+// the bare name `claude` against a possibly-unhydrated PATH.
+//
+// The bug this closes: hydratePathFromShell above is best-effort — a GUI launch
+// that fails to recover PATH silently keeps launchd's minimal set (no nvm bin).
+// The install gate still passed because it had an interactive-login-shell
+// fallback, but chat.ts spawned the bare name with NO fallback, so EVERY
+// session ENOENTed while the app looked healthy ("gate says installed, but
+// typing after Resume throws you back to the chooser"). Resolving an absolute
+// path here — via the same login shell the gate already trusts — makes the
+// thing that RUNS claude exactly as robust as the thing that GATES on it.
+//
+// Outcome is logged (claude-env-log.jsonl) so a future failure is never
+// invisible again — the original incident was undiagnosable precisely because
+// nothing recorded that hydration had failed.
+;(function resolveClaudeBinPath() {
+  const shell = process.env.SHELL || '/bin/zsh'
+  let resolved: string | null = null
+  let via = 'none'
+  for (const { file, args } of claudeBinStrategies(shell)) {
+    try {
+      const out = execFileSync(file, args, { encoding: 'utf-8', timeout: 7000 })
+      const p = pickClaudeBinPath(out)
+      if (p) {
+        resolved = p
+        via = args.join(' ')
+        process.env[CLAUDE_BIN_ENV] = p
+        break
+      }
+    } catch {
+      // Try the next strategy. If all fail, claudeBin() falls back to the bare
+      // name and the gate reports not-installed — the honest outcome.
+    }
+  }
+  try {
+    const dir = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
+    if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
+    appendFileSync(
+      join(dir, 'claude-env-log.jsonl'),
+      JSON.stringify({
+        t: Date.now(),
+        resolvedClaudeBin: resolved,
+        via,
+        pathHydrated: process.env.PATH !== '/usr/bin:/bin:/usr/sbin:/sbin'
+      }) + '\n'
+    )
+  } catch {
+    // Logging is diagnostic-only; never let it block boot.
+  }
+})()
+
 import { createTask, readTask, updateTask, listTasks } from './tasks'
 import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
@@ -57,9 +109,13 @@ import { parsePsRows, hasClaudeDescendant, collectDescendantPids } from './ptyPr
 import { authUrlToOpen } from './authUrl'
 import {
   CLAUDE_INSTALL_COMMAND,
+  CLAUDE_BIN_ENV,
   claudeStatus,
+  claudeBin,
   pickPathLine,
+  pickClaudeBinPath,
   pathHydrationStrategies,
+  claudeBinStrategies,
   claudeProbeStrategies,
   type ClaudeStatus
 } from './claude-env'
@@ -1582,7 +1638,7 @@ app.whenReady().then(() => {
   let authChild: ReturnType<typeof spawn> | null = null
   ipcMain.handle('auth:login', () => {
     return new Promise<{ ok: boolean; code: number; error?: string }>((resolve) => {
-      const child = spawn('claude', ['auth', 'login'], {
+      const child = spawn(claudeBin(), ['auth', 'login'], {
         env: process.env,
         stdio: ['pipe', 'pipe', 'pipe']
       })
@@ -1630,7 +1686,14 @@ app.whenReady().then(() => {
   // Headless (e2e) short-circuits to installed so the gate never blocks tests.
   function claudeCanRun(): boolean {
     const shell = process.env.SHELL || '/bin/zsh'
-    for (const { file, args } of claudeProbeStrategies(shell)) {
+    // Absolute path resolved at boot is the strongest signal AND is exactly
+    // what chat.ts will spawn — so a green gate now guarantees a spawnable
+    // session (the two used to diverge). Probe strategies remain as fallback.
+    const strategies = [
+      { file: claudeBin(), args: ['--version'] },
+      ...claudeProbeStrategies(shell)
+    ]
+    for (const { file, args } of strategies) {
       try {
         execFileSync(file, args, { timeout: 7000, stdio: 'ignore' })
         return true

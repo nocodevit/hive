@@ -8,6 +8,7 @@ import { queryUsageViaCcusage, queryUsagePctViaPty } from './chat-usage-query'
 import { UsageCache } from './usage-cache'
 import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
 import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
+import { claudeBin } from './claude-env'
 
 export type { RecentSession, PrevSessionInfo }
 export type { ContextRow, ContextDetailRow, ContextSnapshot } from './chat-context-parser'
@@ -495,7 +496,7 @@ async function runCompactViaPrint(
     // didn't match Hive's.
     const args = ['--print', '--resume', sid, '/compact', '--output-format', 'stream-json', '--verbose']
     if (agent) args.unshift('--agent', agent)
-    const child = spawn('claude', args, { cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(claudeBin(), args, { cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] })
 
     // Close stdin immediately so claude doesn't wait 3s for piped input.
     try { child.stdin.end() } catch {}
@@ -585,7 +586,7 @@ export function startChat(id: string, opts: StartOpts = {}) {
     }
   }
 
-  const child = spawn('claude', args, {
+  const child = spawn(claudeBin(), args, {
     cwd: opts.cwd,
     env: process.env,
     stdio: ['pipe', 'pipe', 'pipe']
@@ -891,7 +892,7 @@ export function startRemoteControl(id: string) {
   try { session.child?.kill() } catch {}
   session.child = null
   session.mode = 'rc'
-  const rcPty = pty.spawn('claude', ['--resume', sid], {
+  const rcPty = pty.spawn(claudeBin(), ['--resume', sid], {
     name: 'xterm-color',
     cols: 120, rows: 30,
     cwd: session.cwd || process.env.HOME || '/',
@@ -1165,7 +1166,7 @@ export async function scrapeContextLive(id: string, force = false): Promise<{ ok
     // would be computed against the wrong cache key.
     const args = ['--print', '--resume', sid, '/context', '--output-format', 'stream-json', '--verbose']
     if (opts.agent) args.unshift('--agent', opts.agent)
-    const child = spawn('claude', args, { cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(claudeBin(), args, { cwd, env: process.env, stdio: ['pipe', 'pipe', 'pipe'] })
 
     child.stdout.on('data', (chunk: Buffer) => {
       buffer += chunk.toString('utf8')
@@ -1212,7 +1213,7 @@ async function queryUsage(cwd?: string): Promise<{ fiveHour?: number; sevenDay?:
       resolve(value)
     }
     try {
-      const child = spawn('claude', [
+      const child = spawn(claudeBin(), [
         '--print', '/usage',
         '--output-format', 'stream-json',
         '--verbose'
