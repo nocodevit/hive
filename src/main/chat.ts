@@ -85,43 +85,17 @@ function logDir(): string {
 }
 
 /**
- * Retention sweep for ~/.hive/chat-logs — OPT-IN ONLY.
- *
- * Prior to this change the sweep ran unconditionally on every main-process
- * startup and silently deleted any `.jsonl` older than 30 days. That's the
- * class of behavior users don't discover until it's cost them real data:
- * after 30 days of not opening an agent, its chat history vanishes with no
- * confirmation, no notification, and no way to recover (Hive's chat-logs
- * are the ONLY tee of stream-json events — Claude Code's own
- * `~/.claude/projects/*.jsonl` is separately pruned by its own
- * `cleanupPeriodDays` and is also default-30d).
- *
- * New behavior: sweep only runs if the user has explicitly enabled it via
- * `HIVE_LOG_RETENTION_DAYS` env var (positive integer). Absent or invalid
- * value → NO sweep, files kept forever. Users who want the old behavior
- * back can set `HIVE_LOG_RETENTION_DAYS=30`.
- *
- * Never touches ~/.claude/projects (Claude Code's own persistence).
+ * Retention sweep for ~/.hive/chat-logs. Deletes .jsonl files whose mtime
+ * is older than 30 days. Runs once per main-process startup — cheap; no
+ * timer needed since app lifetime rarely spans >30d, and the next launch
+ * will catch whatever this one missed. Never touches ~/.claude/projects
+ * (that's Claude Code's own persistence, not ours to prune).
  */
-/**
- * Parse HIVE_LOG_RETENTION_DAYS into a positive finite day count.
- * Returns null (→ NO sweep) for: unset, empty string, non-numeric, ≤0,
- * NaN, Infinity. Exported for testing — the "opt-in only" contract is
- * a data-loss regression risk and must be locked with unit tests.
- */
-export function parseRetentionDays(raw: string | undefined): number | null {
-  if (!raw) return null
-  const n = Number(raw)
-  if (!Number.isFinite(n) || n <= 0) return null
-  return n
-}
-
+const LOG_RETENTION_DAYS = 30
 function sweepOldLogs() {
-  const days = parseRetentionDays(process.env.HIVE_LOG_RETENTION_DAYS)
-  if (days === null) return
   try {
     const dir = logDir()
-    const cutoff = Date.now() - days * 24 * 3600 * 1000
+    const cutoff = Date.now() - LOG_RETENTION_DAYS * 24 * 3600 * 1000
     let removed = 0
     for (const f of readdirSync(dir)) {
       if (!f.endsWith('.jsonl')) continue
@@ -134,13 +108,12 @@ function sweepOldLogs() {
         }
       } catch {}
     }
-    if (removed > 0) console.log(`[chat] retention: removed ${removed} log(s) older than ${days}d (HIVE_LOG_RETENTION_DAYS)`)
+    if (removed > 0) console.log(`[chat] retention: removed ${removed} log(s) older than ${LOG_RETENTION_DAYS}d`)
   } catch (e) {
     console.warn('[chat] retention sweep failed:', e)
   }
 }
 // Fire once when this module is first imported (main process startup).
-// No-op when HIVE_LOG_RETENTION_DAYS is unset — this is the default.
 sweepOldLogs()
 
 function broadcast(event: string, payload: unknown) {
