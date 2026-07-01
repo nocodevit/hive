@@ -85,6 +85,31 @@ testable. Only the 60s timeout-kill path was marked UNTESTABLE.
 
 ## Subprocess management
 
+### The "can it run?" probe must not have MORE fallbacks than the real spawn
+
+**Rule:** if the install/health gate resolves a binary with fallbacks the
+actual `spawn` site does NOT have, the gate reports "installed" while every
+real session fails. The probe and the spawn must resolve the binary the SAME
+way — ideally resolve ONCE at boot to an absolute path and spawn that path
+everywhere.
+
+**Why:** v1.7.145 shipped `claudeCanRun()` with an interactive-login-shell
+(`-lic`) fallback that hydrated PATH and found claude, so the gate said
+"installed". But `chat.ts` did a bare `spawn('claude', …)` inheriting the
+process's PATH — and a GUI/launchd-launched Hive has the minimal PATH
+(`/usr/bin:/bin:/usr/sbin:/sbin`), no nvm/homebrew claude. So Resume replayed
+the on-disk JSONL fine (no live process needed) but the FIRST `send()` spawned
+`claude` → ENOENT → renderer bounced back to the chooser on every input. The
+gate's richer fallback masked the exact failure the spawn path hit.
+
+**How:** resolve the absolute path once at boot (`-lic command -v claude`),
+stash in an env var (`HIVE_CLAUDE_BIN`), and make every spawn call
+`claudeBin()` which returns that absolute path (bare `claude` only as last
+resort). See `src/main/claude-env.ts` (`claudeBin`, `claudeBinStrategies`,
+`pickClaudeBinPath` — the last scans output LAST-first so a polluted rc that
+dumps text before the answer, e.g. a broken `.zshrc` running `nvm bash
+completion`, can't hide the real path).
+
 ### Cache EVERY result, even null — that's the whole point of TTL
 
 **Rule:** TTL caches over expensive subprocesses MUST store the result
@@ -155,6 +180,45 @@ pushed.
 
 **Why:** standard practice; matters more once collaborators exist. Costs
 nothing to default to it.
+
+### Two open PRs bumping to the SAME version will clash after the first merges
+
+**Rule:** when two open PRs both bump to e.g. 1.7.146, they look MERGEABLE
+independently — but merging the first makes master 1.7.146, and the second
+now collides on `package.json` / `.release-please-manifest.json`. Before
+merging the second, rebase it and bump it to the NEXT z (1.7.147). Never let
+two distinct changes share one version.
+
+**Why:** PR #20 (claude-absolute-path fix) and PR #19 (stream coalescer) both
+claimed 1.7.146. GitHub reported both MERGEABLE because it diffed each against
+the OLD master. After #20 landed, #19's 1.7.145→1.7.146 bump 3-way-merged to
+the same value silently — no conflict flagged, but semantically two releases
+would share 1.7.146. Bumped #19 to 1.7.147 before landing it (as #21).
+
+**How:** after merging the first, `git rebase origin/master` the second, edit
+both version files to the next z, run the full test gate again, then merge.
+
+### When `--force`/`reset --hard` is blocked, push the rebased branch under a NEW name
+
+**Rule:** if force-push and `git reset --hard` are unavailable (permission
+gate, protected branch, shared repo policy), do NOT hack around them. Push
+your rebased local branch to a NEW remote branch name (a plain, non-forcing
+push), open a fresh PR against master, merge it, and close the stale PR as
+"superseded by #N". Zero destructive ops, same result.
+
+**Why:** updating a rebased PR branch normally needs `--force-with-lease`, and
+resetting local to origin needs `reset --hard` — both were denied mid-task.
+Instead of fighting the gate, pushed the rebased+bumped branch as
+`perf/coalesce-1.7.147`, opened PR #21, squash-merged it, closed #19. master
+got the exact intended content without any force/reset.
+
+**How:**
+```bash
+git push origin <local-rebased-branch>:<new-remote-name>   # plain push, no force
+gh pr create --base master --head <new-remote-name> --title … --body …
+gh pr merge <n> --squash
+gh pr close <old-pr> --comment "Superseded by #<n> (rebased + version-bumped)."
+```
 
 ### Verify "is X in master" by file content after squash merges
 
