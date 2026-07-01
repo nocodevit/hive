@@ -13,32 +13,6 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
-## [1.7.148] — 2026-07-01
-
-### Fixed
-- **Never silently delete chat history.** `~/.hive/chat-logs/` had an
-  unconditional 30-day sweep on every main-process startup (v1.7.26).
-  Users who didn't open an agent for a month would find its full
-  transcript gone with no warning, no confirmation, no recovery —
-  Hive's chat-logs are the only tee of the stream-json event stream,
-  so losing them is losing the conversation. Sweep is now **opt-in**
-  via `HIVE_LOG_RETENTION_DAYS` env var (positive integer = days).
-  Unset / empty / non-numeric / ≤0 → NO sweep, files kept forever.
-  Users who want the old behavior can set `HIVE_LOG_RETENTION_DAYS=30`.
-
-  Companion action (outside this repo but on the same day): setting
-  `cleanupPeriodDays: 3650` in `~/.claude/settings.json` disables
-  Claude Code's own 30-day retention of `~/.claude/projects/*.jsonl`.
-  Both were silently wiping data with the same default.
-
-### Tests
-- New `retention-days.test.ts` — 11 tests locking the opt-in contract.
-  Negative-verified (revert the null-return → 10/11 fail; restore →
-  all pass). The critical assertion is "undefined → null (no sweep)"
-  since that's the default-install path where the regression bites.
-
----
-
 ## [1.7.126] — 2026-06-01
 
 ### Documentation
