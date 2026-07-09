@@ -94,6 +94,7 @@ declare global {
         start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean }) => Promise<{ ok: boolean }>
         send: (id: string, text: string) => Promise<{ ok: boolean; error?: string }>
         respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny', input?: Record<string, unknown>, denyMessage?: string) => Promise<{ ok: boolean; error?: string }>
+        allowToolForSession: (id: string, toolName: string) => Promise<{ ok: boolean; error?: string }>
         stop: (id: string) => Promise<{ ok: boolean }>
         loadOlder: (id: string, batch?: number) => Promise<{ loaded: number; hasOlder: boolean; error?: string }>
         startRemoteControl: (id: string) => Promise<{ ok: boolean; sid?: string; error?: string }>

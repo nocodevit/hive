@@ -2101,6 +2101,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         >
         <PermissionModal
           req={pendingPermission}
+          peerCount={pendingPermissions.filter((p, i) => i > 0 && p.toolName === pendingPermission.toolName).length}
           onDecide={async (decision, saveSuggestion) => {
             if (saveSuggestion) {
               // Pass the WHOLE suggestion to the IPC. claude's new
@@ -2125,6 +2126,23 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             // Shift this answered request off the head; next queued
             // request (if any) auto-renders.
             setPendingPermissions(prev => prev.slice(1))
+          }}
+          onAllowSession={async () => {
+            // Two-part effect for the "batch problem" (N parallel MCP
+            // calls emitted in one assistant turn):
+            //  1. Tell main to auto-approve future control_requests for
+            //     this tool this session (session-permissions.ts).
+            //  2. Also respond `allow` to any peers ALREADY sitting in
+            //     the pending queue with the same toolName — those
+            //     arrived before the allowlist entry existed, so main
+            //     already broadcast them.
+            const toolName = pendingPermission.toolName
+            await window.api.chat.allowToolForSession(id, toolName).catch(() => {})
+            const peers = pendingPermissions.filter(p => p.toolName === toolName)
+            for (const p of peers) {
+              window.api.chat.respondPermission(id, p.requestId, 'allow', p.input)
+            }
+            setPendingPermissions(prev => prev.filter(p => p.toolName !== toolName))
           }}
         />
         </PermissionErrorBoundary>
@@ -2450,9 +2468,13 @@ export function describeSuggestion(s: PermissionSuggestion | null | undefined):
   return null
 }
 
-function PermissionModal({ req, onDecide }: {
+function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
   req: { requestId: string; toolName: string; displayName?: string; input: Record<string, unknown>; suggestions?: PermissionSuggestion[] }
+  /** How many OTHER queued requests share this same toolName. Renders a "+N more" hint on the batch-allow button. */
+  peerCount: number
   onDecide: (d: 'allow' | 'deny', saveSuggestion?: PermissionSuggestion) => void
+  /** Grants the tool session-wide: adds to main's per-chat allowlist AND drains any peers with the same toolName from the pending queue. */
+  onAllowSession: () => void
 }) {
   const summary = (() => {
     try {
@@ -2513,6 +2535,13 @@ function PermissionModal({ req, onDecide }: {
             border: `1px solid ${CRUSH.Julep}`, borderRadius: 6,
             padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
           }}>Allow once</button>
+          <button onClick={onAllowSession} style={{
+            background: 'transparent', color: CRUSH.Malibu,
+            border: `1px solid ${CRUSH.Malibu}`, borderRadius: 6,
+            padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
+          }} title={`Auto-allow every future ${req.displayName || req.toolName} call for this chat session${peerCount > 0 ? ` (and the ${peerCount} more already queued)` : ''}`}>
+            Allow this session{peerCount > 0 ? ` (+${peerCount})` : ''}
+          </button>
           {desc && suggestion && (
             <button onClick={() => onDecide('allow', suggestion)} style={{
               background: CRUSH.Julep, color: CRUSH.Pepper,
