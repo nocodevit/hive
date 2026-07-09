@@ -8,6 +8,7 @@ import { queryUsageViaCcusage, queryUsagePctViaPty } from './chat-usage-query'
 import { UsageCache } from './usage-cache'
 import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
 import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
+import { shouldAutoAllow } from './session-permissions'
 import { claudeBin } from './claude-env'
 
 export type { RecentSession, PrevSessionInfo }
@@ -70,6 +71,23 @@ interface ChatSession {
 }
 
 const sessions = new Map<string, ChatSession>()
+
+/**
+ * Per-chat "Allow this session" tool allowlist. Keyed by chat id (agent
+ * id from the renderer), NOT the claude session id. Kept module-level
+ * so it survives session recycles (Compact/Resume/Fork/smartResume all
+ * `sessions.delete(id)` + startChat with same id) — user consent is
+ * per-chat, not per-underlying-subprocess. See `session-permissions.ts`
+ * for the parallel-MCP-tool bug this fixes. Cleared on process exit
+ * only; a user who closes+relaunches Hive.app gets a fresh allowlist.
+ */
+const sessionAllowedTools = new Map<string, Set<string>>()
+
+function getAllowedTools(id: string): Set<string> {
+  let set = sessionAllowedTools.get(id)
+  if (!set) { set = new Set(); sessionAllowedTools.set(id, set) }
+  return set
+}
 
 /**
  * Every chat session tees its raw JSON event stream to disk under
@@ -656,7 +674,23 @@ export function startChat(id: string, opts: StartOpts = {}) {
     const { events, rest } = parseJsonLines(session.buffer, id)
     session.buffer = rest
     let sawMessageStop = false
+    const allowedTools = getAllowedTools(id)
     for (const ev of events) {
+      // Session-level auto-allow gate. When the user has clicked "Allow
+      // this session" on a tool (typically an MCP tool like
+      // `mcp__stargate__jira_update_issue` for which claude does NOT
+      // send permission_suggestions), subsequent control_request events
+      // for that tool are answered here without waking the renderer
+      // modal. Also collapses the "4 parallel calls in one turn = 4
+      // clicks" pattern into zero clicks after the first.
+      const decision = shouldAutoAllow(ev, allowedTools)
+      if (decision.autoAllow) {
+        respondPermission(id, decision.requestId, 'allow', decision.input)
+        // Log the auto-allow for post-mortem, but skip broadcast + skip
+        // the normal event log (this event never reached the renderer).
+        try { appendFileSync(session.logPath, JSON.stringify({ _meta: 'auto-allow', t: Date.now(), requestId: decision.requestId, toolName: decision.toolName }) + '\n') } catch {}
+        continue
+      }
       broadcast(`chat:event:${id}`, ev)
       try { appendFileSync(session.logPath, JSON.stringify(ev) + '\n') } catch {}
       if (ev?.type === 'stream_event' && ev.event?.type === 'message_stop') sawMessageStop = true
@@ -1297,6 +1331,14 @@ export function registerChatIpc() {
   ipcMain.handle('chat:respondPermission', (_e, { id, requestId, decision, input, denyMessage }) =>
     respondPermission(id, requestId, decision, input, denyMessage)
   )
+  // "Allow this session" adds a tool to the per-chat allowlist so the
+  // stdout interceptor auto-responds `allow` on future control_requests
+  // for it (no modal). See session-permissions.ts.
+  ipcMain.handle('chat:allowToolForSession', (_e, { id, toolName }: { id: string; toolName: string }) => {
+    if (!id || typeof toolName !== 'string' || !toolName) return { ok: false, error: 'bad_input' }
+    getAllowedTools(id).add(toolName)
+    return { ok: true }
+  })
   ipcMain.handle('chat:stop', (_e, { id }) => { stopChat(id); return { ok: true } })
   ipcMain.handle('chat:loadOlder', (_e, { id, batch }) => loadOlderHistory(id, batch))
   ipcMain.handle('chat:startRemoteControl', (_e, { id }) => startRemoteControl(id))
