@@ -151,3 +151,48 @@ to query is covered by `src/renderer/src/__tests__/terminalAutoRun.test.ts`.
 5. Switch to **Chat**, wait >3s, switch back to **Term** — claude is **recreated**
    (a fresh `claude --agent` session starts), because the live session check finds
    none running.
+
+## PTY master fd release + ptmx watermark (`ptyRegistry`, `startPtyHealthMonitor`)
+
+**Why this is here:** node-pty's `kill()` only sends SIGHUP; it never closes the
+PTY master fd. Only `destroy()` does. Every teardown site used `kill()` alone, so
+each spawn whose child ignored SIGHUP — or exited without node-pty observing it —
+leaked one `/dev/ptmx` fd permanently. macOS caps these at `kern.tty.ptmx_max`
+(511), and a 7-day-old main process was observed holding exactly 511 with only 14
+live children; every subsequent spawn failed with *"Could not create a new process
+and open a pseudo-tty."*
+
+The fd count is a live OS resource, and the leak took a week of uptime to surface,
+so neither vitest nor Playwright can observe it. `disposePty`, `spawnPty`,
+`releasePty`, and every pure part of the health probe (major extraction, watermark
+thresholds, fd counting against injected deps, report formatting) ARE unit-tested
+in `src/main/__tests__/pty{Dispose,Registry,Health}.test.ts`. Containment is
+enforced by `ptySpawnContainment.test.ts`. What remains manual is only the live
+`/dev/fd` + `sysctl` read and the real accumulate-over-time behaviour.
+
+**Reproducer (fd count must stay flat, not climb):**
+
+1. Launch Hive. Note its pid: `pgrep -f 'Hive.app/Contents/MacOS/Hive'`.
+2. Baseline the master fd count:
+   `lsof -p <pid> | grep -c ptmx` — expect a small number (roughly one per open
+   terminal, plus any in-flight usage scrape).
+3. Open and close ~10 Terminal panes, and open/close a Chat session with
+   remote-control (which spawns `chat-rc`) a few times.
+4. Re-run the `lsof` count. It must return to approximately the step-2 baseline.
+   **Pre-fix it climbed monotonically and never came back down.**
+5. Leave Hive running ≥30 min so the 5-minute usage poll spawns several
+   `usage-scrape` PTYs. Count again — still flat.
+6. Confirm the ceiling is what you think it is: `sysctl -n kern.tty.ptmx_max`
+   (511 by default).
+
+**Watermark monitor:**
+
+7. The monitor runs at boot and every 10 min, and logs **only** when unhealthy
+   (≥50% of the ceiling = `warn`, ≥80% = `critical`), so a healthy run is silent
+   by design — absence of a log line is a pass, not a missing feature.
+8. To see it fire without a real leak, temporarily lower the ceiling:
+   `sudo sysctl -w kern.tty.ptmx_max=20`, restart Hive, open a few terminals, and
+   watch for `[pty-health] N/20 ptmx fds … level=warn` in the console. The line
+   reports open vs registered fds and the oldest live handle labels
+   (`terminal`, `chat-rc`, `usage-scrape`) so a future leak names its own call
+   site. **Restore afterwards:** `sudo sysctl -w kern.tty.ptmx_max=511`.
