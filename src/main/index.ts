@@ -1,17 +1,18 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync } from 'fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync, fstatSync } from 'fs'
 import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
-import { disposePty } from './ptyDispose'
+import { releasePty, spawnPty, livePtyHandles } from './ptyRegistry'
+import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } from './ptyHealth'
 import { execSync, execFileSync, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
 
 // GUI apps launched from Finder/Dock inherit launchd's minimal PATH
 // (/usr/bin:/bin:/usr/sbin:/sbin), so spawn('claude') ENOENTs even though
 // the binary exists in nvm/Homebrew. Terminal panels work because they go
-// through `pty.spawn('zsh', ['-l'])`, but Chat panels call spawn directly
+// through a login-shell PTY, but Chat panels call spawn directly
 // and would silently fail (chat:error has no renderer listener). Hydrate
 // process.env.PATH from the user's rc files once at boot.
 //
@@ -842,7 +843,7 @@ function createWindow(): void {
 ipcMain.handle('pty:create', (_event, { id, cwd }) => {
   try {
     const userShell = process.env.SHELL || '/bin/zsh'
-    const term = pty.spawn(userShell, ['-l'], {
+    const term = spawnPty('terminal', userShell, ['-l'], {
       name: 'xterm-256color',
       cols: 80,
       rows: 24,
@@ -922,6 +923,46 @@ ipcMain.handle('pty:resize', (_event, { id, cols, rows }) => {
   if (term) term.resize(cols, rows)
 })
 
+// Watch our own pty master fd count against kern.tty.ptmx_max.
+//
+// The v1.7.151 incident ran 7 days before the ceiling was hit, and the only
+// symptom was "Could not create a new process and open a pseudo-tty" — an
+// error that names neither the resource nor the leaking call site. A leak with
+// a week-long feedback delay cannot be caught by unit tests or e2e, so the app
+// measures the resource itself and says so in the log long before it breaks.
+//
+// UNTESTABLE: reads live /dev/fd and shells out to sysctl. All logic — major
+// extraction, watermark thresholds, fd counting against injected deps, report
+// formatting — is pure in ptyHealth.ts and unit-tested in
+// __tests__/ptyHealth.test.ts.
+function readPtmxMax(): number {
+  try {
+    return parseInt(execFileSync('sysctl', ['-n', 'kern.tty.ptmx_max'], { encoding: 'utf-8', timeout: 2000 }).trim(), 10) || 511
+  } catch {
+    return 511
+  }
+}
+
+function startPtyHealthMonitor(): void {
+  if (process.platform !== 'darwin') return
+  const max = readPtmxMax()
+  const deps: PtmxDeps = {
+    ptmxRdev: () => statSync('/dev/ptmx').rdev,
+    listFds: () => readdirSync('/dev/fd'),
+    fstatRdev: (fd) => { try { return fstatSync(fd).rdev } catch { return null } }
+  }
+  const check = () => {
+    const open = countOpenPtmxFds(deps)
+    if (open === null) return
+    const report = buildHealthReport(open, max, livePtyHandles(), Date.now())
+    if (report.level === 'ok') return
+    console.warn(formatHealthReport(report))
+  }
+  const timer = setInterval(check, 10 * 60_000)
+  timer.unref()
+  check()
+}
+
 // Tear down a PTY's ENTIRE process subtree, not just the login shell.
 // node-pty's term.kill() only signals the shell (SIGHUP); a healthy `claude`
 // child then exits on its own when the tty closes. But a *wedged* claude
@@ -947,7 +988,7 @@ function killProcessTree(term: pty.IPty): void {
     // ps failed (vanishingly rare) — fall back to just killing the shell below.
   }
   // Graceful pass: SIGHUP the shell (node-pty default), SIGTERM each descendant.
-  disposePty(term)
+  releasePty(term)
   for (const pid of descendants) {
     try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ }
   }
@@ -1873,6 +1914,8 @@ app.whenReady().then(() => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+  startPtyHealthMonitor()
+
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

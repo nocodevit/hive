@@ -10,7 +10,7 @@ import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
 import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
 import { shouldAutoAllow } from './session-permissions'
 import { claudeBin } from './claude-env'
-import { disposePty } from './ptyDispose'
+import { releasePty, spawnPty } from './ptyRegistry'
 
 export type { RecentSession, PrevSessionInfo }
 export type { ContextRow, ContextDetailRow, ContextSnapshot } from './chat-context-parser'
@@ -892,7 +892,7 @@ export function stopChat(id: string) {
   const session = sessions.get(id)
   if (!session) return
   try { session.child?.kill() } catch {}
-  disposePty(session.rcPty)
+  releasePty(session.rcPty)
   if (session.usageTimer) clearInterval(session.usageTimer)
   if (session.autoContinueTimer) clearTimeout(session.autoContinueTimer)
   // NB: don't wipe the persisted entry — user may close+reopen the chat
@@ -927,7 +927,7 @@ export function startRemoteControl(id: string) {
   try { session.child?.kill() } catch {}
   session.child = null
   session.mode = 'rc'
-  const rcPty = pty.spawn(claudeBin(), ['--resume', sid], {
+  const rcPty = spawnPty('chat-rc', claudeBin(), ['--resume', sid], {
     name: 'xterm-color',
     cols: 120, rows: 30,
     cwd: session.cwd || process.env.HOME || '/',
@@ -1126,7 +1126,7 @@ export async function resumeFromRemoteControl(id: string) {
     session.rcPty?.write('/desktop\r')
     await new Promise(r => setTimeout(r, 1500))
   } catch {}
-  disposePty(session.rcPty)
+  releasePty(session.rcPty)
   const opts = session.startOpts
   const sid = session.claudeSid
   // Clear the dead session so startChat starts fresh with --resume.
