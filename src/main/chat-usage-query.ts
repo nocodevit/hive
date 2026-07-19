@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import * as pty from 'node-pty'
 import { Terminal as HeadlessTerm } from '@xterm/headless'
 import { claudeBin } from './claude-env'
+import { disposePty } from './ptyDispose'
 
 /**
  * Hard ceiling on how long we wait for `ccusage blocks --json` to finish.
@@ -99,7 +100,7 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: nu
     const finish = (v: { fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null) => {
       if (done) return
       done = true
-      try { child?.kill() } catch {}
+      disposePty(child)
       resolve(v)
     }
 

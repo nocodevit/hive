@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, rea
 import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
+import { disposePty } from './ptyDispose'
 import { execSync, execFileSync, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
 
@@ -946,7 +947,7 @@ function killProcessTree(term: pty.IPty): void {
     // ps failed (vanishingly rare) — fall back to just killing the shell below.
   }
   // Graceful pass: SIGHUP the shell (node-pty default), SIGTERM each descendant.
-  try { term.kill() } catch { /* already dead */ }
+  disposePty(term)
   for (const pid of descendants) {
     try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ }
   }
