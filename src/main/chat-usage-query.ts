@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import * as pty from 'node-pty'
 import { Terminal as HeadlessTerm } from '@xterm/headless'
 import { claudeBin } from './claude-env'
+import { releasePty, spawnPty } from './ptyRegistry'
 
 /**
  * Hard ceiling on how long we wait for `ccusage blocks --json` to finish.
@@ -99,7 +100,7 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: nu
     const finish = (v: { fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null) => {
       if (done) return
       done = true
-      try { child?.kill() } catch {}
+      releasePty(child)
       resolve(v)
     }
 
@@ -107,7 +108,7 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: nu
       // Force a fresh session id so this PTY scrape can never accidentally
       // attach to an agent's live session (especially Tracy's).
       const freshSessionId = require('crypto').randomUUID()
-      child = pty.spawn(claudeBin(), ['--session-id', freshSessionId], {
+      child = spawnPty('usage-scrape', claudeBin(), ['--session-id', freshSessionId], {
         name: 'xterm-256color',
         cols: 160, rows: 50,
         cwd: cwd || process.env.HOME || '/',
