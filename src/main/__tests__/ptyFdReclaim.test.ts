@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { ownPtmxFds, reclaimNewOrphans, FdReclaimDeps } from '../ptyFdReclaim'
+import {
+  ownPtmxFds,
+  reclaimNewOrphans,
+  reclaimOrphanPtyFds,
+  snapshotPtmxFds,
+  FdReclaimDeps
+} from '../ptyFdReclaim'
 
 const mk = (major: number, minor: number) => (major << 24) | minor
 const PTMX = mk(15, 511)
@@ -80,5 +86,19 @@ describe('reclaimNewOrphans', () => {
     const close = vi.fn()
     const closed = reclaimNewOrphans([], undefined, deps({ close }))
     expect(closed.sort()).toEqual([14, 15])
+  })
+})
+
+describe('snapshotPtmxFds / reclaimOrphanPtyFds wrappers', () => {
+  it('snapshotPtmxFds delegates to ownPtmxFds with the given deps', () => {
+    expect(snapshotPtmxFds(deps())).toEqual([14, 15])
+  })
+
+  it('reclaimOrphanPtyFds closes the new orphan on a unix platform', () => {
+    if (process.platform === 'win32') return
+    const close = vi.fn()
+    const closed = reclaimOrphanPtyFds([], 15, deps({ close }))
+    expect(closed).toEqual([14])
+    expect(close).toHaveBeenCalledExactlyOnceWith(14)
   })
 })
