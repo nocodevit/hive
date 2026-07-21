@@ -1,5 +1,6 @@
 import * as pty from 'node-pty'
 import { disposePty } from './ptyDispose'
+import { snapshotPtmxFds, reclaimOrphanPtyFds } from './ptyFdReclaim'
 
 /**
  * The ONLY place allowed to call `pty.spawn()`.
@@ -36,7 +37,18 @@ export function spawnPty(
   options: pty.IPtyForkOptions | pty.IWindowsPtyForkOptions,
   now: () => number = Date.now
 ): pty.IPty {
+  // node-pty leaks one /dev/ptmx master fd per spawn (a dup made by
+  // tty.ReadStream that it never closes). Snapshot ptmx fds immediately
+  // before the spawn and close the new orphan immediately after, in the same
+  // synchronous tick — see ptyFdReclaim.ts. Nothing may be awaited between
+  // these two calls or a concurrent spawn's fd could be misattributed.
+  const ptmxBefore = snapshotPtmxFds()
   const term = pty.spawn(file, args as string[], options)
+  try {
+    reclaimOrphanPtyFds(ptmxBefore, (term as unknown as { _fd?: number })._fd)
+  } catch {
+    /* fd reclaim is best-effort; never let it break a spawn */
+  }
   live.set(term, { term, label, spawnedAt: now() })
   // Drop the registry reference when the child exits on its own. This does NOT
   // release the fd — only releasePty()/disposePty() does — but it keeps
