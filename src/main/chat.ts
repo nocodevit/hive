@@ -901,6 +901,51 @@ export function stopChat(id: string) {
 }
 
 /**
+ * Duck-typed shape of a chat session for `recycleSessionInPlace`.
+ * Kept minimal so unit tests can pass a plain object without stubbing
+ * `ChildProcessWithoutNullStreams` / `pty.IPty`.
+ */
+export interface RecyclableSession {
+  child: { kill: () => void } | null
+  rcPty?: unknown
+  usageTimer?: NodeJS.Timeout
+  autoContinueTimer?: NodeJS.Timeout
+  internalRecycle?: boolean
+}
+
+/**
+ * Recycle a session in place for an internal kill→await→respawn dance
+ * (Compact+Resume from StartChooser is the case that motivated this).
+ *
+ * Unlike `stopChat`, this does NOT `sessions.delete(id)` — the entry
+ * stays alive across the seconds-long `/compact` await so that:
+ *
+ *   1. The killed child's async `exit` event, when it fires during the
+ *      await, sees `sessions.get(id)` return a session whose
+ *      `internalRecycle` is true → returns early → does NOT broadcast
+ *      `chat:exit`. Without this, the renderer's auto-open-chooser
+ *      useEffect flips `chooserMode` back to `true` mid-compact and
+ *      the user sees the StartChooser again for the SAME session they
+ *      already picked Compact+Resume on.
+ *   2. Concurrent `chat.resumeSmart` / `chat.compact` calls during the
+ *      gap don't fail with `no_session`.
+ *
+ * The subsequent `startChat` call overwrites the entry via
+ * `sessions.set(id, ...)`, so no explicit cleanup here.
+ */
+export function recycleSessionInPlace(session: RecyclableSession): void {
+  session.internalRecycle = true
+  try { session.child?.kill() } catch {}
+  session.child = null
+  releasePty(session.rcPty as pty.IPty | null | undefined)
+  session.rcPty = undefined
+  if (session.usageTimer) clearInterval(session.usageTimer)
+  if (session.autoContinueTimer) clearTimeout(session.autoContinueTimer)
+  session.usageTimer = undefined
+  session.autoContinueTimer = undefined
+}
+
+/**
  * Round-trip through the interactive TUI to run a session-scoped slash
  * command (currently only /remote-control; the plumbing generalizes).
  *
@@ -1312,7 +1357,17 @@ export function registerChatIpc() {
       // (compact reads/writes the JSONL via runCompactViaPrint, then
       // startChat spawns a fresh child for the SAME sid). This is still
       // compact semantics, not fork.
-      if (sessions.has(id)) stopChat(id)
+      //
+      // Recycle IN PLACE (not stopChat) so the seconds-long compact
+      // await doesn't leak the old child's exit event out to the
+      // renderer. stopChat would `sessions.delete(id)`, leaving the old
+      // child's `exit` handler to broadcast `chat:exit` → the renderer's
+      // auto-open-chooser useEffect flips back to StartChooser mid-compact
+      // → user sees "Start session — pick a mode" for the same session
+      // they already picked, and has to click Compact+Resume a SECOND
+      // time. See `recycleSessionInPlace` above for the full story.
+      const existing = sessions.get(id)
+      if (existing) recycleSessionInPlace(existing)
       broadcast(`chat:stderr:${id}`, '⏳ Compacting prior session before resume…\n')
       const r = await runCompactViaPrint(cwd, resumeSid, agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`), id)
       if (r.ok) {
