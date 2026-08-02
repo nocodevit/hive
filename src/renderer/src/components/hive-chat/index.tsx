@@ -1022,7 +1022,17 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       offCompactStuck()
       window.api.chat.stop(id)
     }
-  }, [id, cwd, agent, agentName, continueSession, rebaseOnStart, chooserMode])
+    // agentName is DELIBERATELY excluded from deps: it's a display-only
+    // label (used as claude's `-n` flag on first spawn, captured fresh at
+    // each handler call via closure), and re-running this effect on name
+    // change would (a) run cleanup → `chat.stop(id)`, killing the live
+    // --print subprocess mid-turn, (b) fire `chat:exit`, which trips the
+    // auto-open-chooser useEffect and flips `chooserMode` back to true.
+    // Net effect: user types a character in the "edit agent name" field
+    // → chat disappears, StartChooser reappears. Repro: click ✎ Edit,
+    // change name, click Terminal tab. Fixed 2026-07-27.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, cwd, agent, continueSession, rebaseOnStart, chooserMode])
 
   // Auto-scroll only when the user is already at the bottom. If
   // they've scrolled up to read older content, new live events don't
