@@ -81,25 +81,97 @@ export async function queryUsageViaCcusage(): Promise<{
   })
 }
 
+export interface UsagePctResult {
+  fiveHour?: number
+  sevenDay?: number
+  fiveHourReset?: string
+  sevenDayReset?: string
+}
+
+/**
+ * Parse the two TUI formats that carry subscription %%. Pure — safe to
+ * unit test with hand-crafted grids.
+ *
+ * Formats:
+ *   OLD (< 2.1.x): "Current session ... 23% used" / "Current week ... 5% used"
+ *                  plus optional "Resets in 4h 12m" / "Resets on Apr 30" tail
+ *   NEW (2.1.x+):  inline prompt bar "5h: ░░░░░░░░░░ 23% | 7d: 5%" — no
+ *                  /usage command needed; claude prints it under every prompt
+ *
+ * Returns null iff neither format matched. Partial matches (only 5h, or
+ * only 7d) return with the missing side undefined — the ModelUsageBar
+ * renders `—` for undefined and shows what we do have.
+ */
+export function scrapeUsageFromGrid(text: string): UsagePctResult | null {
+  const fiveOld = text.match(/Current session[\s\S]{0,300}?(\d+)\s*%\s*used/)
+  const fiveNew = text.match(/\b5h\b\s*:\s*[░▒▓█▁▂▃▄▅▆▇#=\- ]*\s*(\d+)\s*%/)
+  const sevenOld = text.match(/Current week[\s\S]{0,300}?(\d+)\s*%\s*used/)
+  const sevenNew = text.match(/\b7d\b\s*:?\s*[░▒▓█▁▂▃▄▅▆▇#=\- ]*\s*(\d+)\s*%/)
+  const weekly = text.match(/weekly[^%]*?(\d+(?:\.\d+)?)\s*%/i)
+  const five = fiveOld || fiveNew
+  const seven = sevenOld || sevenNew || weekly
+  if (!five && !seven) return null
+  const sessionReset = text.match(/Current session[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
+  const weekReset = text.match(/Current week[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
+  return {
+    fiveHour: five ? parseInt(five[1], 10) : undefined,
+    sevenDay: seven ? parseInt(seven[1], 10) : undefined,
+    fiveHourReset: sessionReset ? sessionReset[1].trim() : undefined,
+    sevenDayReset: weekReset ? weekReset[1].trim() : undefined
+  }
+}
+
+/**
+ * True when claude 2.1.x's Settings Warning menu ("1. Continue / 2. Fix
+ * with Claude / 3. Exit and fix manually") is still on screen. When it
+ * is, the real prompt is hidden and the inline 5h/7d bar hasn't rendered
+ * yet — we must dismiss the menu before scraping can succeed.
+ *
+ * The warning appears whenever ~/.claude/settings.json contains invalid
+ * entries claude rejects on startup (e.g. `permissions.allow` rules with
+ * `(undefined)` args, a deprecated shape). Old code sent Enter exactly
+ * once, 200ms after first sighting; the menu wasn't stable yet so the
+ * keystroke was discarded, and the scrape then timed out at 25s. Real
+ * behaviour observed on 2026-07-27 with 44 invalid MCP rules.
+ */
+export function isSettingsWarningVisible(text: string): boolean {
+  return /Exit and fix manually|Enter to confirm/i.test(text)
+}
+
 /**
  * Spawn a headless interactive `claude` under a PTY, pipe every byte
  * into `@xterm/headless` so the terminal state machine handles ANSI
- * cursor moves / erase / scroll correctly, then read the TUI's grid as
- * clean text and extract "Current session … NN% used" and
- * "Current week … NN% used" lines.
+ * cursor moves / erase / scroll correctly, then read the TUI's grid.
  *
- * This is the only way to surface the real subscription-tier %% that
- * /usage shows — stream-json doesn't carry them, and --print /usage is
- * short-circuited to a synthetic canned reply. Uses xterm-headless so
- * TUI redraws don't break the regex.
+ * Strategy:
+ *   1. If the Settings Warning menu is showing, send Enter and RETRY
+ *      every 1500ms up to 5 times (waits for the menu to become stable
+ *      before giving up). One-shot Enter is not enough — claude 2.1.x
+ *      renders the menu in stages and swallows keystrokes sent too
+ *      early. See isSettingsWarningVisible for the failure mode.
+ *   2. Fast path: try scrapeUsageFromGrid on every incoming chunk. In
+ *      claude 2.1.x the "5h: ░░░ N% | 7d: M%" bar is printed under
+ *      every prompt, so we get the number without ever sending /usage
+ *      (saves a full API turn per poll).
+ *   3. Fallback for old claude: wait for prompt glyph, send /usage,
+ *      then scrape "Current session … N% used" / "Current week …".
  */
-export async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null> {
+export async function queryUsagePctViaPty(cwd?: string): Promise<UsagePctResult | null> {
   return new Promise(resolve => {
     let done = false
     let child: pty.IPty | null = null
-    const finish = (v: { fiveHour?: number; sevenDay?: number; fiveHourReset?: string; sevenDayReset?: string } | null) => {
+    let sent = false
+    let promptSeenAt = 0
+    let scrapeTimer: NodeJS.Timeout | null = null
+    let warningRetries = 0
+    let warningRetryTimer: NodeJS.Timeout | null = null
+    const MAX_WARNING_RETRIES = 5
+
+    const finish = (v: UsagePctResult | null) => {
       if (done) return
       done = true
+      if (warningRetryTimer) { clearTimeout(warningRetryTimer); warningRetryTimer = null }
+      if (scrapeTimer) { clearTimeout(scrapeTimer); scrapeTimer = null }
       releasePty(child)
       resolve(v)
     }
@@ -119,9 +191,6 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: nu
     }
 
     const term = new HeadlessTerm({ cols: 160, rows: 50, scrollback: 1000, allowProposedApi: true })
-    let sent = false
-    let promptSeenAt = 0
-    let scrapeTimer: NodeJS.Timeout | null = null
 
     const dumpGrid = (): string => {
       const buf = term.buffer.active
@@ -133,69 +202,65 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<{ fiveHour?: nu
       return lines.join('\n')
     }
 
-    const tryScrape = () => {
-      const text = dumpGrid()
-      // Match BOTH old (`Current session ... 23% used`) and new
-      // (`5h: ░░░░░░░░░░ 23% | 7d: 5%`) formats. claude refactored
-      // /usage TUI in v2.1.x to a compact inline string and our old
-      // regex stopped matching → 25s timeout → null pct → ModelUsageBar
-      // displayed `—` instead of an actual percentage.
-      const fiveOld = text.match(/Current session[\s\S]{0,300}?(\d+)\s*%\s*used/)
-      const fiveNew = text.match(/\b5h\b\s*:\s*[░▒▓█▁▂▃▄▅▆▇#=\- ]*\s*(\d+)\s*%/)
-      const sevenOld = text.match(/Current week[\s\S]{0,300}?(\d+)\s*%\s*used/)
-      const sevenNew = text.match(/\b7d\b\s*:?\s*[░▒▓█▁▂▃▄▅▆▇#=\- ]*\s*(\d+)\s*%/)
-      const weekly = text.match(/weekly[^%]*?(\d+(?:\.\d+)?)\s*%/i)
-      const five = fiveOld || fiveNew
-      const seven = sevenOld || sevenNew || weekly
-      // Reset countdown — old format only; new inline format omits
-      // resets entirely, so we surface undefined and ModelUsageBar
-      // simply skips the "· in 4h 12m" suffix.
-      const sessionReset = text.match(/Current session[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
-      const weekReset = text.match(/Current week[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
-      if (five || seven) {
-        finish({
-          fiveHour: five ? parseInt(five[1], 10) : undefined,
-          sevenDay: seven ? parseInt(seven[1], 10) : undefined,
-          fiveHourReset: sessionReset ? sessionReset[1].trim() : undefined,
-          sevenDayReset: weekReset ? weekReset[1].trim() : undefined
-        })
-      }
+    // Repeatedly hit Enter until the Settings Warning menu is gone. See
+    // isSettingsWarningVisible for why one shot isn't enough.
+    const scheduleWarningRetry = () => {
+      if (warningRetryTimer) return
+      warningRetryTimer = setTimeout(() => {
+        warningRetryTimer = null
+        if (done) return
+        if (!isSettingsWarningVisible(dumpGrid())) return
+        if (warningRetries >= MAX_WARNING_RETRIES) return
+        warningRetries++
+        try { child?.write('\r') } catch {}
+        scheduleWarningRetry()
+      }, 1500)
     }
 
-    let warningHandled = false
     child.onData((d: string) => {
       term.write(d, () => {
         const grid = dumpGrid()
-        // Settings.json warning page: claude renders a "1. Continue /
-        // 2. Exit and fix manually" menu before the real TUI prompt.
-        // The `❯` glyph in that menu used to fool prompt detection,
-        // making us write `/usage` into the menu (where it's eaten as
-        // input) and the real prompt never gets it. Detect the warning
-        // and send Enter once to acknowledge → real prompt appears.
-        if (!warningHandled && /Settings\s+Warning|Exit and fix manually|Enter to confirm/i.test(grid)) {
-          warningHandled = true
-          setTimeout(() => { try { child?.write('\r') } catch {} }, 200)
+        // Fast path — 2.1.x prints "5h: ░░░ N% | 7d: M%" under every
+        // prompt, so as soon as it's on screen we're done. No /usage
+        // command, no extra API turn.
+        const fast = scrapeUsageFromGrid(grid)
+        if (fast) return finish(fast)
+        // A. Settings Warning menu still on screen → dismiss and retry.
+        //    Blocks the prompt from rendering, so nothing else can
+        //    progress until this is cleared.
+        if (isSettingsWarningVisible(grid)) {
+          if (warningRetries === 0) {
+            warningRetries = 1
+            setTimeout(() => { try { child?.write('\r') } catch {} }, 500)
+            scheduleWarningRetry()
+          }
           return
         }
-        // Stage 1: wait for prompt glyph → send /usage. Require the
-        // model name banner to be present so we know we're past any
-        // settings/warning screen. Match both old format ("Opus 4.7" /
-        // "Sonnet 4.6") and new hyphenated format ("claude-sonnet-4-6" /
-        // "claude-opus-4-7") introduced in claude 2.1.x.
+        // B. Fallback for pre-2.1.x claude: prompt visible but no
+        //    inline bar → send /usage and scrape the "Current session
+        //    … N% used" output. Model banner check avoids sending
+        //    /usage into a stray warning/settings screen.
         if (!sent) {
           const hasModelBanner = /(Opus|Sonnet|Haiku)\s+\d|claude-(?:opus|sonnet|haiku)/i.test(grid)
-          const firstTen = grid.split('\n').slice(0, 20).join('\n')
-          if (hasModelBanner && (firstTen.includes('❯') || /^\s*>\s/m.test(firstTen))) {
+          // 2.1.x scrolls the model banner + prompt past line 20 when
+          // the warning list is long, so search the whole grid, not just
+          // the first 20 lines. The fast path above already caught the
+          // common case; this only matters for old claude where /usage
+          // must be typed.
+          if (hasModelBanner && (grid.includes('❯') || /^\s*>\s/m.test(grid))) {
             sent = true
             promptSeenAt = Date.now()
             setTimeout(() => { try { child?.write('/usage\r') } catch {} }, 500)
           }
           return
         }
-        // Stage 2: after /usage, let the TUI settle a moment then scrape.
+        // C. After /usage, let the TUI settle then scrape old-format output.
         if (Date.now() - promptSeenAt < 700) return
         if (scrapeTimer) clearTimeout(scrapeTimer)
-        scrapeTimer = setTimeout(tryScrape, 300)
+        scrapeTimer = setTimeout(() => {
+          const result = scrapeUsageFromGrid(dumpGrid())
+          if (result) finish(result)
+        }, 300)
       })
     })
     child.onExit(() => finish(null))
