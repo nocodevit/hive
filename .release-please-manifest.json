@@ -1,7 +1,3 @@
 {
-<<<<<<< HEAD
   ".": "1.7.156"
-=======
-  ".": "1.7.156"
->>>>>>> c088f70 (fix: renaming an agent no longer kills the live chat (v1.7.156))
 }

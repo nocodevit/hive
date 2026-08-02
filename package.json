@@ -1,11 +1,7 @@
 {
   "name": "hive",
   "productName": "Hive",
-<<<<<<< HEAD
   "version": "1.7.156",
-=======
-  "version": "1.7.156",
->>>>>>> c088f70 (fix: renaming an agent no longer kills the live chat (v1.7.156))
   "description": "Multi-agent Claude Code manager with soul",
   "main": "out/main/index.js",
   "build": {
