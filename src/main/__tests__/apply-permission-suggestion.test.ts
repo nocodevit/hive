@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdirSync, rmSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { patternForAllowRule } from '../permission-rule-format'
 
 /**
  * Replica of the IPC handler logic in src/main/index.ts:
@@ -28,7 +29,7 @@ function applySuggestion(settingsPath: string, payload: { rules?: any; suggestio
   if (Array.isArray(s.rules) && s.rules.length > 0) {
     if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = []
     for (const r of s.rules) {
-      const pattern = `${r.toolName}(${r.ruleContent})`
+      const pattern = patternForAllowRule(r.toolName, r.ruleContent)
       if (!settings.permissions.allow.includes(pattern)) {
         settings.permissions.allow.push(pattern)
         added++
@@ -163,5 +164,60 @@ describe('settings:addClaudeAllowRule (permission save path)', () => {
     const r = applySuggestion(settingsPath, { suggestion: { type: 'addRule', rules: [] } })
     expect(r.ok).toBe(true)
     expect(r.added).toBe(0)
+  })
+
+  describe('REGRESSION: MCP tool persistence (user report 2026-08 — "keeps asking every time")', () => {
+    it('MCP tool with undefined ruleContent writes BARE name (no parens, no "undefined")', () => {
+      // The exact synthetic suggestion the new "Allow forever" button
+      // sends for an MCP prompt without claude-provided suggestions.
+      const r = applySuggestion(settingsPath, {
+        suggestion: { rules: [{ toolName: 'mcp__stargate__jira_update_issue', ruleContent: '' }] }
+      })
+      expect(r.added).toBe(1)
+      const s = JSON.parse(readFileSync(settingsPath, 'utf8'))
+      expect(s.permissions.allow).toEqual(['mcp__stargate__jira_update_issue'])
+      // Explicit: the old writer would have produced `...(undefined)`
+      // or `...()`, both of which claude 2.1.220 rejects.
+      expect(s.permissions.allow[0]).not.toContain('(')
+      expect(s.permissions.allow[0]).not.toContain('undefined')
+    })
+
+    it('Bash rule format is UNCHANGED (regression guard the other way)', () => {
+      const r = applySuggestion(settingsPath, {
+        suggestion: { rules: [{ toolName: 'Bash', ruleContent: 'git *' }] }
+      })
+      expect(r.added).toBe(1)
+      const s = JSON.parse(readFileSync(settingsPath, 'utf8'))
+      expect(s.permissions.allow).toEqual(['Bash(git *)'])
+    })
+
+    it('mixed Bash + MCP rules in one suggestion each write in their correct format', () => {
+      const r = applySuggestion(settingsPath, {
+        suggestion: {
+          rules: [
+            { toolName: 'Bash', ruleContent: 'npm *' },
+            { toolName: 'mcp__stargate__jira_search', ruleContent: '' },
+            { toolName: 'mcp__stargate__gitlab_get_file', ruleContent: undefined }
+          ]
+        }
+      })
+      expect(r.added).toBe(3)
+      const s = JSON.parse(readFileSync(settingsPath, 'utf8'))
+      expect(s.permissions.allow).toEqual([
+        'Bash(npm *)',
+        'mcp__stargate__jira_search',
+        'mcp__stargate__gitlab_get_file'
+      ])
+    })
+
+    it('idempotent for MCP — clicking Allow forever twice adds 0 the second time', () => {
+      const suggestion = { rules: [{ toolName: 'mcp__stargate__jira_update_issue', ruleContent: '' }] }
+      const a = applySuggestion(settingsPath, { suggestion })
+      const b = applySuggestion(settingsPath, { suggestion })
+      expect(a.added).toBe(1)
+      expect(b.added).toBe(0)
+      const s = JSON.parse(readFileSync(settingsPath, 'utf8'))
+      expect(s.permissions.allow).toHaveLength(1)
+    })
   })
 })

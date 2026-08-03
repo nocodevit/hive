@@ -148,3 +148,67 @@ describe('PermissionModal regression (04-29 black-screen scenario)', () => {
     expect(screen.getByRole('button', { name: /Allow & trust \/Users\/meiyang\/\.claude/ })).toBeInTheDocument()
   })
 })
+
+/**
+ * "Allow forever" button — the fix for the user's 2026-08 complaint that
+ * MCP tools (stargate especially) keep asking every session, never getting
+ * remembered. Root cause: claude doesn't send permission_suggestions for
+ * MCP tools, so the existing "Allow & remember" button never rendered.
+ * This synthesizes a bare-name rule (`mcp__server__tool_name`) and forwards
+ * it via onDecide → main writer writes it into ~/.claude/settings.json.
+ */
+describe('PermissionModal — "Allow forever" for MCP tools', () => {
+  let PermissionModal: any
+  beforeEach(async () => {
+    ;(globalThis as any).window.api = { chat: {}, settings: { addClaudeAllowRule: vi.fn(async () => ({ ok: true })) } }
+    PermissionModal = (await import('../index')).PermissionModal
+  })
+  afterEach(() => cleanup())
+
+  const mkReq = (toolName: string, extras: Partial<any> = {}) => ({
+    requestId: 'r1', toolName, input: {}, ...extras
+  })
+
+  it('renders "Allow forever" for an MCP tool with no permission_suggestions', () => {
+    render(<PermissionModal req={mkReq('mcp__stargate__jira_update_issue')}
+      peerCount={0} onDecide={vi.fn()} onAllowSession={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Allow forever' })).toBeInTheDocument()
+  })
+
+  it('does NOT render "Allow forever" for a non-MCP tool (Bash, Read, etc.)', () => {
+    render(<PermissionModal req={mkReq('Bash')}
+      peerCount={0} onDecide={vi.fn()} onAllowSession={vi.fn()} />)
+    expect(screen.queryByRole('button', { name: 'Allow forever' })).not.toBeInTheDocument()
+  })
+
+  it('does NOT render "Allow forever" when claude already sent a usable suggestion (avoid two buttons doing similar things)', () => {
+    render(<PermissionModal
+      req={mkReq('mcp__stargate__jira_update_issue', {
+        suggestions: [{ rules: [{ toolName: 'mcp__stargate__jira_update_issue', ruleContent: '' }] }]
+      })}
+      peerCount={0} onDecide={vi.fn()} onAllowSession={vi.fn()} />)
+    // The suggestion-driven "Allow & remember" (green) button covers it;
+    // no need for a second button to persist the same rule.
+    expect(screen.queryByRole('button', { name: 'Allow forever' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Allow & remember' })).toBeInTheDocument()
+  })
+
+  it('click forwards a synthetic {rules:[{toolName, ruleContent:""}]} suggestion to onDecide', () => {
+    const onDecide = vi.fn()
+    render(<PermissionModal req={mkReq('mcp__stargate__jira_update_issue')}
+      peerCount={0} onDecide={onDecide} onAllowSession={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Allow forever' }))
+    expect(onDecide).toHaveBeenCalledTimes(1)
+    expect(onDecide).toHaveBeenCalledWith('allow', {
+      rules: [{ toolName: 'mcp__stargate__jira_update_issue', ruleContent: '' }]
+    })
+  })
+
+  it('tooltip explains the persistence + cross-session/agent scope', () => {
+    render(<PermissionModal req={mkReq('mcp__stargate__jira_update_issue')}
+      peerCount={0} onDecide={vi.fn()} onAllowSession={vi.fn()} />)
+    const btn = screen.getByRole('button', { name: 'Allow forever' })
+    expect(btn.getAttribute('title')).toMatch(/~\/\.claude\/settings\.json/)
+    expect(btn.getAttribute('title')).toMatch(/session or agent/)
+  })
+})

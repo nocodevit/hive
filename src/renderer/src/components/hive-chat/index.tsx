@@ -2478,7 +2478,7 @@ export function describeSuggestion(s: PermissionSuggestion | null | undefined):
   return null
 }
 
-function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
+export function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
   req: { requestId: string; toolName: string; displayName?: string; input: Record<string, unknown>; suggestions?: PermissionSuggestion[] }
   /** How many OTHER queued requests share this same toolName. Renders a "+N more" hint on the batch-allow button. */
   peerCount: number
@@ -2560,6 +2560,25 @@ function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
               fontWeight: 700, cursor: 'pointer'
             }} title={desc.hover}>
               {desc.label}
+            </button>
+          )}
+          {/* MCP tools: claude typically sends NO permission_suggestions
+             (their inputs are freeform JSON, so no pattern to generalize).
+             The above "Allow & remember" button therefore never renders
+             for them, and before this button existed the only durable
+             option was the session-scoped one — every new chat started
+             asking again. This synthesizes a bare-tool-name suggestion
+             (`mcp__server__tool_name`, the shape claude 2.1.x actually
+             accepts) so onDecide → addClaudeAllowRule writes it into
+             ~/.claude/settings.json for every future session/agent/Hive. */}
+          {!suggestion && req.toolName.startsWith('mcp__') && (
+            <button onClick={() => onDecide('allow', { rules: [{ toolName: req.toolName, ruleContent: '' }] })} style={{
+              background: CRUSH.Zest, color: CRUSH.Pepper,
+              border: 'none', borderRadius: 6,
+              padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO,
+              fontWeight: 700, cursor: 'pointer'
+            }} title={`Persist ${req.toolName} in ~/.claude/settings.json permissions.allow — never asked again across any session or agent`}>
+              Allow forever
             </button>
           )}
         </div>
