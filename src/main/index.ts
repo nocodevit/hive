@@ -104,6 +104,7 @@ import { runGate } from './gate'
 import { getManagerSoulAddendum, getWorkerSoulAddendum, getQaSoulAddendum, getCriticSoulAddendum } from './souls'
 import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './helpers'
 import { isSubagentActiveForCwd } from './subagent-activity'
+import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
 import { registerChatIpc } from './chat'
 import { registerStorageIpc } from './storage'
@@ -1156,11 +1157,13 @@ ipcMain.handle('settings:addClaudeAllowRule', (_event, payload: {
     const s = payload.suggestion || (payload.rules ? { rules: payload.rules } : null)
     if (!s) return { ok: false, error: 'no suggestion' }
 
-    // Shape 1: explicit rules list (old schema, still emitted for some tools)
+    // Shape 1: explicit rules list (old schema, still emitted for some tools).
+    // patternForAllowRule handles the MCP-vs-Bash format split — see that
+    // file for the (undefined) bug history.
     if (Array.isArray(s.rules) && s.rules.length > 0) {
       if (!Array.isArray(settings.permissions.allow)) settings.permissions.allow = []
       for (const r of s.rules) {
-        const pattern = `${r.toolName}(${r.ruleContent})`
+        const pattern = patternForAllowRule(r.toolName, r.ruleContent)
         if (!settings.permissions.allow.includes(pattern)) {
           settings.permissions.allow.push(pattern)
           added++
