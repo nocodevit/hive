@@ -11,6 +11,7 @@ import FilesPanel from './components/FilesPanel'
 import MarkdownPreviewModal from './components/MarkdownPreviewModal'
 import OfficeView from './components/OfficeView'
 import CreateTaskGroupModal from './components/CreateTaskGroupModal'
+import AgentDeleteConfirmModal, { AgentDeleteImpact } from './components/AgentDeleteConfirmModal'
 import ClaudeGate from './components/ClaudeGate'
 import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
@@ -120,6 +121,12 @@ export default function App() {
   const [projectGroupInput, setProjectGroupInput] = useState('')
   const [agentNotePrompt, setAgentNotePrompt] = useState<{ agentId: string; current: string } | null>(null)
   const [agentNoteInput, setAgentNoteInput] = useState('')
+  // Two-step delete confirmation for the trash icon on an agent card. See
+  // AgentDeleteConfirmModal.tsx for why (accidental one-click deletes lost
+  // the "David" agent + its worktree in 2026-08).
+  const [deleteAgentConfirming, setDeleteAgentConfirming] = useState<{
+    agent: Agent; impact: AgentDeleteImpact
+  } | null>(null)
   const [collapsedProjectGroups, setCollapsedProjectGroups] = useState<Set<string>>(new Set())
   useEffect(() => {
     const close = () => { setContextMenu(null); setAgentContextMenu(null) }
@@ -997,20 +1004,23 @@ export default function App() {
                                   </svg>
                                 </button>
                                 <button
-                                  onClick={async (e) => {
+                                  onClick={(e) => {
+                                    // Open the two-step confirm modal instead of
+                                    // deleting immediately. Historical one-click
+                                    // path lost the David agent + worktree in
+                                    // 2026-08 on an accidental mis-click; see
+                                    // AgentDeleteConfirmModal for the reasoning.
                                     e.stopPropagation()
-                                    if (activeTerminals.has(agent.id)) {
-                                      window.api.pty.kill(agent.id)
-                                      setActiveTerminals((prev) => { const next = new Set(prev); next.delete(agent.id); return next })
-                                    }
-                                    if (agent.worktreePath) {
-                                      const zone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
-                                      if (zone) await window.api.git.worktreeRemove(zone.path, agent.worktreePath)
-                                    }
-                                    const delZone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
-                                    if (delZone) window.api.agent.deleteDefinition(agent.worktreePath || delZone.path, agent.id)
-                                    setAgents((prev) => prev.filter((a) => a.id !== agent.id))
-                                    if (selectedAgentId === agent.id) setSelectedAgentId(null)
+                                    const zone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
+                                    setDeleteAgentConfirming({
+                                      agent,
+                                      impact: {
+                                        hasActiveTerminal: activeTerminals.has(agent.id),
+                                        worktreePath: agent.worktreePath,
+                                        worktreeBranch: agent.worktreeBranch,
+                                        definitionCwd: agent.worktreePath || zone?.path
+                                      }
+                                    })
                                   }}
                                   className="w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer"
                                   title="Delete"
@@ -2966,6 +2976,34 @@ export default function App() {
       })()}
 
       <MarkdownPreviewModal filePath={previewFilePath} onClose={() => setPreviewFilePath(null)} />
+
+      {deleteAgentConfirming && (
+        <AgentDeleteConfirmModal
+          agentName={deleteAgentConfirming.agent.name}
+          impact={deleteAgentConfirming.impact}
+          onCancel={() => setDeleteAgentConfirming(null)}
+          onConfirm={async () => {
+            const { agent, impact } = deleteAgentConfirming
+            // Same destructive path the trash icon used to run in one shot.
+            // Kept inline (not extracted) because it touches many pieces of
+            // App state (activeTerminals, agents, selectedAgentId) and
+            // multiple window.api namespaces; extracting them would just
+            // move the same logic behind a longer signature.
+            setDeleteAgentConfirming(null)
+            if (impact.hasActiveTerminal) {
+              window.api.pty.kill(agent.id)
+              setActiveTerminals((prev) => { const next = new Set(prev); next.delete(agent.id); return next })
+            }
+            if (impact.worktreePath) {
+              const zone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
+              if (zone) await window.api.git.worktreeRemove(zone.path, impact.worktreePath)
+            }
+            if (impact.definitionCwd) window.api.agent.deleteDefinition(impact.definitionCwd, agent.id)
+            setAgents((prev) => prev.filter((a) => a.id !== agent.id))
+            if (selectedAgentId === agent.id) setSelectedAgentId(null)
+          }}
+        />
+      )}
 
       {/* Notification Toasts */}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 pointer-events-none">
