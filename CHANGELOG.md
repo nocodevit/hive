@@ -7,6 +7,58 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [1.8.0](https://github.com/nocodevit/hive/compare/v1.7.74...v1.8.0) (2026-08-13)
+
+
+### Features
+
+* "Allow this session" for MCP tools + parallel-batch collapse (v1.7.150) ([b040d19](https://github.com/nocodevit/hive/commit/b040d1994360e264902681aea97778a8f9c943ca))
+* ✦ Start New Session in kebab menu (active session) (v1.7.101) ([191f2a5](https://github.com/nocodevit/hive/commit/191f2a5e4ac4c1073c20eef47b563e081425781f))
+* gate startup on Claude CLI presence with one-click install (v1.7.121) ([#9](https://github.com/nocodevit/hive/issues/9)) ([00a4507](https://github.com/nocodevit/hive/commit/00a450708235913f986d506b82fc714370e7870f))
+* render agent note as a colored tag after the name (v1.7.129) ([#14](https://github.com/nocodevit/hive/issues/14)) ([67e80b1](https://github.com/nocodevit/hive/commit/67e80b1aa45f9dd8215c3500d15b3005da5f119c))
+* right-click agent → attach free-text note (v1.7.102) ([bf655ce](https://github.com/nocodevit/hive/commit/bf655ce5bbd33b275872f46057f879644d053dfe))
+* state auto-cleanup to prevent ghost-state CPU burn (v1.7.98) ([d1abbfa](https://github.com/nocodevit/hive/commit/d1abbfa9e4eae24da19cfba3031d6b0b5a7b1873))
+* v1.7.74 → v1.7.97 accumulated work ([0f01d37](https://github.com/nocodevit/hive/commit/0f01d37baeaea1961983be2d2d20454e996932ea))
+* writeAgentDefinition wraps task-group addendum with v=1 markers (v1.7.99) ([b2bc856](https://github.com/nocodevit/hive/commit/b2bc8567117f97b62092cd0cc14ba47943a4f236))
+
+
+### Bug Fixes
+
+* 5h/7d %% no longer wiped by cc-only chat:usage broadcasts (v1.7.123) ([6c25d28](https://github.com/nocodevit/hive/commit/6c25d28a57c13b6c9be43b9200726fb7bf10f9a5))
+* 5h/7d bar showed per-model 0% instead of aggregate — always send /usage (v1.7.159) ([#33](https://github.com/nocodevit/hive/issues/33)) ([4012436](https://github.com/nocodevit/hive/commit/40124367b67567609eab36f47c7af6ba2105b4cb))
+* 5h/7d usage bar blank — scrape inline "5h: N% | 7d: M%" from prompt line + retry Settings-Warning dismissal (v1.7.155) ([#29](https://github.com/nocodevit/hive/issues/29)) ([4e17010](https://github.com/nocodevit/hive/commit/4e1701099b1823b94da4a09d2711bde16ed39d78))
+* auth/region error handling — 403 country block never asks to sign in ([#17](https://github.com/nocodevit/hive/issues/17)) ([d428925](https://github.com/nocodevit/hive/commit/d428925fd04f9b47e80feae2ea818932f192469b))
+* ccusage no longer pegs CPU on large jsonl histories (v1.7.124) ([68e6555](https://github.com/nocodevit/hive/commit/68e6555ac5697f9c57f619d49f72f5f87f6948b4))
+* chat-log retention is opt-in only, never silently delete (v1.7.148) ([639b437](https://github.com/nocodevit/hive/commit/639b437e000ea2d5a90d78adf86232e79094cc5b))
+* close orphan pty master fd node-pty leaks per spawn (the REAL ptmx fix) ([#27](https://github.com/nocodevit/hive/issues/27)) ([0bedc3a](https://github.com/nocodevit/hive/commit/0bedc3a819ee93af234c893a72ea0b1f44665255))
+* Compact + Resume no longer no-ops on stale session map entry (v1.7.106) ([653a63b](https://github.com/nocodevit/hive/commit/653a63b67d0286e7e0a1fbb08e9d93002155789b))
+* ctx % updates without result events + task header rehydrates on restart (v1.7.103) ([531eb57](https://github.com/nocodevit/hive/commit/531eb57e422b048a74b4b13bd4051aad7800903c))
+* defer Term-pane claude launch until the tab is opened ([302abd9](https://github.com/nocodevit/hive/commit/302abd9310ba4e05a736e867e41c10ec4cd8fcee))
+* drop committed runtime symlink + scope electron-builder files (v1.7.107) ([aae4747](https://github.com/nocodevit/hive/commit/aae474755984bcb7815d1546361ca561dae9bfaa))
+* **e2e:** headless mode + workers=1 + test drift repair (v1.7.120) ([#4](https://github.com/nocodevit/hive/issues/4)) ([c962c38](https://github.com/nocodevit/hive/commit/c962c38003e2016a049dba68a095c0b462c0150e))
+* file explorer + git ipc hardening + parse-error log + pause stub (v1.7.100) ([b2741d8](https://github.com/nocodevit/hive/commit/b2741d81409812fe7e99e55737674e545a4f22c4))
+* keep session entry alive during Compact+Resume so old exit event doesn't reopen StartChooser (v1.7.154) ([#28](https://github.com/nocodevit/hive/issues/28)) ([79556b3](https://github.com/nocodevit/hive/commit/79556b3cbeacce2cf0db3efe202ca94976b9fd62))
+* kill entire PTY subtree on terminal teardown / quit ([6d46fb7](https://github.com/nocodevit/hive/commit/6d46fb7146a85f4f5965f9a239e56adba4be5bcb))
+* links open externally + Resume buttons always active + chat.ts modularisation (v1.7.113) ([#3](https://github.com/nocodevit/hive/issues/3)) ([e1830f1](https://github.com/nocodevit/hive/commit/e1830f17105f1094fb76db7498cf6e9566064cac))
+* log chat spawn command + stderr/exit so resume failures aren't invisible ([b171869](https://github.com/nocodevit/hive/commit/b171869df91ae45a145d2b318eb2db75900ef6ce))
+* MCP tool permissions now persist across sessions (v1.7.158) ([#32](https://github.com/nocodevit/hive/issues/32)) ([39c6552](https://github.com/nocodevit/hive/commit/39c6552a5b10bd5484d99f795008ad156deea4c5))
+* pty master fd leak — release fd on teardown + single-owner lifecycle + ptmx watermark ([#26](https://github.com/nocodevit/hive/issues/26)) ([4745545](https://github.com/nocodevit/hive/commit/4745545584890cb17e089e39bd8973c8b057a603))
+* refresh button now compacts live chat (regression from in-place refresh) (v1.7.105) ([089ad08](https://github.com/nocodevit/hive/commit/089ad08977b85918e9a45bbf2387ea2e5e04ffd3))
+* renaming an agent no longer kills the live chat (v1.7.156) ([#30](https://github.com/nocodevit/hive/issues/30)) ([1cc9e0a](https://github.com/nocodevit/hive/commit/1cc9e0ad927b4558bdc4a9f01fe6d2d51ea4c233))
+* restore nvm-PATH recovery + worktree resume (regression from v1.7.130) ([#16](https://github.com/nocodevit/hive/issues/16)) ([9007d01](https://github.com/nocodevit/hive/commit/9007d016ea3f542f0a04afa986dfbe8ac7ddca38))
+* show "Scanning projects…" instead of "No projects yet" on cold open (v1.7.130) ([#15](https://github.com/nocodevit/hive/issues/15)) ([8a83e22](https://github.com/nocodevit/hive/commit/8a83e22ce62de01ceedf07b72abfdc1b67344536))
+* spawn claude by absolute path so a failed boot-PATH recovery can't ENOENT every session ([#20](https://github.com/nocodevit/hive/issues/20)) ([26e04f9](https://github.com/nocodevit/hive/commit/26e04f9468b630c1b4392e66455801184912a1f7))
+* stop backgrounded StartChooser from swallowing the digit "3" (v1.7.132) ([b2de4f0](https://github.com/nocodevit/hive/commit/b2de4f0aa073d0f2941a09eb78f20891b17a0b35))
+* Term claude launch checks live session instead of a once-flag ([5e24637](https://github.com/nocodevit/hive/commit/5e2463754b26dbb119e55312cedc45f3e1c4a616))
+* terminal refresh no longer white-screens — in-place PTY respawn (v1.7.104) ([937fbf3](https://github.com/nocodevit/hive/commit/937fbf3a3c6f4c04b4ff4bcaefd0d49ac52a40ae))
+* two-step confirmation before deleting an agent (v1.7.157) ([#31](https://github.com/nocodevit/hive/issues/31)) ([06d7d67](https://github.com/nocodevit/hive/commit/06d7d677edff979ed695d4aab4fce1c8fd110973))
+
+
+### Performance Improvements
+
+* coalesce streaming chat deltas to one render per frame (1.7.147) ([#21](https://github.com/nocodevit/hive/issues/21)) ([747fefa](https://github.com/nocodevit/hive/commit/747fefabd0d55306a0b6b629e9c2d43214fbe817))
+* throttle OfficeView canvas to 30fps and pause when hidden ([#18](https://github.com/nocodevit/hive/issues/18)) ([65d6c2e](https://github.com/nocodevit/hive/commit/65d6c2e8d58de16099bf557e29fdd63636fc3e94))
+
 ## [Unreleased]
 
 - *nothing yet*
