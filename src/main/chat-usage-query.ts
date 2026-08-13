@@ -89,30 +89,41 @@ export interface UsagePctResult {
 }
 
 /**
- * Parse the two TUI formats that carry subscription %%. Pure — safe to
- * unit test with hand-crafted grids.
+ * Parse subscription %% out of a `/usage`-command TUI response grid.
  *
- * Formats:
- *   OLD (< 2.1.x): "Current session ... 23% used" / "Current week ... 5% used"
- *                  plus optional "Resets in 4h 12m" / "Resets on Apr 30" tail
- *   NEW (2.1.x+):  inline prompt bar "5h: ░░░░░░░░░░ 23% | 7d: 5%" — no
- *                  /usage command needed; claude prints it under every prompt
+ * ## Why only the /usage-command output — never the inline prompt bar
  *
- * Returns null iff neither format matched. Partial matches (only 5h, or
- * only 7d) return with the missing side undefined — the ModelUsageBar
- * renders `—` for undefined and shows what we do have.
+ * claude 2.1.x prints an inline bar under every prompt, e.g.:
+ *
+ *   `[Opus 5 (1M context)] 5h: ░░░░░░░░░░ 0% | 7d: 0%`
+ *
+ * That number is the CURRENT MODEL's usage, not the aggregate. A user
+ * on Fable-heavy Opus-light will see the Opus bar at 0% while their
+ * aggregate weekly is 56%. v1.7.155 shipped a "fast path" that read the
+ * inline bar (regexes named `fiveNew` / `sevenNew`) and returned 0/0
+ * without ever sending /usage — cosmetically fast, functionally wrong.
+ * Removed 1.7.159.
+ *
+ * The `/usage` command's response instead prints:
+ *
+ *   `Current session: 17% used · resets Aug 13 at 1:39pm (Asia/Singapore)`
+ *   `Current week (all models): 56% used · resets Aug 16 at 12:59am (Asia/Singapore)`
+ *   `Current week (Fable): 2% used · resets Aug 16 at 12:59am (Asia/Singapore)`
+ *
+ * That IS the aggregate. Matching `Current week` (lazy) picks the
+ * `(all models)` line first because it renders before `(Fable)` in
+ * every observed claude version.
+ *
+ * Returns null iff neither `Current session` nor `Current week`
+ * matched. Partial matches (only 5h, or only 7d) return with the
+ * missing side undefined — ModelUsageBar renders `—` for undefined.
  */
 export function scrapeUsageFromGrid(text: string): UsagePctResult | null {
-  const fiveOld = text.match(/Current session[\s\S]{0,300}?(\d+)\s*%\s*used/)
-  const fiveNew = text.match(/\b5h\b\s*:\s*[░▒▓█▁▂▃▄▅▆▇#=\- ]*\s*(\d+)\s*%/)
-  const sevenOld = text.match(/Current week[\s\S]{0,300}?(\d+)\s*%\s*used/)
-  const sevenNew = text.match(/\b7d\b\s*:?\s*[░▒▓█▁▂▃▄▅▆▇#=\- ]*\s*(\d+)\s*%/)
-  const weekly = text.match(/weekly[^%]*?(\d+(?:\.\d+)?)\s*%/i)
-  const five = fiveOld || fiveNew
-  const seven = sevenOld || sevenNew || weekly
+  const five = text.match(/Current session[\s\S]{0,300}?(\d+)\s*%\s*used/)
+  const seven = text.match(/Current week[\s\S]{0,300}?(\d+)\s*%\s*used/)
   if (!five && !seven) return null
-  const sessionReset = text.match(/Current session[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
-  const weekReset = text.match(/Current week[\s\S]{0,500}?Resets\s+(?:in|on|at)\s+([^\n]+?)\s*(?:\n|$)/i)
+  const sessionReset = text.match(/Current session[\s\S]{0,500}?resets?\s+(?:in|on|at)?\s*([^\n·]+?)(?:\s*·|\s*\(|\s*\n|$)/i)
+  const weekReset = text.match(/Current week[\s\S]{0,500}?resets?\s+(?:in|on|at)?\s*([^\n·]+?)(?:\s*·|\s*\(|\s*\n|$)/i)
   return {
     fiveHour: five ? parseInt(five[1], 10) : undefined,
     sevenDay: seven ? parseInt(seven[1], 10) : undefined,
@@ -149,12 +160,20 @@ export function isSettingsWarningVisible(text: string): boolean {
  *      before giving up). One-shot Enter is not enough — claude 2.1.x
  *      renders the menu in stages and swallows keystrokes sent too
  *      early. See isSettingsWarningVisible for the failure mode.
- *   2. Fast path: try scrapeUsageFromGrid on every incoming chunk. In
- *      claude 2.1.x the "5h: ░░░ N% | 7d: M%" bar is printed under
- *      every prompt, so we get the number without ever sending /usage
- *      (saves a full API turn per poll).
- *   3. Fallback for old claude: wait for prompt glyph, send /usage,
- *      then scrape "Current session … N% used" / "Current week …".
+ *   2. Wait for the model banner + prompt glyph, then send `/usage`
+ *      (via write('\r')). The prompt search covers the WHOLE grid —
+ *      a long warning list can scroll the banner past line 20, and the
+ *      old "first 20 lines" guard prevented /usage from ever going out.
+ *   3. Wait ~700ms for the /usage response to start rendering, then
+ *      scrape `Current session ... N% used` and `Current week (all
+ *      models) ... N% used`. scrapeUsageFromGrid returns null until
+ *      those lines appear, so we retry on each chunk.
+ *
+ * v1.7.155 (PR #29) tried to read the inline prompt bar
+ * `[Opus 5] 5h: 0% | 7d: 0%` as a fast path — that number is per-model,
+ * not aggregate, so it reported 0/0 for users whose real weekly was
+ * 56%. Removed 1.7.159. The `/usage` command's output is the only
+ * source that carries the aggregate.
  */
 export async function queryUsagePctViaPty(cwd?: string): Promise<UsagePctResult | null> {
   return new Promise(resolve => {
@@ -220,11 +239,6 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<UsagePctResult 
     child.onData((d: string) => {
       term.write(d, () => {
         const grid = dumpGrid()
-        // Fast path — 2.1.x prints "5h: ░░░ N% | 7d: M%" under every
-        // prompt, so as soon as it's on screen we're done. No /usage
-        // command, no extra API turn.
-        const fast = scrapeUsageFromGrid(grid)
-        if (fast) return finish(fast)
         // A. Settings Warning menu still on screen → dismiss and retry.
         //    Blocks the prompt from rendering, so nothing else can
         //    progress until this is cleared.
@@ -236,17 +250,14 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<UsagePctResult 
           }
           return
         }
-        // B. Fallback for pre-2.1.x claude: prompt visible but no
-        //    inline bar → send /usage and scrape the "Current session
-        //    … N% used" output. Model banner check avoids sending
-        //    /usage into a stray warning/settings screen.
+        // B. Prompt visible → send /usage. Model banner check avoids
+        //    sending /usage into a stray warning/settings screen. The
+        //    prompt glyph is searched across the WHOLE grid (not just
+        //    the first 20 lines), because a long warning list can scroll
+        //    the banner past line 20 — v1.7.155 restricted this to the
+        //    first 20 lines and /usage never got sent for that case.
         if (!sent) {
           const hasModelBanner = /(Opus|Sonnet|Haiku)\s+\d|claude-(?:opus|sonnet|haiku)/i.test(grid)
-          // 2.1.x scrolls the model banner + prompt past line 20 when
-          // the warning list is long, so search the whole grid, not just
-          // the first 20 lines. The fast path above already caught the
-          // common case; this only matters for old claude where /usage
-          // must be typed.
           if (hasModelBanner && (grid.includes('❯') || /^\s*>\s/m.test(grid))) {
             sent = true
             promptSeenAt = Date.now()
@@ -254,7 +265,13 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<UsagePctResult 
           }
           return
         }
-        // C. After /usage, let the TUI settle then scrape old-format output.
+        // C. After /usage, wait for the response to land then scrape.
+        //    scrapeUsageFromGrid ONLY matches `Current session` / `Current
+        //    week` — the aggregate lines from the /usage command. It
+        //    ignores the inline prompt bar (which is per-model and would
+        //    return the wrong number). So while the response is still
+        //    rendering, scrape returns null and we retry on the next
+        //    chunk until the aggregate lines finally arrive.
         if (Date.now() - promptSeenAt < 700) return
         if (scrapeTimer) clearTimeout(scrapeTimer)
         scrapeTimer = setTimeout(() => {
