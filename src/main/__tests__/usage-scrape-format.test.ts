@@ -1,60 +1,54 @@
 import { describe, it, expect } from 'vitest'
 import { scrapeUsageFromGrid, isSettingsWarningVisible } from '../chat-usage-query'
 
-describe('scrapeUsageFromGrid — NEW inline format (claude 2.1.x+)', () => {
-  it('parses "5h: ░░░ 23% | 7d: 5%" printed on the prompt line', () => {
-    const grid = '[Opus 5 (1M context)] 5h: ░░░░░░░░░░ 23% | 7d: 5%   /rc'
-    expect(scrapeUsageFromGrid(grid)).toEqual({
-      fiveHour: 23,
-      sevenDay: 5,
-      fiveHourReset: undefined,
-      sevenDayReset: undefined
-    })
-  })
-
-  it('parses at 0% (both bars empty) — the exact case that motivated this rewrite', () => {
-    const grid = '  [Opus 5 (1M context)] 5h: ░░░░░░░░░░ 0% | 7d: 0%                     '
-    expect(scrapeUsageFromGrid(grid)).toEqual({
-      fiveHour: 0,
-      sevenDay: 0,
-      fiveHourReset: undefined,
-      sevenDayReset: undefined
-    })
-  })
-
-  it('parses at high usage — bars are filled with variety of glyphs', () => {
-    const grid = '5h: ██████████ 97% | 7d: ███████░░░ 71%'
-    const r = scrapeUsageFromGrid(grid)!
-    expect(r.fiveHour).toBe(97)
-    expect(r.sevenDay).toBe(71)
-  })
-
-  it('returns 5h-only when only 5h is present (partial render mid-stream)', () => {
-    const grid = '5h: ░░░ 12%'
-    expect(scrapeUsageFromGrid(grid)).toEqual({
-      fiveHour: 12, sevenDay: undefined, fiveHourReset: undefined, sevenDayReset: undefined
-    })
-  })
-})
-
-describe('scrapeUsageFromGrid — OLD /usage TUI format (pre-2.1.x)', () => {
-  it('parses "Current session: 2% used" plus "Current week (all models): 6% used"', () => {
+/**
+ * scrapeUsageFromGrid MUST parse ONLY the /usage-command's aggregate
+ * output — never the inline prompt bar.
+ *
+ * The inline bar `[Opus 5 (1M context)] 5h: N% | 7d: M%` is per-model.
+ * Users on a Fable-heavy account see the Opus bar at 0% while their
+ * real weekly is 56%. v1.7.155 read the inline bar as a fast path and
+ * shipped a 0/0 lie into ModelUsageBar — regressed 1.7.159 back to
+ * always sending /usage explicitly and parsing "Current session …" +
+ * "Current week (all models) …".
+ */
+describe('scrapeUsageFromGrid — /usage aggregate output', () => {
+  it('parses Current session: N% used (the primary 5h source)', () => {
     const grid = [
       'You are currently using your subscription to power your Claude Code usage',
       '',
-      'Current session: 2% used · resets Jul 27 at 5:30am (Asia/Singapore)',
-      'Current week (all models): 6% used · resets Aug 2 at 1am (Asia/Singapore)',
-      'Current week (Fable): 0% used'
+      'Current session: 17% used · resets Aug 13 at 1:39pm (Asia/Singapore)',
+      'Current week (all models): 56% used · resets Aug 16 at 12:59am (Asia/Singapore)',
+      'Current week (Fable): 2% used · resets Aug 16 at 12:59am (Asia/Singapore)'
     ].join('\n')
     const r = scrapeUsageFromGrid(grid)!
-    expect(r.fiveHour).toBe(2)
-    expect(r.sevenDay).toBe(6)
+    expect(r.fiveHour).toBe(17)
+    expect(r.sevenDay).toBe(56)
   })
 
-  it('extracts "Resets in 4h 12m" reset string in old format', () => {
+  it('MUST pick (all models) weekly, NOT (Fable) weekly — order matters', () => {
+    // The exact live grid the user hit 2026-08-13: 56% aggregate but the
+    // Fable slice was only 2%. If the regex matches "Current week (Fable)"
+    // first it reports 2 and users see a wildly wrong number.
+    const grid = 'Current week (all models): 56% used · resets X\nCurrent week (Fable): 2% used · resets X'
+    const r = scrapeUsageFromGrid(grid)!
+    expect(r.sevenDay).toBe(56)
+    expect(r.sevenDay).not.toBe(2)
+  })
+
+  it('extracts reset countdown from the "resets Aug 13 at 1:39pm" tail', () => {
+    const grid = [
+      'Current session: 17% used · resets Aug 13 at 1:39pm (Asia/Singapore)',
+      'Current week (all models): 56% used · resets Aug 16 at 12:59am (Asia/Singapore)'
+    ].join('\n')
+    const r = scrapeUsageFromGrid(grid)!
+    expect(r.fiveHourReset).toBe('Aug 13 at 1:39pm')
+    expect(r.sevenDayReset).toBe('Aug 16 at 12:59am')
+  })
+
+  it('extracts the older "Resets in 4h 12m" form (pre-2.1.x /usage)', () => {
     const grid = [
       'Current session',
-      '',
       '  23% used',
       '  Resets in 4h 12m',
       'Current week',
@@ -65,18 +59,50 @@ describe('scrapeUsageFromGrid — OLD /usage TUI format (pre-2.1.x)', () => {
     expect(r.fiveHourReset).toBe('4h 12m')
     expect(r.sevenDayReset).toBe('6d 14h')
   })
+
+  it('returns 5h-only when only Current session is present (partial render)', () => {
+    const grid = 'Current session: 12% used · resets Aug 13 at 1:39pm'
+    const r = scrapeUsageFromGrid(grid)!
+    expect(r.fiveHour).toBe(12)
+    expect(r.sevenDay).toBeUndefined()
+  })
 })
 
-describe('scrapeUsageFromGrid — nothing matches', () => {
-  it('returns null when grid is empty', () => {
+describe('scrapeUsageFromGrid — MUST return null (never read per-model inline bar)', () => {
+  it('inline prompt bar ALONE returns null — that number is per-model, not aggregate', () => {
+    // v1.7.155 shipped a regex that matched this and returned {fiveHour:0, sevenDay:0}
+    // for real users whose aggregate was 17/56. Regression guard.
+    expect(scrapeUsageFromGrid('[Opus 5 (1M context)] 5h: ░░░░░░░░░░ 0% | 7d: 0%')).toBeNull()
+  })
+
+  it('inline bar at high per-model % is STILL wrong data — return null', () => {
+    expect(scrapeUsageFromGrid('[Opus 5] 5h: ██████████ 97% | 7d: ███████░░░ 71%')).toBeNull()
+  })
+
+  it('inline bar SHARED with the /usage response — must pick aggregate, ignore inline', () => {
+    // Realistic grid after /usage lands: both are on screen simultaneously.
+    // Old code would have returned min-of-both or first-match, either way
+    // could pick the inline bar's 0. The Current-only regex picks 17.
+    const grid = [
+      'Current session: 17% used · resets Aug 13 at 1:39pm',
+      'Current week (all models): 56% used · resets Aug 16',
+      '',
+      '[Opus 5 (1M context)] 5h: ░░░░ 0% | 7d: 0%'
+    ].join('\n')
+    const r = scrapeUsageFromGrid(grid)!
+    expect(r.fiveHour).toBe(17)
+    expect(r.sevenDay).toBe(56)
+  })
+
+  it('empty grid → null', () => {
     expect(scrapeUsageFromGrid('')).toBeNull()
   })
 
-  it('returns null on random terminal noise with no usage bar', () => {
+  it('random terminal noise with no Current-{session,week} lines → null', () => {
     expect(scrapeUsageFromGrid('Welcome to claude\n\n❯ hello\n\n')).toBeNull()
   })
 
-  it('returns null on the Settings Warning menu (no percentages yet)', () => {
+  it('Settings Warning menu (no percentages) → null', () => {
     const warning = [
       '  ⚠ Settings Warning',
       '  ├ Invalid rule ...',
