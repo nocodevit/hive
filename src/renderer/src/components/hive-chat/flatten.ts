@@ -1,4 +1,5 @@
 import type { TimelineEntry } from './types'
+import { isCompactSummaryEvent, extractCompactSummaryHint } from './compact-summary'
 
 /**
  * Flatten a batch of Claude-Code-local-persistence events
@@ -50,6 +51,17 @@ export function flattenHistoricalEvents(events: any[], nextId: () => string): Ti
         }
       })
     } else if (ev?.type === 'user') {
+      // Compact / Compact+Fork summary user event — collapse to a
+      // small hint chip so the timeline isn't dominated by 5-15 KB of
+      // "This session is being continued…" prose on every replay.
+      // The chip carries the transcript jsonl path so the user can
+      // still open the raw content if they need to. Same filter runs
+      // in the live stream handler (index.tsx).
+      if (isCompactSummaryEvent(ev)) {
+        const hint = extractCompactSummaryHint(ev)
+        push({ kind: 'compact_summary_hint', id: nextId(), transcriptPath: hint.transcriptPath, summaryChars: hint.summaryChars } as TimelineEntry)
+        continue
+      }
       const content = ev.message?.content
       if (typeof content === 'string') {
         push({ kind: 'user', text: content, id: nextId() } as TimelineEntry)

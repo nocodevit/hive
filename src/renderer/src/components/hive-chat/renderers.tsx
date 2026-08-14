@@ -1510,6 +1510,68 @@ export function CompactBoundary({ previousTokens, newTokens, turnsSummarized }: 
   )
 }
 
+/**
+ * CompactSummaryHint — collapsed hint chip that replaces the wall of
+ * "This session is being continued from a previous conversation…"
+ * prose that claude writes to the jsonl after every /compact.
+ *
+ * Renders as a small pill next to CompactBoundary. A native
+ * <details>/<summary> is used so the browser handles open/close
+ * without React state — click to reveal the transcript jsonl path
+ * (Reveal-in-Finder via window.api.fs.revealInFinder when available;
+ * copyable path in any case).
+ */
+export function CompactSummaryHint({ transcriptPath, summaryChars }: {
+  transcriptPath?: string
+  summaryChars: number
+}) {
+  const kb = summaryChars >= 1024 ? `${(summaryChars / 1024).toFixed(1)}KB` : `${summaryChars}ch`
+  const reveal = (e: React.MouseEvent) => {
+    e.preventDefault()
+    if (!transcriptPath) return
+    // Best-effort — Hive's fs bridge; falls back to a no-op if absent
+    // (e.g. running under vitest with no window.api).
+    const api = (globalThis as any).window?.api?.fs
+    if (api?.revealInFinder) api.revealInFinder(transcriptPath).catch(() => {})
+  }
+  return (
+    <div style={{
+      margin: '2px 0 8px',
+      fontFamily: FONT_MONO, fontSize: 10,
+      color: CRUSH.Oyster,
+      display: 'flex', justifyContent: 'center'
+    }}>
+      <details style={{
+        background: 'rgba(107,80,255,0.06)',
+        border: `1px solid ${CRUSH.Charcoal}`,
+        borderRadius: 6,
+        padding: '4px 10px',
+        maxWidth: 560, minWidth: 0
+      }}>
+        <summary style={{
+          cursor: 'pointer',
+          listStyle: 'none',
+          color: CRUSH.Squid,
+          userSelect: 'none' as const
+        }}>
+          ▸ compact summary hidden · {kb}{transcriptPath ? ' · click for transcript path' : ''}
+        </summary>
+        {transcriptPath && (
+          <div style={{ marginTop: 6, wordBreak: 'break-all', color: CRUSH.Ash }}>
+            <span style={{ color: CRUSH.Squid }}>transcript: </span>
+            <a
+              href="#"
+              onClick={reveal}
+              style={{ color: CRUSH.Malibu, textDecoration: 'none', cursor: 'pointer' }}
+              title="Reveal in Finder"
+            >{transcriptPath}</a>
+          </div>
+        )}
+      </details>
+    </div>
+  )
+}
+
 export function SystemLine({ text }: { text: string }) {
   // Detect "in-progress" lines that start with the hourglass + end with
   // an ellipsis. These represent ongoing background ops (compact, scrape,
@@ -1719,6 +1781,7 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
       isError={entry.isError} apiErrorStatus={entry.apiErrorStatus} errorText={entry.errorText}
     />; break
     case 'compact_boundary': row = <CompactBoundary previousTokens={entry.previousTokens} newTokens={entry.newTokens} turnsSummarized={entry.turnsSummarized} />; break
+    case 'compact_summary_hint': row = <CompactSummaryHint transcriptPath={entry.transcriptPath} summaryChars={entry.summaryChars} />; break
   }
   if (!row) return null
   if (isSub) {

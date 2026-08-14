@@ -3,6 +3,7 @@ import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
 import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext, SignInContext, classifyResultError, dismissActionForAuthState } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
+import { isCompactSummaryEvent, extractCompactSummaryHint } from './compact-summary'
 import { createFrameCoalescer } from './streamCoalescer'
 import { mergeUsage, preserveAccountUsage } from './usage-state'
 import { shortenPath } from '../../lib/path-display'
@@ -745,6 +746,19 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           }
         })
       } else if (ev.type === 'user' && 'message' in ev) {
+        // Compact / Compact+Fork summary user event — collapse to a
+        // small hint chip carrying just the transcript jsonl path
+        // (see compact-summary.ts + CompactSummaryHint). Rendering
+        // the full 5-15 KB of "This session is being continued…"
+        // prose as a normal user bubble was drowning the timeline
+        // after every compact. The user-visible signal is the
+        // CompactBoundary chip (result-handler heuristic above)
+        // plus this hint's collapsed <details> that reveals the path.
+        if (isCompactSummaryEvent(ev)) {
+          const hint = extractCompactSummaryHint(ev)
+          addEntry({ kind: 'compact_summary_hint', transcriptPath: hint.transcriptPath, summaryChars: hint.summaryChars } as any)
+          return  // onEvent is per-event callback, not a loop — `return` not `continue`
+        }
         const content = (ev as any).message?.content
         if (typeof content === 'string') {
           addEntry({ kind: 'user', text: content, isSubagent } as any)
@@ -3880,8 +3894,8 @@ function ActionToolbar({
               boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
               zIndex: 20
             }}>
-              <MenuItem icon="≡" label="Compact + Fork" desc="summary → new sid" onClick={() => { setMenuOpen(false); onFork() }} disabled={!sessionActive} />
-              <MenuItem icon="↻" label="Resume Session" desc="--resume <sid>" onClick={() => { setMenuOpen(false); onResume() }} disabled={!sessionActive} />
+              <MenuItem icon="≡" label="Compact + Fork" desc="summary → new sid" onClick={() => { setMenuOpen(false); onFork() }} disabled={!sessionActive} hover="Summarise current context, fork to a NEW session id. Old jsonl is left untouched; live session id changes." />
+              <MenuItem icon="↻" label="Restart Session" desc="kill + resume" onClick={() => { setMenuOpen(false); onResume() }} hover="Kill the live --print child and immediately re-spawn with --resume <sid>. Same session id, same jsonl. Auto-compacts first if context > 50%. Useful for hard-refresh; not a no-op." />
               <MenuItem icon="✦" label="Start New Session" desc="clean slate, no memory" onClick={() => { setMenuOpen(false); onNewSession() }} />
               <MenuItem icon="⌽" label="Remote Control" desc="/remote-control" onClick={() => { setMenuOpen(false); onRemoteControl() }} />
               <div style={{ height: 1, background: CRUSH.Charcoal, margin: '3px 0' }} />
@@ -3954,8 +3968,12 @@ function CtxProgressBar({ pct, tier }: { pct: number; tier: 'normal' | 'warn' | 
   )
 }
 
-function MenuItem({ icon, label, desc, onClick, danger, disabled }: {
+function MenuItem({ icon, label, desc, onClick, danger, disabled, hover }: {
   icon: string; label: string; desc?: string; onClick: () => void; danger?: boolean; disabled?: boolean
+  /** Native browser tooltip. Used to explain non-obvious behaviour
+   *  (e.g. "Restart Session (kill + resume)" needs to say WHAT it
+   *  kills so users don't fire it as a no-op-refresh). */
+  hover?: string
 }) {
   const accent = danger ? CRUSH.Sriracha : CRUSH.Charple
   const bg = danger ? 'rgba(235,66,104,0.14)' : 'rgba(107,80,255,0.14)'
@@ -3963,6 +3981,7 @@ function MenuItem({ icon, label, desc, onClick, danger, disabled }: {
     <button
       onClick={onClick}
       disabled={disabled}
+      title={hover}
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%',
         padding: '7px 10px',
