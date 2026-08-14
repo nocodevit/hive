@@ -119,4 +119,27 @@ describe('flattenHistoricalEvents', () => {
     const out = flattenHistoricalEvents(events, makeNextId())
     expect(out[0].id).toBe('msg:m:0')
   })
+
+  it('collapses isCompactSummary user event into a compact_summary_hint (never renders the wall of prose)', () => {
+    // Exact shape of the summary event claude writes post-/compact.
+    const summary = 'This session is being continued from a previous conversation…\n\nread the full transcript at: /Users/x/.claude/projects/-x/abc.jsonl'
+    const events = [
+      { type: 'user', message: { content: 'real user turn 1' } },
+      { type: 'assistant', message: { id: 'a', content: [{ type: 'text', text: 'reply' }] } },
+      { type: 'user', isCompactSummary: true, isVisibleInTranscriptOnly: true, message: { role: 'user', content: summary } },
+      { type: 'user', message: { content: 'user turn AFTER compact' } }
+    ]
+    const out = flattenHistoricalEvents(events, makeNextId())
+    // The wall-of-prose is NOT in any entry as user text.
+    expect(out.some(e => e.kind === 'user' && (e as any).text.includes('This session is being continued'))).toBe(false)
+    // Instead there's a compact_summary_hint carrying the path + length.
+    const hint = out.find(e => e.kind === 'compact_summary_hint') as any
+    expect(hint).toBeDefined()
+    expect(hint.transcriptPath).toBe('/Users/x/.claude/projects/-x/abc.jsonl')
+    expect(hint.summaryChars).toBe(summary.length)
+    // The real user turns before/after are still there.
+    expect(out.filter(e => e.kind === 'user').map((e: any) => e.text)).toEqual([
+      'real user turn 1', 'user turn AFTER compact'
+    ])
+  })
 })
