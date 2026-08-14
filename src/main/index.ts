@@ -732,6 +732,17 @@ function writeAgentDefinition(cwd: string, config: {
     yaml += `\n\n## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
   }
 
+  if (!config.soul.includes('Persistent Memory')) {
+    yaml += `\n\n## Persistent Memory\n`
+    yaml += `You have a persistent memory folder at \`.claude/memory/\` (symlinked to \`~/.hive/memory/${config.agentId}/\`). Files there survive across every session — resume, restart, compact, or a fresh terminal on a different day.\n\n`
+    yaml += `**At the start of every session**, run \`ls .claude/memory/\` and read any files present, so you continue from where you left off instead of relearning.\n\n`
+    yaml += `**During work**, keep these files current as you make progress and discoveries:\n`
+    yaml += `- \`PROGRESS.md\` — what you're working on now, decisions made, next steps\n`
+    yaml += `- \`FACTS.md\` — invariants you've discovered about the codebase (paths, conventions, gotchas)\n`
+    yaml += `- \`HANDOFF.md\` — the single most critical piece of state a future session needs to pick up cleanly\n\n`
+    yaml += `**Before a substantial pause** (end of task, before you stop, before /compact), update whichever of these matter so future-you has continuity. Prefer editing existing files over creating new ones; keep each file concise.\n`
+  }
+
   // Inject role-specific soul addendum for task group agents.
   //
   // Wrapped in <!-- hive:taskgroup:begin v=1 --> ... :end --> markers
