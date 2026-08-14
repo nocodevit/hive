@@ -25,7 +25,19 @@ function generateAgentDefinition(config: {
   yaml += yamlHookBlock('Stop', curlCmd('/status', `{"agentId":"${config.agentId}","status":"waiting"}`))
   yaml += `---\n\n`
   yaml += config.soul
-  yaml += `\n\n## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
+  if (!config.soul.includes('Task Reporting')) {
+    yaml += `\n\n## Task Reporting\nWhen you start a new task, run: \`.claude/hive-report.sh start "task title"\`\nWhen you finish a task, run: \`.claude/hive-report.sh done "summary"\`\n`
+  }
+  if (!config.soul.includes('Persistent Memory')) {
+    yaml += `\n\n## Persistent Memory\n`
+    yaml += `You have a persistent memory folder at \`.claude/memory/\` (symlinked to \`~/.hive/memory/${config.agentId}/\`). Files there survive across every session — resume, restart, compact, or a fresh terminal on a different day.\n\n`
+    yaml += `**At the start of every session**, run \`ls .claude/memory/\` and read any files present, so you continue from where you left off instead of relearning.\n\n`
+    yaml += `**During work**, keep these files current as you make progress and discoveries:\n`
+    yaml += `- \`PROGRESS.md\` — what you're working on now, decisions made, next steps\n`
+    yaml += `- \`FACTS.md\` — invariants you've discovered about the codebase (paths, conventions, gotchas)\n`
+    yaml += `- \`HANDOFF.md\` — the single most critical piece of state a future session needs to pick up cleanly\n\n`
+    yaml += `**Before a substantial pause** (end of task, before you stop, before /compact), update whichever of these matter so future-you has continuity. Prefer editing existing files over creating new ones; keep each file concise.\n`
+  }
   return yaml
 }
 
@@ -133,5 +145,50 @@ describe('Agent Definition Generation (v0.6.0+ >- format)', () => {
     expect(def.startsWith('---\n')).toBe(true)
     const secondDelimiter = def.indexOf('---', 4)
     expect(secondDelimiter).toBeGreaterThan(0)
+  })
+
+  it('injects Persistent Memory section pointing at .claude/memory/', () => {
+    const def = generateAgentDefinition(baseConfig, 17710)
+    expect(def).toContain('## Persistent Memory')
+    expect(def).toContain('.claude/memory/')
+    expect(def).toContain('~/.hive/memory/agent-123/')
+    expect(def).toContain('ls .claude/memory/')
+    expect(def).toContain('PROGRESS.md')
+    expect(def).toContain('FACTS.md')
+    expect(def).toContain('HANDOFF.md')
+  })
+
+  it('memory section carries the correct agentId path per-agent', () => {
+    const a = generateAgentDefinition({ ...baseConfig, agentId: 'agent-alpha' }, 17710)
+    const b = generateAgentDefinition({ ...baseConfig, agentId: 'agent-beta' }, 17710)
+    expect(a).toContain('~/.hive/memory/agent-alpha/')
+    expect(a).not.toContain('~/.hive/memory/agent-beta/')
+    expect(b).toContain('~/.hive/memory/agent-beta/')
+    expect(b).not.toContain('~/.hive/memory/agent-alpha/')
+  })
+
+  it('does NOT duplicate Persistent Memory when soul already contains it (idempotent)', () => {
+    const soulWithMemory = '# Identity\nYou are David.\n\n## Persistent Memory\n(user-authored block)'
+    const def = generateAgentDefinition({ ...baseConfig, soul: soulWithMemory }, 17710)
+    const occurrences = def.match(/## Persistent Memory/g)?.length ?? 0
+    expect(occurrences).toBe(1)
+    expect(def).toContain('(user-authored block)')
+    expect(def).not.toContain('~/.hive/memory/agent-123/')
+  })
+
+  it('does NOT duplicate Task Reporting when soul already contains it (regression: mirror to real impl)', () => {
+    const soulWithTaskReporting = '# Identity\n\n## Task Reporting\n(user override)'
+    const def = generateAgentDefinition({ ...baseConfig, soul: soulWithTaskReporting }, 17710)
+    const occurrences = def.match(/## Task Reporting/g)?.length ?? 0
+    expect(occurrences).toBe(1)
+    expect(def).toContain('(user override)')
+  })
+
+  it('memory section appears after Task Reporting (stable ordering)', () => {
+    const def = generateAgentDefinition(baseConfig, 17710)
+    const taskIdx = def.indexOf('## Task Reporting')
+    const memIdx = def.indexOf('## Persistent Memory')
+    expect(taskIdx).toBeGreaterThan(0)
+    expect(memIdx).toBeGreaterThan(taskIdx)
   })
 })
