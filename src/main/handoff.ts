@@ -12,12 +12,12 @@ import { spawn, ChildProcess } from 'child_process'
 import type { BrowserWindow } from 'electron'
 import {
   applyEvent,
+  buildRopePresets,
   checkCircuitBreakers,
   configFromRope,
   goalWithTurnCap,
   initialState,
   parseStreamJsonLine,
-  type HandoffConfig,
   type HandoffState,
   type RopeKey
 } from './handoff-supervisor'
@@ -54,6 +54,13 @@ export interface StartHandoffResult {
 export function startHandoff(input: StartHandoffInput, win: BrowserWindow): StartHandoffResult {
   if (!input.goal.trim()) return { ok: false, error: 'goal is empty' }
   if (!input.cwd) return { ok: false, error: 'cwd is empty' }
+  // Rope is IPC input from the renderer — validate at the boundary rather
+  // than trusting the type. An out-of-vocab rope would NPE downstream at
+  // configFromRope (preset.maxTurns on undefined) and crash the handler.
+  const validRopes = Object.keys(buildRopePresets()) as RopeKey[]
+  if (!validRopes.includes(input.rope)) {
+    return { ok: false, error: `invalid rope "${input.rope}" (expected one of: ${validRopes.join(', ')})` }
+  }
   // One handoff per agent — if the user hits Handoff twice, refuse rather
   // than silently doubling up. Force them to Stop the first one visibly.
   for (const h of running.values()) {
