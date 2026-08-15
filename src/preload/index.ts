@@ -289,6 +289,26 @@ const api = {
       ipcRenderer.on('dispatcher:log', handler)
       return () => ipcRenderer.removeListener('dispatcher:log', handler)
     }
+  },
+  handoff: {
+    start: (input: { agentId: string; cwd: string; goal: string; rope: 'quick' | 'normal' | 'marathon' }) =>
+      ipcRenderer.invoke('handoff:start', input) as Promise<{ ok: boolean; runId?: string; error?: string }>,
+    stop: (runId: string) =>
+      ipcRenderer.invoke('handoff:stop', { runId }) as Promise<{ ok: boolean }>,
+    list: () =>
+      ipcRenderer.invoke('handoff:list') as Promise<Array<{ runId: string; agentId: string; status: string; turnCount: number; totalCostUsd: number; startedAt: number; elapsedMs: number; stopReason?: string }>>,
+    activeAgentIds: () =>
+      ipcRenderer.invoke('handoff:activeAgentIds') as Promise<string[]>,
+    onProgress: (cb: (state: any) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: any) => cb(state)
+      ipcRenderer.on('handoff:progress', handler)
+      return () => ipcRenderer.removeListener('handoff:progress', handler)
+    },
+    onDone: (cb: (state: any) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: any) => cb(state)
+      ipcRenderer.on('handoff:done', handler)
+      return () => ipcRenderer.removeListener('handoff:done', handler)
+    }
   }
 }
 
