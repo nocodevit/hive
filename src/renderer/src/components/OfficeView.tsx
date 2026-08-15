@@ -5,6 +5,10 @@ import { shouldDrawFrame, shouldAnimate } from './officeAnimation'
 interface Props {
   agents: Agent[]
   onAgentClick?: (agentId: string) => void
+  /** Agent IDs currently running a Handoff (autonomous /goal loop). Rendered
+   * with a wobbling 🥴 sticker above the sprite so users see at a glance
+   * who's in a long-running loop and shouldn't be interrupted casually. */
+  loopBusyAgentIds?: Set<string>
 }
 
 const TILE = 16
@@ -34,7 +38,9 @@ function darken(hex: string, amount: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
 }
 
-export default function OfficeView({ agents, onAgentClick }: Props) {
+export default function OfficeView({ agents, onAgentClick, loopBusyAgentIds }: Props) {
+  const loopBusyRef = useRef<Set<string>>(loopBusyAgentIds || new Set())
+  loopBusyRef.current = loopBusyAgentIds || new Set()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wanderState = useRef<Map<string, { x: number; y: number; tx: number | null; ty: number | null; timer: number }>>(new Map())
   const renderAgents = useRef<{ id: string; rx: number; ry: number }[]>([])
@@ -256,6 +262,22 @@ export default function OfficeView({ agents, onAgentClick }: Props) {
           ctx.fillStyle = '#fbbf24'
           ctx.fillText('?', ax + 10*s, ay - 20*s)
         }
+      }
+
+      // Handoff loop sticker — wobbles side to side, sits above the
+      // agent's head. Only draws when this agent has an active /goal run
+      // (loopBusyAgentIds set by App.tsx from the supervisor).
+      if (loopBusyRef.current.has(agent.id)) {
+        const wobble = Math.sin(tick * 0.14) * 6
+        ctx.save()
+        ctx.translate(ax, ay - 22*s)
+        ctx.rotate((wobble * Math.PI) / 180)
+        ctx.font = 'bold 18px "Apple Color Emoji", "Segoe UI Emoji", system-ui, sans-serif'
+        ctx.fillStyle = '#FF60FF'
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        ctx.fillText('🥴', 0, 0)
+        ctx.restore()
       }
     }
 

@@ -65,6 +65,27 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [activeTerminals, setActiveTerminals] = useState<Set<string>>(new Set())
+  // v2.1.0: agent IDs currently running a Handoff. Drives the 🥴 sticker
+  // overlay on AvatarPreview. Refreshed from handoff:progress/done events +
+  // a 4s poll fallback (handles cases where events were missed during a
+  // renderer reload). Cheap: the poll returns a small string array.
+  const [activeHandoffAgentIds, setActiveHandoffAgentIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    const api = (window as any).api?.handoff
+    if (!api?.activeAgentIds) return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const ids: string[] = await api.activeAgentIds()
+        if (!cancelled) setActiveHandoffAgentIds(new Set(ids))
+      } catch { /* silent */ }
+    }
+    refresh()
+    const iv = setInterval(refresh, 4000)
+    const off1 = api.onProgress?.(() => refresh())
+    const off2 = api.onDone?.(() => refresh())
+    return () => { cancelled = true; clearInterval(iv); off1?.(); off2?.() }
+  }, [])
   const [showCreateProject, setShowCreateProject] = useState(false)
   const [showCreateAgent, setShowCreateAgent] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<any>(null)
@@ -967,7 +988,7 @@ export default function App() {
                               }}
                             >
                               <div className="w-6 h-6 flex-shrink-0 relative">
-                                <AvatarPreview config={agent.avatar} size={24} />
+                                <AvatarPreview config={agent.avatar} size={24} loopBusy={activeHandoffAgentIds.has(agent.id)} />
                                 <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-bg-secondary ${
                                   agent.status === 'working' ? 'bg-status-working' :
                                   agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
@@ -1300,6 +1321,7 @@ export default function App() {
                   <div className="w-full">
                     <OfficeView
                       agents={projectAgents}
+                      loopBusyAgentIds={activeHandoffAgentIds}
                       onAgentClick={(id) => {
                         setSelectedAgentId(id)
                         const agent = agents.find((a) => a.id === id)
@@ -1336,7 +1358,7 @@ export default function App() {
                                   border border-border transition-colors cursor-pointer"
                               >
                                 <div className="flex items-center gap-2">
-                                  <AvatarPreview config={agent.avatar} size={20} />
+                                  <AvatarPreview config={agent.avatar} size={20} loopBusy={activeHandoffAgentIds.has(agent.id)} />
                                   <span className="text-sm font-medium text-text-primary">{agent.name}</span>
                                   <span className="text-[13px] text-text-muted uppercase ml-auto">
                                     {agent.role || agent.department}
@@ -2226,7 +2248,7 @@ export default function App() {
                   <div className="p-4 rounded-xl bg-bg-secondary border border-border space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-xl bg-bg-primary border border-border flex items-center justify-center overflow-hidden">
-                        <AvatarPreview config={selectedAgent.avatar} size={40} />
+                        <AvatarPreview config={selectedAgent.avatar} size={40} loopBusy={activeHandoffAgentIds.has(selectedAgent.id)} />
                       </div>
                       <div className="flex-1 space-y-1">
                         <input
@@ -2952,7 +2974,7 @@ export default function App() {
                           })}
                           className="accent-[var(--accent)]"
                         />
-                        <div className="w-5 h-5 flex-shrink-0"><AvatarPreview config={a.avatar} size={20} /></div>
+                        <div className="w-5 h-5 flex-shrink-0"><AvatarPreview config={a.avatar} size={20} loopBusy={activeHandoffAgentIds.has(a.id)} /></div>
                         <span className="text-sm text-text-primary">{a.name}</span>
                         <span className="text-[13px] text-text-muted ml-auto">{a.role}</span>
                       </label>
