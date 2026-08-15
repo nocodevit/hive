@@ -5,6 +5,8 @@ import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
 import { releasePty, spawnPty, livePtyHandles } from './ptyRegistry'
+import { startHandoff, stopHandoff, listRunningHandoffs, getActiveHandoffAgentIds } from './handoff'
+import type { RopeKey } from './handoff-supervisor'
 import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } from './ptyHealth'
 import { execSync, execFileSync, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
@@ -1577,6 +1579,20 @@ ipcMain.handle('agent:checkSubagentActivity', (_event, { agentId }) => {
   const cwd = findAgentWorktree(agentId)
   return { active: isSubagentActiveForCwd(cwd) }
 })
+
+// Handoff (v2.1.0) — autonomous /goal-driven long runs with cost/turn/wall
+// circuit breakers. Backing supervisor lives in handoff.ts; pure logic in
+// handoff-supervisor.ts.
+ipcMain.handle('handoff:start', (event, { agentId, cwd, goal, rope }: { agentId: string; cwd: string; goal: string; rope: RopeKey }) => {
+  const win = BrowserWindow.fromWebContents(event.sender)
+  if (!win) return { ok: false, error: 'no window' }
+  return startHandoff({ agentId, cwd, goal, rope }, win)
+})
+ipcMain.handle('handoff:stop', (_event, { runId }: { runId: string }) => {
+  return { ok: stopHandoff(runId) }
+})
+ipcMain.handle('handoff:list', () => listRunningHandoffs())
+ipcMain.handle('handoff:activeAgentIds', () => getActiveHandoffAgentIds())
 
 // Skills scanning — recursively find all SKILL.md files
 ipcMain.handle('skills:scan', () => {

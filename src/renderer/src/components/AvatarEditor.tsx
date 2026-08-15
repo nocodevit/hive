@@ -297,8 +297,11 @@ export default function AvatarEditor({ config, onChange, size = 128 }: Props) {
   )
 }
 
-// Small avatar preview (for sidebar/kanban)
-export function AvatarPreview({ config, size = 32 }: { config: AvatarConfig; size?: number }) {
+// Small avatar preview (for sidebar/kanban). `loopBusy` overlays a
+// 🥴 sticker corner-tag when the agent has a running Handoff — visual
+// cue that this agent is autonomously chewing on a goal and shouldn't
+// be interrupted casually.
+export function AvatarPreview({ config, size = 32, loopBusy = false }: { config: AvatarConfig; size?: number; loopBusy?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -309,13 +312,54 @@ export function AvatarPreview({ config, size = 32 }: { config: AvatarConfig; siz
     drawAvatar(ctx, config, size)
   }, [config, size])
 
+  if (!loopBusy) {
+    return (
+      <canvas
+        ref={canvasRef}
+        width={size}
+        height={size}
+        className="block"
+        style={{ imageRendering: 'pixelated' }}
+      />
+    )
+  }
+
+  const stickerSize = Math.max(12, Math.round(size * 0.45))
   return (
-    <canvas
-      ref={canvasRef}
-      width={size}
-      height={size}
-      className="block"
-      style={{ imageRendering: 'pixelated' }}
-    />
+    <div style={{ position: 'relative', width: size, height: size, display: 'inline-block' }}>
+      <canvas
+        ref={canvasRef}
+        width={size}
+        height={size}
+        className="block"
+        style={{ imageRendering: 'pixelated' }}
+      />
+      <span
+        title="This agent is running a Handoff (autonomous /goal loop). Don't interrupt casually."
+        style={{
+          position: 'absolute',
+          right: -Math.round(stickerSize * 0.15),
+          bottom: -Math.round(stickerSize * 0.15),
+          width: stickerSize,
+          height: stickerSize,
+          borderRadius: '50%',
+          background: '#FF60FF',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: Math.round(stickerSize * 0.65),
+          lineHeight: 1,
+          border: '1.5px solid #150e24',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
+          animation: 'hive-handoff-wobble 1.4s ease-in-out infinite',
+          userSelect: 'none' as const,
+          pointerEvents: 'auto'
+        }}
+      >🥴</span>
+      <style>{`
+        @keyframes hive-handoff-wobble {
+          0%, 100% { transform: rotate(-8deg); }
+          50%      { transform: rotate(8deg); }
+        }
+      `}</style>
+    </div>
   )
 }

@@ -8,6 +8,8 @@ import { createFrameCoalescer } from './streamCoalescer'
 import { mergeUsage, preserveAccountUsage } from './usage-state'
 import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
+import HandoffModal from '../HandoffModal'
+import HandoffBanner from '../HandoffBanner'
 
 /** Isolated subtree so the timeline doesn't re-render on every keystroke
  *  in the input box — only when the timeline array itself or `onChoose`
@@ -58,6 +60,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [exited, setExited] = useState<number | null>(null)
+  const [handoffModalOpen, setHandoffModalOpen] = useState(false)
+  // agent id derived from `agent` prop (which is 'hive-<id>') — used by
+  // Handoff supervisor to key running handoffs, and by the banner + crazy
+  // avatar overlay to look up state by agent.
+  const handoffAgentId = agent?.startsWith('hive-') ? agent.slice(5) : (agent || '')
   // Status-bar state (above + below input)
   const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
   const [contextSize, setContextSize] = useState<string>('') // "1M"
@@ -1611,6 +1618,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         onDismissUrgent={() => setCtxNagDismissed(prev => ({ ...prev, urgent: true }))}
         onCompact={runCompact}
       />
+      {/* Handoff banner — sticky above subagent + rate-limit strips; only
+         renders while this agent has an active handoff run. */}
+      {handoffAgentId && <HandoffBanner agentId={handoffAgentId} />}
       {/* Subagent active banner — sticky above rate-limit, only when
          at least one Task tool is running. Spinner + per-subagent line. */}
       {Object.keys(activeSubagents).length > 0 && (
@@ -1946,6 +1956,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               else addEntry({ kind: 'system', text: `Remote control failed: ${res.error}` })
             }}
             onClose={() => setCloseConfirming(true)}
+            onHandoff={() => setHandoffModalOpen(true)}
             sessionActive={exited === null && !!sessionId}
           />
           <div style={{
@@ -2282,6 +2293,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         </div>
       )}
     </div>
+    {handoffAgentId && (
+      <HandoffModal
+        open={handoffModalOpen}
+        agentId={handoffAgentId}
+        agentName={agentName || handoffAgentId}
+        cwd={cwd || ''}
+        onCancel={() => setHandoffModalOpen(false)}
+        onStarted={() => setHandoffModalOpen(false)}
+      />
+    )}
     </HiveChatErrorBoundary>
     </AskUserQuestionContext.Provider>
     </SignInContext.Provider>
@@ -3708,7 +3729,7 @@ export function CrushTooltip({ text, children, side = 'top', block = false }: {
  * (Fork, Resume, Remote Control, Close).
  */
 function ActionToolbar({
-  usedTokens, contextSize, onCompact, compacting, onFork, onResume, onNewSession, onRemoteControl, onClose, sessionActive,
+  usedTokens, contextSize, onCompact, compacting, onFork, onResume, onNewSession, onRemoteControl, onClose, onHandoff, sessionActive,
   rateLimit5h, rateLimit7d, autoContinueAt, onCancelAutoContinue, modelKnown, onViewContext
 }: {
   usedTokens: number
@@ -3720,6 +3741,7 @@ function ActionToolbar({
   onNewSession: () => void
   onRemoteControl: () => void
   onClose: () => void
+  onHandoff: () => void
   sessionActive: boolean
   rateLimit5h: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null
   rateLimit7d: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null
@@ -3894,6 +3916,8 @@ function ActionToolbar({
               boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
               zIndex: 20
             }}>
+              <MenuItem icon="🥴" label="Handoff…" desc="autonomous /goal loop" onClick={() => { setMenuOpen(false); onHandoff() }} hover="Hand a goal off to the agent and walk away. It runs claude -p /goal in the background with cost/turn/wall-time circuit breakers. Stop button always visible while running." />
+              <div style={{ height: 1, background: CRUSH.Charcoal, margin: '3px 0' }} />
               <MenuItem icon="≡" label="Compact + Fork" desc="summary → new sid" onClick={() => { setMenuOpen(false); onFork() }} disabled={!sessionActive} hover="Summarise current context, fork to a NEW session id. Old jsonl is left untouched; live session id changes." />
               <MenuItem icon="↻" label="Restart Session" desc="kill + resume" onClick={() => { setMenuOpen(false); onResume() }} hover="Kill the live --print child and immediately re-spawn with --resume <sid>. Same session id, same jsonl. Auto-compacts first if context > 50%. Useful for hard-refresh; not a no-op." />
               <MenuItem icon="✦" label="Start New Session" desc="clean slate, no memory" onClick={() => { setMenuOpen(false); onNewSession() }} />
