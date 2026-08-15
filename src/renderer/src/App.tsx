@@ -1115,7 +1115,7 @@ export default function App() {
                     : 'text-text-muted hover:bg-bg-hover'
                 }`}
               >
-                Terminal
+                Chat
               </button>
               <button
                 onClick={() => setMainView('editor')}
