@@ -45,15 +45,11 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   // remains compiled so it's trivial to re-enable, but the Pretty button
   // is removed from the UI and prettyModeRef is hard-wired false.
   const [mode, setMode] = useState<ViewMode>('raw')
-  const [chatMode, setChatMode] = useState(true) // Chat is the default experience; Term stays as fallback.
-  // Once HiveChat has been opened for this Terminal, keep it MOUNTED for the
-  // rest of the Terminal's lifetime so its claude --print subprocess survives
-  // agent switches and Term/Chat toggles. Visibility is CSS-driven below.
-  // Without this, switching away kills the subprocess and coming back burns
-  // an API turn on resume — which wrecks multi-agent orchestration where
-  // the user flips between chats to direct work.
-  const [chatEverOpened, setChatEverOpened] = useState(chatMode)
-  useEffect(() => { if (chatMode) setChatEverOpened(true) }, [chatMode])
+  // v2.0.0: chat-only surface. xterm/PTY infrastructure stays mounted for
+  // future features (handoff supervisor, deep-link tools) but no user-facing
+  // Term/Chat toggle any more — HiveChat is the one and only visible surface.
+  const chatMode = true
+  const chatEverOpened = true
   const prettyMode = false
   const prettyModeRef = useRef(false)
   const richMode = false
@@ -612,27 +608,11 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
 
   return (
     <div ref={wrapperRef} style={{ width: '100%', height: '100%', position: 'relative', overflow: 'visible' }}>
-      {/* Term / Chat toggle */}
-      {visible && (
-        <div className="absolute top-2 right-2 z-[9999] flex items-center gap-0">
-          <button
-            onClick={() => setChatMode(false)}
-            className={`px-2 py-1 rounded-l-md text-[10px] font-mono cursor-pointer transition-colors border ${
-              !chatMode ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
-            }`}
-          >Term</button>
-          <button
-            onClick={() => setChatMode(true)}
-            className={`px-2 py-1 rounded-r-md text-[10px] font-mono cursor-pointer transition-colors border -ml-px ${
-              chatMode ? 'bg-accent text-white border-accent' : 'bg-bg-secondary text-text-muted hover:text-text-primary border-border'
-            }`}
-          >Chat</button>
-        </div>
-      )}
+      {/* v2.0.0: Term/Chat toggle removed. Chat is the only visible surface. */}
 
       {/* Hive Chat — sticky mount. Once opened for this Terminal, stays
           mounted so the underlying `claude --print` subprocess survives
-          Term↔Chat toggles and agent switches. Shown/hidden via CSS. */}
+          agent switches. Shown/hidden via CSS. */}
       {chatEverOpened && (
         <div style={{
           position: 'absolute',
