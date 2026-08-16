@@ -39,6 +39,12 @@ interface GoalPreset {
 }
 
 export const GOAL_PRESETS: GoalPreset[] = [
+  // v2.2.2: first slot — Plan Mode continuation. Chat-inject means the
+  // plan claude presented via ExitPlanMode is already in context; this
+  // preset just makes the affordance visible so users don't have to
+  // discover it by typing "execute the plan above" into Custom.
+  { key: 'plan', label: 'Execute the plan I approved above (Plan Mode)', needsSpecify: false,
+    render: () => 'execute the plan you presented via ExitPlanMode above, item by item, until every item is implemented and verified' },
   { key: 'feature', label: 'Feature done', needsSpecify: true,
     render: s => `feature is complete: ${s}` },
   { key: 'tests', label: 'Tests pass (npm test / vitest / etc.)', needsSpecify: false,
