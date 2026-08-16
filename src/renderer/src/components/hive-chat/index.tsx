@@ -65,6 +65,26 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // Handoff supervisor to key running handoffs, and by the banner + crazy
   // avatar overlay to look up state by agent.
   const handoffAgentId = agent?.startsWith('hive-') ? agent.slice(5) : (agent || '')
+  // True while a handoff is actively running against THIS chat. Powers
+  // the permission-modal auto-allow bypass (v2.2.0): during handoff, any
+  // PermissionRequest is answered `allow` immediately without opening
+  // the modal, matching the "walk away, agent decides" contract.
+  const [isHandoffActive, setIsHandoffActive] = useState(false)
+  useEffect(() => {
+    const api = (window as any).api?.handoff
+    if (!api) return
+    let cancelled = false
+    const refresh = async () => {
+      try {
+        const ids: string[] = await api.activeChatIds()
+        if (!cancelled) setIsHandoffActive(ids.includes(id))
+      } catch { /* silent */ }
+    }
+    refresh()
+    const off1 = api.onProgress?.((s: { chatId?: string }) => { if (s.chatId === id) refresh() })
+    const off2 = api.onDone?.((s: { chatId?: string }) => { if (s.chatId === id) refresh() })
+    return () => { cancelled = true; off1?.(); off2?.() }
+  }, [id])
   // Status-bar state (above + below input)
   const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
   const [contextSize, setContextSize] = useState<string>('') // "1M"
@@ -172,6 +192,21 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // Existing render/reply code reads `pendingPermission.foo` — keep that
   // working by exposing the queue head as a derived var. `null` when empty.
   const pendingPermission = pendingPermissions[0] || null
+
+  // v2.2.0 Handoff auto-allow: when a handoff is running for this chat,
+  // every arriving PermissionRequest is immediately allow'd without
+  // opening the modal. This is the "auto: all permission requests
+  // approved while running" contract advertised in HandoffModal.
+  // AskUserQuestion is intentionally NOT covered here — it goes through
+  // pendingQuestion (separate state) and the supervisor's
+  // stopOnAskUserQuestion breaker decides what to do with it.
+  useEffect(() => {
+    if (!isHandoffActive || pendingPermissions.length === 0) return
+    for (const p of pendingPermissions) {
+      window.api.chat.respondPermission(id, p.requestId, 'allow', p.input, undefined)
+    }
+    setPendingPermissions([])
+  }, [isHandoffActive, pendingPermissions, id])
 
   // AskUserQuestion is technically a tool call (claude SDK emits it as a
   // can_use_tool control_request) but its semantics are "ask the user a
@@ -2296,9 +2331,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     {handoffAgentId && (
       <HandoffModal
         open={handoffModalOpen}
-        agentId={handoffAgentId}
+        chatId={id}
         agentName={agentName || handoffAgentId}
-        cwd={cwd || ''}
         onCancel={() => setHandoffModalOpen(false)}
         onStarted={() => setHandoffModalOpen(false)}
       />
