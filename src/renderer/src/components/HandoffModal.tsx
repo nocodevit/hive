@@ -1,21 +1,24 @@
 /**
- * HandoffModal (v2.2.0 — checkbox layout, chat-inject backend).
+ * HandoffModal (v2.2.1 — theme-aware).
  *
- * v2.1.0 had rope-radio + single-goal-textarea shape. v2.2.0 exposes
- * every knob directly:
+ * Fixes v2.2.0 regression: I used hardcoded Crush palette hex
+ * (`#DFDBDD`, `#2D2C35`, etc.) inside a Modal that mounts at app level.
+ * In light mode the light-gray text was invisible against the light
+ * modal background. Crush palette is meant ONLY for HiveChat + terminal
+ * decorations (locked deep-purple surface). App-level modals must use
+ * theme-aware Tailwind classes (`text-text-primary`, `bg-bg-secondary`,
+ * `border-border`, `text-accent`) so light + dark both work.
+ *
+ * Design reference: docs/design.md § "Color Palette" tokens.
+ *
+ * Design contract (unchanged from v2.2.0):
  *   - Goal: multi-select preset checkboxes + always-visible free text
- *     (any checked = one condition, joined with AND ALSO by the supervisor)
  *   - Breakers: 5 independent toggles with inline numeric / path inputs
- *   - Quick / Normal / Marathon: preset-autofill buttons (check +
- *     populate the 3 numeric breakers), user can still adjust after
- *
- * Two implicit defaults (surfaced as small grey text, no toggle):
- *   - Permissions auto-allowed while handoff is running (renderer side)
- *   - 5h rate-limit auto-resume (inherited from chat's own auto-continue)
- *
- * Submits via window.api.handoff.start({chatId, goals, breakers}).
+ *   - Quick / Normal / Marathon preset-autofill buttons
+ *   - Implicit defaults: permission auto-allow + 5h auto-resume
+ *   - Submits via window.api.handoff.start({chatId, goals, breakers})
  */
-import { useState, type CSSProperties } from 'react'
+import { useState } from 'react'
 import Modal from './Modal'
 
 export type RopeKey = 'quick' | 'normal' | 'marathon'
@@ -32,7 +35,7 @@ interface GoalPreset {
   key: string
   label: string
   needsSpecify: boolean
-  render: (specify: string) => string  // final text sent as one goal fragment
+  render: (specify: string) => string
 }
 
 export const GOAL_PRESETS: GoalPreset[] = [
@@ -134,18 +137,19 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
 
   return (
     <Modal open={open} onClose={onCancel} title={`Hand off to ${agentName}`}>
-      <div>
-        <label style={sectionLabelStyle}>
-          Goal <span style={{ opacity: 0.6, fontWeight: 400 }}>— check any + free text; ALL must hold for done</span>
-        </label>
-        <div style={sectionBoxStyle}>
-          {GOAL_PRESETS.map(p => {
-            const checked = checkedPresets.has(p.key)
-            return (
-              <div key={p.key} style={{ marginBottom: 6 }}>
-                <label style={rowStyle}>
-                  <input type="checkbox" checked={checked} onChange={() => togglePreset(p.key)} disabled={starting} />
-                  <span style={{ flex: p.needsSpecify ? 'unset' : 1 }}>{p.label}</span>
+      <div className="space-y-4">
+        {/* GOAL section */}
+        <div>
+          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+            Goal <span className="normal-case tracking-normal opacity-70">— check any + free text; ALL must hold for done</span>
+          </div>
+          <div className="p-3 bg-bg-primary rounded-lg border border-border space-y-2">
+            {GOAL_PRESETS.map(p => {
+              const checked = checkedPresets.has(p.key)
+              return (
+                <label key={p.key} className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
+                  <input type="checkbox" checked={checked} onChange={() => togglePreset(p.key)} disabled={starting} className="accent-[var(--accent)]" />
+                  <span className={p.needsSpecify ? '' : 'flex-1'}>{p.label}</span>
                   {p.needsSpecify && checked && (
                     <input
                       type="text"
@@ -153,16 +157,14 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
                       value={presetSpecify[p.key] || ''}
                       onChange={e => setPresetSpecify(prev => ({ ...prev, [p.key]: e.target.value }))}
                       disabled={starting}
-                      style={inlineTextStyle}
+                      className="flex-1 px-2 py-1 rounded bg-bg-hover text-text-primary border border-border text-xs focus:outline-none focus:border-accent"
                     />
                   )}
                 </label>
-              </div>
-            )
-          })}
-          <div style={{ marginTop: 8 }}>
-            <label style={{ ...rowStyle, alignItems: 'flex-start' }}>
-              <span style={{ paddingTop: 4, opacity: 0.8 }}>Custom:</span>
+              )
+            })}
+            <label className="flex items-start gap-2 text-sm text-text-primary pt-1">
+              <span className="pt-1 text-text-muted">Custom:</span>
               <textarea
                 value={freeText}
                 onChange={e => setFreeText(e.target.value)}
@@ -170,80 +172,84 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
                 rows={2}
                 maxLength={4000}
                 disabled={starting}
-                style={{ ...inlineTextStyle, resize: 'vertical' as const, minHeight: 40 }}
+                className="flex-1 px-2 py-1 rounded bg-bg-hover text-text-primary border border-border text-xs resize-y min-h-[40px] focus:outline-none focus:border-accent"
               />
             </label>
           </div>
         </div>
 
-        <label style={sectionLabelStyle}>
-          Circuit breakers <span style={{ opacity: 0.6, fontWeight: 400 }}>— each independent; ANY trip = SIGTERM</span>
-        </label>
-        <div style={sectionBoxStyle}>
-          <BreakerRow enabled={enableTurns} setEnabled={setEnableTurns} disabled={starting} label="Max turns">
-            <input type="number" min={1} value={maxTurns} onChange={e => setMaxTurns(Number(e.target.value))} disabled={starting || !enableTurns} style={numericStyle} />
-          </BreakerRow>
-          <BreakerRow enabled={enableCost} setEnabled={setEnableCost} disabled={starting} label="Max cost">
-            <span style={{ opacity: 0.8 }}>$</span>
-            <input type="number" step="0.5" min={0.1} value={maxCost} onChange={e => setMaxCost(Number(e.target.value))} disabled={starting || !enableCost} style={numericStyle} />
-            <span style={{ opacity: 0.6 }}>USD</span>
-          </BreakerRow>
-          <BreakerRow enabled={enableWall} setEnabled={setEnableWall} disabled={starting} label="Max wall time">
-            <input type="number" step="0.25" min={0.25} value={maxWallH} onChange={e => setMaxWallH(Number(e.target.value))} disabled={starting || !enableWall} style={numericStyle} />
-            <span style={{ opacity: 0.6 }}>h (pause excluded)</span>
-          </BreakerRow>
-          <BreakerRow enabled={enableGate} setEnabled={setEnableGate} disabled={starting} label="Gate script">
-            <input type="text" placeholder="/path/to/gate.sh" value={gatePath} onChange={e => setGatePath(e.target.value)} disabled={starting || !enableGate} style={{ ...inlineTextStyle, minWidth: 200 }} />
-          </BreakerRow>
-          <BreakerRow enabled={enableAskQ} setEnabled={setEnableAskQ} disabled={starting} label="Stop if Claude asks a question">
-            {null}
-          </BreakerRow>
+        {/* BREAKERS section */}
+        <div>
+          <div className="text-[10px] font-semibold text-text-muted uppercase tracking-wider mb-2">
+            Circuit breakers <span className="normal-case tracking-normal opacity-70">— each independent; ANY trip = SIGTERM</span>
+          </div>
+          <div className="p-3 bg-bg-primary rounded-lg border border-border space-y-2">
+            <BreakerRow enabled={enableTurns} setEnabled={setEnableTurns} disabled={starting} label="Max turns">
+              <input type="number" min={1} value={maxTurns} onChange={e => setMaxTurns(Number(e.target.value))} disabled={starting || !enableTurns} className="w-20 px-2 py-1 rounded bg-bg-hover text-text-primary border border-border text-xs font-mono focus:outline-none focus:border-accent disabled:opacity-50" />
+            </BreakerRow>
+            <BreakerRow enabled={enableCost} setEnabled={setEnableCost} disabled={starting} label="Max cost">
+              <span className="text-text-muted">$</span>
+              <input type="number" step="0.5" min={0.1} value={maxCost} onChange={e => setMaxCost(Number(e.target.value))} disabled={starting || !enableCost} className="w-20 px-2 py-1 rounded bg-bg-hover text-text-primary border border-border text-xs font-mono focus:outline-none focus:border-accent disabled:opacity-50" />
+              <span className="text-text-muted text-xs">USD</span>
+            </BreakerRow>
+            <BreakerRow enabled={enableWall} setEnabled={setEnableWall} disabled={starting} label="Max wall time">
+              <input type="number" step="0.25" min={0.25} value={maxWallH} onChange={e => setMaxWallH(Number(e.target.value))} disabled={starting || !enableWall} className="w-20 px-2 py-1 rounded bg-bg-hover text-text-primary border border-border text-xs font-mono focus:outline-none focus:border-accent disabled:opacity-50" />
+              <span className="text-text-muted text-xs">h (pause excluded)</span>
+            </BreakerRow>
+            <BreakerRow enabled={enableGate} setEnabled={setEnableGate} disabled={starting} label="Gate script">
+              <input type="text" placeholder="/path/to/gate.sh" value={gatePath} onChange={e => setGatePath(e.target.value)} disabled={starting || !enableGate} className="flex-1 min-w-[180px] px-2 py-1 rounded bg-bg-hover text-text-primary border border-border text-xs font-mono focus:outline-none focus:border-accent disabled:opacity-50" />
+            </BreakerRow>
+            <BreakerRow enabled={enableAskQ} setEnabled={setEnableAskQ} disabled={starting} label="Stop if Claude asks a question">
+              {null}
+            </BreakerRow>
+          </div>
         </div>
 
-        <div style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 10, color: '#858392', marginBottom: 6 }}>Quick presets (fills turns/cost/wall):</div>
-          <div style={{ display: 'flex', gap: 6 }}>
+        {/* Rope preset buttons */}
+        <div>
+          <div className="text-[10px] text-text-muted mb-1.5">Quick presets (fills turns/cost/wall):</div>
+          <div className="flex gap-2">
             {ROPE_PRESETS.map(p => (
               <button
                 key={p.key}
                 type="button"
                 onClick={() => applyRope(p.key)}
                 disabled={starting}
-                style={ropeBtnStyle}
+                className="px-3 py-1.5 rounded-md bg-bg-primary border border-border text-text-primary text-xs hover:bg-bg-hover transition-colors cursor-pointer disabled:opacity-50"
               >
-                <span style={{ fontWeight: 600 }}>{p.label}</span>
-                <span style={{ opacity: 0.65, marginLeft: 6, fontSize: 10 }}>{p.hint}</span>
+                <span className="font-semibold">{p.label}</span>
+                <span className="opacity-65 ml-1.5 text-[10px]">{p.hint}</span>
               </button>
             ))}
           </div>
         </div>
 
-        <div style={{
-          padding: '6px 10px', marginBottom: 14,
-          background: 'rgba(107,80,255,0.06)',
-          border: '1px solid #3A3943',
-          borderRadius: 4,
-          fontSize: 10, color: '#858392', fontStyle: 'italic' as const
-        }}>
+        {/* Implicit defaults hint */}
+        <div className="px-2.5 py-1.5 rounded bg-accent-subtle border border-border text-[10px] text-text-muted italic">
           Auto: all permission requests approved while running · 5h rate-limit resume via chat's auto-continue
         </div>
 
         {error && (
-          <div style={{
-            padding: 10, marginBottom: 12,
-            background: 'rgba(235,66,104,0.10)',
-            border: '1px solid #EB4268',
-            borderRadius: 4, color: '#EB4268', fontSize: 12
-          }}>
+          <div className="px-3 py-2 rounded bg-red-500/10 border border-red-500 text-red-400 text-xs">
             {error}
           </div>
         )}
 
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <button type="button" onClick={onCancel} disabled={starting} style={cancelBtnStyle}>
+        <div className="flex justify-end gap-2 pt-2 border-t border-border">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={starting}
+            className="px-4 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-sm hover:bg-bg-hover transition-colors cursor-pointer disabled:opacity-50"
+          >
             Cancel
           </button>
-          <button type="button" onClick={handleGo} disabled={!canGo} style={goBtnStyle(canGo)}>
+          <button
+            type="button"
+            onClick={handleGo}
+            disabled={!canGo}
+            className="px-4 py-1.5 rounded-lg bg-accent text-text-on-purple text-sm font-semibold hover:bg-accent-hover transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
             {starting ? 'Starting…' : 'Start handoff'}
           </button>
         </div>
@@ -256,61 +262,10 @@ function BreakerRow({ enabled, setEnabled, disabled, label, children }: {
   enabled: boolean; setEnabled: (v: boolean) => void; disabled: boolean; label: string; children: React.ReactNode
 }) {
   return (
-    <div style={{ marginBottom: 6 }}>
-      <label style={rowStyle}>
-        <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} disabled={disabled} />
-        <span style={{ minWidth: 200, opacity: enabled ? 1 : 0.5 }}>{label}</span>
-        {children}
-      </label>
-    </div>
+    <label className="flex items-center gap-2 text-sm cursor-pointer">
+      <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} disabled={disabled} className="accent-[var(--accent)]" />
+      <span className={`min-w-[180px] ${enabled ? 'text-text-primary' : 'text-text-muted'}`}>{label}</span>
+      {children}
+    </label>
   )
-}
-
-const sectionLabelStyle: CSSProperties = {
-  display: 'block', fontSize: 11, fontWeight: 600,
-  color: '#DFDBDD', marginBottom: 6, letterSpacing: 0.3
-}
-const sectionBoxStyle: CSSProperties = {
-  padding: 10, marginBottom: 14,
-  background: '#201F26', borderRadius: 6,
-  border: '1px solid #3A3943'
-}
-const rowStyle: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 8,
-  fontSize: 12, color: '#DFDBDD',
-  cursor: 'pointer'
-}
-const inlineTextStyle: CSSProperties = {
-  flex: 1, padding: '4px 8px',
-  background: '#2D2C35', color: '#FFFAF1',
-  border: '1px solid #3A3943', borderRadius: 4,
-  fontSize: 12, fontFamily: 'inherit'
-}
-const numericStyle: CSSProperties = {
-  width: 70, padding: '4px 8px',
-  background: '#2D2C35', color: '#FFFAF1',
-  border: '1px solid #3A3943', borderRadius: 4,
-  fontSize: 12, fontFamily: 'monospace'
-}
-const ropeBtnStyle: CSSProperties = {
-  padding: '5px 10px',
-  background: '#2D2C35', color: '#DFDBDD',
-  border: '1px solid #3A3943', borderRadius: 4,
-  cursor: 'pointer', fontFamily: 'inherit', fontSize: 11
-}
-const cancelBtnStyle: CSSProperties = {
-  padding: '8px 14px',
-  background: 'transparent', color: '#DFDBDD',
-  border: '1px solid #3A3943', borderRadius: 6,
-  cursor: 'pointer', fontFamily: 'inherit', fontSize: 13
-}
-function goBtnStyle(enabled: boolean): CSSProperties {
-  return {
-    padding: '8px 18px',
-    background: enabled ? '#6B50FF' : '#3A3943',
-    color: '#FFFAF1', border: 'none', borderRadius: 6,
-    cursor: enabled ? 'pointer' : 'not-allowed',
-    fontFamily: 'inherit', fontSize: 13, fontWeight: 600,
-    opacity: enabled ? 1 : 0.5
-  }
 }
