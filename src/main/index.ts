@@ -5,8 +5,8 @@ import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
 import { releasePty, spawnPty, livePtyHandles } from './ptyRegistry'
-import { startHandoff, stopHandoff, listRunningHandoffs, getActiveHandoffAgentIds } from './handoff'
-import type { RopeKey } from './handoff-supervisor'
+import { startHandoff, stopHandoff, listRunningHandoffs, getActiveHandoffAgentIds, getActiveHandoffChatIds } from './handoff'
+import type { HandoffBreakers } from './handoff-supervisor'
 import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } from './ptyHealth'
 import { execSync, execFileSync, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
@@ -1580,19 +1580,29 @@ ipcMain.handle('agent:checkSubagentActivity', (_event, { agentId }) => {
   return { active: isSubagentActiveForCwd(cwd) }
 })
 
-// Handoff (v2.1.0) — autonomous /goal-driven long runs with cost/turn/wall
-// circuit breakers. Backing supervisor lives in handoff.ts; pure logic in
-// handoff-supervisor.ts.
-ipcMain.handle('handoff:start', (event, { agentId, cwd, goal, rope }: { agentId: string; cwd: string; goal: string; rope: RopeKey }) => {
+// Handoff (v2.2.0 — chat-inject model). Sends /goal to the existing chat's
+// claude subprocess; supervisor subscribes to chatEventBus. See handoff.ts.
+ipcMain.handle('handoff:start', (event, payload: unknown) => {
   const win = BrowserWindow.fromWebContents(event.sender)
   if (!win) return { ok: false, error: 'no window' }
-  return startHandoff({ agentId, cwd, goal, rope }, win)
+  // Reject v1 payload shape loudly rather than silently auto-migrating —
+  // saves debug time when a stale renderer tries the old surface.
+  const p = payload as { chatId?: string; goals?: unknown; breakers?: unknown; rope?: unknown; goal?: unknown }
+  if ('rope' in (p ?? {}) || 'goal' in (p ?? {})) {
+    return { ok: false, error: 'v1 handoff payload rejected — v2 expects { chatId, goals: string[], breakers: {...} }' }
+  }
+  if (!p?.chatId || typeof p.chatId !== 'string') return { ok: false, error: 'chatId required (string)' }
+  if (!Array.isArray(p.goals)) return { ok: false, error: 'goals required (string[])' }
+  const goals = p.goals.filter((g): g is string => typeof g === 'string')
+  const breakers: HandoffBreakers = (p.breakers && typeof p.breakers === 'object' ? p.breakers : {}) as HandoffBreakers
+  return startHandoff({ chatId: p.chatId, goals, breakers }, win)
 })
 ipcMain.handle('handoff:stop', (_event, { runId }: { runId: string }) => {
   return { ok: stopHandoff(runId) }
 })
 ipcMain.handle('handoff:list', () => listRunningHandoffs())
 ipcMain.handle('handoff:activeAgentIds', () => getActiveHandoffAgentIds())
+ipcMain.handle('handoff:activeChatIds', () => getActiveHandoffChatIds())
 
 // Skills scanning — recursively find all SKILL.md files
 ipcMain.handle('skills:scan', () => {

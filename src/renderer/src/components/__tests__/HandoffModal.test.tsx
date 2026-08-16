@@ -2,15 +2,14 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
-import HandoffModal, { HANDOFF_PRESETS } from '../HandoffModal'
+import HandoffModal, { GOAL_PRESETS, ROPE_PRESETS } from '../HandoffModal'
 
 afterEach(() => cleanup())
 
 const baseProps = {
   open: true,
-  agentId: 'agent-abc',
+  chatId: 'chat-agent-abc',
   agentName: 'David',
-  cwd: '/tmp/proj',
   onCancel: vi.fn(),
   onStarted: vi.fn()
 }
@@ -23,73 +22,114 @@ beforeEach(() => {
   }
 })
 
-describe('HandoffModal', () => {
+describe('HandoffModal (v2.2.0)', () => {
   it('renders nothing when open=false', () => {
     const { container } = render(<HandoffModal {...baseProps} open={false} />)
     expect(container).toBeEmptyDOMElement()
   })
 
-  it('shows agent name in the title so user can\'t accidentally hand off to the wrong one', () => {
+  it('shows agent name in the title', () => {
     render(<HandoffModal {...baseProps} />)
     expect(screen.getByText(/Hand off to David/)).toBeInTheDocument()
   })
 
-  it('defaults to Normal rope (mid preset)', () => {
+  it('surfaces the "auto: permissions + 5h auto-resume" implicit-defaults line', () => {
     render(<HandoffModal {...baseProps} />)
-    // The selected rope button has purple bg (#6B50FF); assert Normal is selected by finding the aria-label / text pattern
-    // Simpler: click Show advanced and read the numbers to confirm defaults are Normal preset
-    fireEvent.click(screen.getByText(/Show advanced/))
-    expect(screen.getByText(/max turns:/).textContent).toContain('60')
-    expect(screen.getByText(/max cost:/).textContent).toContain('$5.00')
+    expect(screen.getByText(/permission requests approved/)).toBeInTheDocument()
+    expect(screen.getByText(/5h rate-limit resume/)).toBeInTheDocument()
   })
 
-  it('changes advanced numbers when a different rope is picked', () => {
+  it('Go disabled when no goal (no preset checked + free text empty)', () => {
     render(<HandoffModal {...baseProps} />)
-    fireEvent.click(screen.getByText(/Show advanced/))
-    fireEvent.click(screen.getByText(/Quick/))
-    expect(screen.getByText(/max turns:/).textContent).toContain('15')
-    expect(screen.getByText(/max cost:/).textContent).toContain('$1.00')
-    fireEvent.click(screen.getByText(/Marathon/))
-    expect(screen.getByText(/max turns:/).textContent).toContain('200')
-    expect(screen.getByText(/max cost:/).textContent).toContain('$20.00')
+    const go = screen.getByRole('button', { name: /Start handoff/ }) as HTMLButtonElement
+    expect(go.disabled).toBe(true)
   })
 
-  it('Go button is disabled until goal is non-empty (whitespace does not count)', () => {
+  it('typing in free text enables Go', () => {
     render(<HandoffModal {...baseProps} />)
-    const go = screen.getByRole('button', { name: /^Go$/ }) as HTMLButtonElement
-    expect(go.disabled).toBe(true)
-    const textarea = screen.getByPlaceholderText(/All tests in test\/auth/) as HTMLTextAreaElement
-    fireEvent.change(textarea, { target: { value: '    \n\n   ' } })
-    expect(go.disabled).toBe(true)
-    fireEvent.change(textarea, { target: { value: 'do the thing' } })
+    fireEvent.change(screen.getByPlaceholderText(/deploy to staging/), { target: { value: 'do it' } })
+    const go = screen.getByRole('button', { name: /Start handoff/ }) as HTMLButtonElement
     expect(go.disabled).toBe(false)
   })
 
-  it('clicking Go invokes handoff.start with the current goal + rope + trimmed', async () => {
-    const started = vi.fn()
-    render(<HandoffModal {...baseProps} onStarted={started} />)
-    const textarea = screen.getByPlaceholderText(/All tests in test\/auth/) as HTMLTextAreaElement
-    fireEvent.change(textarea, { target: { value: '  do stuff  ' } })
-    fireEvent.click(screen.getByText(/Quick/))
-    fireEvent.click(screen.getByRole('button', { name: /^Go$/ }))
-    // wait a tick for promise
-    await new Promise(r => setTimeout(r, 10))
-    expect((window as any).api.handoff.start).toHaveBeenCalledWith({
-      agentId: 'agent-abc',
-      cwd: '/tmp/proj',
-      goal: 'do stuff',
-      rope: 'quick'
-    })
-    expect(started).toHaveBeenCalledWith('hnd_xyz')
+  it('checking a preset that needs "specify" without filling it does NOT enable Go', () => {
+    render(<HandoffModal {...baseProps} />)
+    // "Feature done" needs specify
+    fireEvent.click(screen.getByText(/Feature done/))
+    const go = screen.getByRole('button', { name: /Start handoff/ }) as HTMLButtonElement
+    expect(go.disabled).toBe(true)
+    // Now fill specify → enabled
+    fireEvent.change(screen.getByPlaceholderText(/specify…/), { target: { value: 'user auth' } })
+    expect(go.disabled).toBe(false)
   })
 
-  it('surfaces the supervisor error inline instead of silently swallowing it', async () => {
-    ;(window as any).api.handoff.start = vi.fn().mockResolvedValue({ ok: false, error: 'agent already has a handoff running' })
+  it('checking a preset that does NOT need specify (Tests pass) enables Go immediately', () => {
     render(<HandoffModal {...baseProps} />)
-    fireEvent.change(screen.getByPlaceholderText(/All tests in test\/auth/), { target: { value: 'x' } })
-    fireEvent.click(screen.getByRole('button', { name: /^Go$/ }))
+    fireEvent.click(screen.getByText(/Tests pass/))
+    const go = screen.getByRole('button', { name: /Start handoff/ }) as HTMLButtonElement
+    expect(go.disabled).toBe(false)
+  })
+
+  it('clicking Go submits {chatId, goals[], breakers} in v2 shape', async () => {
+    render(<HandoffModal {...baseProps} />)
+    fireEvent.change(screen.getByPlaceholderText(/deploy to staging/), { target: { value: 'do it' } })
+    fireEvent.click(screen.getByRole('button', { name: /Start handoff/ }))
     await new Promise(r => setTimeout(r, 10))
-    expect(screen.getByText(/agent already has a handoff running/)).toBeInTheDocument()
+    expect((window as any).api.handoff.start).toHaveBeenCalledWith(expect.objectContaining({
+      chatId: 'chat-agent-abc',
+      goals: ['do it']
+    }))
+    const call = (window as any).api.handoff.start.mock.calls[0][0]
+    // Default breakers: turns, cost, wall, askQ enabled (from initial state)
+    expect(call.breakers).toEqual(expect.objectContaining({
+      maxTurns: 60,
+      maxCostUsd: 5,
+      maxWallTimeMs: 2 * 60 * 60 * 1000,
+      stopOnAskUserQuestion: true
+    }))
+    expect(call.breakers.gateScriptPath).toBeUndefined()
+  })
+
+  it('unchecking cost breaker omits maxCostUsd from payload', async () => {
+    render(<HandoffModal {...baseProps} />)
+    fireEvent.change(screen.getByPlaceholderText(/deploy to staging/), { target: { value: 'x' } })
+    // Uncheck "Max cost" by clicking its checkbox
+    const rows = screen.getAllByRole('checkbox') as HTMLInputElement[]
+    // Find checkbox in the Max cost row — locate by label
+    const costLabel = screen.getByText('Max cost').closest('label') as HTMLLabelElement
+    const costCheckbox = costLabel.querySelector('input[type="checkbox"]') as HTMLInputElement
+    fireEvent.click(costCheckbox)
+    fireEvent.click(screen.getByRole('button', { name: /Start handoff/ }))
+    await new Promise(r => setTimeout(r, 10))
+    const call = (window as any).api.handoff.start.mock.calls[0][0]
+    expect(call.breakers.maxCostUsd).toBeUndefined()
+    expect(call.breakers.maxTurns).toBeDefined()
+    expect(rows.length).toBeGreaterThan(0) // sanity
+  })
+
+  it('Quick preset button fills turns=15 / cost=1 / wall=0.25h', async () => {
+    render(<HandoffModal {...baseProps} />)
+    fireEvent.change(screen.getByPlaceholderText(/deploy to staging/), { target: { value: 'x' } })
+    // "Quick" text appears both in the section header ("Quick presets: ...")
+    // AND on the button — click the actual button by tag+role.
+    const quickBtn = screen.getAllByRole('button').find(b => /^Quick/.test(b.textContent || '')) as HTMLButtonElement
+    expect(quickBtn).toBeDefined()
+    fireEvent.click(quickBtn)
+    fireEvent.click(screen.getByRole('button', { name: /Start handoff/ }))
+    await new Promise(r => setTimeout(r, 10))
+    const call = (window as any).api.handoff.start.mock.calls[0][0]
+    expect(call.breakers.maxTurns).toBe(15)
+    expect(call.breakers.maxCostUsd).toBe(1)
+    expect(call.breakers.maxWallTimeMs).toBe(15 * 60 * 1000)
+  })
+
+  it('surfaces supervisor error inline', async () => {
+    ;(window as any).api.handoff.start = vi.fn().mockResolvedValue({ ok: false, error: 'chat already has an active handoff' })
+    render(<HandoffModal {...baseProps} />)
+    fireEvent.change(screen.getByPlaceholderText(/deploy to staging/), { target: { value: 'x' } })
+    fireEvent.click(screen.getByRole('button', { name: /Start handoff/ }))
+    await new Promise(r => setTimeout(r, 10))
+    expect(screen.getByText(/chat already has an active handoff/)).toBeInTheDocument()
   })
 
   it('Cancel calls onCancel', () => {
@@ -99,8 +139,8 @@ describe('HandoffModal', () => {
     expect(onCancel).toHaveBeenCalled()
   })
 
-  it('HANDOFF_PRESETS is monotonic — quick < normal < marathon', () => {
-    expect(HANDOFF_PRESETS[0].maxTurns).toBeLessThan(HANDOFF_PRESETS[1].maxTurns)
-    expect(HANDOFF_PRESETS[1].maxTurns).toBeLessThan(HANDOFF_PRESETS[2].maxTurns)
+  it('GOAL_PRESETS + ROPE_PRESETS are exported for external reference', () => {
+    expect(GOAL_PRESETS.length).toBeGreaterThan(0)
+    expect(ROPE_PRESETS.map(r => r.key)).toEqual(['quick', 'normal', 'marathon'])
   })
 })
