@@ -12,11 +12,12 @@ import { useEffect, useState, type CSSProperties } from 'react'
 export interface HandoffLiveState {
   runId: string
   agentId: string
-  status: 'running' | 'done' | 'stopped' | 'failed'
+  status: 'running' | 'paused' | 'done' | 'stopped' | 'failed'
   turnCount: number
   totalCostUsd: number
   startedAt: number
   elapsedMs: number
+  pausedMs?: number
   stopReason?: string
 }
 
@@ -71,7 +72,7 @@ export default function HandoffBanner({ agentId }: HandoffBannerProps) {
     return () => clearInterval(iv)
   }, [state])
 
-  if (state && state.status === 'running') {
+  if (state && (state.status === 'running' || state.status === 'paused')) {
     return <RunningStrip state={state} expanded={expanded} onToggle={() => setExpanded(v => !v)} />
   }
   if (finalState && !dismissed) {
@@ -83,15 +84,19 @@ export default function HandoffBanner({ agentId }: HandoffBannerProps) {
 function RunningStrip({ state, expanded, onToggle }: { state: HandoffLiveState; expanded: boolean; onToggle: () => void }) {
   const elapsedNow = Date.now() - state.startedAt
   const elapsedStr = formatDuration(elapsedNow)
+  const paused = state.status === 'paused'
+  const label = paused ? 'Handoff paused (rate-limit)' : 'Handoff running'
+  const icon = paused ? '⏸' : '🥴'
+  const color = paused ? '#E8FE96' : '#FF60FF'
   const onStop = async () => {
     if (!confirm('Stop this handoff? Claude will get SIGTERM immediately.')) return
     await (window as any).api.handoff.stop(state.runId)
   }
   return (
-    <div style={runningStripStyle}>
+    <div style={{ ...runningStripStyle, background: paused ? 'rgba(232,254,150,0.10)' : 'rgba(255,96,255,0.10)', borderColor: color }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-        <span style={{ fontSize: 14 }}>🥴</span>
-        <span style={{ fontWeight: 600, color: '#FF60FF' }}>Handoff running</span>
+        <span style={{ fontSize: 14 }}>{icon}</span>
+        <span style={{ fontWeight: 600, color }}>{label}</span>
         <span style={{ opacity: 0.7 }}>·</span>
         <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{elapsedStr}</span>
         <span style={{ opacity: 0.7 }}>·</span>

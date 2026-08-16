@@ -2,6 +2,7 @@ import { spawn, ChildProcessWithoutNullStreams, execSync } from 'node:child_proc
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { EventEmitter } from 'node:events'
 import { ipcMain, BrowserWindow, app } from 'electron'
 import * as pty from 'node-pty'
 import { queryUsageViaCcusage, queryUsagePctViaPty } from './chat-usage-query'
@@ -24,6 +25,18 @@ export type { ContextRow, ContextDetailRow, ContextSnapshot } from './chat-conte
  * and not used here. See docs/structured-events.md for the expected event
  * shapes once they're confirmed empirically.
  */
+
+/**
+ * Main-process event bus fired alongside every renderer broadcast. Lets
+ * other main-process modules (Handoff supervisor v2.2.0+) subscribe to a
+ * chat's stream-json events without going through the renderer round-trip.
+ *
+ * Fires `event` with { sessionId, event } for every stream-json event that
+ * lands in the broadcast path. Not fired for stdin frames or internal
+ * metadata (see broadcast callsites for exact placement).
+ */
+export const chatEventBus = new EventEmitter()
+chatEventBus.setMaxListeners(50)  // one supervisor per active handoff + slack for stopped listeners
 
 interface StartOpts {
   cwd?: string
@@ -693,6 +706,11 @@ export function startChat(id: string, opts: StartOpts = {}) {
         continue
       }
       broadcast(`chat:event:${id}`, ev)
+      // Main-process listeners (Handoff supervisor v2.2.0+) subscribe here.
+      // Only fires on the LIVE event path — history replay and RC-start
+      // synthetic events skip the bus deliberately (a mid-run handoff
+      // shouldn't be perturbed by history that predates its start).
+      try { chatEventBus.emit('event', { sessionId: id, event: ev }) } catch {}
       try { appendFileSync(session.logPath, JSON.stringify(ev) + '\n') } catch {}
       if (ev?.type === 'stream_event' && ev.event?.type === 'message_stop') sawMessageStop = true
       // Stash the claude session_id from system/init so remote-control
