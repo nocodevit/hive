@@ -143,4 +143,34 @@ describe('HandoffModal (v2.2.0)', () => {
     expect(GOAL_PRESETS.length).toBeGreaterThan(0)
     expect(ROPE_PRESETS.map(r => r.key)).toEqual(['quick', 'normal', 'marathon'])
   })
+
+  it('Plan Mode preset appears FIRST in the goal list (v2.2.2)', () => {
+    expect(GOAL_PRESETS[0].key).toBe('plan')
+    expect(GOAL_PRESETS[0].needsSpecify).toBe(false)
+    // Prompt text must reference ExitPlanMode explicitly so claude's
+    // evaluator knows what "the plan" refers to in transcript.
+    expect(GOAL_PRESETS[0].render('')).toMatch(/ExitPlanMode/)
+  })
+
+  it('checking the Plan Mode preset submits a plan-execution goal fragment', async () => {
+    render(<HandoffModal {...baseProps} />)
+    fireEvent.click(screen.getByText(/Execute the plan I approved above/))
+    fireEvent.click(screen.getByRole('button', { name: /Start handoff/ }))
+    await new Promise(r => setTimeout(r, 10))
+    const call = (window as any).api.handoff.start.mock.calls[0][0]
+    expect(call.goals.length).toBe(1)
+    expect(call.goals[0]).toMatch(/execute the plan you presented via ExitPlanMode/)
+  })
+
+  it('Plan Mode preset stacks with other goals (AND ALSO on backend)', async () => {
+    render(<HandoffModal {...baseProps} />)
+    fireEvent.click(screen.getByText(/Execute the plan I approved above/))
+    fireEvent.click(screen.getByText(/Tests pass/))
+    fireEvent.click(screen.getByRole('button', { name: /Start handoff/ }))
+    await new Promise(r => setTimeout(r, 10))
+    const call = (window as any).api.handoff.start.mock.calls[0][0]
+    expect(call.goals.length).toBe(2)
+    expect(call.goals.some((g: string) => /ExitPlanMode/.test(g))).toBe(true)
+    expect(call.goals.some((g: string) => /test command exits 0/.test(g))).toBe(true)
+  })
 })
