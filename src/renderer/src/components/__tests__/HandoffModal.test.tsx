@@ -152,6 +152,19 @@ describe('HandoffModal (v2.2.0)', () => {
     expect(GOAL_PRESETS[0].render('')).toMatch(/ExitPlanMode/)
   })
 
+  it('every preset prompt forces per-item / per-step reporting (v2.2.3 evaluator starvation fix)', () => {
+    // /goal's Haiku evaluator only judges from what claude SAYS in the
+    // transcript. If a prompt lets claude do the work silently, the
+    // evaluator keeps voting "not verified" and the handoff burns turns.
+    // Every preset must instruct claude to explicitly report progress.
+    for (const p of GOAL_PRESETS) {
+      const rendered = p.render(p.key === 'feature' ? 'test feature' : '')
+      // Contains an explicit reporting or verification directive.
+      const hasReportDirective = /briefly state|quote its actual|verified|verify/.test(rendered)
+      expect(hasReportDirective).toBe(true)
+    }
+  })
+
   it('checking the Plan Mode preset submits a plan-execution goal fragment', async () => {
     render(<HandoffModal {...baseProps} />)
     fireEvent.click(screen.getByText(/Execute the plan I approved above/))
@@ -159,7 +172,8 @@ describe('HandoffModal (v2.2.0)', () => {
     await new Promise(r => setTimeout(r, 10))
     const call = (window as any).api.handoff.start.mock.calls[0][0]
     expect(call.goals.length).toBe(1)
-    expect(call.goals[0]).toMatch(/execute the plan you presented via ExitPlanMode/)
+    expect(call.goals[0]).toMatch(/work through the plan you presented via ExitPlanMode/)
+    expect(call.goals[0]).toMatch(/briefly state/)  // v2.2.3 per-item report
   })
 
   it('Plan Mode preset stacks with other goals (AND ALSO on backend)', async () => {
@@ -171,6 +185,6 @@ describe('HandoffModal (v2.2.0)', () => {
     const call = (window as any).api.handoff.start.mock.calls[0][0]
     expect(call.goals.length).toBe(2)
     expect(call.goals.some((g: string) => /ExitPlanMode/.test(g))).toBe(true)
-    expect(call.goals.some((g: string) => /test command exits 0/.test(g))).toBe(true)
+    expect(call.goals.some((g: string) => /test command.*exits 0/.test(g))).toBe(true)
   })
 })
