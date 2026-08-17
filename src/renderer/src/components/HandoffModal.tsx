@@ -39,18 +39,19 @@ interface GoalPreset {
 }
 
 export const GOAL_PRESETS: GoalPreset[] = [
-  // v2.2.2: first slot — Plan Mode continuation. Chat-inject means the
-  // plan claude presented via ExitPlanMode is already in context; this
-  // preset just makes the affordance visible so users don't have to
-  // discover it by typing "execute the plan above" into Custom.
+  // v2.2.3: prompts strengthened to force per-item explicit reporting.
+  // Without this, /goal's Haiku evaluator (which only reads what claude
+  // SAYS in the transcript, can't independently verify) may keep judging
+  // "not verified" even when claude silently did the work — burning
+  // turns on redundant checks until the turn cap trips.
   { key: 'plan', label: 'Execute the plan I approved above (Plan Mode)', needsSpecify: false,
-    render: () => 'execute the plan you presented via ExitPlanMode above, item by item, until every item is implemented and verified' },
+    render: () => 'work through the plan you presented via ExitPlanMode above, item by item. After finishing each item, briefly state which item you completed and how you verified it (test output, file paths, commit sha). Only consider done when every item is both implemented AND verified' },
   { key: 'feature', label: 'Feature done', needsSpecify: true,
-    render: s => `feature is complete: ${s}` },
+    render: s => `implement this feature and verify it works: ${s}. After each substantive change, briefly state what changed and how you verified it (test output, screenshot, file diff). Only consider done when the feature is both implemented AND verified` },
   { key: 'tests', label: 'Tests pass (npm test / vitest / etc.)', needsSpecify: false,
-    render: () => 'the project test command exits 0 (npm test / vitest run / pytest — whichever this project uses)' },
+    render: () => 'the project test command (npm test / vitest run / pytest — whichever this project uses) exits 0 with zero failures. Run the command and quote its actual exit code and pass/fail summary in the conversation so completion can be verified from the transcript' },
   { key: 'lint', label: 'Lint clean', needsSpecify: false,
-    render: () => 'the project lint command exits 0 with zero errors' }
+    render: () => 'the project lint command exits 0 with zero errors. Run the command and quote its actual output so completion can be verified from the transcript' }
 ]
 
 interface RopePresetUI { key: RopeKey; label: string; hint: string; turns: number; cost: number; wallH: number }
