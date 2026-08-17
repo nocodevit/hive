@@ -241,6 +241,44 @@ function parseJsonLines(buf: string, sessionId: string): { events: any[]; rest: 
 const DEFAULT_REPLAY_LIMIT = 500
 
 /**
+ * Map a raw claude-native jsonl event into the shape the renderer expects
+ * when replayed as historical. Preserves the two known compact-summary
+ * flags so the renderer's isCompactSummaryEvent filter can catch it and
+ * collapse the "This session is being continued…" wall into the small
+ * hint chip PR #34 introduced.
+ *
+ * Kept small + pure so it's testable without spinning up a session. Both
+ * the initial-replay path (~line 302) and loadOlderHistory (~line 349)
+ * route through this helper — before extraction, only one had the fix.
+ *
+ * Returns null for event shapes we don't rebroadcast (system events,
+ * malformed, etc.).
+ */
+export function mapReplayEvent(ev: unknown): Record<string, unknown> | null {
+  if (!ev || typeof ev !== 'object') return null
+  const e = ev as { type?: unknown; message?: { content?: unknown } | undefined; sessionId?: unknown; isCompactSummary?: unknown; isVisibleInTranscriptOnly?: unknown }
+  if (e.type === 'user' && e.message?.content) {
+    return {
+      type: 'user',
+      message: e.message,
+      session_id: e.sessionId,
+      _historical: true,
+      ...(e.isCompactSummary === true ? { isCompactSummary: true } : {}),
+      ...(e.isVisibleInTranscriptOnly === true ? { isVisibleInTranscriptOnly: true } : {})
+    }
+  }
+  if (e.type === 'assistant' && e.message) {
+    return {
+      type: 'assistant',
+      message: e.message,
+      session_id: e.sessionId,
+      _historical: true
+    }
+  }
+  return null
+}
+
+/**
  * Process-wide /usage cache shared across all chat sessions. Subscription
  * %% is account-scoped, not session-scoped — N agents all see the same
  * numbers — so it's wasteful to spawn N independent PTY scrapes. The
@@ -299,21 +337,8 @@ function replaySessionHistory(sessionId: string, cwd: string | undefined, limit 
       const line = lines[i]
       try {
         const ev = JSON.parse(line)
-        if (ev.type === 'user' && ev.message?.content) {
-          broadcast(`chat:event:${sessionId}`, {
-            type: 'user',
-            message: ev.message,
-            session_id: ev.sessionId,
-            _historical: true
-          })
-        } else if (ev.type === 'assistant' && ev.message) {
-          broadcast(`chat:event:${sessionId}`, {
-            type: 'assistant',
-            message: ev.message,
-            session_id: ev.sessionId,
-            _historical: true
-          })
-        }
+        const mapped = mapReplayEvent(ev)
+        if (mapped) broadcast(`chat:event:${sessionId}`, mapped)
       } catch {}
     }
     // Record where we started so "Load older" can walk earlier.
@@ -351,11 +376,8 @@ export function loadOlderHistory(sessionId: string, batch = DEFAULT_REPLAY_LIMIT
     for (let i = newStart; i < session.replayedFrom; i++) {
       try {
         const ev = JSON.parse(lines[i])
-        if (ev.type === 'user' && ev.message?.content) {
-          events.push({ type: 'user', message: ev.message, session_id: ev.sessionId, _historical: true })
-        } else if (ev.type === 'assistant' && ev.message) {
-          events.push({ type: 'assistant', message: ev.message, session_id: ev.sessionId, _historical: true })
-        }
+        const mapped = mapReplayEvent(ev)
+        if (mapped) events.push(mapped)
       } catch {}
     }
     session.replayedFrom = newStart
