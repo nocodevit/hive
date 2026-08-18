@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isCompactSummaryEvent, extractCompactSummaryHint } from '../compact-summary'
+import { isCompactSummaryEvent, extractCompactSummaryHint, COMPACT_SUMMARY_OPENING } from '../compact-summary'
 
 /**
  * Realistic slice of the exact event claude writes into <session>.jsonl
@@ -38,6 +38,44 @@ describe('isCompactSummaryEvent', () => {
     expect(isCompactSummaryEvent(undefined)).toBe(false)
     expect(isCompactSummaryEvent('user')).toBe(false)
     expect(isCompactSummaryEvent(42)).toBe(false)
+  })
+
+  // ---- v2.2.4 belt-and-suspenders: content-pattern fallback ----
+  // If Anthropic renames isCompactSummary, or a future replay path
+  // strips it again, the content prose still gives us a signal.
+  describe('content-pattern fallback (flag missing / renamed)', () => {
+    const wallContent = `${COMPACT_SUMMARY_OPENING}. The summary below covers the earlier portion of the conversation.\n\nSummary:\n1. Primary Request…`
+
+    it('true when flag is ABSENT but content starts with the canonical opening (string content)', () => {
+      const ev = { type: 'user', message: { role: 'user', content: wallContent } }
+      // no isCompactSummary flag on the event
+      expect(isCompactSummaryEvent(ev)).toBe(true)
+    })
+
+    it('true when flag is ABSENT but content starts with the opening (block-array content)', () => {
+      const ev = { type: 'user', message: { role: 'user', content: [{ type: 'text', text: wallContent }] } }
+      expect(isCompactSummaryEvent(ev)).toBe(true)
+    })
+
+    it('false when a user message just MENTIONS the phrase somewhere in the middle', () => {
+      const ev = { type: 'user', message: { content: 'hey did you see the message "This session is being continued from a previous conversation"? weird right' } }
+      expect(isCompactSummaryEvent(ev)).toBe(false)
+    })
+
+    it('false on assistant events even if they somehow contain the opening (compact-summary is user-only)', () => {
+      const ev = { type: 'assistant', message: { content: [{ type: 'text', text: wallContent }] } }
+      expect(isCompactSummaryEvent(ev)).toBe(false)
+    })
+
+    it('false on system events even if content matches (system events never carry compact-summary)', () => {
+      const ev = { type: 'system', subtype: 'notification', message: { content: wallContent } }
+      expect(isCompactSummaryEvent(ev)).toBe(false)
+    })
+
+    it('COMPACT_SUMMARY_OPENING is exported for grep-ability + external assertions', () => {
+      expect(typeof COMPACT_SUMMARY_OPENING).toBe('string')
+      expect(COMPACT_SUMMARY_OPENING.length).toBeGreaterThan(30)
+    })
   })
 })
 
