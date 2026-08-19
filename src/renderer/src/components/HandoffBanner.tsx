@@ -13,7 +13,7 @@ export interface HandoffLiveState {
   runId: string
   agentId: string
   chatId?: string
-  status: 'running' | 'paused' | 'done' | 'stopped' | 'failed'
+  status: 'running' | 'paused' | 'compacting' | 'done' | 'stopped' | 'failed'
   turnCount: number
   totalCostUsd: number
   startedAt: number
@@ -26,6 +26,8 @@ export interface HandoffLiveState {
     commits: Array<{ sha?: string; msg: string }>
     lastTestRun?: { command: string; passed?: number; failed?: number; ok: boolean }
     toolErrorsRecovered: number
+    autoCompactCount?: number       // v2.5.0
+    autoCompactCostUsd?: number     // v2.5.0
   }
 }
 
@@ -94,7 +96,7 @@ export default function HandoffBanner({ agentId, onRequestNewGoal }: HandoffBann
     // v2.3.0: full pause UI with 3-button choice (Resume / Exit / New goal)
     return <PausedCard state={state} onNewGoal={onRequestNewGoal} />
   }
-  if (state && (state.status === 'running' || state.status === 'paused')) {
+  if (state && (state.status === 'running' || state.status === 'paused' || state.status === 'compacting')) {
     return <RunningStrip state={state} expanded={expanded} onToggle={() => setExpanded(v => !v)} />
   }
   if (finalState && !dismissed) {
@@ -156,15 +158,18 @@ function RunningStrip({ state, expanded, onToggle }: { state: HandoffLiveState; 
   const elapsedNow = Date.now() - state.startedAt
   const elapsedStr = formatDuration(elapsedNow)
   const paused = state.status === 'paused'
-  const label = paused ? 'Handoff paused (rate-limit)' : 'Handoff running'
-  const icon = paused ? '⏸' : '🥴'
-  const color = paused ? '#E8FE96' : '#FF60FF'
+  const compacting = state.status === 'compacting'
+  const label = compacting
+    ? 'Handoff auto-compacting (context ≥ 70%)…'
+    : paused ? 'Handoff paused (rate-limit)' : 'Handoff running'
+  const icon = compacting ? '⏳' : paused ? '⏸' : '🥴'
+  const color = compacting ? '#E8FE96' : paused ? '#E8FE96' : '#FF60FF'
   const onStop = async () => {
     if (!confirm('Stop this handoff? Claude will get SIGTERM immediately.')) return
     await (window as any).api.handoff.stop(state.runId)
   }
   return (
-    <div style={{ ...runningStripStyle, background: paused ? 'rgba(232,254,150,0.10)' : 'rgba(255,96,255,0.10)', borderColor: color }}>
+    <div style={{ ...runningStripStyle, background: (paused || compacting) ? 'rgba(232,254,150,0.10)' : 'rgba(255,96,255,0.10)', borderColor: color }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
         <span style={{ fontSize: 14 }}>{icon}</span>
         <span style={{ fontWeight: 600, color }}>{label}</span>
@@ -204,7 +209,7 @@ function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: (
   const ok = state.status === 'done'
   const [expanded, setExpanded] = useState(false)
   const stats = state.stats
-  const hasDetails = !!stats && (stats.filesEdited.length > 0 || stats.commits.length > 0 || !!stats.lastTestRun || stats.toolErrorsRecovered > 0)
+  const hasDetails = !!stats && (stats.filesEdited.length > 0 || stats.commits.length > 0 || !!stats.lastTestRun || stats.toolErrorsRecovered > 0 || (stats.autoCompactCount ?? 0) > 0)
   const copySummary = () => {
     const lines: string[] = [
       `# Handoff ${state.status}`,
@@ -213,7 +218,8 @@ function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: (
       stats?.filesEdited.length ? `\n## Files changed (${stats.filesEdited.length})\n${stats.filesEdited.map(f => `- ${f}`).join('\n')}` : '',
       stats?.commits.length ? `\n## Commits (${stats.commits.length})\n${stats.commits.map(c => `- ${c.msg}`).join('\n')}` : '',
       stats?.lastTestRun ? `\n## Last test run\n\`${stats.lastTestRun.command}\`\n${stats.lastTestRun.passed ?? '?'} passed / ${stats.lastTestRun.failed ?? '?'} failed` : '',
-      stats?.toolErrorsRecovered ? `\nTool errors recovered: ${stats.toolErrorsRecovered}` : ''
+      stats?.toolErrorsRecovered ? `\nTool errors recovered: ${stats.toolErrorsRecovered}` : '',
+      stats?.autoCompactCount ? `\nAuto-compacted ${stats.autoCompactCount}×, cost $${(stats.autoCompactCostUsd ?? 0).toFixed(2)}` : ''
     ].filter(Boolean)
     navigator.clipboard.writeText(lines.join('\n')).catch(() => { /* silent */ })
   }
@@ -302,6 +308,11 @@ function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: (
           )}
           {stats.toolErrorsRecovered > 0 && (
             <div style={{ opacity: 0.7 }}>Tool errors recovered: {stats.toolErrorsRecovered}</div>
+          )}
+          {(stats.autoCompactCount ?? 0) > 0 && (
+            <div style={{ opacity: 0.7, marginTop: 4 }}>
+              Auto-compacted <b>{stats.autoCompactCount}×</b> · cost <b>${(stats.autoCompactCostUsd ?? 0).toFixed(2)}</b>
+            </div>
           )}
           <button
             type="button"

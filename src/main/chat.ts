@@ -1148,7 +1148,7 @@ export async function startWithSummary(id: string) {
  * --print --resume <sid>. The user just sees a brief 'Compacting…'
  * system entry and the session continues with summarized context.
  */
-export async function compactSession(id: string) {
+export async function compactSession(id: string): Promise<{ ok: boolean; error?: string; durationMs?: number; costUsd?: number }> {
   const session = sessions.get(id)
   if (!session) return { ok: false, error: 'no_session' }
   if (!session.claudeSid || !session.startOpts) return { ok: false, error: 'session-id not yet captured — send a message first' }
@@ -1182,7 +1182,10 @@ export async function compactSession(id: string) {
   } else {
     broadcast(`chat:stderr:${id}`, `❌ /compact ${r.error} (${(r.durationMs / 1000).toFixed(1)}s) — context UNCHANGED, session resumed\n`)
   }
-  return { ok: r.ok, error: r.error }
+  // v2.5.0: expose duration + cost so Handoff supervisor can attribute
+  // auto-compact overhead in the report card + charge against maxCostUsd.
+  const costUsd = typeof r.resultEvent?.total_cost_usd === 'number' ? r.resultEvent.total_cost_usd : undefined
+  return { ok: r.ok, error: r.error, durationMs: r.durationMs, costUsd }
 }
 
 /**
