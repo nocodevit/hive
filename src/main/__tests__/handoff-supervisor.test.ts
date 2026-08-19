@@ -219,7 +219,7 @@ describe('initialState', () => {
       runId: 'hnd_1', chatId: 'chat-agent-1', agentId: 'agent-1',
       status: 'running', turnCount: 0, totalCostUsd: 0,
       startedAt: T0, elapsedMs: 0, pausedMs: 0,
-      stats: { filesEdited: [], commits: [], toolErrorsRecovered: 0 }
+      stats: { filesEdited: [], commits: [], toolErrorsRecovered: 0, autoCompactCount: 0, autoCompactCostUsd: 0 }
     })
   })
 })

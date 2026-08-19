@@ -36,7 +36,12 @@ export interface HandoffConfig {
   breakers: HandoffBreakers
 }
 
-export type HandoffStatus = 'running' | 'paused' | 'done' | 'stopped' | 'failed'
+export type HandoffStatus = 'running' | 'paused' | 'compacting' | 'done' | 'stopped' | 'failed'
+
+/** Fixed threshold for auto-compact during Handoff (v2.5.0). Hardcoded per
+ * user's "you decide" — not exposed in the modal to keep the checkbox
+ * grid clean. If future users want it configurable, add a breakers field. */
+export const AUTO_COMPACT_PCT_THRESHOLD = 0.70
 
 /**
  * Report-card stats accumulated over a handoff run. All fields are
@@ -48,10 +53,54 @@ export interface HandoffStats {
   commits: Array<{ sha?: string; msg: string }>       // from Bash `git commit -m "..."` + tool_result sha
   lastTestRun?: { command: string; passed?: number; failed?: number; ok: boolean }
   toolErrorsRecovered: number                          // count of tool_result.is_error === true
+  autoCompactCount: number                             // v2.5.0: how many times auto-compact fired
+  autoCompactCostUsd: number                           // v2.5.0: total $ spent on auto-compact runs
 }
 
 export function emptyStats(): HandoffStats {
-  return { filesEdited: [], commits: [], toolErrorsRecovered: 0 }
+  return { filesEdited: [], commits: [], toolErrorsRecovered: 0, autoCompactCount: 0, autoCompactCostUsd: 0 }
+}
+
+// --------- Context measurement (v2.5.0) --------- //
+
+/**
+ * Extract input_tokens from an assistant event's usage field. Claude
+ * emits this on every assistant message. Returns null when absent
+ * (e.g. streaming intermediate events, system events).
+ */
+export function extractInputTokens(event: Record<string, unknown>): number | null {
+  if (event.type !== 'assistant') return null
+  const msg = event.message as { usage?: { input_tokens?: unknown } } | undefined
+  const t = msg?.usage?.input_tokens
+  return typeof t === 'number' && t >= 0 ? t : null
+}
+
+/**
+ * Parse the model's advertised context size string ("1M", "200K", "1000000")
+ * into a token count. Matches parseContextSize in the renderer's
+ * progress-bar module so front + back agree.
+ */
+export function parseContextSize(s: string): number {
+  const cleaned = String(s || '').trim().toUpperCase()
+  const m = cleaned.match(/^([\d.]+)\s*([KM])?$/)
+  if (!m) return 0
+  const n = parseFloat(m[1])
+  if (!Number.isFinite(n)) return 0
+  if (m[2] === 'M') return n * 1_000_000
+  if (m[2] === 'K') return n * 1_000
+  return n
+}
+
+/**
+ * Should the supervisor trigger auto-compact right now?
+ * True iff pct >= threshold AND we're not already compacting/paused/stopped.
+ * Zero throttling per user directive ("每次 compact 都能低于 10%").
+ */
+export function shouldTriggerAutoCompact(pct: number, status: HandoffStatus, alreadyCompacting: boolean, threshold = AUTO_COMPACT_PCT_THRESHOLD): boolean {
+  if (alreadyCompacting) return false
+  if (status !== 'running') return false
+  if (!Number.isFinite(pct) || pct < 0) return false
+  return pct >= threshold
 }
 
 export interface HandoffState {

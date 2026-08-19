@@ -21,7 +21,7 @@
  */
 import type { BrowserWindow } from 'electron'
 import { execFile, spawn } from 'node:child_process'
-import { chatEventBus, sendUserMessage, interruptSession } from './chat'
+import { chatEventBus, sendUserMessage, interruptSession, compactSession } from './chat'
 import {
   applyEvent,
   beginPause,
@@ -30,9 +30,12 @@ import {
   detectAskUserQuestion,
   endPause,
   extractAskUserQuestion,
+  extractInputTokens,
   foldStats,
   initialState,
   liveElapsedMs,
+  parseContextSize,
+  shouldTriggerAutoCompact,
   type HandoffBreakers,
   type HandoffConfig,
   type HandoffState
@@ -45,7 +48,10 @@ interface RunningHandoff {
   resumeTimer?: NodeJS.Timeout    // set while paused for rate-limit auto-resume
   unsubscribe: () => void
   win: BrowserWindow
-  lastBashCmd: string | null     // v2.3.0: for attributing test-run tool_results
+  lastBashCmd: string | null      // v2.3.0: for attributing test-run tool_results
+  lastInputTokens: number         // v2.5.0: for auto-compact context-% detection
+  contextSizeTokens: number       // v2.5.0: resolved from initial system:init event
+  autoCompacting: boolean         // v2.5.0: guard against re-entering compact while one is in flight
 }
 
 const running = new Map<string, RunningHandoff>()
@@ -144,6 +150,16 @@ export function startHandoff(input: StartHandoffInput, win: BrowserWindow): Star
       return  // don't process breakers / turn count while paused
     }
 
+    // v2.5.0: track context tokens for auto-compact detection.
+    // system:init events carry `contextSize`; assistant events carry
+    // `usage.input_tokens` on each turn.
+    if (event.type === 'system' && (event as any).subtype === 'init') {
+      const cs = (event as any).contextSize
+      if (typeof cs === 'string' && h) h.contextSizeTokens = parseContextSize(cs)
+    }
+    const inputTok = extractInputTokens(event)
+    if (inputTok !== null && h) h.lastInputTokens = inputTok
+
     const before = state.turnCount
     const next = applyEvent(state, event, now)
     Object.assign(state, next)
@@ -153,6 +169,19 @@ export function startHandoff(input: StartHandoffInput, win: BrowserWindow): Star
     if (!turnAdvanced) return
 
     emitProgress(win, state)
+
+    // v2.5.0 auto-compact: on every result event, if context > 70%
+    // and not already compacting, kick off tryAutoCompact (async, no
+    // await — this event handler must return quickly, compact runs in
+    // background and updates state on completion).
+    if (h && h.contextSizeTokens > 0 && h.lastInputTokens > 0) {
+      const pct = h.lastInputTokens / h.contextSizeTokens
+      if (shouldTriggerAutoCompact(pct, state.status, h.autoCompacting)) {
+        void tryAutoCompact(runId)
+        return  // don't run breakers on this turn — compacting takes over
+      }
+    }
+
     const cb = checkCircuitBreakers(state, config, now, false)
     if (cb.trip && state.status === 'running') {
       state.status = 'stopped'
@@ -197,9 +226,63 @@ export function startHandoff(input: StartHandoffInput, win: BrowserWindow): Star
     emitProgress(win, state)
   }, 30_000)
 
-  running.set(runId, { config, state, wallTimer, unsubscribe, win, lastBashCmd: null })
+  running.set(runId, {
+    config, state, wallTimer, unsubscribe, win,
+    lastBashCmd: null,
+    lastInputTokens: 0,
+    contextSizeTokens: 0,
+    autoCompacting: false
+  })
   emitProgress(win, state) // paint banner immediately
   return { ok: true, runId }
+}
+
+/**
+ * Auto-compact when context passes 70%. Retries once on failure; second
+ * failure halts the handoff. Silent on success per user directive.
+ * Wall-time is paused via same beginPause/endPause bookkeeping used by
+ * 5h rate-limit — compact duration doesn't count against maxWallTimeMs.
+ */
+async function tryAutoCompact(runId: string): Promise<void> {
+  const h = running.get(runId)
+  if (!h || h.autoCompacting) return
+  h.autoCompacting = true
+  const before = h.state.status
+  h.state.status = 'compacting'
+  Object.assign(h.state, beginPause(h.state, Date.now()))
+  emitProgress(h.win, h.state)
+
+  const attempt = async () => await compactSession(h.config.chatId)
+  let res = await attempt()
+  if (!res.ok) {
+    // Retry once — per user directive: "重试一次，再失败就 halt".
+    res = await attempt()
+  }
+
+  // Restore state (or halt if both attempts failed).
+  h.autoCompacting = false
+  if (res.ok) {
+    if (h.state.stats) {
+      h.state.stats = {
+        ...h.state.stats,
+        autoCompactCount: h.state.stats.autoCompactCount + 1,
+        autoCompactCostUsd: h.state.stats.autoCompactCostUsd + (res.costUsd || 0)
+      }
+    }
+    // Also charge compact cost against the main cost budget so max-cost
+    // breaker fires if compaction itself blows the budget.
+    if (typeof res.costUsd === 'number') {
+      h.state.totalCostUsd += res.costUsd
+    }
+    Object.assign(h.state, endPause(h.state, Date.now()))
+    h.state.status = before === 'running' ? 'running' : before
+    emitProgress(h.win, h.state)
+  } else {
+    h.state.status = 'stopped'
+    h.state.stopReason = `auto-compact failed after 2 attempts: ${res.error || 'unknown'}`
+    try { interruptSession(h.config.chatId) } catch { /* already stopped */ }
+    finalize(runId, h.win)
+  }
 }
 
 /**
