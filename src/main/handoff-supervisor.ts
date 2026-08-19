@@ -38,6 +38,22 @@ export interface HandoffConfig {
 
 export type HandoffStatus = 'running' | 'paused' | 'done' | 'stopped' | 'failed'
 
+/**
+ * Report-card stats accumulated over a handoff run. All fields are
+ * derived from streamed events — no separate log needed. Rendered in
+ * HandoffReportCard on handoff:done.
+ */
+export interface HandoffStats {
+  filesEdited: string[]                                // deduped paths from Edit/Write tool_use
+  commits: Array<{ sha?: string; msg: string }>       // from Bash `git commit -m "..."` + tool_result sha
+  lastTestRun?: { command: string; passed?: number; failed?: number; ok: boolean }
+  toolErrorsRecovered: number                          // count of tool_result.is_error === true
+}
+
+export function emptyStats(): HandoffStats {
+  return { filesEdited: [], commits: [], toolErrorsRecovered: 0 }
+}
+
 export interface HandoffState {
   runId: string
   chatId: string
@@ -51,6 +67,8 @@ export interface HandoffState {
   pauseStartedAt?: number      // when current pause began; undefined if not paused
   lastReason?: string          // e.g. evaluator's last "no" reason
   stopReason?: string
+  stats?: HandoffStats         // v2.3.0: accumulated during run, sent with handoff:done
+  askedQuestion?: { question: string; options?: Array<{ label: string; description?: string }> } // v2.3.0 pause payload
 }
 
 export type CircuitBreakerResult =
@@ -207,8 +225,166 @@ export function initialState(config: HandoffConfig, startedAt: number): HandoffS
     totalCostUsd: 0,
     startedAt,
     elapsedMs: 0,
-    pausedMs: 0
+    pausedMs: 0,
+    stats: emptyStats()
   }
+}
+
+// --------- Stats extraction (pure) --------- //
+
+/** Extract file_path from an Edit / Write tool_use event, if applicable. */
+export function extractEditedFilePath(event: Record<string, unknown>): string | null {
+  if (event.type !== 'assistant') return null
+  const msg = event.message as { content?: unknown } | undefined
+  const content = msg?.content
+  if (!Array.isArray(content)) return null
+  for (const block of content) {
+    if (block && typeof block === 'object') {
+      const b = block as { type?: unknown; name?: unknown; input?: { file_path?: unknown } }
+      if (b.type === 'tool_use' && (b.name === 'Edit' || b.name === 'Write' || b.name === 'MultiEdit')) {
+        const p = b.input?.file_path
+        if (typeof p === 'string' && p.length > 0) return p
+      }
+    }
+  }
+  return null
+}
+
+/** Extract git commit message from a Bash tool_use command, if `git commit -m`. */
+export function extractCommitFromBash(event: Record<string, unknown>): string | null {
+  if (event.type !== 'assistant') return null
+  const msg = event.message as { content?: unknown } | undefined
+  const content = msg?.content
+  if (!Array.isArray(content)) return null
+  for (const block of content) {
+    if (block && typeof block === 'object') {
+      const b = block as { type?: unknown; name?: unknown; input?: { command?: unknown } }
+      if (b.type === 'tool_use' && b.name === 'Bash' && typeof b.input?.command === 'string') {
+        // Match: git commit -m "..." OR git commit -m '...' OR heredoc-style
+        const m = b.input.command.match(/git\s+commit(?:\s+[^-][^\s]*)*\s+-m\s+["'](.+?)["']/s)
+        if (m) return m[1].split('\n')[0].slice(0, 200)
+      }
+    }
+  }
+  return null
+}
+
+/** Extract a test-run summary from a Bash tool_result — best-effort. */
+export function extractTestSummary(event: Record<string, unknown>, lastBashCmd: string | null): { command: string; passed?: number; failed?: number; ok: boolean } | null {
+  if (event.type !== 'user' || !lastBashCmd) return null
+  if (!/npm test|vitest|pytest|jest|go test|cargo test/i.test(lastBashCmd)) return null
+  const msg = event.message as { content?: unknown } | undefined
+  const content = msg?.content
+  if (!Array.isArray(content)) return null
+  for (const block of content) {
+    if (block && typeof block === 'object') {
+      const b = block as { type?: unknown; content?: unknown; is_error?: unknown }
+      if (b.type === 'tool_result') {
+        const text = Array.isArray(b.content)
+          ? b.content.map((c: any) => c?.text ?? '').join('\n')
+          : String(b.content ?? '')
+        // Common patterns: "47 passed", "3 failed", "Tests: 47 passed | 3 failed"
+        const passedMatch = text.match(/(\d+)\s+passed/i)
+        const failedMatch = text.match(/(\d+)\s+failed/i)
+        const passed = passedMatch ? parseInt(passedMatch[1], 10) : undefined
+        const failed = failedMatch ? parseInt(failedMatch[1], 10) : undefined
+        const ok = !b.is_error && (failed ?? 0) === 0
+        return { command: lastBashCmd, passed, failed, ok }
+      }
+    }
+  }
+  return null
+}
+
+/** Was this event a tool_result with is_error=true? Counts recovered errors. */
+export function isToolErrorResult(event: Record<string, unknown>): boolean {
+  if (event.type !== 'user') return false
+  const msg = event.message as { content?: unknown } | undefined
+  const content = msg?.content
+  if (!Array.isArray(content)) return false
+  return content.some(block => {
+    if (!block || typeof block !== 'object') return false
+    const b = block as { type?: unknown; is_error?: unknown }
+    return b.type === 'tool_result' && b.is_error === true
+  })
+}
+
+/** Extract the pending Bash command being invoked (used to attribute test-run tool_result). */
+export function extractBashCommand(event: Record<string, unknown>): string | null {
+  if (event.type !== 'assistant') return null
+  const msg = event.message as { content?: unknown } | undefined
+  const content = msg?.content
+  if (!Array.isArray(content)) return null
+  for (const block of content) {
+    if (block && typeof block === 'object') {
+      const b = block as { type?: unknown; name?: unknown; input?: { command?: unknown } }
+      if (b.type === 'tool_use' && b.name === 'Bash' && typeof b.input?.command === 'string') {
+        return b.input.command
+      }
+    }
+  }
+  return null
+}
+
+/** Pure: fold a stream event into an existing stats snapshot. */
+export function foldStats(stats: HandoffStats, event: Record<string, unknown>, lastBashCmd: string | null): { stats: HandoffStats; nextBashCmd: string | null } {
+  let nextStats = stats
+  let nextBashCmd = lastBashCmd
+
+  const editedPath = extractEditedFilePath(event)
+  if (editedPath && !stats.filesEdited.includes(editedPath)) {
+    nextStats = { ...nextStats, filesEdited: [...nextStats.filesEdited, editedPath] }
+  }
+
+  const commitMsg = extractCommitFromBash(event)
+  if (commitMsg) {
+    nextStats = { ...nextStats, commits: [...nextStats.commits, { msg: commitMsg }] }
+  }
+
+  const bashCmd = extractBashCommand(event)
+  if (bashCmd) nextBashCmd = bashCmd
+
+  const testSummary = extractTestSummary(event, lastBashCmd)
+  if (testSummary) {
+    nextStats = { ...nextStats, lastTestRun: testSummary }
+    nextBashCmd = null  // consumed
+  }
+
+  if (isToolErrorResult(event)) {
+    nextStats = { ...nextStats, toolErrorsRecovered: nextStats.toolErrorsRecovered + 1 }
+  }
+
+  return { stats: nextStats, nextBashCmd }
+}
+
+/** Detect AskUserQuestion payload (question + options) for pause UI. */
+export function extractAskUserQuestion(event: Record<string, unknown>): { question: string; options?: Array<{ label: string; description?: string }> } | null {
+  if (event.type !== 'assistant') return null
+  const msg = event.message as { content?: unknown } | undefined
+  const content = msg?.content
+  if (!Array.isArray(content)) return null
+  for (const block of content) {
+    if (block && typeof block === 'object') {
+      const b = block as { type?: unknown; name?: unknown; input?: { question?: unknown; questions?: unknown; options?: unknown } }
+      if (b.type === 'tool_use' && b.name === 'AskUserQuestion') {
+        // Real payload shape: { questions: [{ question, options: [...] }] } — take the first question.
+        const questions = b.input?.questions as Array<{ question?: string; options?: Array<{ label?: string; description?: string }> }> | undefined
+        if (Array.isArray(questions) && questions.length > 0 && typeof questions[0].question === 'string') {
+          return {
+            question: questions[0].question,
+            options: (questions[0].options || []).map(o => ({ label: String(o?.label || ''), description: o?.description ? String(o.description) : undefined }))
+          }
+        }
+        // Fallback simpler shape: { question, options }
+        if (typeof b.input?.question === 'string') {
+          const opts = Array.isArray(b.input.options) ? (b.input.options as Array<{ label?: string; description?: string }>).map(o => ({ label: String(o?.label || ''), description: o?.description ? String(o.description) : undefined })) : undefined
+          return { question: b.input.question, options: opts }
+        }
+        return { question: '(agent asked a question — see chat)' }
+      }
+    }
+  }
+  return null
 }
 
 /** Enter pause (called when rate_limit_event with status='blocked' arrives). */

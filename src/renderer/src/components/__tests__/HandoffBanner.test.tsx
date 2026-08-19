@@ -89,7 +89,8 @@ describe('HandoffBanner', () => {
       doneCb?.({ runId: 'hnd_1', agentId: 'agent-1', status: 'done', turnCount: 3, totalCostUsd: 0.1, startedAt: Date.now(), elapsedMs: 1000 })
     })
     expect(screen.getByText(/Handoff done/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: /^✕$/ }))
+    // v2.2.5+: dismiss button uses aria-label for accessibility.
+    fireEvent.click(screen.getByRole('button', { name: /Dismiss handoff summary/i }))
     expect(screen.queryByText(/Handoff done/)).not.toBeInTheDocument()
   })
 })

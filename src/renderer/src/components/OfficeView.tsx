@@ -6,9 +6,13 @@ interface Props {
   agents: Agent[]
   onAgentClick?: (agentId: string) => void
   /** Agent IDs currently running a Handoff (autonomous /goal loop). Rendered
-   * with a wobbling 🥴 sticker above the sprite so users see at a glance
-   * who's in a long-running loop and shouldn't be interrupted casually. */
+   * with a rotating dashed halo around the sprite so users see at a glance
+   * who's in a long-running loop and shouldn't be interrupted casually.
+   * v2.3.0 replaced the earlier 🥴 emoji above the head. */
   loopBusyAgentIds?: Set<string>
+  /** Currently focused agent id — halo renders brighter/thicker for
+   * selected agents so users can visually track which loop they're on. */
+  selectedAgentId?: string | null
 }
 
 const TILE = 16
@@ -38,9 +42,11 @@ function darken(hex: string, amount: number): string {
   return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`
 }
 
-export default function OfficeView({ agents, onAgentClick, loopBusyAgentIds }: Props) {
+export default function OfficeView({ agents, onAgentClick, loopBusyAgentIds, selectedAgentId }: Props) {
   const loopBusyRef = useRef<Set<string>>(loopBusyAgentIds || new Set())
   loopBusyRef.current = loopBusyAgentIds || new Set()
+  const selectedAgentRef = useRef<string | null>(selectedAgentId ?? null)
+  selectedAgentRef.current = selectedAgentId ?? null
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wanderState = useRef<Map<string, { x: number; y: number; tx: number | null; ty: number | null; timer: number }>>(new Map())
   const renderAgents = useRef<{ id: string; rx: number; ry: number }[]>([])
@@ -264,19 +270,31 @@ export default function OfficeView({ agents, onAgentClick, loopBusyAgentIds }: P
         }
       }
 
-      // Handoff loop sticker — wobbles side to side, sits above the
-      // agent's head. Only draws when this agent has an active /goal run
-      // (loopBusyAgentIds set by App.tsx from the supervisor).
+      // v2.3.0 Handoff halo — rotating dashed circle around the sprite.
+      // Replaces the earlier 🥴 emoji-above-head sticker. Ring never
+      // overlaps the character, and selected agents get brighter + thicker
+      // + faster rotation so users can tell selected-in-loop apart from
+      // background-in-loop at a glance.
       if (loopBusyRef.current.has(agent.id)) {
-        const wobble = Math.sin(tick * 0.14) * 6
+        const isSelected = selectedAgentRef.current === agent.id
+        const ringRadius = 15 * s   // sits around the character body
+        const ringStroke = isSelected ? 2.2 : 1.6
+        const ringColor = isSelected
+          ? 'rgba(255, 96, 255, 0.9)'   // Dolly bright
+          : 'rgba(107, 80, 255, 0.6)'   // Charple muted
+        // Rotation speed: selected = twice as fast to signal focus/urgency.
+        const rotSpeed = isSelected ? 0.06 : 0.03
+        const rotation = (tick * rotSpeed) % (Math.PI * 2)
         ctx.save()
-        ctx.translate(ax, ay - 22*s)
-        ctx.rotate((wobble * Math.PI) / 180)
-        ctx.font = 'bold 18px "Apple Color Emoji", "Segoe UI Emoji", system-ui, sans-serif'
-        ctx.fillStyle = '#FF60FF'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText('🥴', 0, 0)
+        ctx.translate(ax, ay - 4 * s)  // center on body, not head
+        ctx.rotate(rotation)
+        ctx.strokeStyle = ringColor
+        ctx.lineWidth = ringStroke
+        ctx.setLineDash([6, 4])
+        ctx.beginPath()
+        ctx.arc(0, 0, ringRadius, 0, Math.PI * 2)
+        ctx.stroke()
+        ctx.setLineDash([])  // reset for other draws
         ctx.restore()
       }
     }

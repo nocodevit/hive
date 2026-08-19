@@ -1655,7 +1655,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       />
       {/* Handoff banner — sticky above subagent + rate-limit strips; only
          renders while this agent has an active handoff run. */}
-      {handoffAgentId && <HandoffBanner agentId={handoffAgentId} />}
+      {handoffAgentId && <HandoffBanner agentId={handoffAgentId} onRequestNewGoal={() => setHandoffModalOpen(true)} />}
       {/* Subagent active banner — sticky above rate-limit, only when
          at least one Task tool is running. Spinner + per-subagent line. */}
       {Object.keys(activeSubagents).length > 0 && (
