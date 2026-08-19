@@ -5,7 +5,7 @@ import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
 import { releasePty, spawnPty, livePtyHandles } from './ptyRegistry'
-import { startHandoff, stopHandoff, listRunningHandoffs, getActiveHandoffAgentIds, getActiveHandoffChatIds } from './handoff'
+import { startHandoff, stopHandoff, resumeHandoff, listRunningHandoffs, getActiveHandoffAgentIds, getActiveHandoffChatIds } from './handoff'
 import type { HandoffBreakers } from './handoff-supervisor'
 import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } from './ptyHealth'
 import { execSync, execFileSync, spawn } from 'child_process'
@@ -1599,6 +1599,9 @@ ipcMain.handle('handoff:start', (event, payload: unknown) => {
 })
 ipcMain.handle('handoff:stop', (_event, { runId }: { runId: string }) => {
   return { ok: stopHandoff(runId) }
+})
+ipcMain.handle('handoff:resume', (_event, { runId }: { runId: string }) => {
+  return { ok: resumeHandoff(runId) }
 })
 ipcMain.handle('handoff:list', () => listRunningHandoffs())
 ipcMain.handle('handoff:activeAgentIds', () => getActiveHandoffAgentIds())
