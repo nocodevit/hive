@@ -1002,14 +1002,14 @@ export default function App() {
                                 )}
                               </div>
                               <div className="flex flex-col min-w-0 flex-1">
-                                <span className="truncate flex items-center gap-1.5 text-[13px]">
+                                <span className="truncate flex items-center gap-1.5 text-[13px] font-heading font-semibold text-text-primary">
                                   {agent.tagColor && (
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
                                   <span className="truncate">{agent.name}</span>
                                   {agent.note && <NoteTag id={agent.id} note={agent.note} />}
                                 </span>
-                                <span className="text-[13px] truncate group-hover:invisible text-text-muted/60" title={agent.role}>
+                                <span className="text-[10px] font-semibold uppercase tracking-wider truncate group-hover:invisible text-text-muted" title={agent.role}>
                                   {agent.role}
                                 </span>
                               </div>
@@ -1359,8 +1359,8 @@ export default function App() {
                               >
                                 <div className="flex items-center gap-2">
                                   <AvatarPreview config={agent.avatar} size={20} loopBusy={activeHandoffAgentIds.has(agent.id)} />
-                                  <span className="text-sm font-medium text-text-primary">{agent.name}</span>
-                                  <span className="text-[13px] text-text-muted uppercase ml-auto">
+                                  <span className="text-sm font-heading font-semibold text-text-primary">{agent.name}</span>
+                                  <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider ml-auto">
                                     {agent.role || agent.department}
                                   </span>
                                 </div>
@@ -1699,8 +1699,8 @@ export default function App() {
                               <div key={id} className="grid grid-cols-[36px_1fr_80px_100px] gap-2 items-center px-4 py-2.5 hover:bg-bg-hover transition-colors">
                                 <span className="w-9 h-9 flex items-center justify-center rounded-lg text-lg" style={{ background: bgColor, border: `1px solid ${borderColor}` }}>{icon}</span>
                                 <div className="min-w-0">
-                                  <div className="text-[13px] font-semibold text-text-primary truncate">{agent.name}</div>
-                                  <div className="text-[11px] text-text-muted truncate">{agent.role || role}</div>
+                                  <div className="text-[13px] font-heading font-semibold text-text-primary truncate">{agent.name}</div>
+                                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted truncate">{agent.role || role}</div>
                                 </div>
                                 <span className="text-[11px] text-text-muted text-center font-mono">{jobLabel}</span>
                                 <span className="text-[13px] text-center px-2 py-1 rounded-md flex items-center justify-center gap-1" style={{ background: bgColor, border: `1px solid ${borderColor}` }}>

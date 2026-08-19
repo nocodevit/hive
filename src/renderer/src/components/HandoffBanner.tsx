@@ -133,23 +133,44 @@ function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: (
   const ok = state.status === 'done'
   return (
     <div style={{ ...runningStripStyle, background: ok ? 'rgba(0,255,178,0.10)' : 'rgba(232,254,150,0.10)', borderColor: ok ? '#00FFB2' : '#E8FE96' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-        <span style={{ fontSize: 14 }}>{ok ? '✅' : '⚠️'}</span>
-        <span style={{ fontWeight: 600, color: ok ? '#00FFB2' : '#E8FE96' }}>
+      {/* min-width:0 lets the flex child shrink; without it, a long
+          stopReason (e.g. "hit cost cap $5.00 (spent $5.02)") pushes
+          the ✕ button off the right edge and the card becomes
+          undismissable. Reported by user 2026-08-18: "X 根本关不上". */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 14, flexShrink: 0 }}>{ok ? '✅' : '⚠️'}</span>
+        <span style={{ fontWeight: 600, color: ok ? '#00FFB2' : '#E8FE96', flexShrink: 0 }}>
           Handoff {state.status}
         </span>
-        <span style={{ opacity: 0.7 }}>·</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11 }}>
+        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>
           {formatDuration(state.elapsedMs)} · {state.turnCount} turn · ${state.totalCostUsd.toFixed(2)}
         </span>
         {state.stopReason && (
           <>
-            <span style={{ opacity: 0.7 }}>·</span>
-            <span style={{ fontSize: 11, opacity: 0.9 }}>{state.stopReason}</span>
+            <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
+            <span
+              title={state.stopReason}
+              style={{
+                fontSize: 11,
+                opacity: 0.9,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}
+            >{state.stopReason}</span>
           </>
         )}
       </div>
-      <button type="button" onClick={onDismiss} style={infoButtonStyle}>✕</button>
+      {/* flexShrink:0 guarantees the dismiss button never gets pushed
+          off-screen regardless of the leftside content width. */}
+      <button
+        type="button"
+        onClick={onDismiss}
+        aria-label="Dismiss handoff summary"
+        style={{ ...infoButtonStyle, flexShrink: 0 }}
+      >✕</button>
     </div>
   )
 }
@@ -172,7 +193,8 @@ const runningStripStyle: CSSProperties = {
   borderRadius: 4,
   fontSize: 12, color: '#FFFAF1', fontFamily: 'inherit',
   position: 'relative' as const,
-  margin: '4px 8px'
+  margin: '4px 8px',
+  minWidth: 0  // container must allow shrink so inner min-w-0 works
 }
 
 const infoButtonStyle: CSSProperties = {
