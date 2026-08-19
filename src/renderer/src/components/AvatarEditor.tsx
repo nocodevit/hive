@@ -297,11 +297,23 @@ export default function AvatarEditor({ config, onChange, size = 128 }: Props) {
   )
 }
 
-// Small avatar preview (for sidebar/kanban). `loopBusy` overlays a
-// 🥴 sticker corner-tag when the agent has a running Handoff — visual
-// cue that this agent is autonomously chewing on a goal and shouldn't
-// be interrupted casually.
-export function AvatarPreview({ config, size = 32, loopBusy = false }: { config: AvatarConfig; size?: number; loopBusy?: boolean }) {
+// Small avatar preview (for sidebar/kanban).
+//
+// `loopBusy`: draws a rotating dashed ring AROUND the avatar (never
+// covers the character) when the agent has a running Handoff.
+// `selected`: brighter/thicker/faster ring for the currently focused
+// agent so users can visually track which loop they're inspecting.
+//
+// v2.3.0 replaces the v2.1.0 corner 🥴 sticker — the sticker was
+// obscuring the character at small sizes and didn't distinguish
+// selected from non-selected agents. Ring is size-responsive and
+// completely outside the canvas bounds via absolute positioning.
+export function AvatarPreview({ config, size = 32, loopBusy = false, selected = false }: {
+  config: AvatarConfig
+  size?: number
+  loopBusy?: boolean
+  selected?: boolean
+}) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -324,7 +336,16 @@ export function AvatarPreview({ config, size = 32, loopBusy = false }: { config:
     )
   }
 
-  const stickerSize = Math.max(12, Math.round(size * 0.45))
+  // Ring geometry — scales with avatar size so it feels consistent
+  // from 20px sidebar rows to 40px editor headers.
+  const ringPad = size <= 20 ? 2 : size <= 24 ? 3 : 4
+  const ringStroke = size <= 20 ? 1.5 : size <= 24 ? 2 : 2.5
+  const ringSize = size + ringPad * 2 + ringStroke * 2
+  const spinDur = selected ? '4s' : '8s'
+  const ringColor = selected ? 'rgba(255, 96, 255, 0.9)' : 'rgba(107, 80, 255, 0.6)'
+  const glow = selected ? '0 0 6px rgba(255, 96, 255, 0.55)' : 'none'
+  const dashArray = size <= 20 ? '3 3' : '5 4'
+
   return (
     <div style={{ position: 'relative', width: size, height: size, display: 'inline-block' }}>
       <canvas
@@ -334,30 +355,38 @@ export function AvatarPreview({ config, size = 32, loopBusy = false }: { config:
         className="block"
         style={{ imageRendering: 'pixelated' }}
       />
-      <span
-        title="This agent is running a Handoff (autonomous /goal loop). Don't interrupt casually."
+      {/* SVG ring positioned OUTSIDE canvas so it never overlaps the
+          character sprite. Rotates via CSS animation on the SVG root. */}
+      <svg
+        aria-hidden="true"
+        width={ringSize}
+        height={ringSize}
+        viewBox={`0 0 ${ringSize} ${ringSize}`}
         style={{
           position: 'absolute',
-          right: -Math.round(stickerSize * 0.15),
-          bottom: -Math.round(stickerSize * 0.15),
-          width: stickerSize,
-          height: stickerSize,
-          borderRadius: '50%',
-          background: '#FF60FF',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: Math.round(stickerSize * 0.65),
-          lineHeight: 1,
-          border: '1.5px solid #150e24',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.4)',
-          animation: 'hive-handoff-wobble 1.4s ease-in-out infinite',
-          userSelect: 'none' as const,
-          pointerEvents: 'auto'
+          top: -ringPad - ringStroke,
+          left: -ringPad - ringStroke,
+          pointerEvents: 'none',
+          animation: `hive-halo-spin ${spinDur} linear infinite`,
+          filter: glow === 'none' ? undefined : 'none',  // filter clashes with drop-shadow on tiny sizes
+          overflow: 'visible'
         }}
-      >🥴</span>
+      >
+        <circle
+          cx={ringSize / 2}
+          cy={ringSize / 2}
+          r={ringSize / 2 - ringStroke / 2}
+          fill="none"
+          stroke={ringColor}
+          strokeWidth={ringStroke}
+          strokeDasharray={dashArray}
+          style={selected ? { filter: `drop-shadow(${glow})` } : undefined}
+        />
+      </svg>
       <style>{`
-        @keyframes hive-handoff-wobble {
-          0%, 100% { transform: rotate(-8deg); }
-          50%      { transform: rotate(8deg); }
+        @keyframes hive-halo-spin {
+          from { transform: rotate(0deg); }
+          to   { transform: rotate(360deg); }
         }
       `}</style>
     </div>

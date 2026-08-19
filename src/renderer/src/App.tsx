@@ -988,7 +988,7 @@ export default function App() {
                               }}
                             >
                               <div className="w-6 h-6 flex-shrink-0 relative">
-                                <AvatarPreview config={agent.avatar} size={24} loopBusy={activeHandoffAgentIds.has(agent.id)} />
+                                <AvatarPreview config={agent.avatar} size={24} loopBusy={activeHandoffAgentIds.has(agent.id)} selected={selectedAgentId === agent.id} />
                                 <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-bg-secondary ${
                                   agent.status === 'working' ? 'bg-status-working' :
                                   agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
@@ -1322,6 +1322,7 @@ export default function App() {
                     <OfficeView
                       agents={projectAgents}
                       loopBusyAgentIds={activeHandoffAgentIds}
+                      selectedAgentId={selectedAgentId}
                       onAgentClick={(id) => {
                         setSelectedAgentId(id)
                         const agent = agents.find((a) => a.id === id)
@@ -1358,7 +1359,7 @@ export default function App() {
                                   border border-border transition-colors cursor-pointer"
                               >
                                 <div className="flex items-center gap-2">
-                                  <AvatarPreview config={agent.avatar} size={20} loopBusy={activeHandoffAgentIds.has(agent.id)} />
+                                  <AvatarPreview config={agent.avatar} size={20} loopBusy={activeHandoffAgentIds.has(agent.id)} selected={selectedAgentId === agent.id} />
                                   <span className="text-sm font-heading font-semibold text-text-primary">{agent.name}</span>
                                   <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider ml-auto">
                                     {agent.role || agent.department}
@@ -2248,7 +2249,7 @@ export default function App() {
                   <div className="p-4 rounded-xl bg-bg-secondary border border-border space-y-3">
                     <div className="flex items-center gap-3">
                       <div className="w-12 h-12 rounded-xl bg-bg-primary border border-border flex items-center justify-center overflow-hidden">
-                        <AvatarPreview config={selectedAgent.avatar} size={40} loopBusy={activeHandoffAgentIds.has(selectedAgent.id)} />
+                        <AvatarPreview config={selectedAgent.avatar} size={40} loopBusy={activeHandoffAgentIds.has(selectedAgent.id)} selected />
                       </div>
                       <div className="flex-1 space-y-1">
                         <input
@@ -2974,7 +2975,7 @@ export default function App() {
                           })}
                           className="accent-[var(--accent)]"
                         />
-                        <div className="w-5 h-5 flex-shrink-0"><AvatarPreview config={a.avatar} size={20} loopBusy={activeHandoffAgentIds.has(a.id)} /></div>
+                        <div className="w-5 h-5 flex-shrink-0"><AvatarPreview config={a.avatar} size={20} loopBusy={activeHandoffAgentIds.has(a.id)} selected={selectedAgentId === a.id} /></div>
                         <span className="text-sm text-text-primary">{a.name}</span>
                         <span className="text-[13px] text-text-muted ml-auto">{a.role}</span>
                       </label>

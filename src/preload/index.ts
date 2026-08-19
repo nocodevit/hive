@@ -305,6 +305,8 @@ const api = {
       ipcRenderer.invoke('handoff:start', input) as Promise<{ ok: boolean; runId?: string; error?: string }>,
     stop: (runId: string) =>
       ipcRenderer.invoke('handoff:stop', { runId }) as Promise<{ ok: boolean }>,
+    resume: (runId: string) =>
+      ipcRenderer.invoke('handoff:resume', { runId }) as Promise<{ ok: boolean }>,
     list: () =>
       ipcRenderer.invoke('handoff:list') as Promise<Array<{ runId: string; chatId: string; agentId: string; status: string; turnCount: number; totalCostUsd: number; startedAt: number; elapsedMs: number; pausedMs: number; stopReason?: string }>>,
     activeAgentIds: () =>
@@ -320,6 +322,11 @@ const api = {
       const handler = (_event: Electron.IpcRendererEvent, state: any) => cb(state)
       ipcRenderer.on('handoff:done', handler)
       return () => ipcRenderer.removeListener('handoff:done', handler)
+    },
+    onPaused: (cb: (state: any) => void) => {
+      const handler = (_event: Electron.IpcRendererEvent, state: any) => cb(state)
+      ipcRenderer.on('handoff:paused', handler)
+      return () => ipcRenderer.removeListener('handoff:paused', handler)
     }
   }
 }
