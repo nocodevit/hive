@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync, fstatSync } from 'fs'
 import { createServer } from 'http'
@@ -6,6 +6,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
 import { releasePty, spawnPty, livePtyHandles } from './ptyRegistry'
 import { startHandoff, stopHandoff, resumeHandoff, listRunningHandoffs, getActiveHandoffAgentIds, getActiveHandoffChatIds } from './handoff'
+import { checkForUpdates, autoCheckIfDue } from './updater'
 import type { HandoffBreakers } from './handoff-supervisor'
 import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } from './ptyHealth'
 import { execSync, execFileSync, spawn } from 'child_process'
@@ -1607,6 +1608,75 @@ ipcMain.handle('handoff:list', () => listRunningHandoffs())
 ipcMain.handle('handoff:activeAgentIds', () => getActiveHandoffAgentIds())
 ipcMain.handle('handoff:activeChatIds', () => getActiveHandoffChatIds())
 
+// v2.4.0 updater — renderer can also trigger a manual check (e.g. from
+// a Settings "Check now" button in the future). For now only the app
+// menu wires it. Silent=false = surfaces "up to date" dialog too.
+ipcMain.handle('updater:check', () => checkForUpdates(false))
+
+/**
+ * Build & install the application menu. Adds "Check for Updates…" to the
+ * macOS app menu (under About) + standard Edit / View / Window items so
+ * ⌘C/⌘V/⌘W etc. keep working. This function is a no-op if a menu
+ * already exists — safe to call multiple times if needed.
+ */
+function installAppMenu(): void {
+  const isMac = process.platform === 'darwin'
+  const template: Electron.MenuItemConstructorOptions[] = []
+
+  if (isMac) {
+    template.push({
+      label: 'Hive',
+      submenu: [
+        { role: 'about' },
+        {
+          label: 'Check for Updates…',
+          click: () => { checkForUpdates(false).catch(() => {}) }
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    })
+  } else {
+    // Windows / Linux fallback: put it under File → Check for Updates.
+    template.push({
+      label: 'File',
+      submenu: [
+        {
+          label: 'Check for Updates…',
+          click: () => { checkForUpdates(false).catch(() => {}) }
+        },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    })
+  }
+
+  template.push({ role: 'editMenu' })
+  template.push({ role: 'viewMenu' })
+  template.push({ role: 'windowMenu' })
+  template.push({
+    role: 'help',
+    submenu: [
+      {
+        label: 'Hive on GitHub',
+        click: () => { shell.openExternal('https://github.com/nocodevit/hive').catch(() => {}) }
+      },
+      {
+        label: 'Release Notes',
+        click: () => { shell.openExternal('https://github.com/nocodevit/hive/releases').catch(() => {}) }
+      }
+    ]
+  })
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 // Skills scanning — recursively find all SKILL.md files
 ipcMain.handle('skills:scan', () => {
   const skillsDir = join(app.getPath('home'), '.claude', 'skills')
@@ -1682,6 +1752,15 @@ ipcMain.handle('skills:scan', () => {
 app.whenReady().then(() => {
   app.setName('Hive')
   electronApp.setAppUserModelId('com.hive.app')
+
+  // v2.4.0: application menu with "Check for Updates…" — macOS convention
+  // is under the app menu, below About. On other platforms we install
+  // the same menu structure but macOS puts it in the top-most system bar.
+  installAppMenu()
+
+  // Fire a silent auto-check ~5s after startup so we don't slow app
+  // launch. Only surfaces a dialog when there's actually a new release.
+  setTimeout(() => { autoCheckIfDue().catch(() => {}) }, 5_000)
 
   // Catch every way a renderer or helper can die — these fire even when
   // there is no JS exception (SIGKILL, OOM, GPU process abort, etc.).
