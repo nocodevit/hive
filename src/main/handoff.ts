@@ -20,7 +20,7 @@
  *      time spent waiting for rate-limit reset.
  */
 import type { BrowserWindow } from 'electron'
-import { execFile } from 'node:child_process'
+import { execFile, spawn } from 'node:child_process'
 import { chatEventBus, sendUserMessage, interruptSession } from './chat'
 import {
   applyEvent,
@@ -29,6 +29,8 @@ import {
   composeSlashGoalCommand,
   detectAskUserQuestion,
   endPause,
+  extractAskUserQuestion,
+  foldStats,
   initialState,
   liveElapsedMs,
   type HandoffBreakers,
@@ -43,6 +45,7 @@ interface RunningHandoff {
   resumeTimer?: NodeJS.Timeout    // set while paused for rate-limit auto-resume
   unsubscribe: () => void
   win: BrowserWindow
+  lastBashCmd: string | null     // v2.3.0: for attributing test-run tool_results
 }
 
 const running = new Map<string, RunningHandoff>()
@@ -117,18 +120,40 @@ export function startHandoff(input: StartHandoffInput, win: BrowserWindow): Star
       emitProgress(win, state)
     }
 
-    const askedQuestion = config.breakers.stopOnAskUserQuestion === true && detectAskUserQuestion(event)
+    // v2.3.0: fold stats (files edited, commits, test results, tool errors).
+    // running.get() returns the same object we set in the map, so mutating
+    // its lastBashCmd field is fine here.
+    const h = running.get(runId)
+    if (h && state.stats) {
+      const { stats: nextStats, nextBashCmd } = foldStats(state.stats, event, h.lastBashCmd)
+      state.stats = nextStats
+      h.lastBashCmd = nextBashCmd
+    }
+
+    // v2.3.0: AskUserQuestion → PAUSE (not SIGTERM). User picks: resume /
+    // exit+report / new goal from the banner UI. Fire desktop notification
+    // so user isn't left staring at a stuck chat.
+    if (config.breakers.stopOnAskUserQuestion === true && detectAskUserQuestion(event)) {
+      const q = extractAskUserQuestion(event)
+      if (state.status === 'running') {
+        Object.assign(state, beginPause(state, now))
+        state.askedQuestion = q || undefined
+        emitPaused(win, state)
+        fireQuestionNotification(config.agentId, q?.question)
+      }
+      return  // don't process breakers / turn count while paused
+    }
+
     const before = state.turnCount
     const next = applyEvent(state, event, now)
     Object.assign(state, next)
 
-    // Only re-check breakers on interesting boundaries (turn/cost change or
-    // AskUserQuestion) — no need to re-check on every stream chunk.
+    // Only re-check breakers on interesting boundaries (turn/cost change).
     const turnAdvanced = state.turnCount > before
-    if (!turnAdvanced && !askedQuestion) return
+    if (!turnAdvanced) return
 
-    if (turnAdvanced) emitProgress(win, state)
-    const cb = checkCircuitBreakers(state, config, now, askedQuestion)
+    emitProgress(win, state)
+    const cb = checkCircuitBreakers(state, config, now, false)
     if (cb.trip && state.status === 'running') {
       state.status = 'stopped'
       state.stopReason = cb.detail
@@ -172,9 +197,24 @@ export function startHandoff(input: StartHandoffInput, win: BrowserWindow): Star
     emitProgress(win, state)
   }, 30_000)
 
-  running.set(runId, { config, state, wallTimer, unsubscribe, win })
+  running.set(runId, { config, state, wallTimer, unsubscribe, win, lastBashCmd: null })
   emitProgress(win, state) // paint banner immediately
   return { ok: true, runId }
+}
+
+/**
+ * Resume a paused handoff after the user answered claude's AskUserQuestion.
+ * The answer has already been sent to claude by the existing renderer path
+ * (PermissionModal/AskUserQuestionInline). We just flip status back and
+ * let the next arriving stream event drive the machine.
+ */
+export function resumeHandoff(runId: string): boolean {
+  const h = running.get(runId)
+  if (!h || h.state.status !== 'paused') return false
+  Object.assign(h.state, endPause(h.state, Date.now()))
+  h.state.askedQuestion = undefined
+  emitProgress(h.win, h.state)
+  return true
 }
 
 /** Stop a running handoff — interrupt the chat + tear down subscription. */
@@ -223,7 +263,24 @@ function emitProgress(win: BrowserWindow, state: HandoffState) {
   if (win.isDestroyed()) return
   win.webContents.send('handoff:progress', state)
 }
+function emitPaused(win: BrowserWindow, state: HandoffState) {
+  if (win.isDestroyed()) return
+  win.webContents.send('handoff:paused', state)
+}
 function emitDone(win: BrowserWindow, state: HandoffState) {
   if (win.isDestroyed()) return
   win.webContents.send('handoff:done', state)
+}
+
+/**
+ * Fire a macOS desktop notification when the agent pauses to ask a
+ * question — user asked in v2.2.4 review: "你应该发通知给我啊".
+ * Non-fatal on failure (Linux/Windows: osascript missing → silent skip).
+ */
+function fireQuestionNotification(agentId: string, question?: string): void {
+  try {
+    const preview = (question || 'the agent needs your answer').slice(0, 120).replace(/["\\]/g, '')
+    const title = `Handoff paused — ${agentId}`
+    spawn('osascript', ['-e', `display notification "${preview}" with title "${title}" sound name "Ping"`], { stdio: 'ignore' })
+  } catch { /* no notification is not a bug */ }
 }

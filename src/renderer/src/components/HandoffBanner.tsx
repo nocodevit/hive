@@ -12,6 +12,7 @@ import { useEffect, useState, type CSSProperties } from 'react'
 export interface HandoffLiveState {
   runId: string
   agentId: string
+  chatId?: string
   status: 'running' | 'paused' | 'done' | 'stopped' | 'failed'
   turnCount: number
   totalCostUsd: number
@@ -19,13 +20,23 @@ export interface HandoffLiveState {
   elapsedMs: number
   pausedMs?: number
   stopReason?: string
+  askedQuestion?: { question: string; options?: Array<{ label: string; description?: string }> }
+  stats?: {
+    filesEdited: string[]
+    commits: Array<{ sha?: string; msg: string }>
+    lastTestRun?: { command: string; passed?: number; failed?: number; ok: boolean }
+    toolErrorsRecovered: number
+  }
 }
 
 export interface HandoffBannerProps {
   agentId: string
+  /** Called when user picks "New goal from here" in the pause UI — parent
+   * opens the Handoff modal seeded with current context. */
+  onRequestNewGoal?: () => void
 }
 
-export default function HandoffBanner({ agentId }: HandoffBannerProps) {
+export default function HandoffBanner({ agentId, onRequestNewGoal }: HandoffBannerProps) {
   const [state, setState] = useState<HandoffLiveState | null>(null)
   const [expanded, setExpanded] = useState(false)
   const [finalState, setFinalState] = useState<HandoffLiveState | null>(null)
@@ -61,7 +72,14 @@ export default function HandoffBanner({ agentId }: HandoffBannerProps) {
       setState(null)
       setFinalState(s)
     })
-    return () => { off1?.(); off2?.() }
+    // v2.3.0: dedicated pause event (AskUserQuestion detected → agent
+    // paused, needs your answer). Same state update as progress.
+    const off3 = api.onPaused?.((s: HandoffLiveState) => {
+      if (s.agentId !== agentId) return
+      setState(s)
+      setDismissed(false)
+    }) ?? (() => {})
+    return () => { off1?.(); off2?.(); off3?.() }
   }, [agentId])
 
   // 1s heartbeat so elapsed clock ticks even between turns
@@ -72,6 +90,10 @@ export default function HandoffBanner({ agentId }: HandoffBannerProps) {
     return () => clearInterval(iv)
   }, [state])
 
+  if (state && state.status === 'paused' && state.askedQuestion) {
+    // v2.3.0: full pause UI with 3-button choice (Resume / Exit / New goal)
+    return <PausedCard state={state} onNewGoal={onRequestNewGoal} />
+  }
   if (state && (state.status === 'running' || state.status === 'paused')) {
     return <RunningStrip state={state} expanded={expanded} onToggle={() => setExpanded(v => !v)} />
   }
@@ -79,6 +101,55 @@ export default function HandoffBanner({ agentId }: HandoffBannerProps) {
     return <FinalCard state={finalState} onDismiss={() => setDismissed(true)} />
   }
   return null
+}
+
+/**
+ * v2.3.0 pause UI — shown when AskUserQuestion pause fires.
+ * Three actions: Resume (default), Exit+report, New goal.
+ * The question itself renders via the existing AskUserQuestionInline
+ * flow in HiveChat; this card just adds the 3-button strip below.
+ */
+function PausedCard({ state, onNewGoal }: { state: HandoffLiveState; onNewGoal?: () => void }) {
+  const [busy, setBusy] = useState<'resume' | 'exit' | null>(null)
+  const onResume = async () => {
+    setBusy('resume')
+    try { await (window as any).api.handoff.resume(state.runId) } finally { setBusy(null) }
+  }
+  const onExit = async () => {
+    setBusy('exit')
+    try { await (window as any).api.handoff.stop(state.runId) } finally { setBusy(null) }
+  }
+  return (
+    <div style={{ ...runningStripStyle, background: 'rgba(232,254,150,0.10)', borderColor: '#E8FE96', flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 14, flexShrink: 0 }}>🤔</span>
+        <span style={{ fontWeight: 600, color: '#E8FE96', flexShrink: 0 }}>Handoff paused — agent asked a question</span>
+        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>
+          turn {state.turnCount} · ${state.totalCostUsd.toFixed(2)}
+        </span>
+      </div>
+      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+        <button type="button" onClick={onResume} disabled={busy !== null} autoFocus style={{
+          padding: '3px 10px', background: '#00FFB2', color: '#150e24',
+          border: 'none', borderRadius: 3, fontSize: 11, fontWeight: 600,
+          cursor: busy === null ? 'pointer' : 'wait', fontFamily: 'inherit'
+        }}>▶ Resume</button>
+        <button type="button" onClick={onExit} disabled={busy !== null} style={{
+          padding: '3px 10px', background: '#EB4268', color: '#FFFAF1',
+          border: 'none', borderRadius: 3, fontSize: 11, fontWeight: 600,
+          cursor: busy === null ? 'pointer' : 'wait', fontFamily: 'inherit'
+        }}>✕ Exit + report</button>
+        {onNewGoal && (
+          <button type="button" onClick={onNewGoal} disabled={busy !== null} style={{
+            padding: '3px 10px', background: 'transparent', color: '#DFDBDD',
+            border: '1px solid #3A3943', borderRadius: 3, fontSize: 11,
+            cursor: busy === null ? 'pointer' : 'wait', fontFamily: 'inherit'
+          }}>↻ New goal</button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 function RunningStrip({ state, expanded, onToggle }: { state: HandoffLiveState; expanded: boolean; onToggle: () => void }) {
@@ -131,8 +202,23 @@ function RunningStrip({ state, expanded, onToggle }: { state: HandoffLiveState; 
 
 function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: () => void }) {
   const ok = state.status === 'done'
+  const [expanded, setExpanded] = useState(false)
+  const stats = state.stats
+  const hasDetails = !!stats && (stats.filesEdited.length > 0 || stats.commits.length > 0 || !!stats.lastTestRun || stats.toolErrorsRecovered > 0)
+  const copySummary = () => {
+    const lines: string[] = [
+      `# Handoff ${state.status}`,
+      `Duration: ${formatDuration(state.elapsedMs)} · Turns: ${state.turnCount} · Cost: $${state.totalCostUsd.toFixed(2)}`,
+      state.stopReason ? `Reason: ${state.stopReason}` : '',
+      stats?.filesEdited.length ? `\n## Files changed (${stats.filesEdited.length})\n${stats.filesEdited.map(f => `- ${f}`).join('\n')}` : '',
+      stats?.commits.length ? `\n## Commits (${stats.commits.length})\n${stats.commits.map(c => `- ${c.msg}`).join('\n')}` : '',
+      stats?.lastTestRun ? `\n## Last test run\n\`${stats.lastTestRun.command}\`\n${stats.lastTestRun.passed ?? '?'} passed / ${stats.lastTestRun.failed ?? '?'} failed` : '',
+      stats?.toolErrorsRecovered ? `\nTool errors recovered: ${stats.toolErrorsRecovered}` : ''
+    ].filter(Boolean)
+    navigator.clipboard.writeText(lines.join('\n')).catch(() => { /* silent */ })
+  }
   return (
-    <div style={{ ...runningStripStyle, background: ok ? 'rgba(0,255,178,0.10)' : 'rgba(232,254,150,0.10)', borderColor: ok ? '#00FFB2' : '#E8FE96' }}>
+    <div style={{ ...runningStripStyle, background: ok ? 'rgba(0,255,178,0.10)' : 'rgba(232,254,150,0.10)', borderColor: ok ? '#00FFB2' : '#E8FE96', flexWrap: 'wrap' }}>
       {/* min-width:0 lets the flex child shrink; without it, a long
           stopReason (e.g. "hit cost cap $5.00 (spent $5.02)") pushes
           the ✕ button off the right edge and the card becomes
@@ -163,6 +249,14 @@ function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: (
           </>
         )}
       </div>
+      {hasDetails && (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          aria-label={expanded ? 'Hide handoff details' : 'Show handoff details'}
+          style={{ ...infoButtonStyle, flexShrink: 0 }}
+        >{expanded ? '▾' : '▸'} details</button>
+      )}
       {/* flexShrink:0 guarantees the dismiss button never gets pushed
           off-screen regardless of the leftside content width. */}
       <button
@@ -171,6 +265,51 @@ function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: (
         aria-label="Dismiss handoff summary"
         style={{ ...infoButtonStyle, flexShrink: 0 }}
       >✕</button>
+      {expanded && stats && (
+        <div style={{
+          flexBasis: '100%',
+          marginTop: 8,
+          padding: '8px 10px',
+          background: 'rgba(0,0,0,0.25)',
+          borderRadius: 4,
+          fontSize: 11,
+          fontFamily: 'monospace',
+          color: '#DFDBDD',
+          maxHeight: 220,
+          overflowY: 'auto'
+        }}>
+          {stats.filesEdited.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ opacity: 0.7, marginBottom: 2 }}>Files changed ({stats.filesEdited.length}):</div>
+              {stats.filesEdited.slice(0, 20).map(f => <div key={f} style={{ paddingLeft: 8 }}>· {f}</div>)}
+              {stats.filesEdited.length > 20 && <div style={{ paddingLeft: 8, opacity: 0.6 }}>… +{stats.filesEdited.length - 20} more</div>}
+            </div>
+          )}
+          {stats.commits.length > 0 && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ opacity: 0.7, marginBottom: 2 }}>Commits ({stats.commits.length}):</div>
+              {stats.commits.slice(-5).map((c, i) => <div key={i} style={{ paddingLeft: 8 }}>· {c.msg}</div>)}
+            </div>
+          )}
+          {stats.lastTestRun && (
+            <div style={{ marginBottom: 8 }}>
+              <div style={{ opacity: 0.7, marginBottom: 2 }}>Last test run:</div>
+              <div style={{ paddingLeft: 8 }}>
+                {stats.lastTestRun.ok ? '✅' : '❌'} {stats.lastTestRun.passed ?? '?'} passed / {stats.lastTestRun.failed ?? '?'} failed
+                <div style={{ opacity: 0.6, fontSize: 10 }}>{stats.lastTestRun.command}</div>
+              </div>
+            </div>
+          )}
+          {stats.toolErrorsRecovered > 0 && (
+            <div style={{ opacity: 0.7 }}>Tool errors recovered: {stats.toolErrorsRecovered}</div>
+          )}
+          <button
+            type="button"
+            onClick={copySummary}
+            style={{ marginTop: 6, padding: '2px 8px', background: 'transparent', color: '#DFDBDD', border: '1px solid #3A3943', borderRadius: 3, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}
+          >Copy summary</button>
+        </div>
+      )}
     </div>
   )
 }
