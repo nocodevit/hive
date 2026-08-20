@@ -337,7 +337,13 @@ export function formatDuration(ms: number): string {
 
 const runningStripStyle: CSSProperties = {
   display: 'flex', alignItems: 'center', gap: 10,
-  padding: '6px 12px',
+  // v2.5.1: paddingRight bumped to 56px so the ✕ dismiss button
+  // never sits under the floating ↓ scroll-to-bottom arrow (which
+  // is `position:absolute; right:16; top:-42; width:32` inside the
+  // input area, i.e. hovers up 42px into the banner strip region).
+  // 32 (arrow width) + 16 (its right offset) + 8 (safe gap) = 56.
+  // User: "handoff x 因为和 bottom 的箭头重合了，所以按不到".
+  padding: '6px 56px 6px 12px',
   background: 'rgba(255,96,255,0.10)',
   border: '1px solid #FF60FF',
   borderRadius: 4,

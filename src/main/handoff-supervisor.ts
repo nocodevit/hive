@@ -76,20 +76,11 @@ export function extractInputTokens(event: Record<string, unknown>): number | nul
 }
 
 /**
- * Parse the model's advertised context size string ("1M", "200K", "1000000")
- * into a token count. Matches parseContextSize in the renderer's
- * progress-bar module so front + back agree.
+ * v2.5.1: re-export from shared module — renderer's progress-bar.ts also
+ * imports from the same file so main + UI can NEVER drift on context %
+ * math. See src/shared/context-size.ts.
  */
-export function parseContextSize(s: string): number {
-  const cleaned = String(s || '').trim().toUpperCase()
-  const m = cleaned.match(/^([\d.]+)\s*([KM])?$/)
-  if (!m) return 0
-  const n = parseFloat(m[1])
-  if (!Number.isFinite(n)) return 0
-  if (m[2] === 'M') return n * 1_000_000
-  if (m[2] === 'K') return n * 1_000
-  return n
-}
+export { parseContextSize } from '../shared/context-size'
 
 /**
  * Should the supervisor trigger auto-compact right now?
