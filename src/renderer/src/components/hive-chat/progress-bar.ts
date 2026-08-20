@@ -17,17 +17,12 @@ export function computeGrainBar(pct: number | undefined, total = 10): GrainBar {
 }
 
 /**
- * Parse a model's context-window size string ("1M", "200K", etc.)
- * into an integer token count. Returns 0 for unrecognized input.
+ * v2.5.1: parseContextSize is now defined ONCE in src/shared/context-size.ts
+ * and re-exported here so existing importers (renderers/tests) keep working.
+ * Consolidation was requested by user: "应该用同一个基础不是吗" — main-
+ * process Handoff supervisor now uses the exact same math, no drift.
  */
-export function parseContextSize(s: string | undefined): number {
-  if (!s) return 0
-  const m = s.match(/^(\d+)\s*([kKmM])$/)
-  if (!m) return 0
-  const n = parseInt(m[1], 10)
-  if (!Number.isFinite(n)) return 0
-  return m[2].toLowerCase() === 'm' ? n * 1_000_000 : n * 1_000
-}
+export { parseContextSize } from '../../../../shared/context-size'
 
 export type CtxNagTier = 'warn' | 'urgent' | null
 
