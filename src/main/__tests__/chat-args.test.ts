@@ -16,6 +16,30 @@ describe('buildChatArgs', () => {
     expect(a).toContain('--permission-prompt-tool')
   })
 
+  it('v2.5.2: passes --permission-mode bypassPermissions so settings allow list actually rules', () => {
+    // Without this flag, Anthropic's auto-mode classifier could veto
+    // even explicitly allowed tools (user reported "denied by classifier"
+    // for tools with Bash(*) allow rules on file). Bypass mode lets the
+    // classifier stop interfering; Hive's own PermissionModal + session
+    // allowlist still work for anything NOT already in settings.
+    const a = buildChatArgs({})
+    const idx = a.indexOf('--permission-mode')
+    expect(idx, 'chat args must include --permission-mode').toBeGreaterThanOrEqual(0)
+    expect(a[idx + 1]).toBe('bypassPermissions')
+  })
+
+  it('v2.5.2: bypass flag stays present even with resumeSid / continueSession / agent', () => {
+    for (const opts of [
+      { resumeSid: 'sid-x' },
+      { continueSession: true },
+      { agent: 'hive-alex' },
+      { resumeSid: 'sid-x', agent: 'hive-alex', name: 'Alex' }
+    ]) {
+      const a = buildChatArgs(opts)
+      expect(a, `bypass missing for opts ${JSON.stringify(opts)}`).toContain('bypassPermissions')
+    }
+  })
+
   it('a bare session does NOT resume or continue', () => {
     const a = buildChatArgs({})
     expect(a).not.toContain('--resume')
