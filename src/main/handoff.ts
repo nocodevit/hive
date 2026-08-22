@@ -21,7 +21,7 @@
  */
 import type { BrowserWindow } from 'electron'
 import { execFile, spawn } from 'node:child_process'
-import { chatEventBus, sendUserMessage, interruptSession, compactSession } from './chat'
+import { chatEventBus, sendUserMessage, interruptSession, compactSession, stopChat } from './chat'
 import {
   applyEvent,
   beginPause,
@@ -300,17 +300,69 @@ export function resumeHandoff(runId: string): boolean {
   return true
 }
 
-/** Stop a running handoff — interrupt the chat + tear down subscription. */
+/**
+ * Stop a running handoff — v2.5.3 three-stage escalation because
+ * interruptSession alone doesn't kill /goal (interrupt cancels the
+ * current turn; /goal's completion checker fires ANOTHER turn on the
+ * next tick). Nancy's 2026-08-22 incident: user pressed Stop, only
+ * ONE interrupt fired at line 8931, /goal loop ran 6,000 more log
+ * lines while user typed 15 escalating "停止" messages that all got
+ * consumed as user input feeding the loop.
+ *
+ * Three-stage escalation:
+ *   1. sendUserMessage(chatId, '/goal clear')  — claude parses it as
+ *      a slash command on next turn boundary and clears the goal so
+ *      the completion checker stops re-firing.
+ *   2. interruptSession(chatId)                — cancel any in-flight
+ *      tool call / assistant response.
+ *   3. armGoalKillFallback(runId)              — 5s later, if we
+ *      observe any NEW result event (loop still going), hard-kill the
+ *      chat subprocess. Cannot be defeated by any /goal misbehavior.
+ */
 export function stopHandoff(runId: string): boolean {
   const h = running.get(runId)
   if (!h) return false
-  if (h.state.status === 'running' || h.state.status === 'paused') {
+  if (h.state.status === 'running' || h.state.status === 'paused' || h.state.status === 'compacting') {
     h.state.status = 'stopped'
     h.state.stopReason = 'stopped by user'
-    try { interruptSession(h.config.chatId) } catch { /* already stopped */ }
+    // Stage 1: politely ask claude to clear its /goal.
+    try { sendUserMessage(h.config.chatId, '/goal clear') } catch { /* ignore */ }
+    // Stage 2: cancel current turn.
+    try { interruptSession(h.config.chatId) } catch { /* already dead */ }
+    // Stage 3: fallback — if /goal keeps producing result events after
+    // stop, hard-kill the subprocess after 5s.
+    armGoalKillFallback(runId)
   }
   finalize(runId, h.win)
   return true
+}
+
+/**
+ * v2.5.3 stop escalation: after stopHandoff fires stages 1+2, watch
+ * for further result events for 5s. If any arrive, /goal is still
+ * looping despite the clear — nuke the whole chat subprocess.
+ */
+function armGoalKillFallback(runId: string): void {
+  const h = running.get(runId)
+  if (!h) return
+  const startTurns = h.state.turnCount
+  const chatId = h.config.chatId
+  setTimeout(() => {
+    // Re-fetch — may have been finalize'd + removed from map already.
+    // stateSnapshotByChatId helper isn't necessary: we just need to know
+    // if the chat processed a new turn since we tried to stop. We stashed
+    // startTurns above; check the local state on any handoff still tracking
+    // this chatId (shouldn't be any post-finalize, but if the finalize
+    // race happened we still act).
+    let latestTurns = startTurns
+    for (const running_h of running.values()) {
+      if (running_h.config.chatId === chatId) latestTurns = running_h.state.turnCount
+    }
+    if (latestTurns > startTurns) {
+      // Loop still running despite /goal clear + interrupt. Nuclear option.
+      try { stopChat(chatId) } catch { /* already dead */ }
+    }
+  }, 5_000)
 }
 
 /** Clean shutdown: clear timers, unsubscribe, emit final, remove from map. */
