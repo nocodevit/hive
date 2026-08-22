@@ -981,6 +981,18 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         // again.
         setCompactStartedAt(null)
         setCompactStuck(null)
+        // v2.5.3: on compact SUCCESS, reset ctx% immediately so the
+        // top bar reflects the just-compacted state without waiting
+        // for the user to type a new message. Prior behavior: bar
+        // stayed pegged at pre-compact % until the next assistant
+        // event landed (which needs user input first — 68% → typed
+        // "hi" → suddenly 8% = confusing UX user complained about).
+        // Failure path (context UNCHANGED) also resets — the old
+        // number is stale either way; better to show 0% than lie.
+        // Real value refreshes on the next assistant.usage event.
+        if (text.includes('/compact done')) {
+          setLatestInputTokens(0)
+        }
       }
     })
     const offExit = window.api.chat.onExit(id, (code: number) => {
@@ -2037,7 +2049,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                         ? ` (${Math.round((Date.now() - compactStartedAt) / 1000)}s)`
                         : ''
                     }`
-                  : 'Message Claude… (Enter to send, Shift+Enter for newline)'
+                  : isHandoffActive
+                    ? '⚠ Handoff active — your message will feed the /goal loop, NOT stop it. To stop, press Stop in the banner above.'
+                    : 'Message Claude… (Enter to send, Shift+Enter for newline)'
               }
               style={{
                 flex: 1, resize: 'none',
