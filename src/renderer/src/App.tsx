@@ -18,6 +18,8 @@ import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES } from './types'
 import { NoteTag } from './noteTag'
 import { projectListState } from './projectListState'
+import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette } from './palette'
+import { OverviewPage } from './components/OverviewPage'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
@@ -54,6 +56,9 @@ export default function App() {
   const [theme, setTheme] = useState<'light' | 'dark'>(() => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
+  // v2.6.0: accent-palette overlay. Layered on top of light/dark theme.
+  // 'neon-purple' = default (no data-palette attribute), matches historic look.
+  const [palette, setPalette] = useState<Palette>(() => loadPalette())
   // Claude CLI gate: null = checking, then { installed, installCommand }.
   // Block the app until claude is runnable (or the user clicks "Continue").
   const [claudeEnv, setClaudeEnv] = useState<{ installed: boolean; installCommand: string } | null>(null)
@@ -99,6 +104,16 @@ export default function App() {
   const [isListening, setIsListening] = useState(false)
   const [speechPartial, setSpeechPartial] = useState('')
   const [projectTab, setProjectTab] = useState<'dashboard' | 'office' | 'taskgroup' | 'settings'>('dashboard')
+  // v2.6.0: top-level app screen. 'projects' = the historic project-focused
+  // view (sidebar + agents + chat). 'overview' = the new cross-project
+  // Overview dashboard (KPI cards, working-now, idle sessions, sleeping
+  // agents). Persisted so a user who lives in Overview doesn't get bounced
+  // back to Projects on every app restart.
+  const [mainScreen, setMainScreen] = useState<'projects' | 'overview'>(() => {
+    const saved = localStorage.getItem('hive:mainScreen')
+    return saved === 'overview' ? 'overview' : 'projects'
+  })
+  useEffect(() => { localStorage.setItem('hive:mainScreen', mainScreen) }, [mainScreen])
   const [mainView, setMainView] = useState<'terminal' | 'editor' | 'logs'>('terminal')
   const [editorTab, setEditorTab] = useState<'basic' | 'skills' | 'settings'>('basic')
   const [availableSkills, setAvailableSkills] = useState<SkillInfo[]>([])
@@ -184,6 +199,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
+
+  // v2.6.0: apply + persist accent palette. See palette.ts for the
+  // load/apply pair and why 'neon-purple' removes the attribute.
+  useEffect(() => { applyPalette(palette) }, [palette])
 
   // Lazy boot: single data.load() pulls the project/agent skeleton + task
   // groups + appPrefs (14 KB JSON, ~ms). EVERYTHING else — skills scan,
@@ -830,6 +849,25 @@ export default function App() {
           )}
         </div>
         <div className="p-2 border-t border-border space-y-1">
+          {/* v2.6.0: Overview toggle. Highlighted (accent bg) when active
+              so it reads as the currently-selected top-level view. */}
+          <button
+            onClick={() => setMainScreen(mainScreen === 'overview' ? 'projects' : 'overview')}
+            aria-pressed={mainScreen === 'overview'}
+            className={`w-full px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors
+              flex items-center gap-2 ${
+                mainScreen === 'overview'
+                  ? 'bg-accent text-text-on-purple font-semibold'
+                  : 'text-text-muted hover:bg-bg-hover hover:text-text-primary'
+              }`}
+            title="Overview across all projects and agents"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
+              <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
+            </svg>
+            Overview
+          </button>
           <div className="flex gap-1">
             <button
               onClick={() => setShowCreateProject(true)}
@@ -2742,6 +2780,40 @@ export default function App() {
         />
       )}
 
+      {/* v2.6.0: Overview screen — absolute overlay covering everything to
+          the right of the projects sidebar. Keeps the sidebar accessible
+          so users can switch back to a project view with one click. */}
+      {mainScreen === 'overview' && (
+        <div
+          className="fixed top-0 right-0 bottom-0 z-30 bg-bg-primary"
+          style={{ left: panelWidths.projects }}
+        >
+          <OverviewPage
+            projects={projects}
+            agents={displayAgents}
+            activeTerminals={activeTerminals}
+            activeHandoffAgentIds={activeHandoffAgentIds}
+            agentTasks={agentTasks}
+            onOpenAgent={(agent) => {
+              setSelectedProjectId(agent.projectId)
+              setSelectedAgentId(agent.id)
+              setMainScreen('projects')
+              if (!activeTerminals.has(agent.id)) startAgent(agent)
+            }}
+            onCloseSession={async (agentId) => {
+              try {
+                await (window as any).api?.chat?.stop?.(agentId)
+              } catch { /* silent — chat.stop already logs on the main side */ }
+              setActiveTerminals((prev) => {
+                const next = new Set(prev)
+                next.delete(agentId)
+                return next
+              })
+            }}
+          />
+        </div>
+      )}
+
       {/* App Settings Modal */}
       {showAppSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -2757,6 +2829,42 @@ export default function App() {
             </div>
             <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-5 max-h-[70vh] overflow-y-auto">
+            {/* v2.6.0: accent-palette picker. Three swatches, click to apply
+                instantly (no confirmation — reversible). Live-preview
+                because the CSS vars update immediately on data-palette
+                attribute change. */}
+            <div>
+              <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Theme palette</label>
+              <div className="grid grid-cols-3 gap-2.5">
+                {PALETTES.map((id) => {
+                  const meta = PALETTE_META[id]
+                  const selected = palette === id
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setPalette(id)}
+                      className={`text-left p-3 rounded-xl border-2 transition-colors cursor-pointer
+                        ${selected
+                          ? 'border-accent bg-accent-subtle'
+                          : 'border-border bg-bg-primary hover:border-accent-muted'}`}
+                      aria-pressed={selected}
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span
+                          className="w-4 h-4 rounded-full ring-2 ring-white/10"
+                          style={{ backgroundColor: meta.swatch }}
+                        />
+                        <span className="text-sm font-heading font-semibold text-text-primary">
+                          {meta.name}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-text-muted">{meta.tagline}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* Toggles */}
             <div>
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">General</label>

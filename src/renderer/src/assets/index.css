@@ -42,6 +42,10 @@
     --status-working: #16a34a;
     --status-waiting: #d97706;
     --status-done: #78889a;
+    /* Sriracha (Crush palette) — semantic destructive-action red.
+       Used by Overview's "Close session" / "Close N idle" buttons and
+       any other destructive affordance so we stay on the color contract. */
+    --status-danger: #eb4268;
 
     --sidebar-bg: #f0eaff;
     --sidebar-active: #e4daff;
@@ -71,9 +75,50 @@
     --status-working: #5cff90;
     --status-waiting: #ffcc33;
     --status-done: #7888a0;
+    /* Sriracha — same semantic as light. Slightly brighter on dark for contrast. */
+    --status-danger: #ff5a7c;
 
     --sidebar-bg: #150e24;
     --sidebar-active: #2d1f48;
+  }
+
+  /* v2.6.0 — palette overlays. Layered on top of the base theme (light or
+     dark), only the accent/tint tokens shift; layout tokens stay stable.
+     Default palette (no data-palette attribute) = neon-purple, matches the
+     existing look. */
+
+  [data-palette='tech-blue'] {
+    --accent: #38bdf8;
+    --accent-hover: #7dd3fc;
+    --accent-subtle: #082f49;
+    --accent-muted: #0284c7;
+    --sidebar-active: #0c2033;
+  }
+  [data-palette='tech-blue'][data-theme='light'] {
+    --accent: #0284c7;
+    --accent-hover: #0369a1;
+    --accent-subtle: #e0f2fe;
+    --accent-muted: #38bdf8;
+    /* v2.6.0 fix: also override sidebar-active for light — the dark-mode
+       value (#0c2033) would render as a black tile on the light lavender
+       sidebar bg. */
+    --sidebar-active: #dbeafe;
+  }
+
+  [data-palette='future-pink'] {
+    --accent: #f472b6;
+    --accent-hover: #f9a8d4;
+    --accent-subtle: #3d0d2b;
+    --accent-muted: #db2777;
+    --sidebar-active: #2a0f22;
+  }
+  [data-palette='future-pink'][data-theme='light'] {
+    --accent: #db2777;
+    --accent-hover: #be185d;
+    --accent-subtle: #fce7f3;
+    --accent-muted: #f472b6;
+    /* v2.6.0 fix: same reason as tech-blue-light above. */
+    --sidebar-active: #fbcfe8;
   }
 }
 
