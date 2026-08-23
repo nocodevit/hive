@@ -31,7 +31,8 @@ module.exports = {
         status: {
           working: 'var(--status-working)',
           waiting: 'var(--status-waiting)',
-          done: 'var(--status-done)'
+          done: 'var(--status-done)',
+          danger: 'var(--status-danger)'
         },
         sidebar: {
           bg: 'var(--sidebar-bg)',
