@@ -113,6 +113,7 @@ export function OverviewPage(props: OverviewPageProps) {
           <OpenSessionsSection
             openSessionAgents={openSessionAgents}
             workingAgents={workingAgents}
+            allAgents={agents}
             projects={projects}
             activeHandoffAgentIds={activeHandoffAgentIds}
             onOpenAgent={onOpenAgent}
@@ -243,10 +244,11 @@ function WorkingNowSection({
 // ============================================================
 
 function OpenSessionsSection({
-  openSessionAgents, workingAgents, projects, activeHandoffAgentIds, onOpenAgent, onCloseSession,
+  openSessionAgents, workingAgents, allAgents, projects, activeHandoffAgentIds, onOpenAgent, onCloseSession,
 }: {
   openSessionAgents: Agent[]
   workingAgents: Agent[]
+  allAgents: Agent[]
   projects: Project[]
   activeHandoffAgentIds: Set<string>
   onOpenAgent: (agent: Agent) => void
@@ -268,6 +270,7 @@ function OpenSessionsSection({
           <CloseAllIdleButton
             openAgents={openSessionAgents}
             workingSet={workingSet}
+            allAgents={allAgents}
             onCloseSession={onCloseSession}
           />
         )
@@ -311,7 +314,7 @@ function OpenSessionsSection({
                       }
                     }}
                     className="px-2.5 py-1 rounded-lg text-[12px] font-medium
-                      bg-bg-hover text-text-muted hover:bg-red-500/15 hover:text-red-500
+                      bg-bg-hover text-text-muted hover:bg-status-danger/15 hover:text-status-danger
                       transition-colors cursor-pointer"
                     title="Close this Claude session and free its memory"
                   >
@@ -328,23 +331,31 @@ function OpenSessionsSection({
 }
 
 function CloseAllIdleButton({
-  openAgents, workingSet, onCloseSession,
+  openAgents, workingSet, onCloseSession, allAgents,
 }: {
   openAgents: Agent[]
   workingSet: Set<string>
   onCloseSession: (agentId: string) => void | Promise<void>
+  allAgents: Agent[]  // full latest list — used to re-verify status at click time
 }) {
   const idleCount = openAgents.filter((a) => !workingSet.has(a.id)).length
   if (idleCount === 0) return null
   return (
     <button
       onClick={() => {
-        if (window.confirm(`Close ${idleCount} idle Claude session${idleCount > 1 ? 's' : ''}? Working sessions will be kept.`)) {
-          openAgents.filter((a) => !workingSet.has(a.id)).forEach((a) => onCloseSession(a.id))
+        // v2.6.0 fix: re-derive the idle set from the *current* agent list
+        // at click time, not from the workingSet captured at render. Between
+        // render and click a queued task can flip an agent to status='working';
+        // firing onCloseSession on it would kill an in-flight Claude turn.
+        const freshWorking = new Set(allAgents.filter((a) => a.status === 'working').map((a) => a.id))
+        const toClose = openAgents.filter((a) => !freshWorking.has(a.id))
+        if (toClose.length === 0) return
+        if (window.confirm(`Close ${toClose.length} idle Claude session${toClose.length > 1 ? 's' : ''}? Working sessions will be kept.`)) {
+          toClose.forEach((a) => onCloseSession(a.id))
         }
       }}
       className="px-2.5 py-1 rounded-lg text-[12px] font-medium
-        bg-bg-hover text-text-muted hover:bg-red-500/15 hover:text-red-500
+        bg-bg-hover text-text-muted hover:bg-status-danger/15 hover:text-status-danger
         transition-colors cursor-pointer"
     >
       Close {idleCount} idle

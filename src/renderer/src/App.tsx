@@ -18,7 +18,7 @@ import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES } from './types'
 import { NoteTag } from './noteTag'
 import { projectListState } from './projectListState'
-import { PALETTES, type Palette, PALETTE_META } from './palette'
+import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette } from './palette'
 import { OverviewPage } from './components/OverviewPage'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
@@ -58,10 +58,7 @@ export default function App() {
   })
   // v2.6.0: accent-palette overlay. Layered on top of light/dark theme.
   // 'neon-purple' = default (no data-palette attribute), matches historic look.
-  const [palette, setPalette] = useState<Palette>(() => {
-    const saved = localStorage.getItem('hive:palette') as Palette | null
-    return saved && PALETTES.includes(saved) ? saved : 'neon-purple'
-  })
+  const [palette, setPalette] = useState<Palette>(() => loadPalette())
   // Claude CLI gate: null = checking, then { installed, installCommand }.
   // Block the app until claude is runnable (or the user clicks "Continue").
   const [claudeEnv, setClaudeEnv] = useState<{ installed: boolean; installCommand: string } | null>(null)
@@ -203,14 +200,9 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
 
-  // v2.6.0: apply the accent palette overlay. Default palette omits the
-  // attribute so the base CSS vars from :root / [data-theme='dark'] rule.
-  useEffect(() => {
-    const root = document.documentElement
-    if (palette === 'neon-purple') root.removeAttribute('data-palette')
-    else root.setAttribute('data-palette', palette)
-    localStorage.setItem('hive:palette', palette)
-  }, [palette])
+  // v2.6.0: apply + persist accent palette. See palette.ts for the
+  // load/apply pair and why 'neon-purple' removes the attribute.
+  useEffect(() => { applyPalette(palette) }, [palette])
 
   // Lazy boot: single data.load() pulls the project/agent skeleton + task
   // groups + appPrefs (14 KB JSON, ~ms). EVERYTHING else — skills scan,
@@ -861,6 +853,7 @@ export default function App() {
               so it reads as the currently-selected top-level view. */}
           <button
             onClick={() => setMainScreen(mainScreen === 'overview' ? 'projects' : 'overview')}
+            aria-pressed={mainScreen === 'overview'}
             className={`w-full px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors
               flex items-center gap-2 ${
                 mainScreen === 'overview'

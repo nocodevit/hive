@@ -4,8 +4,8 @@
 // UI enumerates PALETTES, applies data-palette). A missing entry or a
 // swatch typo would silently render an empty-looking picker.
 
-import { describe, it, expect } from 'vitest'
-import { PALETTES, PALETTE_META, type Palette } from '../palette'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { PALETTES, PALETTE_META, type Palette, loadPalette, applyPalette } from '../palette'
 
 describe('palette', () => {
   it('lists the three shipped palettes in the expected order', () => {
@@ -40,5 +40,48 @@ describe('palette', () => {
     // Sanity: the tuple derives Palette correctly.
     const p: Palette = 'tech-blue'
     expect(PALETTES).toContain(p)
+  })
+})
+
+describe('loadPalette / applyPalette', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    document.documentElement.removeAttribute('data-palette')
+  })
+
+  it('defaults to neon-purple when nothing saved', () => {
+    expect(loadPalette()).toBe('neon-purple')
+  })
+
+  it('returns the saved palette when it is a known value', () => {
+    localStorage.setItem('hive:palette', 'future-pink')
+    expect(loadPalette()).toBe('future-pink')
+  })
+
+  it('ignores unknown or stale saved values', () => {
+    // Simulates a downgrade or a rogue write from an old build.
+    localStorage.setItem('hive:palette', 'retro-orange')
+    expect(loadPalette()).toBe('neon-purple')
+  })
+
+  it('applyPalette sets data-palette attribute for non-default palettes', () => {
+    applyPalette('tech-blue')
+    expect(document.documentElement.getAttribute('data-palette')).toBe('tech-blue')
+    expect(localStorage.getItem('hive:palette')).toBe('tech-blue')
+  })
+
+  it('applyPalette REMOVES data-palette attribute for the default palette', () => {
+    // First set something so the attr exists, then apply default and expect removal.
+    applyPalette('future-pink')
+    expect(document.documentElement.getAttribute('data-palette')).toBe('future-pink')
+    applyPalette('neon-purple')
+    expect(document.documentElement.hasAttribute('data-palette')).toBe(false)
+    // But localStorage still records the choice so load returns the right default.
+    expect(localStorage.getItem('hive:palette')).toBe('neon-purple')
+  })
+
+  it('load→apply→load round-trip preserves the palette', () => {
+    applyPalette('tech-blue')
+    expect(loadPalette()).toBe('tech-blue')
   })
 })

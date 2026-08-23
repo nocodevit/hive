@@ -20,6 +20,29 @@ export interface PaletteMeta {
   tagline: string   // one-line explanation shown under the swatch
 }
 
+const PALETTE_STORAGE_KEY = 'hive:palette'
+
+/// Read the persisted palette from localStorage; falls back to the default
+/// if none saved or the saved value is stale (e.g. an old build shipped a
+/// palette id we no longer recognize).
+export function loadPalette(): Palette {
+  const saved = localStorage.getItem(PALETTE_STORAGE_KEY)
+  return isPalette(saved) ? saved : 'neon-purple'
+}
+
+/// Persist + apply a palette to the DOM. Removing the attribute for the
+/// default palette lets base CSS variables win (no override layer needed).
+export function applyPalette(p: Palette): void {
+  const root = document.documentElement
+  if (p === 'neon-purple') root.removeAttribute('data-palette')
+  else root.setAttribute('data-palette', p)
+  localStorage.setItem(PALETTE_STORAGE_KEY, p)
+}
+
+function isPalette(v: unknown): v is Palette {
+  return typeof v === 'string' && (PALETTES as readonly string[]).includes(v)
+}
+
 export const PALETTE_META: Record<Palette, PaletteMeta> = {
   'neon-purple': {
     id: 'neon-purple',

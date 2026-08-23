@@ -42,6 +42,10 @@
     --status-working: #16a34a;
     --status-waiting: #d97706;
     --status-done: #78889a;
+    /* Sriracha (Crush palette) — semantic destructive-action red.
+       Used by Overview's "Close session" / "Close N idle" buttons and
+       any other destructive affordance so we stay on the color contract. */
+    --status-danger: #eb4268;
 
     --sidebar-bg: #f0eaff;
     --sidebar-active: #e4daff;
@@ -71,6 +75,8 @@
     --status-working: #5cff90;
     --status-waiting: #ffcc33;
     --status-done: #7888a0;
+    /* Sriracha — same semantic as light. Slightly brighter on dark for contrast. */
+    --status-danger: #ff5a7c;
 
     --sidebar-bg: #150e24;
     --sidebar-active: #2d1f48;
@@ -93,6 +99,10 @@
     --accent-hover: #0369a1;
     --accent-subtle: #e0f2fe;
     --accent-muted: #38bdf8;
+    /* v2.6.0 fix: also override sidebar-active for light — the dark-mode
+       value (#0c2033) would render as a black tile on the light lavender
+       sidebar bg. */
+    --sidebar-active: #dbeafe;
   }
 
   [data-palette='future-pink'] {
@@ -107,6 +117,8 @@
     --accent-hover: #be185d;
     --accent-subtle: #fce7f3;
     --accent-muted: #f472b6;
+    /* v2.6.0 fix: same reason as tech-blue-light above. */
+    --sidebar-active: #fbcfe8;
   }
 }
 
