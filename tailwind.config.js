@@ -40,8 +40,16 @@ module.exports = {
         }
       },
       fontFamily: {
+        // v2.8.0: SINGLE-FAMILY typography. Inter Tight covers everything
+        // from 10px caption to 24px display; weight (400/500/600/700)
+        // does the hierarchy work, not a second family. Space Grotesk
+        // moved to `font-display` for the very few marketing-tier titles
+        // that genuinely need a display face — most callers on
+        // `font-heading` should just render Inter Tight and stop double-
+        // familying.
         sans: ['Inter Tight', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-        heading: ['Space Grotesk', 'sans-serif'],
+        heading: ['Inter Tight', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        display: ['Space Grotesk', 'Inter Tight', 'sans-serif'],
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
       }
     }

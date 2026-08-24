@@ -20,6 +20,7 @@ import { NoteTag } from './noteTag'
 import { projectListState } from './projectListState'
 import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette } from './palette'
 import { OverviewPage } from './components/OverviewPage'
+import { formatTimeSince } from './timeSince'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
@@ -127,6 +128,29 @@ export default function App() {
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
   const [agentTasks, setAgentTasks] = useState<Record<string, { title?: string; summary?: string; active: boolean }>>({})
   const [agentLogs, setAgentLogs] = useState<{ time: string; type: string; message: string }[]>([])
+  /// v2.8.0: last-event epoch ms per agent. Written on agent:status /
+  /// agent:report — every observable activity bumps it. Used by the
+  /// dept-list "time-since" chip so idle agents show `2h` / `1d` and
+  /// active ones show `now` / `4m`. Persisted to localStorage so a
+  /// renderer restart doesn't reset every agent to "never seen".
+  const [lastEventAt, setLastEventAt] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem('hive:lastEventAt') || '{}') } catch { return {} }
+  })
+  const bumpLastEventAt = useCallback((agentId: string) => {
+    setLastEventAt((prev) => {
+      const next = { ...prev, [agentId]: Date.now() }
+      try { localStorage.setItem('hive:lastEventAt', JSON.stringify(next)) } catch { /* quota */ }
+      return next
+    })
+  }, [])
+  /// v2.8.0: 30s ticker that re-renders the dept list so time-since
+  /// chips (`4m` → `5m`) refresh without needing a user interaction.
+  /// One state variable + one interval — cheap enough to run always.
+  const [nowTick, setNowTick] = useState<number>(() => Date.now())
+  useEffect(() => {
+    const iv = setInterval(() => setNowTick(Date.now()), 30000)
+    return () => clearInterval(iv)
+  }, [])
   const [dragAgentId, setDragAgentId] = useState<string | null>(null)
   const [agentNames, setAgentNames] = useState<Record<string, string>>({})
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
@@ -413,6 +437,7 @@ export default function App() {
         setAgents((prev) =>
           prev.map((a) => (a.id === agentId ? { ...a, status: status as Agent['status'] } : a))
         )
+        bumpLastEventAt(agentId)   // v2.8.0 time-since ticker
       }
     })
     const removeReport = window.api.agent.onReport(({ agentId, type, title, summary, items }: any) => {
@@ -424,6 +449,7 @@ export default function App() {
       if (agentId && items) {
         setAgentReports((prev) => ({ ...prev, [agentId]: items }))
       }
+      if (agentId) bumpLastEventAt(agentId)
     })
     const removeTaskUpdate = window.api.agent.onTaskUpdate(({ projectId, tasks }) => {
       setBatchTasks((prev) => ({ ...prev, [projectId]: tasks }))
@@ -650,17 +676,23 @@ export default function App() {
                   setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id })
                 }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer
-                  transition-colors flex items-center gap-2 ${
+                  transition-colors flex items-center gap-2 border-l-2 ${
                   selectedProjectId === project.id
-                    ? 'bg-sidebar-active text-text-primary font-medium'
-                    : 'text-text-secondary hover:bg-bg-hover'
+                    ? 'bg-sidebar-active text-text-primary font-medium border-accent'
+                    : 'text-text-secondary border-transparent hover:bg-bg-hover hover:border-accent-muted hover:text-text-primary'
                 }`}
               >
                 {(() => {
                   const projectAgents = agents.filter((a) => a.projectId === project.id)
                   const hasWorking = projectAgents.some((a) => a.status === 'working')
                   const hasWaiting = projectAgents.some((a) => a.status === 'waiting')
-                  if (projectAgents.length === 0) return <span className="w-4 text-center text-[13px] flex-shrink-0" title="No agents">🕳️</span>
+                  if (projectAgents.length === 0) return (
+                    <span className="w-4 text-center flex-shrink-0 text-text-muted/60" title="No agents">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block">
+                        <circle cx="12" cy="12" r="9"/>
+                      </svg>
+                    </span>
+                  )
                   if (hasWorking) return <span className="w-4 text-center text-[13px] flex-shrink-0" title="Agents working">🏃</span>
                   if (hasWaiting) return <span className="w-4 text-center text-[13px] flex-shrink-0" title="Agents idle">☕</span>
                   return <span className="w-4 text-center text-[13px] flex-shrink-0" title="Agents offline">💤</span>
@@ -729,8 +761,11 @@ export default function App() {
                   }
                   setContextMenu(null)
                 }}
-                className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer"
-              >🚀 (Re)start All Agents</button>
+                className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer flex items-center gap-2"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
+                (Re)start All Agents
+              </button>
               <button
                 onClick={() => {
                   setProjectGroupPrompt({ projectId: contextMenu.projectId })
@@ -738,15 +773,21 @@ export default function App() {
                   setProjectGroupInput(proj?.group || '')
                   setContextMenu(null)
                 }}
-                className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer"
-              >📁 Move to Group...</button>
+                className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer flex items-center gap-2"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                Move to Group…
+              </button>
               <button
                 onClick={() => {
                   setProjects(prev => prev.map(p => p.id === contextMenu.projectId ? { ...p, group: undefined } : p))
                   setContextMenu(null)
                 }}
-                className="w-full text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg-hover cursor-pointer"
-              >✖ Remove from Group</button>
+                className="w-full text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg-hover cursor-pointer flex items-center gap-2"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                Remove from Group
+              </button>
             </div>
           )}
           {/* Agent context menu */}
@@ -765,16 +806,22 @@ export default function App() {
                     setAgentNotePrompt({ agentId: ag.id, current: ag.note || '' })
                     setAgentContextMenu(null)
                   }}
-                  className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer"
-                >📝 {ag.note ? 'Edit note…' : 'Set note…'}</button>
+                  className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer flex items-center gap-2"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+                  {ag.note ? 'Edit note…' : 'Set note…'}
+                </button>
                 {ag.note && (
                   <button
                     onClick={() => {
                       updateAgent(ag.id, { note: undefined })
                       setAgentContextMenu(null)
                     }}
-                    className="w-full text-left px-3 py-2 text-[13px] text-red-400/80 hover:bg-bg-hover cursor-pointer"
-                  >✕ Clear note</button>
+                    className="w-full text-left px-3 py-2 text-[13px] text-red-400/80 hover:bg-bg-hover cursor-pointer flex items-center gap-2"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    Clear note
+                  </button>
                 )}
               </div>
             )
@@ -784,7 +831,7 @@ export default function App() {
             <div className="fixed inset-0 z-50 flex items-center justify-center">
               <div className="absolute inset-0 bg-black/50" onClick={() => setAgentNotePrompt(null)} />
               <div className="relative bg-bg-secondary border border-border rounded-xl shadow-2xl p-4 w-[300px]">
-                <h3 className="text-sm font-heading font-bold mb-2">📝 Set Note</h3>
+                <h3 className="text-sm font-heading font-semibold mb-2">Set Note</h3>
                 <input
                   autoFocus
                   value={agentNoteInput}
@@ -937,9 +984,9 @@ export default function App() {
                 }
 
                 return (
-                  <div key={dept} className="rounded-xl bg-bg-primary/50 border shadow-sm p-1.5" style={{ borderColor: '#6B50FF' }}>
-                    <div className="px-2.5 py-1.5 text-[13px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <div key={dept} className="rounded-xl bg-bg-primary/50 border border-border p-1.5">
+                    <div className="px-2.5 py-1.5 text-[11px] font-medium text-text-muted uppercase tracking-[0.16em] flex items-center gap-1.5">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                       </svg>
                       {dept}
@@ -1005,15 +1052,23 @@ export default function App() {
                               onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
                               onDrop={(e) => { e.stopPropagation(); handleDrop(agent.id, grp) }}
                               onDragEnd={() => setDragAgentId(null)}
-                              className={`group w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5 relative
-                                transition-colors cursor-grab active:cursor-grabbing ${
+                              className={`group w-full text-left pl-2.5 pr-3 py-2 rounded-lg text-sm flex items-center gap-2.5 relative
+                                transition-colors cursor-grab active:cursor-grabbing border-l-2 ${
                                 grp ? 'ml-2' : ''
                               } ${
                                 dragAgentId === agent.id ? 'opacity-50' : ''
                               } ${
+                                /* v2.8.0: status-driven left border. Selected wins
+                                   over status (users need to see WHICH agent is
+                                   picked). Idle rows fade to 60% opacity so the
+                                   working ones dominate the eye. */
                                 selectedAgentId === agent.id
-                                  ? 'bg-accent-subtle text-accent font-medium'
-                                  : 'text-text-secondary hover:bg-bg-hover'
+                                  ? 'bg-accent-subtle text-accent font-medium border-accent'
+                                  : agent.status === 'working'
+                                    ? 'text-text-primary border-status-working hover:bg-bg-hover'
+                                    : agent.status === 'waiting'
+                                      ? 'text-text-primary border-status-waiting hover:bg-bg-hover'
+                                      : 'text-text-secondary border-transparent hover:bg-bg-hover opacity-60'
                               }`}
                               onClick={() => {
                                 if (agent.projectId !== selectedProjectId) setSelectedProjectId(agent.projectId)
@@ -1047,8 +1102,21 @@ export default function App() {
                                   <span className="truncate">{agent.name}</span>
                                   {agent.note && <NoteTag id={agent.id} note={agent.note} />}
                                 </span>
-                                <span className="text-[10px] font-semibold uppercase tracking-wider truncate group-hover:invisible text-text-muted" title={agent.role}>
-                                  {agent.role}
+                                <span className="text-[10px] font-semibold uppercase tracking-wider truncate group-hover:invisible text-text-muted flex items-center gap-1.5" title={agent.role}>
+                                  <span className="truncate">{agent.role}</span>
+                                  {/* v2.8.0: time-since chip. Fixed-width
+                                      mono cell so a row of chips lines up.
+                                      Hidden on hover to make room for
+                                      per-row action icons (edit/delete). */}
+                                  {(() => {
+                                    const ts = formatTimeSince(lastEventAt[agent.id], nowTick)
+                                    if (!ts) return null
+                                    return (
+                                      <span className="ml-auto font-mono tabular-nums text-[9.5px] text-text-muted/70 shrink-0" title="Last activity">
+                                        {ts}
+                                      </span>
+                                    )
+                                  })()}
                                 </span>
                               </div>
                               <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2">
@@ -1315,16 +1383,19 @@ export default function App() {
           {!selectedAgent && selectedProject && (
             <div className="absolute inset-0 flex flex-col">
               {/* Project Header + Tabs in title bar area */}
-              <div className="px-6 pt-2 pb-3 border-b border-border flex items-center gap-4">
-                <div className="flex gap-1">
+              <div className="px-6 pt-2 border-b border-border flex items-center gap-4">
+                {/* v2.8.0: Linear-style underline tabs. No pill background,
+                    no `bg-accent` block. Active = 2px accent underline
+                    that sits flush against the container's own border. */}
+                <div className="flex gap-0.5 -mb-px">
                   {([['dashboard', 'Dashboard'], ['office', 'Office'], ['taskgroup', 'Task Group'], ['settings', 'Settings']] as const).map(([key, label]) => (
                     <button
                       key={key}
                       onClick={() => setProjectTab(key)}
-                      className={`px-3 py-1 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                      className={`px-3 py-2 text-xs font-medium cursor-pointer transition-colors border-b-2 ${
                         projectTab === key
-                          ? 'bg-accent text-text-on-purple'
-                          : 'text-text-muted hover:bg-bg-hover'
+                          ? 'text-text-primary border-accent'
+                          : 'text-text-muted border-transparent hover:text-text-primary hover:border-border'
                       }`}
                     >
                       {label}
@@ -1378,9 +1449,9 @@ export default function App() {
                       return (
                         <div key={status} className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
                           <div className="px-4 py-3 border-b border-border flex items-center gap-2.5">
-                            <span className={`w-2.5 h-2.5 rounded-full ${statusColor[status]}`} />
-                            <span className="text-sm font-heading font-bold text-text-primary">{statusLabel[status]}</span>
-                            <span className="text-lg font-heading font-bold text-text-primary ml-auto">{columnAgents.length}</span>
+                            <span className={`w-2 h-2 rounded-full ${statusColor[status]}`} />
+                            <span className="text-[11px] font-medium text-text-muted uppercase tracking-[0.16em]">{statusLabel[status]}</span>
+                            <span className="ml-auto text-[13px] font-mono tabular-nums text-text-primary">{columnAgents.length}</span>
                           </div>
                           <div className="p-2 space-y-1.5 min-h-[80px]">
                             {columnAgents.length === 0 && (
@@ -1396,11 +1467,17 @@ export default function App() {
                                 className="w-full text-left p-2.5 rounded-lg bg-bg-primary hover:bg-bg-hover
                                   border border-border transition-colors cursor-pointer"
                               >
+                                {/* v2.8.0: kanban card slimmed. Removed the
+                                    role/department suffix — dept was already
+                                    the project's dept-list header (redundant
+                                    inside the same panel), and role rarely
+                                    changed the read. Now the card is name
+                                    + optional in-flight task title only. */}
                                 <div className="flex items-center gap-2">
                                   <AvatarPreview config={agent.avatar} size={20} loopBusy={activeHandoffAgentIds.has(agent.id)} selected={selectedAgentId === agent.id} />
-                                  <span className="text-sm font-heading font-semibold text-text-primary">{agent.name}</span>
-                                  <span className="text-[10px] font-semibold text-text-muted uppercase tracking-wider ml-auto">
-                                    {agent.role || agent.department}
+                                  <span className="text-[13px] font-medium text-text-primary truncate">{agent.name}</span>
+                                  <span className="ml-auto font-mono tabular-nums text-[10px] text-text-muted/70 shrink-0" title="Last activity">
+                                    {formatTimeSince(lastEventAt[agent.id], nowTick)}
                                   </span>
                                 </div>
                                 {agentTasks[agent.id] && (
