@@ -55,10 +55,11 @@ export interface Project {
   officePath: string  // root office folder
   zones: Zone[]
   group?: string      // project group name for sidebar organization
-  /// v2.7.1: per-project chat pane base font size in px. Applied to
-  /// every HiveChat surface mounted from this project (agent messages,
-  /// tool blocks, everything that used the hardcoded 13px baseline).
-  /// undefined = default 13. Range 11-20 enforced by the settings slider.
+  /// v2.7.1 (DEPRECATED in v2.8.2): per-project chat pane font size.
+  /// Chat font size is now a GLOBAL app-level preference — see
+  /// appPrefs.chatFontSize. Kept in the type only so serialized
+  /// project data from v2.7.x doesn't fail to parse; ignored on
+  /// read / never written on save.
   chatFontSize?: number
 }
 

@@ -32,10 +32,15 @@ describe('noteTagColor', () => {
 // env is flaky (html-encoding-sniffer ESM require), so we assert on props.
 describe('NoteTag', () => {
   it('shows the note text and title', () => {
+    // v2.8.1: the note text is now wrapped in an inner `<span class="truncate">`
+    // so overflow ellipsis + symmetric outer padding coexist. children is
+    // that inner span, not a raw string; walk into it for the text.
     const el = NoteTag({ id: 'agent-7', note: 'ship it' }) as any
     expect(el.type).toBe('span')
-    expect(el.props.children).toBe('ship it')
     expect(el.props.title).toBe('ship it')
+    const inner = el.props.children as any
+    expect(inner.type).toBe('span')
+    expect(inner.props.children).toBe('ship it')
   })
 
   it('renders border + text at the full palette hex (no desaturation)', () => {

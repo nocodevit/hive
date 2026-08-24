@@ -15,7 +15,7 @@ import AgentDeleteConfirmModal, { AgentDeleteImpact } from './components/AgentDe
 import ClaudeGate from './components/ClaudeGate'
 import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
-import { BUILTIN_TEMPLATES } from './types'
+import { BUILTIN_TEMPLATES, clampChatFontSize, CHAT_FONT_SIZE_MIN, CHAT_FONT_SIZE_MAX } from './types'
 import { NoteTag } from './noteTag'
 import { projectListState } from './projectListState'
 import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette } from './palette'
@@ -122,6 +122,10 @@ export default function App() {
     autoRunClaude: true, maxLogs: 100, continueSession: true,
     defaultSkillsRnD: ['review', 'qa', 'ship'] as string[],
     defaultSkillsNonRnD: ['browse'] as string[],
+    // v2.8.2: chat font size is a GLOBAL preference — same value for
+    // every project. v2.7.1 mistakenly put it on Project; that's now
+    // the deprecated field and the app-level value wins.
+    chatFontSize: 13 as number,
   })
   const [panelWidths, setPanelWidths] = useState({ projects: 200, agents: 240, files: 220 })
   const [showFiles, setShowFiles] = useState(true)
@@ -140,6 +144,22 @@ export default function App() {
     setLastEventAt((prev) => {
       const next = { ...prev, [agentId]: Date.now() }
       try { localStorage.setItem('hive:lastEventAt', JSON.stringify(next)) } catch { /* quota */ }
+      return next
+    })
+  }, [])
+  /// v2.8.2: agents whose claude subprocess has actually emitted at
+  /// least one status/report event THIS app launch. Distinguishes a
+  /// truly-running session from a mounted-but-idle HiveChat pane
+  /// (which the user might have opened just to see the Resume/New/
+  /// Fork chooser — no claude spawned yet). In-memory only; resets
+  /// on app open. Overview reads THIS, not activeTerminals, so "N
+  /// session panes" only counts genuinely alive claude processes.
+  const [liveSessionAgents, setLiveSessionAgents] = useState<Set<string>>(new Set())
+  const markLiveSession = useCallback((agentId: string) => {
+    setLiveSessionAgents((prev) => {
+      if (prev.has(agentId)) return prev
+      const next = new Set(prev)
+      next.add(agentId)
       return next
     })
   }, [])
@@ -438,6 +458,7 @@ export default function App() {
           prev.map((a) => (a.id === agentId ? { ...a, status: status as Agent['status'] } : a))
         )
         bumpLastEventAt(agentId)   // v2.8.0 time-since ticker
+        markLiveSession(agentId)   // v2.8.2 real "session running" signal
       }
     })
     const removeReport = window.api.agent.onReport(({ agentId, type, title, summary, items }: any) => {
@@ -449,7 +470,10 @@ export default function App() {
       if (agentId && items) {
         setAgentReports((prev) => ({ ...prev, [agentId]: items }))
       }
-      if (agentId) bumpLastEventAt(agentId)
+      if (agentId) {
+        bumpLastEventAt(agentId)
+        markLiveSession(agentId)
+      }
     })
     const removeTaskUpdate = window.api.agent.onTaskUpdate(({ projectId, tasks }) => {
       setBatchTasks((prev) => ({ ...prev, [projectId]: tasks }))
@@ -2329,7 +2353,7 @@ export default function App() {
                   startupCommand={agent.preferences?.startupCommand}
                   rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath && !newAgentIds.has(agent.id)}
                   onCloseTerminal={() => setActiveTerminals(prev => { const next = new Set(prev); next.delete(agentId); return next })}
-                  chatFontSize={projects.find(p => p.id === agent.projectId)?.chatFontSize}
+                  chatFontSize={appPrefs.chatFontSize}
                 />
               </div>
             )
@@ -2864,7 +2888,7 @@ export default function App() {
           <OverviewPage
             projects={projects}
             agents={displayAgents}
-            activeTerminals={activeTerminals}
+            activeTerminals={liveSessionAgents}
             activeHandoffAgentIds={activeHandoffAgentIds}
             agentTasks={agentTasks}
             onOpenAgent={(agent) => {
@@ -2878,6 +2902,14 @@ export default function App() {
                 await (window as any).api?.chat?.stop?.(agentId)
               } catch { /* silent — chat.stop already logs on the main side */ }
               setActiveTerminals((prev) => {
+                const next = new Set(prev)
+                next.delete(agentId)
+                return next
+              })
+              // v2.8.2: also drop from the "live session" set so Overview
+              // stops counting it. Real session is gone; the set matches.
+              setLiveSessionAgents((prev) => {
+                if (!prev.has(agentId)) return prev
                 const next = new Set(prev)
                 next.delete(agentId)
                 return next
@@ -2968,12 +3000,37 @@ export default function App() {
                     <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${showFiles ? 'left-[18px]' : 'left-0.5'}`} />
                   </button>
                 </div>
-                <div className="flex items-center justify-between px-4 py-2.5">
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-border">
                   <span className="text-sm text-text-primary">Max logs</span>
                   <select value={appPrefs.maxLogs} onChange={(e) => setAppPrefs((p) => ({ ...p, maxLogs: Number(e.target.value) }))}
                     className="text-sm bg-bg-hover text-text-primary rounded px-2 py-1 cursor-pointer border-none">
                     {[50, 100, 200, 500].map((n) => <option key={n} value={n}>{n}</option>)}
                   </select>
+                </div>
+                {/* v2.8.2: chat font size — global preference. Applies to
+                    every project's chat pane. Was previously per-project
+                    (v2.7.1) — user asked for global. */}
+                <div className="flex items-center justify-between px-4 py-2.5">
+                  <span className="text-sm text-text-primary">Chat font size</span>
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[10px] text-text-muted font-mono tabular-nums">{CHAT_FONT_SIZE_MIN}</span>
+                    <input
+                      type="range"
+                      min={CHAT_FONT_SIZE_MIN}
+                      max={CHAT_FONT_SIZE_MAX}
+                      step={1}
+                      value={appPrefs.chatFontSize}
+                      onChange={(e) => setAppPrefs((p) => ({ ...p, chatFontSize: clampChatFontSize(Number(e.target.value)) }))}
+                      className="accent-accent cursor-pointer w-32"
+                      aria-label="Chat font size (global)"
+                    />
+                    <span className="text-[10px] text-text-muted font-mono tabular-nums">{CHAT_FONT_SIZE_MAX}</span>
+                    <span
+                      className="text-sm font-heading font-semibold text-text-primary tabular-nums w-6 text-right"
+                      style={{ fontSize: appPrefs.chatFontSize }}
+                      title="Preview at selected size"
+                    >{appPrefs.chatFontSize}</span>
+                  </div>
                 </div>
               </div>
             </div>

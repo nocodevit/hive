@@ -26,9 +26,11 @@ const APP_TSX = readFileSync(join(REPO_ROOT, 'src', 'renderer', 'src', 'App.tsx'
 
 describe('typography — agent name vs role visual distinction', () => {
   it('every agent-name render carries strong text style (medium+ weight, primary color, no uppercase)', () => {
-    // Sidebar list — Inter Tight heading, semibold, primary color
+    // Sidebar list — Inter Tight heading, semibold, primary color.
+    // v2.8.1: outer span dropped `truncate` (was clipping the note-tag's
+    // right padding). Truncate moved onto the inner name span.
     expect(APP_TSX).toMatch(
-      /className="truncate flex items-center gap-1\.5 text-\[13px\] font-heading font-semibold text-text-primary"/
+      /className="flex items-center gap-1\.5 min-w-0 whitespace-nowrap text-\[13px\] font-heading font-semibold text-text-primary"/
     )
     // Kanban card — v2.8.0 relaxed to font-medium (Inter Tight body weight)
     expect(APP_TSX).toMatch(
