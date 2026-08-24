@@ -2933,6 +2933,7 @@ export default function App() {
               setProjectTab('office')
               setMainScreen('projects')
             }}
+            onClose={() => setMainScreen('projects')}
           />
         </div>
       )}

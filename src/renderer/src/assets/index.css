@@ -46,7 +46,10 @@
     --accent-muted: #a78bfa;
 
     --status-working: #16a34a;
-    --status-waiting: #d97706;
+    /* v2.9.0: waiting was amber (#d97706) — user called it 土 (dated).
+       Sky blue instead — cool + tech + reads as "on hold, patient",
+       contrasts cleanly against working-green and done-grey. */
+    --status-waiting: #0284c7;
     --status-done: #78889a;
     /* Sriracha (Crush palette) — semantic destructive-action red.
        Used by Overview's "Close session" / "Close N idle" buttons and
@@ -79,7 +82,8 @@
     --accent-muted: #9b6fff;
 
     --status-working: #5cff90;
-    --status-waiting: #ffcc33;
+    /* v2.9.0: sky-400 — brighter for dark bg legibility. */
+    --status-waiting: #38bdf8;
     --status-done: #7888a0;
     /* Sriracha — same semantic as light. Slightly brighter on dark for contrast. */
     --status-danger: #ff5a7c;
