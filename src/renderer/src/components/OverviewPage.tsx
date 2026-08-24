@@ -264,12 +264,27 @@ function OpenSessionsSection({
   onCloseSession: (agentId: string) => void | Promise<void>
 }) {
   const workingSet = new Set(workingAgents.map((a) => a.id))
-  // Sort: idle (not working) first (they're the killable candidates), then working.
-  const sorted = [...openSessionAgents].sort((a, b) => {
-    const aw = workingSet.has(a.id) ? 1 : 0
-    const bw = workingSet.has(b.id) ? 1 : 0
-    return aw - bw
-  })
+  // v2.8.2: group by project so rows aren't a random jumble across
+  // 5+ projects. Within each project, working sessions bubble to the
+  // top (users care WHICH agent is doing work). Projects sorted by
+  // "has-work" first, then by name — so an active project sits above
+  // dormant ones even if alphabetically later.
+  const byProject = new Map<string, Agent[]>()
+  for (const a of openSessionAgents) {
+    if (!byProject.has(a.projectId)) byProject.set(a.projectId, [])
+    byProject.get(a.projectId)!.push(a)
+  }
+  const projectGroups = Array.from(byProject.entries())
+    .map(([pid, list]) => ({
+      project: projects.find((p) => p.id === pid),
+      list: list.sort((a, b) => (workingSet.has(b.id) ? 1 : 0) - (workingSet.has(a.id) ? 1 : 0)),
+    }))
+    .sort((A, B) => {
+      const aw = A.list.some((a) => workingSet.has(a.id)) ? 1 : 0
+      const bw = B.list.some((a) => workingSet.has(a.id)) ? 1 : 0
+      if (aw !== bw) return bw - aw
+      return (A.project?.name || '').localeCompare(B.project?.name || '')
+    })
   return (
     <SectionCard
       title="Loaded session panes"
@@ -288,51 +303,54 @@ function OpenSessionsSection({
       {openSessionAgents.length === 0 ? (
         <EmptyState line="No chat sessions are open. Open an agent to start one." />
       ) : (
-        <div className="space-y-2">
-          {sorted.map((agent) => {
-            const proj = projects.find((p) => p.id === agent.projectId)
-            const isWorking = workingSet.has(agent.id)
-            const inHandoff = activeHandoffAgentIds.has(agent.id)
-            return (
-              <div
-                key={agent.id}
-                className="flex items-center gap-3 p-3 rounded-xl bg-bg-primary border border-border"
-              >
-                <AvatarPreview config={agent.avatar} size={28} loopBusy={inHandoff} />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+        <div className="space-y-4">
+          {projectGroups.map(({ project, list }) => (
+            <div key={project?.id || 'unknown'} className="space-y-1.5">
+              <div className="flex items-center gap-2 px-1 pb-1 border-b border-border-subtle">
+                <span className="text-[11px] font-medium text-text-muted uppercase tracking-[0.16em]">
+                  {project?.name || 'Unknown project'}
+                </span>
+                <span className="text-[10px] font-mono tabular-nums text-text-muted/70">·</span>
+                <span className="text-[10px] font-mono tabular-nums text-text-muted">
+                  {list.length}
+                </span>
+              </div>
+              {list.map((agent) => {
+                const isWorking = workingSet.has(agent.id)
+                const inHandoff = activeHandoffAgentIds.has(agent.id)
+                return (
+                  <div
+                    key={agent.id}
+                    className="flex items-center gap-3 p-2.5 rounded-lg bg-bg-primary border border-border"
+                  >
+                    <AvatarPreview config={agent.avatar} size={24} loopBusy={inHandoff} />
                     <button
                       onClick={() => onOpenAgent(agent)}
-                      className="text-sm font-heading font-semibold text-text-primary hover:text-accent truncate cursor-pointer"
+                      className="flex-1 min-w-0 text-left text-sm font-heading font-semibold text-text-primary hover:text-accent truncate cursor-pointer"
                     >
                       {agent.name}
                     </button>
-                    {proj && (
-                      <span className="text-[11px] text-text-muted uppercase tracking-wider">
-                        {proj.name}
-                      </span>
+                    <StatusPill status={isWorking ? 'working' : 'idle'} />
+                    {!isWorking && (
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Close ${agent.name}'s Claude session?`)) {
+                            onCloseSession(agent.id)
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-lg text-[12px] font-medium
+                          bg-bg-hover text-text-muted hover:bg-status-danger/15 hover:text-status-danger
+                          transition-colors cursor-pointer"
+                        title="Close this Claude session and free its memory"
+                      >
+                        Close
+                      </button>
                     )}
                   </div>
-                </div>
-                <StatusPill status={isWorking ? 'working' : 'idle'} />
-                {!isWorking && (
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Close ${agent.name}'s Claude session?`)) {
-                        onCloseSession(agent.id)
-                      }
-                    }}
-                    className="px-2.5 py-1 rounded-lg text-[12px] font-medium
-                      bg-bg-hover text-text-muted hover:bg-status-danger/15 hover:text-status-danger
-                      transition-colors cursor-pointer"
-                    title="Close this Claude session and free its memory"
-                  >
-                    Close
-                  </button>
-                )}
-              </div>
-            )
-          })}
+                )
+              })}
+            </div>
+          ))}
         </div>
       )}
     </SectionCard>
@@ -383,35 +401,61 @@ function SleepingAgentsSection({
   projects: Project[]
   onOpenAgent: (agent: Agent) => void
 }) {
+  // v2.8.2: group closed agents by project so scanning is possible
+  // when a user has 5+ projects. Alphabetical project order.
+  const byProject = new Map<string, Agent[]>()
+  for (const a of sleepingAgents) {
+    if (!byProject.has(a.projectId)) byProject.set(a.projectId, [])
+    byProject.get(a.projectId)!.push(a)
+  }
+  const projectGroups = Array.from(byProject.entries())
+    .map(([pid, list]) => ({
+      project: projects.find((p) => p.id === pid),
+      list: list.sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((A, B) => (A.project?.name || '').localeCompare(B.project?.name || ''))
+
   return (
     <SectionCard title="Closed · click to open" count={sleepingAgents.length}>
       {sleepingAgents.length === 0 ? (
-        <EmptyState line="All agents have an active session." />
+        <EmptyState line="Every agent has a session open." />
       ) : (
-        <div className="grid grid-cols-4 gap-2">
-          {sleepingAgents.map((agent) => {
-            const proj = projects.find((p) => p.id === agent.projectId)
-            return (
-              <button
-                key={agent.id}
-                onClick={() => onOpenAgent(agent)}
-                className="flex items-center gap-2 p-2.5 rounded-xl bg-bg-primary border border-border
-                  hover:border-accent hover:bg-bg-hover transition-colors cursor-pointer text-left"
-              >
-                <AvatarPreview config={agent.avatar} size={24} />
-                <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-heading font-semibold text-text-primary truncate">
-                    {agent.name}
-                  </div>
-                  {proj && (
-                    <div className="text-[10px] text-text-muted uppercase tracking-wider truncate">
-                      {proj.name}
+        <div className="space-y-4">
+          {projectGroups.map(({ project, list }) => (
+            <div key={project?.id || 'unknown'}>
+              <div className="flex items-center gap-2 px-1 pb-2 mb-2 border-b border-border-subtle">
+                <span className="text-[11px] font-medium text-text-muted uppercase tracking-[0.16em]">
+                  {project?.name || 'Unknown project'}
+                </span>
+                <span className="text-[10px] font-mono tabular-nums text-text-muted/70">·</span>
+                <span className="text-[10px] font-mono tabular-nums text-text-muted">
+                  {list.length}
+                </span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {list.map((agent) => (
+                  <button
+                    key={agent.id}
+                    onClick={() => onOpenAgent(agent)}
+                    className="flex items-center gap-2 p-2.5 rounded-xl bg-bg-primary border border-border
+                      hover:border-accent hover:bg-bg-hover transition-colors cursor-pointer text-left"
+                  >
+                    <AvatarPreview config={agent.avatar} size={24} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[13px] font-heading font-semibold text-text-primary truncate">
+                        {agent.name}
+                      </div>
+                      {agent.role && (
+                        <div className="text-[10px] text-text-muted uppercase tracking-wider truncate">
+                          {agent.role}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-              </button>
-            )
-          })}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </SectionCard>
