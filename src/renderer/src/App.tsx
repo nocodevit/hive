@@ -2257,6 +2257,7 @@ export default function App() {
                   startupCommand={agent.preferences?.startupCommand}
                   rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath && !newAgentIds.has(agent.id)}
                   onCloseTerminal={() => setActiveTerminals(prev => { const next = new Set(prev); next.delete(agentId); return next })}
+                  chatFontSize={projects.find(p => p.id === agent.projectId)?.chatFontSize}
                 />
               </div>
             )

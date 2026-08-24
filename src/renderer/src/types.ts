@@ -55,6 +55,20 @@ export interface Project {
   officePath: string  // root office folder
   zones: Zone[]
   group?: string      // project group name for sidebar organization
+  /// v2.7.1: per-project chat pane base font size in px. Applied to
+  /// every HiveChat surface mounted from this project (agent messages,
+  /// tool blocks, everything that used the hardcoded 13px baseline).
+  /// undefined = default 13. Range 11-20 enforced by the settings slider.
+  chatFontSize?: number
+}
+
+/// v2.7.1: default + clamp for Project.chatFontSize.
+export const DEFAULT_CHAT_FONT_SIZE = 13
+export const CHAT_FONT_SIZE_MIN = 11
+export const CHAT_FONT_SIZE_MAX = 20
+export function clampChatFontSize(n: number | undefined): number {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return DEFAULT_CHAT_FONT_SIZE
+  return Math.min(CHAT_FONT_SIZE_MAX, Math.max(CHAT_FONT_SIZE_MIN, Math.round(n)))
 }
 
 export interface AgentPreferences {
