@@ -11,17 +11,23 @@
 import { describe, it, expect } from 'vitest'
 import { randomAvatar } from '../avatarRandom'
 import { defaultAvatar } from '../types'
+import {
+  SKIN_TONES, HAIR_COLORS, HAIR_STYLES,
+  TOP_STYLES, TOP_COLORS, BOTTOM_STYLES, BOTTOM_COLORS,
+} from '../components/AvatarEditor'
 
-// Mirrors the private constants in avatarRandom.ts. Duplicated
-// deliberately so a typo there fails the assertion here.
+// v2.7.0: test asserts against the SAME exported constants both
+// avatarRandom.ts and the editor read from — no drifting copy.
 const POOLS = {
-  skinTone:    ['#fde0c4', '#f5d0a9', '#dba97a', '#c68642', '#8d5524', '#5c3317'],
-  hairColor:   ['#2c1810', '#4a3728', '#8b6914', '#c4a35a', '#d4a76a', '#e8c07a', '#7c3aed', '#06b6d4', '#f43f5e'],
-  hairStyle:   ['short', 'parted', 'spiky', 'bun', 'long'],
-  topStyle:    ['tee', 'hoodie', 'jacket', 'tank'],
-  topColor:    ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#1e293b', '#f8fafc'],
-  bottomStyle: ['pants', 'shorts', 'skirt'],
-  bottomColor: ['#1e293b', '#3b82f6', '#6b7280', '#7c3aed', '#0f172a', '#ec4899'],
+  skinTone: SKIN_TONES,
+  hairColor: HAIR_COLORS,
+  // randomAvatar filters 'none' out because bald defaults read as
+  // random-broken; hairStyle is checked against the filtered set.
+  hairStyle: HAIR_STYLES.filter((h) => h !== 'none'),
+  topStyle: TOP_STYLES,
+  topColor: TOP_COLORS,
+  bottomStyle: BOTTOM_STYLES,
+  bottomColor: BOTTOM_COLORS,
 }
 
 describe('randomAvatar', () => {

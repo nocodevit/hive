@@ -7,16 +7,20 @@ interface Props {
   size?: number
 }
 
-const SKIN_TONES = ['#fde0c4', '#f5d0a9', '#dba97a', '#c68642', '#8d5524', '#5c3317']
-const HAIR_COLORS = ['#2c1810', '#4a3728', '#8b6914', '#c4a35a', '#d4a76a', '#e8c07a', '#7c3aed', '#06b6d4', '#f43f5e']
-const HAIR_STYLES = ['none', 'short', 'parted', 'spiky', 'bun', 'long']
-const TOP_STYLES = ['tee', 'hoodie', 'jacket', 'tank']
-const TOP_COLORS = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#1e293b', '#f8fafc']
-const BOTTOM_STYLES = ['pants', 'shorts', 'skirt']
-const BOTTOM_COLORS = ['#1e293b', '#3b82f6', '#6b7280', '#7c3aed', '#0f172a', '#ec4899']
-const HAT_TYPES = ['none', 'cap', 'beanie']
-const ACCESSORIES = ['glasses', 'headset', 'backpack']
-const SHOE_COLORS = ['#1e293b', '#7c3aed', '#8b4513', '#f8fafc']
+// v2.7.0: pools exported so avatarRandom.ts and any future consumer
+// (badge picker, template preview, tests) reads from ONE source.
+// Adding a swatch here now propagates to the random-avatar path too;
+// review found the previous copy-paste was already three drifting copies.
+export const SKIN_TONES = ['#fde0c4', '#f5d0a9', '#dba97a', '#c68642', '#8d5524', '#5c3317']
+export const HAIR_COLORS = ['#2c1810', '#4a3728', '#8b6914', '#c4a35a', '#d4a76a', '#e8c07a', '#7c3aed', '#06b6d4', '#f43f5e']
+export const HAIR_STYLES = ['none', 'short', 'parted', 'spiky', 'bun', 'long']
+export const TOP_STYLES = ['tee', 'hoodie', 'jacket', 'tank']
+export const TOP_COLORS = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#1e293b', '#f8fafc']
+export const BOTTOM_STYLES = ['pants', 'shorts', 'skirt']
+export const BOTTOM_COLORS = ['#1e293b', '#3b82f6', '#6b7280', '#7c3aed', '#0f172a', '#ec4899']
+export const HAT_TYPES = ['none', 'cap', 'beanie']
+export const ACCESSORIES = ['glasses', 'headset', 'backpack']
+export const SHOE_COLORS = ['#1e293b', '#7c3aed', '#8b4513', '#f8fafc']
 
 function drawAvatar(ctx: CanvasRenderingContext2D, config: AvatarConfig, size: number) {
   const s = size / 16 // pixel scale
