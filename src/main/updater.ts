@@ -206,9 +206,14 @@ export async function checkForUpdates(silent = false): Promise<void> {
 }
 
 /**
- * Download the .dmg to ~/Downloads, then Finder-reveal it. User drags
- * it into /Applications manually — no auto-install path (would require
- * signing + notarization we don't have).
+ * Download the .dmg to ~/Downloads, then AUTO-MOUNT it (`shell.openPath`)
+ * so Finder shows the drag-Hive-to-Applications overlay directly. User
+ * only needs to drag once. Then a follow-up dialog reminds them to quit
+ * the running Hive before overwriting /Applications/Hive.app.
+ *
+ * v2.10.0: previously used shell.showItemInFolder (Finder reveal only);
+ * user still had to double-click the .dmg. openPath eliminates that
+ * step — mount happens immediately after download.
  */
 function downloadAndReveal(url: string, filename: string): void {
   const downloadsDir = join(homedir(), 'Downloads')
@@ -228,9 +233,33 @@ function downloadAndReveal(url: string, filename: string): void {
       const out = createWriteStream(target)
       res.on('data', (chunk) => out.write(chunk))
       res.on('end', () => {
-        out.end(() => {
-          notify('Hive update downloaded', 'Opening Finder…')
-          shell.showItemInFolder(target)
+        out.end(async () => {
+          notify('Hive update downloaded', 'Opening installer…')
+          // Auto-mount the DMG. On success Finder pops up the standard
+          // drag-to-Applications window; on failure fall back to reveal.
+          try {
+            const errMsg = await shell.openPath(target)
+            if (errMsg) {
+              // openPath returned a non-empty string = error. Fall back.
+              shell.showItemInFolder(target)
+            }
+          } catch {
+            shell.showItemInFolder(target)
+          }
+
+          // Follow-up dialog explains the two steps the user still owns:
+          // drag Hive → Applications, then quit + relaunch the app.
+          dialog.showMessageBox({
+            type: 'info',
+            title: 'Installer opened',
+            message: `Hive ${filename.replace(/^Hive-|-arm64\.dmg$/g, '')} ready to install`,
+            detail:
+              '1. Drag Hive.app into the Applications folder shown in Finder.\n' +
+              '   (If asked, replace the existing Hive.)\n' +
+              '2. Quit this running Hive from the app menu.\n' +
+              '3. Reopen Hive from Applications to run the new version.',
+            buttons: ['OK'],
+          })
         })
       })
       res.on('error', (err) => {

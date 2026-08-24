@@ -784,7 +784,7 @@ export default function App() {
           {/* Project context menu */}
           {contextMenu && (
             <div
-              className="fixed z-50 bg-bg-secondary border border-border rounded-lg shadow-2xl py-1 min-w-[200px]"
+              className="fixed z-50 bg-bg-secondary border border-border rounded-lg shadow-e3 py-1 min-w-[200px]"
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
               <button
@@ -830,7 +830,7 @@ export default function App() {
             if (!ag) return null
             return (
               <div
-                className="fixed z-50 bg-bg-secondary border border-border rounded-lg shadow-2xl py-1 min-w-[200px]"
+                className="fixed z-50 bg-bg-secondary border border-border rounded-lg shadow-e3 py-1 min-w-[200px]"
                 style={{ left: agentContextMenu.x, top: agentContextMenu.y }}
                 onClick={(e) => e.stopPropagation()}
               >
@@ -864,7 +864,7 @@ export default function App() {
           {agentNotePrompt && (
             <div className="fixed inset-0 z-50 flex items-center justify-center">
               <div className="absolute inset-0 bg-black/50" onClick={() => setAgentNotePrompt(null)} />
-              <div className="relative bg-bg-secondary border border-border rounded-xl shadow-2xl p-4 w-[300px]">
+              <div className="relative bg-bg-secondary border border-border rounded-xl shadow-e3 p-4 w-[300px]">
                 <h3 className="text-sm font-heading font-semibold mb-2">Set Note</h3>
                 <input
                   autoFocus
@@ -900,7 +900,7 @@ export default function App() {
           {projectGroupPrompt && (
             <div className="fixed inset-0 z-50 flex items-center justify-center">
               <div className="absolute inset-0 bg-black/50" onClick={() => setProjectGroupPrompt(null)} />
-              <div className="relative bg-bg-secondary border border-border rounded-xl shadow-2xl p-4 w-[280px]">
+              <div className="relative bg-bg-secondary border border-border rounded-xl shadow-e3 p-4 w-[280px]">
                 <h3 className="text-sm font-heading font-bold mb-2">Move to Group</h3>
                 <input
                   autoFocus
@@ -1018,7 +1018,7 @@ export default function App() {
                 }
 
                 return (
-                  <div key={dept} className="rounded-xl bg-bg-primary/50 border border-border p-1.5">
+                  <div key={dept} className="rounded-xl bg-bg-primary/50 border border-border p-1.5 shadow-e1">
                     <div className="px-2.5 py-1.5 text-[11px] font-medium text-text-muted uppercase tracking-[0.16em] flex items-center gap-1.5">
                       <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
@@ -1478,7 +1478,7 @@ export default function App() {
                       const statusColor = { working: 'bg-status-working', waiting: 'bg-status-waiting', done: 'bg-status-done' }
                       const columnAgents = projectAgents.filter((a) => a.status === status)
                       return (
-                        <div key={status} className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
+                        <div key={status} className="rounded-xl bg-bg-secondary border border-border overflow-hidden shadow-e1">
                           <div className="px-4 py-3 border-b border-border flex items-center gap-2.5">
                             <span className={`w-2 h-2 rounded-full ${statusColor[status]}`} />
                             <span className="text-[11px] font-medium text-text-muted uppercase tracking-[0.16em]">{statusLabel[status]}</span>
@@ -1496,7 +1496,7 @@ export default function App() {
                                   if (!activeTerminals.has(agent.id)) startAgent(agent)
                                 }}
                                 className="w-full text-left p-2.5 rounded-lg bg-bg-primary hover:bg-bg-hover
-                                  border border-border transition-colors cursor-pointer"
+                                  border border-border cursor-pointer card-lift"
                               >
                                 {/* v2.8.0: kanban card slimmed. Removed the
                                     role/department suffix — dept was already
@@ -2178,7 +2178,7 @@ export default function App() {
               {showInbox && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center">
                   <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowInbox(false)} />
-                  <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-2xl w-[600px] max-h-[70vh] overflow-hidden flex flex-col">
+                  <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-e3 w-[600px] max-h-[70vh] overflow-hidden flex flex-col">
                     <div className="flex items-center justify-between px-5 py-3 border-b border-border">
                       <h2 className="font-heading font-semibold text-sm">📬 Message Inbox</h2>
                       <button onClick={() => setShowInbox(false)} className="w-7 h-7 rounded-lg flex items-center justify-center text-text-muted hover:bg-bg-hover cursor-pointer">
@@ -2951,7 +2951,7 @@ export default function App() {
       {showAppSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAppSettings(false)} />
-          <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-2xl w-[680px] max-h-[85vh] overflow-hidden flex flex-col">
+          <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-e3 w-[680px] max-h-[85vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="font-heading font-semibold text-base text-text-primary">App Settings</h2>
               <button onClick={() => setShowAppSettings(false)}
@@ -3256,7 +3256,7 @@ export default function App() {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setTeamPrompt(null)} />
-            <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-2xl w-[360px] p-5">
+            <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-e3 w-[360px] p-5">
               <h3 className="text-sm font-heading font-semibold text-text-primary mb-3">New Team in {teamPrompt.dept}</h3>
               <input
                 autoFocus
@@ -3343,7 +3343,7 @@ export default function App() {
           const age = Date.now() - new Date(r.time).getTime()
           if (age > 10000) return null // auto-dismiss after 10s
           return (
-            <div key={i} className="pointer-events-auto bg-bg-secondary border border-border rounded-xl shadow-xl p-3 max-w-xs animate-slide-in">
+            <div key={i} className="pointer-events-auto bg-bg-secondary border border-border rounded-xl shadow-e2 p-3 max-w-xs animate-slide-in">
               <div className="flex items-start gap-2">
                 <span className="text-sm" style={{ color: '#F59E0B' }}>♛</span>
                 <div className="flex-1 min-w-0">

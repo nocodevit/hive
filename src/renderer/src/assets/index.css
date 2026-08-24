@@ -208,6 +208,73 @@ body {
 }
 
 /* ============================================================
+   v2.10.0 — Accent visual system tokens
+   ============================================================ */
+
+:root {
+  /* Elevation scale — 4 steps of drop shadow depth. Light theme uses
+     soft neutral shadows; dark theme uses deeper shadows since dark
+     surfaces need more contrast to feel raised. */
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
+  --elevation-2: 0 4px 12px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+  --elevation-3: 0 16px 40px rgba(0, 0, 0, 0.14), 0 4px 12px rgba(0, 0, 0, 0.06);
+
+  /* Motion — 3-tier duration scale. Micro-interactions (hover / focus)
+     use --fast; card entry / dropdown reveals use --base; modal
+     transitions use --slow. Curve is a mild ease-out (bias toward
+     settling) for anything above --fast. */
+  --motion-fast: 120ms;
+  --motion-base: 220ms;
+  --motion-slow: 380ms;
+  --motion-ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+:root[data-theme='dark'] {
+  --elevation-1: 0 1px 2px rgba(0, 0, 0, 0.5), 0 1px 1px rgba(0, 0, 0, 0.3);
+  --elevation-2: 0 6px 20px rgba(0, 0, 0, 0.4), 0 3px 6px rgba(0, 0, 0, 0.25);
+  --elevation-3: 0 24px 60px rgba(0, 0, 0, 0.55), 0 8px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Focus ring — one global rule replaces macOS default blue.
+   :focus-visible so mouse clicks don't leave a ring, but keyboard
+   navigation does. Offset 2px so the ring reads as an outline, not
+   a border. */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+button:focus-visible,
+a:focus-visible,
+[role='button']:focus-visible {
+  outline-offset: 2px;
+}
+
+/* Card lift — apply to any interactive card that should visibly react
+   to hover. Combines shadow bump (e1 → e2) with a 1px translate. */
+.card-lift {
+  transition: transform var(--motion-fast) var(--motion-ease),
+              box-shadow var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+  will-change: transform;
+}
+.card-lift:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--elevation-2);
+}
+
+/* prefers-reduced-motion — kill non-essential motion. */
+@media (prefers-reduced-motion: reduce) {
+  .card-lift, .card-lift:hover {
+    transition: none;
+    transform: none;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================================================
    v2.9.0 · Prime style overlay — HUD / CRT visual language.
    Applied whenever [data-style="prime"] is on <html>. Every
    surface still routes through the same design tokens; Prime

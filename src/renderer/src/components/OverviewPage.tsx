@@ -19,6 +19,7 @@
 import { useEffect, useMemo } from 'react'
 import type { Project, Agent } from '../types'
 import { AvatarPreview } from './AvatarEditor'
+import { StatusPill } from './StatusPill'
 
 interface OverviewPageProps {
   projects: Project[]
@@ -200,7 +201,7 @@ function KpiCard({
   emphasis?: 'accent'
 }) {
   return (
-    <div className="rounded-2xl bg-bg-secondary border border-border p-5">
+    <div className="rounded-2xl bg-bg-secondary border border-border p-5 shadow-e1 card-lift">
       <div className="text-[11px] font-heading font-semibold uppercase tracking-widest text-text-muted mb-2">
         {label}
       </div>
@@ -285,7 +286,7 @@ function WorkingNowSection({
                     <div className="text-[13px] text-accent truncate mt-0.5">{currentTitle}</div>
                   )}
                 </div>
-                <StatusPill status="working" />
+                <LocalStatusPill status="working" />
               </button>
             )
           })}
@@ -371,7 +372,7 @@ function OpenSessionsSection({
                     >
                       {agent.name}
                     </button>
-                    <StatusPill status={isWorking ? 'working' : 'idle'} />
+                    <LocalStatusPill status={isWorking ? 'working' : 'idle'} />
                     {!isWorking && (
                       <button
                         onClick={() => {
@@ -515,7 +516,7 @@ function ProjectsGrid({
             const working = projAgents.filter((a) => a.status === 'working').length
             const openCount = projAgents.filter((a) => activeTerminals.has(a.id)).length
             return (
-              <div key={p.id} className="rounded-xl bg-bg-primary border border-border p-4 hover:border-accent-muted transition-colors">
+              <div key={p.id} className="rounded-xl bg-bg-primary border border-border p-4 shadow-e1 card-lift hover:border-accent-muted">
                 <button
                   onClick={() => onSwitchProject(p.id)}
                   className="w-full flex items-center gap-2 mb-3 cursor-pointer text-left"
@@ -576,7 +577,7 @@ function SectionCard({
   action?: React.ReactNode
 }) {
   return (
-    <section className="rounded-2xl bg-bg-secondary border border-border overflow-hidden">
+    <section className="rounded-2xl bg-bg-secondary border border-border overflow-hidden shadow-e1">
       <div className="flex items-center justify-between px-5 py-3.5 border-b border-border-subtle">
         <div className="flex items-center gap-2.5">
           <h2 className="text-sm font-heading font-bold text-text-primary">{title}</h2>
@@ -597,21 +598,9 @@ function EmptyState({ line }: { line: string }) {
   )
 }
 
-function StatusPill({ status }: { status: 'working' | 'idle' }) {
-  if (status === 'working') {
-    return (
-      <span className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-status-working/15 text-status-working text-[11px] font-semibold">
-        <span className="w-1.5 h-1.5 rounded-full bg-status-working animate-pulse" />
-        Working
-      </span>
-    )
-  }
-  // v2.8.1: "Idle" → "Ready" — the session pane is loaded and Claude is
-  // waiting for input, not abandoned. Idle read as "you should probably
-  // close this" which caused confusion when Hive auto-mounts panes on launch.
-  return (
-    <span className="px-2 py-1 rounded-full bg-bg-hover text-text-muted text-[11px] font-semibold">
-      Ready
-    </span>
-  )
+// v2.10.0: local StatusPill wrapper — routes into the shared component
+// but preserves the "Ready" label for the loaded-but-not-working state.
+function LocalStatusPill({ status }: { status: 'working' | 'idle' }) {
+  if (status === 'working') return <StatusPill status="working" size="sm" />
+  return <StatusPill status="idle" size="sm" label="Ready" />
 }
