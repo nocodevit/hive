@@ -203,6 +203,81 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ============================================================
+   v2.9.0 · Prime style overlay — HUD / CRT visual language.
+   Applied whenever [data-style="prime"] is on <html>. Every
+   surface still routes through the same design tokens; Prime
+   only shifts the FEEL layer (font, radius, glow, scanlines)
+   while palette continues to pick the hue family.
+   ============================================================ */
+
+:root[data-style='prime'] body {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0;
+}
+
+/* Global scanline overlay — very subtle, purely atmospheric.
+   Pointer-events off so it never interferes with clicks.
+   Skipped for prefers-reduced-motion. */
+:root[data-style='prime'] body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    to bottom, transparent 0, transparent 2px,
+    rgba(255, 255, 255, 0.015) 2px, rgba(255, 255, 255, 0.015) 3px);
+}
+:root[data-style='prime'][data-theme='light'] body::before {
+  background: repeating-linear-gradient(
+    to bottom, transparent 0, transparent 2px,
+    rgba(0, 0, 0, 0.02) 2px, rgba(0, 0, 0, 0.02) 3px);
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-style='prime'] body::before { display: none; }
+}
+
+/* Sharpen every rounded corner to 5px (Prime signature). Rounded-full
+   pill shapes intentionally left alone — dots / avatars stay round. */
+:root[data-style='prime'] .rounded,
+:root[data-style='prime'] .rounded-lg,
+:root[data-style='prime'] .rounded-xl,
+:root[data-style='prime'] .rounded-2xl {
+  border-radius: 5px !important;
+}
+:root[data-style='prime'] .rounded-md { border-radius: 4px !important; }
+:root[data-style='prime'] .rounded-sm { border-radius: 3px !important; }
+
+/* Accent-colored glow on selected + focused surfaces. Text-shadow on
+   accent-colored text picks up the "phosphor" feel without needing to
+   touch component code. */
+:root[data-style='prime'] .bg-accent {
+  box-shadow: 0 0 12px var(--accent), inset 0 0 8px rgba(255,255,255,0.05);
+}
+:root[data-style='prime'] .bg-accent-subtle {
+  box-shadow: inset 0 0 12px color-mix(in oklab, var(--accent) 20%, transparent);
+}
+:root[data-style='prime'] .text-accent {
+  text-shadow: 0 0 6px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+:root[data-style='prime'] .border-accent {
+  box-shadow: 0 0 6px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+/* Focus ring: replace default browser blue with accent glow. */
+:root[data-style='prime'] *:focus-visible {
+  outline: 1px solid var(--accent) !important;
+  outline-offset: 2px;
+  box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 55%, transparent);
+}
+
+/* Uppercase-y small labels — Prime aesthetic bumps letter-spacing
+   subtly on already-uppercase text for the CRT-terminal feel. */
+:root[data-style='prime'] .uppercase {
+  letter-spacing: 0.14em !important;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Space Grotesk', sans-serif;
 }
