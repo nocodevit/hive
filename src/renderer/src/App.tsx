@@ -990,24 +990,14 @@ export default function App() {
                         <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
                       </svg>
                       {dept}
-                      {dept === 'R&D' && (
-                        <button
-                          onClick={() => {
-                            const activeRdAgents = deptAgents.filter(a => activeTerminals.has(a.id))
-                            if (activeRdAgents.length === 0) return
-                            const prompt = 'Please rebase your worktree: `git fetch origin && BASE=$(for b in develop main master; do git rev-parse --verify origin/$b >/dev/null 2>&1 && echo $b && break; done) && [ -n "$BASE" ] && git rebase origin/$BASE`. Resolve conflicts if any, then confirm rebase completed.'
-                            for (const ag of activeRdAgents) {
-                              window.api.pty.write(ag.id, prompt)
-                              setTimeout(() => window.api.pty.write(ag.id, '\r'), 150)
-                            }
-                          }}
-                          className="ml-auto text-[13px] text-accent hover:text-accent-hover cursor-pointer"
-                          title="Send rebase prompt to all active R&D agents"
-                        >⟳ Rebase</button>
-                      )}
+                      {/* v2.8.0: dropped the R&D-only "⟳ Rebase" action —
+                          crowded the dept header against "+ Team" and the
+                          same prompt is one right-click away. Rebase-on-
+                          restart preference in App Settings covers the
+                          scheduled case. */}
                       <button
                         onClick={() => { setTeamPrompt({ dept }); setTeamNameInput(''); setTeamSelectedAgents(new Set()) }}
-                        className={`${dept === 'R&D' ? '' : 'ml-auto'} text-[13px] text-accent hover:text-accent-hover cursor-pointer`}
+                        className="ml-auto text-[13px] text-accent hover:text-accent-hover cursor-pointer"
                         title="Add team"
                       >+ Team</button>
                     </div>
@@ -1095,11 +1085,16 @@ export default function App() {
                                 )}
                               </div>
                               <div className="flex flex-col min-w-0 flex-1">
-                                <span className="truncate flex items-center gap-1.5 text-[13px] font-heading font-semibold text-text-primary">
+                                {/* v2.8.0: outer span drops `truncate`
+                                    (was clipping the note-tag's right
+                                    padding+border). Name inside keeps its
+                                    own truncate; nowrap on the outer keeps
+                                    name + tag on one line. */}
+                                <span className="flex items-center gap-1.5 min-w-0 whitespace-nowrap text-[13px] font-heading font-semibold text-text-primary">
                                   {agent.tagColor && (
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
-                                  <span className="truncate">{agent.name}</span>
+                                  <span className="truncate min-w-0">{agent.name}</span>
                                   {agent.note && <NoteTag id={agent.id} note={agent.note} />}
                                 </span>
                                 <span className="text-[10px] font-semibold uppercase tracking-wider truncate group-hover:invisible text-text-muted flex items-center gap-1.5" title={agent.role}>
