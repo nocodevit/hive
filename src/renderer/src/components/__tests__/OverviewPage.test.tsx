@@ -182,7 +182,7 @@ describe('OverviewPage', () => {
         onCloseSession={noop}
       />
     )
-    const sleepingSection = screen.getByText('Closed · click to open').parentElement!
+    const sleepingSection = screen.getByText('Closed').parentElement!
     expect(within(sleepingSection).getByText('1')).toBeInTheDocument()
     // Zzz appears somewhere on the page (Sleeping row + Projects grid tooltip).
     // "Opened" appears in Projects grid too but we're asserting only that
