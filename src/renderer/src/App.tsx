@@ -1109,17 +1109,23 @@ export default function App() {
                                 )}
                               </div>
                               <div className="flex flex-col min-w-0 flex-1">
-                                {/* v2.8.0: outer span drops `truncate`
-                                    (was clipping the note-tag's right
-                                    padding+border). Name inside keeps its
-                                    own truncate; nowrap on the outer keeps
-                                    name + tag on one line. */}
+                                {/* v2.8.5: note-tag pushed to the RIGHT of
+                                    the row so line 1 mirrors line 2's
+                                    right-aligned time-since chip. Before,
+                                    tag hugged name and the row's selected-
+                                    state pink bg looked asymmetric with a
+                                    big empty right block. `ml-auto` on the
+                                    tag wrapper fills that space. */}
                                 <span className="flex items-center gap-1.5 min-w-0 whitespace-nowrap text-[13px] font-heading font-semibold text-text-primary">
                                   {agent.tagColor && (
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
                                   <span className="truncate min-w-0">{agent.name}</span>
-                                  {agent.note && <NoteTag id={agent.id} note={agent.note} />}
+                                  {agent.note && (
+                                    <span className="ml-auto flex-shrink min-w-0">
+                                      <NoteTag id={agent.id} note={agent.note} />
+                                    </span>
+                                  )}
                                 </span>
                                 <span className="text-[10px] font-semibold uppercase tracking-wider truncate group-hover:invisible text-text-muted flex items-center gap-1.5" title={agent.role}>
                                   <span className="truncate">{agent.role}</span>
