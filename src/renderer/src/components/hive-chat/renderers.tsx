@@ -205,7 +205,7 @@ const MD_COMPONENTS: Record<string, any> = {
   a: ({ href, children }: any) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: CRUSH.Malibu, textDecoration: 'underline' }}>{children}</a>,
   h1: ({ children }: any) => <h3 style={{ color: CRUSH.Butter, fontSize: 15, margin: '6px 0 4px' }}>{children}</h3>,
   h2: ({ children }: any) => <h4 style={{ color: CRUSH.Butter, fontSize: 14, margin: '6px 0 4px' }}>{children}</h4>,
-  h3: ({ children }: any) => <h5 style={{ color: CRUSH.Butter, fontSize: 13, margin: '6px 0 4px' }}>{children}</h5>,
+  h3: ({ children }: any) => <h5 style={{ color: CRUSH.Butter, fontSize: 'var(--chat-fs, 13px)', margin: '6px 0 4px' }}>{children}</h5>,
   blockquote: ({ children }: any) => <blockquote style={{ borderLeft: `2px solid ${CRUSH.Charple}`, paddingLeft: 10, margin: '4px 0', color: CRUSH.Squid }}>{children}</blockquote>,
   hr: () => <hr style={{ border: 'none', borderTop: `1px solid ${CRUSH.Charcoal}`, margin: '6px 0' }} />,
   table: ({ children }: any) => (
@@ -300,7 +300,7 @@ function CodeBlockWithCopy({ code, language }: { code: string; language: string 
 
 function CrushMarkdown({ text }: { text: string }) {
   return (
-    <div className="hive-chat-md" style={{ fontFamily: FONT_MONO, fontSize: 13, lineHeight: 1.55 }}>
+    <div className="hive-chat-md" style={{ fontFamily: FONT_MONO, fontSize: 'var(--chat-fs, 13px)', lineHeight: 1.55 }}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{redact(text)}</ReactMarkdown>
     </div>
   )
@@ -458,7 +458,7 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
               border: `1px solid ${CRUSH.Charcoal}`,
               borderRadius: 6,
               background: 'transparent',
-              fontFamily: FONT_MONO, fontSize: 13,
+              fontFamily: FONT_MONO, fontSize: 'var(--chat-fs, 13px)',
               color: CRUSH.Ash,
               transition: 'background 120ms ease, border-color 120ms ease'
             }}
@@ -559,7 +559,7 @@ function PlainAssistantText({ text }: { text: string }) {
                   textTransform: 'uppercase' as const
                 }}>summary</span>
                 {summary.title && (
-                  <span style={{ color: CRUSH.Butter, fontWeight: 600, fontSize: 13 }}>
+                  <span style={{ color: CRUSH.Butter, fontWeight: 600, fontSize: 'var(--chat-fs, 13px)' }}>
                     {redact(summary.title)}
                   </span>
                 )}
@@ -1235,7 +1235,7 @@ function TodoInline({ input }: { input: Record<string, unknown> }) {
         const icon = todo.status === 'completed' ? '✓' : todo.status === 'in_progress' ? '→' : '•'
         const color = todo.status === 'completed' ? CRUSH.Julep : todo.status === 'in_progress' ? CRUSH.Dolly : CRUSH.Squid
         return (
-          <div key={i} style={{ display: 'flex', gap: 8, fontSize: 13, padding: '1px 0' }}>
+          <div key={i} style={{ display: 'flex', gap: 8, fontSize: 'var(--chat-fs, 13px)', padding: '1px 0' }}>
             <span style={{ color, fontWeight: 700, minWidth: 14, textAlign: 'center' }}>{icon}</span>
             <span style={{
               color: todo.status === 'completed' ? CRUSH.Squid : CRUSH.Ash,
@@ -1336,7 +1336,7 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
                 textTransform: 'uppercase' as const, letterSpacing: '0.05em',
                 marginRight: 8
               }}>{q.header}</span>
-              <span style={{ color: CRUSH.Ash, fontSize: 13 }}>{q.question}</span>
+              <span style={{ color: CRUSH.Ash, fontSize: 'var(--chat-fs, 13px)' }}>{q.question}</span>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column' as const, gap: 4 }}>
               {q.options.map((opt, oIdx) => {
@@ -1450,7 +1450,7 @@ export function ThinkingSpinner({ since }: { since: number }) {
     <div style={{
       display: 'flex', alignItems: 'center', gap: 10,
       padding: '8px 4px',
-      fontFamily: FONT_MONO, fontSize: 13
+      fontFamily: FONT_MONO, fontSize: 'var(--chat-fs, 13px)'
     }}>
       <style>{`@keyframes thinking-grad { 0% { background-position: 0% 50%; } 100% { background-position: 400% 50%; } }`}</style>
       <span style={{ ...gradStyle, width: 14, textAlign: 'center', display: 'inline-block' }}>{glyph}</span>
@@ -1588,7 +1588,7 @@ export function SystemLine({ text }: { text: string }) {
         <style>{`@keyframes hg-flip { 0%,40% { transform: rotate(0deg); } 60%,100% { transform: rotate(180deg); } }`}</style>
         <span style={{
           display: 'inline-block',
-          fontSize: 13,
+          fontSize: 'var(--chat-fs, 13px)',
           animation: 'hg-flip 2s ease-in-out infinite',
           color: CRUSH.Charple
         }}>⏳</span>
