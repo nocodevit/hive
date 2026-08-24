@@ -423,37 +423,35 @@ function SleepingAgentsSection({
       {sleepingAgents.length === 0 ? (
         <EmptyState line="Every agent has a session open." />
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {projectGroups.map(({ project, list }) => (
-            <div key={project?.id || 'unknown'}>
+            <div key={project?.id || 'unknown'}
+              className="rounded-lg bg-bg-primary/40 border border-border p-2.5">
+              {/* v2.8.7: stronger project group header — accent-tinted, bold,
+                  count as a clear chip. Cards packed via flex-wrap so a
+                  3-agent group doesn't leave one empty grid column. */}
               <div className="flex items-center gap-2 px-1 pb-2 mb-2 border-b border-border-subtle">
-                <span className="text-[11px] font-medium text-text-muted uppercase tracking-[0.16em]">
+                <span className="w-1 h-3.5 rounded-sm bg-accent" />
+                <span className="text-[12px] font-semibold text-text-primary tracking-tight">
                   {project?.name || 'Unknown project'}
                 </span>
-                <span className="text-[10px] font-mono tabular-nums text-text-muted/70">·</span>
-                <span className="text-[10px] font-mono tabular-nums text-text-muted">
+                <span className="ml-auto text-[11px] font-mono tabular-nums text-text-muted px-1.5 py-0.5 rounded bg-bg-hover">
                   {list.length}
                 </span>
               </div>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="flex flex-wrap gap-1.5">
                 {list.map((agent) => (
                   <button
                     key={agent.id}
                     onClick={() => onOpenAgent(agent)}
-                    className="flex items-center gap-2 p-2.5 rounded-xl bg-bg-primary border border-border
+                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-bg-secondary border border-border
                       hover:border-accent hover:bg-bg-hover transition-colors cursor-pointer text-left"
+                    title={agent.role ? `${agent.name} · ${agent.role}` : agent.name}
                   >
-                    <AvatarPreview config={agent.avatar} size={24} />
-                    <div className="flex-1 min-w-0">
-                      <div className="text-[13px] font-heading font-semibold text-text-primary truncate">
-                        {agent.name}
-                      </div>
-                      {agent.role && (
-                        <div className="text-[10px] text-text-muted uppercase tracking-wider truncate">
-                          {agent.role}
-                        </div>
-                      )}
-                    </div>
+                    <AvatarPreview config={agent.avatar} size={18} />
+                    <span className="text-[12px] font-medium text-text-primary max-w-[120px] truncate">
+                      {agent.name}
+                    </span>
                   </button>
                 ))}
               </div>
