@@ -1,0 +1,78 @@
+# v2.8.4: build + upload macOS DMG whenever a GitHub Release is
+# published — typically when release-please's PR is merged and cuts a
+# tag. Also fires on manual `Publish release` via the GitHub UI, so
+# hotfix releases don't need a separate mechanism.
+#
+# Design:
+#   - Runs on macos-latest (arm64 host required for arm64 electron-builder
+#     output; universal binary is easy to add later if needed).
+#   - No signing / notarization credentials needed — ad-hoc sign is fine
+#     for the current "unsigned dmg + right-click Open" install path.
+#   - Uploads dmg + zip to the same release that triggered the workflow.
+
+name: Publish macOS DMG
+
+on:
+  release:
+    types: [published]
+  # Escape hatch — build a specific tag on demand from the Actions tab.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v2.8.5). Leave empty to build the checked-out ref.'
+        required: false
+
+permissions:
+  contents: write  # to upload assets to the release
+
+jobs:
+  macos-arm64:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          # Prefer the release's tag_name; fall back to workflow_dispatch input; else default ref.
+          ref: ${{ github.event.release.tag_name || inputs.tag || github.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install deps
+        run: npm ci
+
+      - name: Vitest (guard rail)
+        run: npx vitest run
+
+      - name: electron-vite build
+        run: npm run build
+
+      - name: electron-builder — package DMG + zip
+        run: npx electron-builder --mac --publish never
+        env:
+          # Ad-hoc sign, no Apple Dev creds needed. If we later wire
+          # notarization these three env vars carry it:
+          #   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+      - name: Upload dmg + zip to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          if [ -z "$TAG" ]; then
+            echo "No release tag; skipping asset upload."
+            exit 0
+          fi
+          set -euo pipefail
+          shopt -s nullglob
+          ASSETS=(dist/*.dmg dist/*.zip)
+          if [ ${#ASSETS[@]} -eq 0 ]; then
+            echo "No dmg/zip produced in dist/; failing." >&2
+            exit 1
+          fi
+          echo "Uploading: ${ASSETS[*]} → $TAG"
+          gh release upload "$TAG" "${ASSETS[@]}" --clobber
