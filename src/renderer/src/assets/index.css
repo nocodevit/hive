@@ -349,6 +349,72 @@ a:focus-visible,
   letter-spacing: 0.14em !important;
 }
 
+/* ============================================================
+   v2.11.0 · Prime — beef up the visual pop across surfaces so the
+   style switch is felt, not just detected in devtools.
+   ============================================================ */
+
+/* Hex-clip every "avatar-sized" round element (14-72px wide+tall)
+   into the hive-comb hex tile shape. We target `.rounded-full` on
+   direct AvatarPreview wrappers only — status dots are much smaller
+   AND use inline `.rounded-full` too, so we exclude below 14px via
+   the specific min-width descendants of the CanvasWrapper. Simpler
+   trick: apply clip-path to any `canvas` element inside a wrapper
+   that has `.rounded-full` — AvatarPreview always uses canvas. */
+:root[data-style='prime'] canvas {
+  clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0% 50%);
+}
+/* Small avatars (<16px) — the hex clip on a 12px canvas is visually
+   awkward. Skip clip on the smallest cell size. */
+:root[data-style='prime'] canvas[width='12'],
+:root[data-style='prime'] canvas[width='14'] {
+  clip-path: none;
+}
+
+/* KPI card headline numbers — mono in Prime, so the digits click
+   into a HUD readout instead of feeling like body typography. */
+:root[data-style='prime'] .tabular-nums {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: -0.02em;
+}
+
+/* Card hover in Prime — bump the accent glow instead of the neutral
+   drop-shadow that Accent uses. The `card-lift` translate stays; only
+   the shadow flavor swaps. */
+:root[data-style='prime'] .card-lift:hover {
+  box-shadow: 0 0 0 1px var(--accent),
+              0 0 20px color-mix(in oklab, var(--accent) 40%, transparent);
+}
+
+/* Dept-group / section headers in Prime read as `// LABEL` terminal
+   comments. `.dept-h` isn't a real class we own; use the natural
+   uppercase-tracking selector chain that shows up in the dept-list. */
+:root[data-style='prime'] .tracking-\[0\.16em\]::before {
+  content: '// ';
+  color: color-mix(in oklab, var(--accent) 70%, transparent);
+  margin-right: 2px;
+}
+
+/* Primary action buttons — subtle accent-glow pulse on Prime so the
+   CTA reads as "live" not just "highlighted". */
+@keyframes prime-cta-pulse {
+  0%,100% { box-shadow: 0 0 12px color-mix(in oklab, var(--accent) 45%, transparent); }
+  50%    { box-shadow: 0 0 20px color-mix(in oklab, var(--accent) 75%, transparent); }
+}
+:root[data-style='prime'] .bg-accent {
+  animation: prime-cta-pulse 2.4s var(--motion-ease) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-style='prime'] .bg-accent { animation: none; }
+}
+
+/* Selected agent-row accent border → glow instead of solid stripe. */
+:root[data-style='prime'] .border-accent {
+  box-shadow: 0 0 8px color-mix(in oklab, var(--accent) 55%, transparent),
+              inset 2px 0 0 var(--accent);
+  border-color: transparent !important;
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Space Grotesk', sans-serif;
 }
