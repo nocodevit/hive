@@ -404,59 +404,44 @@ function SleepingAgentsSection({
   projects: Project[]
   onOpenAgent: (agent: Agent) => void
 }) {
-  // v2.8.2: group closed agents by project so scanning is possible
-  // when a user has 5+ projects. Alphabetical project order.
-  const byProject = new Map<string, Agent[]>()
-  for (const a of sleepingAgents) {
-    if (!byProject.has(a.projectId)) byProject.set(a.projectId, [])
-    byProject.get(a.projectId)!.push(a)
-  }
-  const projectGroups = Array.from(byProject.entries())
-    .map(([pid, list]) => ({
-      project: projects.find((p) => p.id === pid),
-      list: list.sort((a, b) => a.name.localeCompare(b.name)),
-    }))
-    .sort((A, B) => (A.project?.name || '').localeCompare(B.project?.name || ''))
+  // v2.8.8: flat sorted list — project A-Z as primary sort key, agent
+  // A-Z as secondary. User asked NOT to per-project row-group; all
+  // closed agents wrap together in a single flex-wrap. Sort still
+  // stable and predictable across launches.
+  const projectName = (pid: string) => projects.find((p) => p.id === pid)?.name || ''
+  const sorted = [...sleepingAgents].sort((a, b) => {
+    const byProj = projectName(a.projectId).localeCompare(projectName(b.projectId))
+    return byProj !== 0 ? byProj : a.name.localeCompare(b.name)
+  })
 
   return (
     <SectionCard title="Closed" count={sleepingAgents.length}>
       {sleepingAgents.length === 0 ? (
         <EmptyState line="Every agent has a session open." />
       ) : (
-        <div className="space-y-3">
-          {projectGroups.map(({ project, list }) => (
-            <div key={project?.id || 'unknown'}
-              className="rounded-lg bg-bg-primary/40 border border-border p-2.5">
-              {/* v2.8.7: stronger project group header — accent-tinted, bold,
-                  count as a clear chip. Cards packed via flex-wrap so a
-                  3-agent group doesn't leave one empty grid column. */}
-              <div className="flex items-center gap-2 px-1 pb-2 mb-2 border-b border-border-subtle">
-                <span className="w-1 h-3.5 rounded-sm bg-accent" />
-                <span className="text-[12px] font-semibold text-text-primary tracking-tight">
-                  {project?.name || 'Unknown project'}
+        <div className="flex flex-wrap gap-1.5">
+          {sorted.map((agent) => {
+            const projLabel = projectName(agent.projectId)
+            return (
+              <button
+                key={agent.id}
+                onClick={() => onOpenAgent(agent)}
+                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-bg-primary border border-border
+                  hover:border-accent hover:bg-bg-hover transition-colors cursor-pointer text-left"
+                title={`${agent.name}${projLabel ? ' · ' + projLabel : ''}${agent.role ? ' · ' + agent.role : ''}`}
+              >
+                <AvatarPreview config={agent.avatar} size={18} />
+                <span className="text-[12px] font-medium text-text-primary max-w-[140px] truncate">
+                  {agent.name}
                 </span>
-                <span className="ml-auto text-[11px] font-mono tabular-nums text-text-muted px-1.5 py-0.5 rounded bg-bg-hover">
-                  {list.length}
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {list.map((agent) => (
-                  <button
-                    key={agent.id}
-                    onClick={() => onOpenAgent(agent)}
-                    className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-bg-secondary border border-border
-                      hover:border-accent hover:bg-bg-hover transition-colors cursor-pointer text-left"
-                    title={agent.role ? `${agent.name} · ${agent.role}` : agent.name}
-                  >
-                    <AvatarPreview config={agent.avatar} size={18} />
-                    <span className="text-[12px] font-medium text-text-primary max-w-[120px] truncate">
-                      {agent.name}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
+                {projLabel && (
+                  <span className="text-[10px] text-text-muted uppercase tracking-wider">
+                    {projLabel}
+                  </span>
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
     </SectionCard>

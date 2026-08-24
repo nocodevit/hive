@@ -1119,23 +1119,19 @@ export default function App() {
                                 )}
                               </div>
                               <div className="flex flex-col min-w-0 flex-1">
-                                {/* v2.8.5: note-tag pushed to the RIGHT of
-                                    the row so line 1 mirrors line 2's
-                                    right-aligned time-since chip. Before,
-                                    tag hugged name and the row's selected-
-                                    state pink bg looked asymmetric with a
-                                    big empty right block. `ml-auto` on the
-                                    tag wrapper fills that space. */}
-                                <span className="flex items-center gap-1.5 min-w-0 whitespace-nowrap text-[13px] font-heading font-semibold text-text-primary">
+                                {/* v2.9.0: undo the v2.8.5 ml-auto — it was
+                                    pushing the note tag OUT of the row's
+                                    right edge (Playwright measured a
+                                    -26.8px "gap", i.e. 26px overflow).
+                                    Back to natural inline flow: tag right
+                                    after name; name truncates first when
+                                    space is tight, tag never spills. */}
+                                <span className="flex items-center gap-1.5 min-w-0 whitespace-nowrap overflow-hidden text-[13px] font-heading font-semibold text-text-primary">
                                   {agent.tagColor && (
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
-                                  <span className="truncate min-w-0">{agent.name}</span>
-                                  {agent.note && (
-                                    <span className="ml-auto flex-shrink min-w-0">
-                                      <NoteTag id={agent.id} note={agent.note} />
-                                    </span>
-                                  )}
+                                  <span className="truncate min-w-0 flex-shrink">{agent.name}</span>
+                                  {agent.note && <NoteTag id={agent.id} note={agent.note} />}
                                 </span>
                                 <span className="text-[10px] font-semibold uppercase tracking-wider truncate group-hover:invisible text-text-muted flex items-center gap-1.5" title={agent.role}>
                                   <span className="truncate">{agent.role}</span>
