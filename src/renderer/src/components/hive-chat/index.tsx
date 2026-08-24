@@ -1568,6 +1568,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       background: '#150e24',  // matches --sidebar-bg dark mode (project list)
       color: CRUSH.Ash,
       fontFamily: FONT_MONO, fontSize: baseFontSize,
+      // v2.8.3: expose baseFontSize as a CSS var so message-body
+      // renderers (which live in exported helpers outside HiveChat's
+      // closure and can't access baseFontSize directly) can scale via
+      // `fontSize: 'var(--chat-fs, 13px)'`. Fallback 13px preserves
+      // the historic baseline when the var isn't set (e.g. tests).
+      ['--chat-fs' as any]: `${baseFontSize}px`,
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden'
     }}>
@@ -2410,7 +2416,7 @@ class HiveChatErrorBoundary extends React.Component<
     return (
       <div style={{
         width: '100%', height: '100%', background: '#150e24',
-        color: CRUSH.Ash, fontFamily: FONT_MONO, fontSize: 13,
+        color: CRUSH.Ash, fontFamily: FONT_MONO, fontSize: 'var(--chat-fs, 13px)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: 24, gap: 12
       }}>
@@ -2486,7 +2492,7 @@ function PermissionFallback({ req, onDecide }: {
         <div style={{ color: CRUSH.Sriracha, fontWeight: 700, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>
           Permission required (fallback ui)
         </div>
-        <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 4 }}>
+        <div style={{ color: CRUSH.Ash, fontSize: 'var(--chat-fs, 13px)', marginBottom: 4 }}>
           Claude wants to use <strong style={{ color: CRUSH.Charple }}>{String(req.toolName || 'unknown tool')}</strong>
         </div>
         <div style={{ color: CRUSH.Squid, fontSize: 11, marginBottom: 14 }}>
@@ -2612,7 +2618,7 @@ export function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
         <div style={{ color: CRUSH.Dolly, fontWeight: 700, fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 10 }}>
           Permission required
         </div>
-        <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 6 }}>
+        <div style={{ color: CRUSH.Ash, fontSize: 'var(--chat-fs, 13px)', marginBottom: 6 }}>
           Claude wants to use <strong style={{ color: CRUSH.Charple }}>{req.displayName || req.toolName}</strong>
         </div>
         <div style={{
@@ -2818,7 +2824,7 @@ export function ContextModal({ loading, error, data, claudeSid, onRefresh, onClo
           borderBottom: `1px solid ${CRUSH.Charcoal}`,
           flexShrink: 0
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'Space Grotesk, sans-serif' as any, fontSize: 13, fontWeight: 700, letterSpacing: '0.05em', color: CRUSH.Ash }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: 'Space Grotesk, sans-serif' as any, fontSize: 'var(--chat-fs, 13px)', fontWeight: 700, letterSpacing: '0.05em', color: CRUSH.Ash }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: dotColor, boxShadow: `0 0 10px ${dotColor}` }} />
             Context Usage
             {data && (
@@ -3290,7 +3296,7 @@ export function StartChooser({
               background: hasPrev ? (ctxTier === 'urgent' ? CRUSH.Sriracha : CRUSH.Charple) : CRUSH.Zest,
               boxShadow: `0 0 8px ${hasPrev ? (ctxTier === 'urgent' ? CRUSH.Sriracha : CRUSH.Charple) : CRUSH.Zest}`
             }} />
-            <span style={{ fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700, color: CRUSH.Ash, letterSpacing: '0.04em' }}>
+            <span style={{ fontFamily: FONT_MONO, fontSize: 'var(--chat-fs, 13px)', fontWeight: 700, color: CRUSH.Ash, letterSpacing: '0.04em' }}>
               Start session — pick a mode
             </span>
           </div>
@@ -3588,7 +3594,7 @@ function ChooserCell({ label, value, valueColor, title, last }: {
     }}>
       <span style={{ fontSize: 9, color: CRUSH.Squid, textTransform: 'uppercase', letterSpacing: '0.1em' }}>{label}</span>
       <span title={title} style={{
-        fontSize: 13, fontWeight: 600, color: valueColor, fontFamily: FONT_MONO,
+        fontSize: 'var(--chat-fs, 13px)', fontWeight: 600, color: valueColor, fontFamily: FONT_MONO,
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
       }}>{value}</span>
     </div>
@@ -3906,7 +3912,7 @@ function ActionToolbar({
                   border: 'none',
                   color: CRUSH.Squid,
                   cursor: 'pointer',
-                  fontSize: 13, lineHeight: 1,
+                  fontSize: 'var(--chat-fs, 13px)', lineHeight: 1,
                   padding: '2px 4px',
                   borderRadius: 3,
                   transition: 'color 120ms'
@@ -4227,7 +4233,7 @@ function SubagentBanner({ subs }: { subs: Record<string, {
           <div key={tuid} style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' as const }}>
             <span style={{
               display: 'inline-block',
-              fontSize: 13,
+              fontSize: 'var(--chat-fs, 13px)',
               animation: isHealthy ? 'hg-flip 2s ease-in-out infinite' : 'none',
               color: isHealthy ? CRUSH.Charple : CRUSH.Zest
             }}>⏳</span>
