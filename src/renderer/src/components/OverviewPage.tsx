@@ -28,12 +28,16 @@ interface OverviewPageProps {
   agentTasks: Record<string, { title?: string; summary?: string; active: boolean }>
   onOpenAgent: (agent: Agent) => void
   onCloseSession: (agentId: string) => void | Promise<void>
+  /// v2.7.0: click a project card header → jump to that project's office
+  /// view. Previously the whole project card was inert; only per-avatar
+  /// clicks worked, which the user (correctly) flagged.
+  onSwitchProject: (projectId: string) => void
 }
 
 export function OverviewPage(props: OverviewPageProps) {
   const {
     projects, agents, activeTerminals, activeHandoffAgentIds,
-    agentTasks, onOpenAgent, onCloseSession,
+    agentTasks, onOpenAgent, onCloseSession, onSwitchProject,
   } = props
 
   // ---------- derived ----------
@@ -134,6 +138,7 @@ export function OverviewPage(props: OverviewPageProps) {
           agents={agents}
           activeTerminals={activeTerminals}
           onOpenAgent={onOpenAgent}
+          onSwitchProject={onSwitchProject}
         />
       </div>
     </div>
@@ -414,12 +419,13 @@ function SleepingAgentsSection({
 // ============================================================
 
 function ProjectsGrid({
-  projects, agents, activeTerminals, onOpenAgent,
+  projects, agents, activeTerminals, onOpenAgent, onSwitchProject,
 }: {
   projects: Project[]
   agents: Agent[]
   activeTerminals: Set<string>
   onOpenAgent: (agent: Agent) => void
+  onSwitchProject: (projectId: string) => void
 }) {
   return (
     <SectionCard title="Projects" count={projects.length}>
@@ -432,16 +438,20 @@ function ProjectsGrid({
             const working = projAgents.filter((a) => a.status === 'working').length
             const openCount = projAgents.filter((a) => activeTerminals.has(a.id)).length
             return (
-              <div key={p.id} className="rounded-xl bg-bg-primary border border-border p-4">
-                <div className="flex items-center gap-2 mb-3">
+              <div key={p.id} className="rounded-xl bg-bg-primary border border-border p-4 hover:border-accent-muted transition-colors">
+                <button
+                  onClick={() => onSwitchProject(p.id)}
+                  className="w-full flex items-center gap-2 mb-3 cursor-pointer text-left"
+                  title={`Open ${p.name}`}
+                >
                   <div className="w-1 h-6 rounded bg-accent" />
-                  <span className="text-sm font-heading font-bold text-text-primary truncate">
+                  <span className="text-sm font-heading font-bold text-text-primary truncate hover:text-accent transition-colors">
                     {p.name}
                   </span>
                   <span className="ml-auto text-[13px] text-text-muted tabular-nums">
                     {projAgents.length}
                   </span>
-                </div>
+                </button>
                 <div className="flex items-center gap-3 text-[11px] text-text-muted">
                   <span><span className="text-status-working font-semibold">{working}</span> working</span>
                   <span>·</span>

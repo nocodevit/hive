@@ -1,4 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+/* v2.7.0: switched body face from DM Sans (softer, geometric-round) to
+   Inter Tight (tighter tracking, editorial-feel) — better for a data-
+   dense manager app; DM Sans was too round for this many rows of
+   compact info. Space Grotesk stays for headings (keeps the Hive
+   character). JetBrains Mono is loaded here too so terminal/data
+   surfaces (chat, tabular numbers) have a single canonical mono. */
+@import url('https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -126,9 +132,11 @@ body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Inter Tight', -apple-system, BlinkMacSystemFont, sans-serif;
   background-color: var(--bg-primary);
   color: var(--text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 h1, h2, h3, h4, h5, h6 {
