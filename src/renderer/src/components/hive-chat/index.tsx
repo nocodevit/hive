@@ -1223,7 +1223,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // the auto-grow handler in onChange — value going to '' doesn't fire
   // onChange so we must reset the inline height ourselves.
   const resetInputHeight = () => {
-    if (textareaRef.current) textareaRef.current.style.height = '20px'
+    // v2.8.6: snap to one line — height derived from current baseFontSize.
+    if (textareaRef.current) textareaRef.current.style.height = Math.ceil(baseFontSize * 1.4) + 'px'
   }
   const send = async () => {
     const text = input.trim()
@@ -2036,12 +2037,15 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               value={input}
               onChange={e => {
                 setInput(e.target.value)
-                // Auto-grow up to 2 lines (~40px); beyond that, fix height
-                // and let overflow-y handle scrolling. Reset to 'auto'
-                // first so shrinking back to 1 line works on delete.
+                // v2.8.6: auto-grow up to 5 lines, then scroll. Line height
+                // = fontSize × lineHeight (1.4), so one line ≈ baseFontSize
+                // × 1.4. Cap = 5 × that. Reset to 'auto' first so shrinking
+                // back down on delete works.
                 const ta = e.currentTarget
+                const oneLine = Math.ceil(baseFontSize * 1.4)
+                const maxLines = 5
                 ta.style.height = 'auto'
-                ta.style.height = Math.min(ta.scrollHeight, 40) + 'px'
+                ta.style.height = Math.min(ta.scrollHeight, oneLine * maxLines) + 'px'
               }}
               onCompositionStart={() => { composingRef.current = true }}
               onCompositionEnd={() => { composingRef.current = false }}
@@ -2075,8 +2079,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 background: 'transparent', color: CRUSH.Butter,
                 border: 'none', outline: 'none',
                 fontFamily: FONT_MONO, fontSize: baseFontSize, lineHeight: 1.4,
-                height: 20,        // 1 line default
-                maxHeight: 40,     // 2 lines cap; overflow scrolls past
+                // v2.8.6: 1 line default, cap 5 lines then scroll. Heights
+                // derive from baseFontSize × 1.4 so the input scales
+                // with the user's chosen font size.
+                height: Math.ceil(baseFontSize * 1.4),
+                maxHeight: Math.ceil(baseFontSize * 1.4) * 5,
                 overflowY: 'auto',
                 padding: 0
               }}

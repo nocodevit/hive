@@ -419,7 +419,7 @@ function SleepingAgentsSection({
     .sort((A, B) => (A.project?.name || '').localeCompare(B.project?.name || ''))
 
   return (
-    <SectionCard title="Closed · click to open" count={sleepingAgents.length}>
+    <SectionCard title="Closed" count={sleepingAgents.length}>
       {sleepingAgents.length === 0 ? (
         <EmptyState line="Every agent has a session open." />
       ) : (
