@@ -75,7 +75,7 @@ export default function MarkdownPreviewModal({ filePath, onClose }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-2xl w-[90vw] max-w-[1200px] h-[80vh] overflow-hidden flex flex-col">
+      <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-e3 w-[90vw] max-w-[1200px] h-[80vh] overflow-hidden flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-3 border-b border-border">
           <div className="flex items-center gap-2">

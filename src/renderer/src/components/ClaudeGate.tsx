@@ -39,7 +39,7 @@ export default function ClaudeGate({
 
   return (
     <div className="flex h-screen items-center justify-center bg-bg-primary text-text-primary">
-      <div className="w-[460px] bg-bg-secondary border border-border rounded-xl shadow-2xl p-6">
+      <div className="w-[460px] bg-bg-secondary border border-border rounded-xl shadow-e3 p-6">
         <h1 className="text-lg font-heading font-semibold mb-1">Claude Code CLI not found</h1>
         <p className="text-sm text-text-muted mb-4">
           Hive runs Claude Code agents, so it needs the <code>claude</code> command available.
