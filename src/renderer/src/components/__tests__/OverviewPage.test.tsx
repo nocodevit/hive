@@ -83,7 +83,7 @@ describe('OverviewPage', () => {
     expect(within(cards[3] as HTMLElement).getByText('1')).toBeInTheDocument()
     // Descriptive sub-lines
     expect(screen.getByText(/2 working now/)).toBeInTheDocument()
-    expect(screen.getByText(/1 sleeping/)).toBeInTheDocument()
+    expect(screen.getByText(/1 closed/)).toBeInTheDocument()
   })
 
   it('lists working agents in Working now section', () => {
@@ -159,14 +159,14 @@ describe('OverviewPage', () => {
         onCloseSession={onCloseSession}
       />
     )
-    const batchBtn = screen.getByRole('button', { name: /Close 2 idle/ })
+    const batchBtn = screen.getByRole('button', { name: /Close 2 ready/ })
     fireEvent.click(batchBtn)
     expect(onCloseSession).toHaveBeenCalledTimes(2)
     const closedIds = onCloseSession.mock.calls.map((c) => c[0]).sort()
     expect(closedIds).toEqual(['i1', 'i2'])
   })
 
-  it('Sleeping agents section shows agents without a mounted terminal', () => {
+  it('Closed section shows agents without a mounted terminal', () => {
     const agents = [
       makeAgent({ id: 'open', name: 'Opened', status: 'waiting' }),
       makeAgent({ id: 'zzz', name: 'Zzz', status: 'waiting' }),
@@ -182,7 +182,7 @@ describe('OverviewPage', () => {
         onCloseSession={noop}
       />
     )
-    const sleepingSection = screen.getByText('Sleeping agents').parentElement!
+    const sleepingSection = screen.getByText('Closed · click to open').parentElement!
     expect(within(sleepingSection).getByText('1')).toBeInTheDocument()
     // Zzz appears somewhere on the page (Sleeping row + Projects grid tooltip).
     // "Opened" appears in Projects grid too but we're asserting only that

@@ -97,9 +97,9 @@ export function OverviewPage(props: OverviewPageProps) {
             emphasis={workingAgents.length > 0 ? 'accent' : undefined}
           />
           <KpiCard
-            label="Open sessions"
+            label="Session panes"
             value={openSessionAgents.length}
-            sub={`${sleepingAgents.length} sleeping`}
+            sub={`${sleepingAgents.length} closed`}
           />
           <KpiCard
             label="Handoffs running"
@@ -272,7 +272,7 @@ function OpenSessionsSection({
   })
   return (
     <SectionCard
-      title="Open sessions"
+      title="Loaded session panes"
       count={openSessionAgents.length}
       action={
         openSessionAgents.length > 1 && (
@@ -359,7 +359,7 @@ function CloseAllIdleButton({
         const freshWorking = new Set(allAgents.filter((a) => a.status === 'working').map((a) => a.id))
         const toClose = openAgents.filter((a) => !freshWorking.has(a.id))
         if (toClose.length === 0) return
-        if (window.confirm(`Close ${toClose.length} idle Claude session${toClose.length > 1 ? 's' : ''}? Working sessions will be kept.`)) {
+        if (window.confirm(`Close ${toClose.length} ready session pane${toClose.length > 1 ? 's' : ''}? Working sessions (currently running a turn) will be kept.`)) {
           toClose.forEach((a) => onCloseSession(a.id))
         }
       }}
@@ -367,7 +367,7 @@ function CloseAllIdleButton({
         bg-bg-hover text-text-muted hover:bg-status-danger/15 hover:text-status-danger
         transition-colors cursor-pointer"
     >
-      Close {idleCount} idle
+      Close {idleCount} ready
     </button>
   )
 }
@@ -384,7 +384,7 @@ function SleepingAgentsSection({
   onOpenAgent: (agent: Agent) => void
 }) {
   return (
-    <SectionCard title="Sleeping agents" count={sleepingAgents.length}>
+    <SectionCard title="Closed · click to open" count={sleepingAgents.length}>
       {sleepingAgents.length === 0 ? (
         <EmptyState line="All agents have an active session." />
       ) : (
@@ -533,9 +533,12 @@ function StatusPill({ status }: { status: 'working' | 'idle' }) {
       </span>
     )
   }
+  // v2.8.1: "Idle" → "Ready" — the session pane is loaded and Claude is
+  // waiting for input, not abandoned. Idle read as "you should probably
+  // close this" which caused confusion when Hive auto-mounts panes on launch.
   return (
     <span className="px-2 py-1 rounded-full bg-bg-hover text-text-muted text-[11px] font-semibold">
-      Idle
+      Ready
     </span>
   )
 }
