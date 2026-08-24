@@ -21,9 +21,11 @@ interface TerminalProps {
   startupCommand?: string
   rebaseOnStart?: boolean
   onCloseTerminal?: () => void
+  /// v2.7.1: per-project chat font-size, forwarded to HiveChat.
+  chatFontSize?: number
 }
 
-export default function Terminal({ id, agentId, agentName, cwd, visible, autoRunClaude, continueSession, startupCommand, rebaseOnStart, onCloseTerminal }: TerminalProps) {
+export default function Terminal({ id, agentId, agentName, cwd, visible, autoRunClaude, continueSession, startupCommand, rebaseOnStart, onCloseTerminal, chatFontSize }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
@@ -635,6 +637,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
             rebaseOnStart={rebaseOnStart}
             visible={chatMode && visible}
             onCloseTerminal={onCloseTerminal}
+            chatFontSize={chatFontSize}
           />
         </div>
       )}

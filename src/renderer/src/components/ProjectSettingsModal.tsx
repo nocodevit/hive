@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import type { Project, Zone } from '../types'
+import { clampChatFontSize, DEFAULT_CHAT_FONT_SIZE, CHAT_FONT_SIZE_MIN, CHAT_FONT_SIZE_MAX } from '../types'
 
 interface Props {
   open: boolean
@@ -13,10 +14,14 @@ interface Props {
 export default function ProjectSettingsModal({ open, onClose, project, onUpdate, onDelete }: Props) {
   const [name, setName] = useState(project.name)
   const [zones, setZones] = useState<Zone[]>(project.zones)
+  const [chatFontSize, setChatFontSize] = useState<number>(
+    clampChatFontSize(project.chatFontSize)
+  )
 
   useEffect(() => {
     setName(project.name)
     setZones(project.zones)
+    setChatFontSize(clampChatFontSize(project.chatFontSize))
   }, [project])
 
   const addZone = async (type: 'rnd' | 'non-rnd') => {
@@ -34,7 +39,13 @@ export default function ProjectSettingsModal({ open, onClose, project, onUpdate,
   const removeZone = (id: string) => setZones((prev) => prev.filter((z) => z.id !== id))
 
   const handleSave = () => {
-    onUpdate({ ...project, name: name.trim(), zones, officePath: zones[0]?.path || project.officePath })
+    onUpdate({
+      ...project,
+      name: name.trim(),
+      zones,
+      officePath: zones[0]?.path || project.officePath,
+      chatFontSize: clampChatFontSize(chatFontSize),
+    })
     onClose()
   }
 
@@ -111,6 +122,46 @@ export default function ProjectSettingsModal({ open, onClose, project, onUpdate,
               Add Non-R&D Folder
             </button>
           </div>
+        </div>
+
+        {/* v2.7.1: per-project chat font-size — user asked for it because
+            the fixed 13px was hard to read on large monitors + fatiguing
+            on small laptops when working long sessions. Slider clamps to
+            11-20; default 13 preserves the historic baseline. */}
+        <div>
+          <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-1.5">
+            Chat font size
+          </label>
+          <div className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-bg-primary border border-border">
+            <span className="text-[11px] text-text-muted font-mono tabular-nums w-6">{CHAT_FONT_SIZE_MIN}</span>
+            <input
+              type="range"
+              min={CHAT_FONT_SIZE_MIN}
+              max={CHAT_FONT_SIZE_MAX}
+              step={1}
+              value={chatFontSize}
+              onChange={(e) => setChatFontSize(Number(e.target.value))}
+              className="flex-1 accent-accent cursor-pointer"
+              aria-label="Chat font size"
+            />
+            <span className="text-[11px] text-text-muted font-mono tabular-nums w-6 text-right">{CHAT_FONT_SIZE_MAX}</span>
+            <span
+              className="text-sm font-heading font-semibold text-text-primary tabular-nums w-10 text-right"
+              style={{ fontSize: chatFontSize }}
+              title="Preview at selected size"
+            >
+              {chatFontSize}
+            </span>
+          </div>
+          {chatFontSize !== DEFAULT_CHAT_FONT_SIZE && (
+            <button
+              type="button"
+              onClick={() => setChatFontSize(DEFAULT_CHAT_FONT_SIZE)}
+              className="text-[11px] text-accent hover:text-accent-hover cursor-pointer mt-1.5"
+            >
+              Reset to default ({DEFAULT_CHAT_FONT_SIZE}px)
+            </button>
+          )}
         </div>
 
         <button
