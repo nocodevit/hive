@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import Modal from './Modal'
 import type { Agent, Project, Zone, AgentTemplate, TemplateSection, SkillInfo } from '../types'
 import { defaultAvatar, defaultPreferences, BUILTIN_TEMPLATES, TRAIT_OPTIONS, buildSoulFromTemplate } from '../types'
+import { randomAvatar } from '../avatarRandom'
 
 interface Props {
   open: boolean
@@ -121,7 +122,7 @@ export default function CreateAgentModal({ open, onClose, project, availableSkil
       order: Date.now(),
       status: 'done',
       soul,
-      avatar: { ...defaultAvatar },
+      avatar: randomAvatar(),
       enabledSkills,
       model, effort,
       preferences: { ...defaultPreferences }

@@ -40,8 +40,9 @@ module.exports = {
         }
       },
       fontFamily: {
-        sans: ['DM Sans', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
-        heading: ['Space Grotesk', 'sans-serif']
+        sans: ['Inter Tight', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        heading: ['Space Grotesk', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
       }
     }
   },
