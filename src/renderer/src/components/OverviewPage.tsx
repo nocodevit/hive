@@ -447,25 +447,30 @@ function SleepingAgentsSection({
       {sleepingAgents.length === 0 ? (
         <EmptyState line="Every agent has a session open." />
       ) : (
-        <div className="flex flex-wrap gap-1">
-          {/* v2.9.0: much denser — 14px avatar, 11px name, tight padding.
-              Project label dropped from the chip; the flat list is still
-              sorted project A-Z so agents from the same project cluster.
-              Tooltip carries the full name + project + role. */}
+        <div className="flex flex-wrap gap-1.5">
+          {/* v2.9.1: still flat-wrap (no per-project row grouping the
+              user rejected) but chips breathe: 20px avatar, 12px name,
+              10px project label visible inline (not tooltip-only —
+              user wants project info readable at a glance). */}
           {sorted.map((agent) => {
             const projLabel = projectName(agent.projectId)
             return (
               <button
                 key={agent.id}
                 onClick={() => onOpenAgent(agent)}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-bg-primary border border-border
+                className="flex items-center gap-2 pl-1.5 pr-2.5 py-1 rounded-md bg-bg-primary border border-border
                   hover:border-accent hover:bg-bg-hover transition-colors cursor-pointer text-left"
                 title={`${agent.name}${projLabel ? ' · ' + projLabel : ''}${agent.role ? ' · ' + agent.role : ''}`}
               >
-                <AvatarPreview config={agent.avatar} size={14} />
-                <span className="text-[11px] font-medium text-text-primary max-w-[110px] truncate">
+                <AvatarPreview config={agent.avatar} size={20} />
+                <span className="text-[12px] font-medium text-text-primary max-w-[120px] truncate">
                   {agent.name}
                 </span>
+                {projLabel && (
+                  <span className="text-[9.5px] font-mono uppercase tracking-wider text-text-muted/80 border-l border-border pl-2">
+                    {projLabel}
+                  </span>
+                )}
               </button>
             )
           })}
