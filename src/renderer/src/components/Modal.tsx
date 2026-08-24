@@ -12,7 +12,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-2xl
+      <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-e3
         w-[520px] max-h-[80vh] overflow-y-auto">
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="font-heading font-semibold text-base text-text-primary">{title}</h2>
