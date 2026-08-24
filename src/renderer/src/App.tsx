@@ -18,7 +18,7 @@ import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES, clampChatFontSize, CHAT_FONT_SIZE_MIN, CHAT_FONT_SIZE_MAX } from './types'
 import { NoteTag } from './noteTag'
 import { projectListState } from './projectListState'
-import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette } from './palette'
+import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
 import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
 
@@ -60,6 +60,9 @@ export default function App() {
   // v2.6.0: accent-palette overlay. Layered on top of light/dark theme.
   // 'neon-purple' = default (no data-palette attribute), matches historic look.
   const [palette, setPalette] = useState<Palette>(() => loadPalette())
+  // v2.9.0: visual STYLE (accent | prime), orthogonal to palette.
+  // Prime is a full CRT/HUD language swap; accent = shipping look.
+  const [style, setStyle] = useState<Style>(() => loadStyle())
   // Claude CLI gate: null = checking, then { installed, installCommand }.
   // Block the app until claude is runnable (or the user clicks "Continue").
   const [claudeEnv, setClaudeEnv] = useState<{ installed: boolean; installCommand: string } | null>(null)
@@ -247,6 +250,13 @@ export default function App() {
   // v2.6.0: apply + persist accent palette. See palette.ts for the
   // load/apply pair and why 'neon-purple' removes the attribute.
   useEffect(() => { applyPalette(palette) }, [palette])
+  // v2.9.0: apply style. Prime only accepts a subset of palettes —
+  // if the current one is incompatible, applyStyle returns the
+  // coerced fallback and we sync React state to match.
+  useEffect(() => {
+    const coerced = applyStyle(style, palette)
+    if (coerced !== palette) setPalette(coerced)
+  }, [style, palette])
 
   // Lazy boot: single data.load() pulls the project/agent skeleton + task
   // groups + appPrefs (14 KB JSON, ~ms). EVERYTHING else — skills scan,
@@ -2946,6 +2956,40 @@ export default function App() {
             </div>
             <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-5 max-h-[70vh] overflow-y-auto">
+            {/* v2.9.0: STYLE picker (Accent | Prime). Prime is a full
+                visual-language swap (mono font, glow, scanlines, hex
+                avatars). Available palettes reconcile automatically —
+                Prime narrows to purple + blue, pink stays Accent-only. */}
+            <div>
+              <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Visual style</label>
+              <div className="grid grid-cols-2 gap-2.5">
+                {STYLES.map((id) => {
+                  const meta = STYLE_META[id]
+                  const selected = style === id
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setStyle(id)}
+                      className={`text-left p-3 rounded-xl border-2 transition-colors cursor-pointer
+                        ${selected
+                          ? 'border-accent bg-accent-subtle'
+                          : 'border-border bg-bg-primary hover:border-accent-muted'}`}
+                      aria-pressed={selected}
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className={`text-sm font-heading font-semibold ${
+                          id === 'prime' ? 'font-mono tracking-widest uppercase' : ''
+                        } text-text-primary`}>
+                          {meta.name}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-text-muted leading-relaxed">{meta.tagline}</div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* v2.6.0: accent-palette picker. Three swatches, click to apply
                 instantly (no confirmation — reversible). Live-preview
                 because the CSS vars update immediately on data-palette
@@ -2956,15 +3000,22 @@ export default function App() {
                 {PALETTES.map((id) => {
                   const meta = PALETTE_META[id]
                   const selected = palette === id
+                  // v2.9.0: fade + disable palettes incompatible with the
+                  // current Style (Prime has no pink).
+                  const compatible = STYLE_META[style].compatiblePalettes.includes(id)
                   return (
                     <button
                       key={id}
-                      onClick={() => setPalette(id)}
+                      onClick={() => compatible && setPalette(id)}
+                      disabled={!compatible}
                       className={`text-left p-3 rounded-xl border-2 transition-colors cursor-pointer
                         ${selected
                           ? 'border-accent bg-accent-subtle'
-                          : 'border-border bg-bg-primary hover:border-accent-muted'}`}
+                          : compatible
+                            ? 'border-border bg-bg-primary hover:border-accent-muted'
+                            : 'border-border bg-bg-primary opacity-40 cursor-not-allowed'}`}
                       aria-pressed={selected}
+                      title={compatible ? meta.tagline : `Not available in ${STYLE_META[style].name} style`}
                     >
                       <div className="flex items-center gap-2 mb-1.5">
                         <span
@@ -2975,7 +3026,9 @@ export default function App() {
                           {meta.name}
                         </span>
                       </div>
-                      <div className="text-[11px] text-text-muted">{meta.tagline}</div>
+                      <div className="text-[11px] text-text-muted">
+                        {compatible ? meta.tagline : `Accent only`}
+                      </div>
                     </button>
                   )
                 })}
