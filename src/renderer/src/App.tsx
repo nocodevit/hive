@@ -1066,7 +1066,7 @@ export default function App() {
                               onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
                               onDrop={(e) => { e.stopPropagation(); handleDrop(agent.id, grp) }}
                               onDragEnd={() => setDragAgentId(null)}
-                              className={`group w-full text-left pl-2.5 pr-3 py-2 rounded-lg text-sm flex items-center gap-2.5 relative
+                              className={`group w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5 relative
                                 transition-colors cursor-grab active:cursor-grabbing border-l-2 ${
                                 grp ? 'ml-2' : ''
                               } ${
