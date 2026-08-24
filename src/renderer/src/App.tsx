@@ -2895,7 +2895,10 @@ export default function App() {
       {mainScreen === 'overview' && (
         <div
           className="fixed top-0 right-0 bottom-0 z-30 bg-bg-primary"
-          style={{ left: panelWidths.projects }}
+          // v2.9.3: no-drag on the whole Overview overlay — click hits
+          // any interactive element (esp. the close X) on the FIRST
+          // press, not the 2nd/3rd after macOS auto-focuses the window.
+          style={{ left: panelWidths.projects, WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
           <OverviewPage
             projects={projects}
