@@ -95,12 +95,22 @@ export function OverviewPage(props: OverviewPageProps) {
           <div className="flex items-center gap-4">
             <LivePulse />
             <button
-              onClick={onClose}
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onClose() }}
               aria-label="Close Overview"
               title="Close Overview (Esc)"
+              // v2.9.3: WebkitAppRegion:no-drag — the Overview overlay sits
+              // at top-0 which covers the window's default drag-region.
+              // Without this the macOS window manager treats a click on the
+              // button as "focus the window" first (single click does
+              // nothing, then a second/third click actually hits the
+              // handler). Explicit no-drag opts the button OUT of the
+              // drag zone so click lands immediately.
+              style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
               className="w-9 h-9 rounded-lg flex items-center justify-center
                 text-text-muted hover:bg-bg-hover hover:text-text-primary
-                border border-border transition-colors cursor-pointer"
+                border border-border transition-colors cursor-pointer
+                relative z-10"
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                 strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
