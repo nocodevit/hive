@@ -2900,7 +2900,13 @@ export default function App() {
           <OverviewPage
             projects={projects}
             agents={displayAgents}
-            activeTerminals={liveSessionAgents}
+            /* v2.9.2: use activeTerminals (immediate) not liveSessionAgents
+               (waits for first status/report hook — 3-10s lag after
+               user clicks Resume). User: "生成了 missy 新 session 但
+               overview 里却没有". Signal fired the moment startAgent()
+               runs, matches user mental model. Startup auto-mount still
+               counted, but user can Close from Overview if unwanted. */
+            activeTerminals={activeTerminals}
             activeHandoffAgentIds={activeHandoffAgentIds}
             agentTasks={agentTasks}
             onOpenAgent={(agent) => {
