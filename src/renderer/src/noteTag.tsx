@@ -28,11 +28,16 @@ export function NoteTag({ id, note }: { id: string; note: string }) {
   const color = noteTagColor(id)
   return (
     <span
-      className="inline-flex items-center px-1.5 py-px rounded text-[11px] leading-none font-medium flex-shrink-0 max-w-[140px] truncate border"
+      // v2.8.0: symmetric padding (px-2) + explicit overflow rules so the
+      // truncated text ellipsis leaves visible padding on BOTH edges. The
+      // old `truncate` shorthand + px-1.5 inside a parent that itself had
+      // `truncate` was clipping the right border. min-w-0 lets flex parents
+      // shrink the tag if they must, before the ellipsis kicks in.
+      className="inline-flex items-center px-2 py-px rounded text-[11px] leading-none font-medium flex-shrink min-w-0 max-w-[140px] overflow-hidden whitespace-nowrap border"
       style={{ color, borderColor: color, background: `${color}1F` }}
       title={note}
     >
-      {note}
+      <span className="truncate">{note}</span>
     </span>
   )
 }

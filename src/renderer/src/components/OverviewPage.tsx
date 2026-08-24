@@ -66,7 +66,11 @@ export function OverviewPage(props: OverviewPageProps) {
   }, [openSessionAgents])
 
   return (
-    <div className="flex-1 overflow-y-auto bg-bg-primary">
+    // v2.8.0 fix: parent is `fixed top-0 right-0 bottom-0` (no flex context),
+    // so `flex-1` did nothing and `overflow-y-auto` had no height to scroll
+    // against. h-full activates the fixed parent's inherited height and
+    // makes the scroll container behave.
+    <div className="h-full overflow-y-auto bg-bg-primary">
       <div className="max-w-[1400px] mx-auto p-8 space-y-8">
         {/* Title + subtitle */}
         <div className="flex items-center justify-between">
