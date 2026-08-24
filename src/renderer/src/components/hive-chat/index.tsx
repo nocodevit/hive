@@ -8,6 +8,7 @@ import { createFrameCoalescer } from './streamCoalescer'
 import { mergeUsage, preserveAccountUsage } from './usage-state'
 import { shortenPath } from '../../lib/path-display'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
+import { clampChatFontSize } from '../../types'
 import HandoffModal from '../HandoffModal'
 import HandoffBanner from '../HandoffBanner'
 
@@ -60,11 +61,12 @@ interface Props {
  * a Crush-styled component.
  */
 export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible, onCloseTerminal, chatFontSize }: Props) {
-  // v2.7.1: base font-size for the message body. All the smaller sub-element
-  // sizes (11/12) stay hardcoded — those are label/caption tier, meant to
-  // read smaller than the body regardless of the user's chosen base.
-  const baseFontSize = (typeof chatFontSize === 'number' && chatFontSize >= 11 && chatFontSize <= 20)
-    ? chatFontSize : 13
+  // v2.7.1: base font-size for the message body. Reuses the same clamp
+  // helper ProjectSettingsModal uses so the range/default can only ever
+  // widen or narrow in ONE place. Sub-element sizes (11/12) stay
+  // hardcoded — those are label/caption tier, meant to read smaller
+  // than the body regardless of the user's chosen base.
+  const baseFontSize = clampChatFontSize(chatFontSize)
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -2408,7 +2410,7 @@ class HiveChatErrorBoundary extends React.Component<
     return (
       <div style={{
         width: '100%', height: '100%', background: '#150e24',
-        color: CRUSH.Ash, fontFamily: FONT_MONO, fontSize: baseFontSize,
+        color: CRUSH.Ash, fontFamily: FONT_MONO, fontSize: 13,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: 24, gap: 12
       }}>
@@ -2484,7 +2486,7 @@ function PermissionFallback({ req, onDecide }: {
         <div style={{ color: CRUSH.Sriracha, fontWeight: 700, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>
           Permission required (fallback ui)
         </div>
-        <div style={{ color: CRUSH.Ash, fontSize: baseFontSize, marginBottom: 4 }}>
+        <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 4 }}>
           Claude wants to use <strong style={{ color: CRUSH.Charple }}>{String(req.toolName || 'unknown tool')}</strong>
         </div>
         <div style={{ color: CRUSH.Squid, fontSize: 11, marginBottom: 14 }}>
