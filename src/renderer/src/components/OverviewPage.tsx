@@ -207,7 +207,16 @@ function WorkingNowSection({
         <EmptyState line="No agents are running a turn right now." />
       ) : (
         <div className="space-y-2">
-          {workingAgents.map((agent) => {
+          {/* v2.8.3: sorted project-then-agent for stable scan order,
+              matches the Loaded / Closed sections downstream. */}
+          {[...workingAgents]
+            .sort((a, b) => {
+              const pa = projects.find((p) => p.id === a.projectId)?.name || ''
+              const pb = projects.find((p) => p.id === b.projectId)?.name || ''
+              const byProj = pa.localeCompare(pb)
+              return byProj !== 0 ? byProj : a.name.localeCompare(b.name)
+            })
+            .map((agent) => {
             const proj = projects.find((p) => p.id === agent.projectId)
             const task = agentTasks[agent.id]
             const currentTitle = task?.active ? task.title : null
@@ -264,11 +273,10 @@ function OpenSessionsSection({
   onCloseSession: (agentId: string) => void | Promise<void>
 }) {
   const workingSet = new Set(workingAgents.map((a) => a.id))
-  // v2.8.2: group by project so rows aren't a random jumble across
-  // 5+ projects. Within each project, working sessions bubble to the
-  // top (users care WHICH agent is doing work). Projects sorted by
-  // "has-work" first, then by name — so an active project sits above
-  // dormant ones even if alphabetically later.
+  // v2.8.3: pure alphabetical sort. Projects A-Z, agents A-Z inside
+  // each project. Working state shows as a "Working" pill on the row
+  // — no need to bubble those to the top and break the sort. Users
+  // asked for stable, scannable, predictable order.
   const byProject = new Map<string, Agent[]>()
   for (const a of openSessionAgents) {
     if (!byProject.has(a.projectId)) byProject.set(a.projectId, [])
@@ -277,14 +285,9 @@ function OpenSessionsSection({
   const projectGroups = Array.from(byProject.entries())
     .map(([pid, list]) => ({
       project: projects.find((p) => p.id === pid),
-      list: list.sort((a, b) => (workingSet.has(b.id) ? 1 : 0) - (workingSet.has(a.id) ? 1 : 0)),
+      list: list.sort((a, b) => a.name.localeCompare(b.name)),
     }))
-    .sort((A, B) => {
-      const aw = A.list.some((a) => workingSet.has(a.id)) ? 1 : 0
-      const bw = B.list.some((a) => workingSet.has(a.id)) ? 1 : 0
-      if (aw !== bw) return bw - aw
-      return (A.project?.name || '').localeCompare(B.project?.name || '')
-    })
+    .sort((A, B) => (A.project?.name || '').localeCompare(B.project?.name || ''))
   return (
     <SectionCard
       title="Loaded session panes"
@@ -481,7 +484,8 @@ function ProjectsGrid({
         <EmptyState line="No projects yet. Add one from the sidebar." />
       ) : (
         <div className="grid grid-cols-3 gap-3">
-          {projects.map((p) => {
+          {/* v2.8.3: alphabetical for stable order across launches. */}
+          {[...projects].sort((a, b) => a.name.localeCompare(b.name)).map((p) => {
             const projAgents = agents.filter((a) => a.projectId === p.id)
             const working = projAgents.filter((a) => a.status === 'working').length
             const openCount = projAgents.filter((a) => activeTerminals.has(a.id)).length
