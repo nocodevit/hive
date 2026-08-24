@@ -16,7 +16,7 @@
 // to splitting into 5 tiny sub-files) so the dashboard is easy to follow
 // end-to-end when we iterate on the design.
 
-import { useMemo } from 'react'
+import { useEffect, useMemo } from 'react'
 import type { Project, Agent } from '../types'
 import { AvatarPreview } from './AvatarEditor'
 
@@ -32,13 +32,25 @@ interface OverviewPageProps {
   /// view. Previously the whole project card was inert; only per-avatar
   /// clicks worked, which the user (correctly) flagged.
   onSwitchProject: (projectId: string) => void
+  /// v2.9.0: explicit close X button — user shouldn't have to hunt
+  /// down the sidebar Overview toggle again to leave. Routes back to
+  /// the Projects view.
+  onClose: () => void
 }
 
 export function OverviewPage(props: OverviewPageProps) {
   const {
     projects, agents, activeTerminals, activeHandoffAgentIds,
-    agentTasks, onOpenAgent, onCloseSession, onSwitchProject,
+    agentTasks, onOpenAgent, onCloseSession, onSwitchProject, onClose,
   } = props
+
+  // v2.9.0: Esc closes Overview. Window-level listener so users don't
+  // have to focus a specific button first.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', h)
+    return () => window.removeEventListener('keydown', h)
+  }, [onClose])
 
   // ---------- derived ----------
 
@@ -72,7 +84,7 @@ export function OverviewPage(props: OverviewPageProps) {
     // makes the scroll container behave.
     <div className="h-full overflow-y-auto bg-bg-primary">
       <div className="max-w-[1400px] mx-auto p-8 space-y-8">
-        {/* Title + subtitle */}
+        {/* Title + subtitle + close X (v2.9.0). Esc also closes. */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-heading font-bold text-text-primary">Overview</h1>
@@ -80,7 +92,23 @@ export function OverviewPage(props: OverviewPageProps) {
               Everything running across all your projects. Close what you no longer need.
             </p>
           </div>
-          <LivePulse />
+          <div className="flex items-center gap-4">
+            <LivePulse />
+            <button
+              onClick={onClose}
+              aria-label="Close Overview"
+              title="Close Overview (Esc)"
+              className="w-9 h-9 rounded-lg flex items-center justify-center
+                text-text-muted hover:bg-bg-hover hover:text-text-primary
+                border border-border transition-colors cursor-pointer"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18" />
+                <line x1="6" y1="6" x2="18" y2="18" />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {/* KPI row */}
@@ -419,26 +447,25 @@ function SleepingAgentsSection({
       {sleepingAgents.length === 0 ? (
         <EmptyState line="Every agent has a session open." />
       ) : (
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1">
+          {/* v2.9.0: much denser — 14px avatar, 11px name, tight padding.
+              Project label dropped from the chip; the flat list is still
+              sorted project A-Z so agents from the same project cluster.
+              Tooltip carries the full name + project + role. */}
           {sorted.map((agent) => {
             const projLabel = projectName(agent.projectId)
             return (
               <button
                 key={agent.id}
                 onClick={() => onOpenAgent(agent)}
-                className="flex items-center gap-1.5 px-2 py-1.5 rounded-md bg-bg-primary border border-border
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-bg-primary border border-border
                   hover:border-accent hover:bg-bg-hover transition-colors cursor-pointer text-left"
                 title={`${agent.name}${projLabel ? ' · ' + projLabel : ''}${agent.role ? ' · ' + agent.role : ''}`}
               >
-                <AvatarPreview config={agent.avatar} size={18} />
-                <span className="text-[12px] font-medium text-text-primary max-w-[140px] truncate">
+                <AvatarPreview config={agent.avatar} size={14} />
+                <span className="text-[11px] font-medium text-text-primary max-w-[110px] truncate">
                   {agent.name}
                 </span>
-                {projLabel && (
-                  <span className="text-[10px] text-text-muted uppercase tracking-wider">
-                    {projLabel}
-                  </span>
-                )}
               </button>
             )
           })}
