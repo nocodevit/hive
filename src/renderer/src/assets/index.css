@@ -415,6 +415,130 @@ a:focus-visible,
   border-color: transparent !important;
 }
 
+/* ============================================================
+   v2.12.0 · Prime — full-coverage visual language
+   Fills the 8 remaining surfaces (buttons / inputs / tabs / pills /
+   modals / KPI digits / sidebar rows / context menus) so every
+   component reads as Prime, not just the ones we happened to touch.
+   Every rule is palette-token driven → works across 4 combos:
+     dark neon-purple · dark tech-blue · light neon-purple · light tech-blue
+   ============================================================ */
+
+/* Buttons — mono uppercase + accent border. Applies to native <button>
+   elements that ALSO carry a background token (skip pure-ghost hits).
+   Solid CTAs already covered by .bg-accent pulse above; this rule
+   catches the ghost/secondary tier that renders as text + border. */
+:root[data-style='prime'] button:not([disabled]):not(.no-prime) {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.06em;
+}
+:root[data-style='prime'] button.border-accent-muted,
+:root[data-style='prime'] button.border-2 {
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent) 40%, transparent);
+  transition: box-shadow var(--motion-fast) var(--motion-ease);
+}
+:root[data-style='prime'] button.border-accent-muted:hover,
+:root[data-style='prime'] button.border-2:hover {
+  box-shadow: inset 0 0 0 1px var(--accent),
+              0 0 12px color-mix(in oklab, var(--accent) 50%, transparent);
+}
+
+/* Inputs / textareas — mono font, accent caret, accent focus glow. */
+:root[data-style='prime'] input,
+:root[data-style='prime'] textarea,
+:root[data-style='prime'] select {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  caret-color: var(--accent);
+  transition: box-shadow var(--motion-fast) var(--motion-ease),
+              border-color var(--motion-fast) var(--motion-ease);
+}
+:root[data-style='prime'] input:focus,
+:root[data-style='prime'] textarea:focus,
+:root[data-style='prime'] select:focus {
+  border-color: var(--accent) !important;
+  box-shadow: 0 0 0 1px var(--accent),
+              0 0 12px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+/* Project tabs (Dashboard / Office / Task Group / Settings) — Prime
+   turns Linear-style underline into a mono uppercase HUD tab with a
+   glowing underline. Selector matches App.tsx tab pattern:
+   `border-b-2 border-accent` for the active tab. */
+:root[data-style='prime'] .border-b-2 {
+  text-transform: uppercase;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.14em;
+  font-size: 10.5px;
+}
+:root[data-style='prime'] .border-b-2.border-accent {
+  box-shadow: 0 3px 6px -2px color-mix(in oklab, var(--accent) 60%, transparent);
+}
+
+/* StatusPill — Prime commits to sharp corners + accent-tinted border.
+   Selector: our StatusPill component's outer <span> carries
+   `rounded-full font-semibold whitespace-nowrap`. Override to sharp. */
+:root[data-style='prime'] span.rounded-full.font-semibold.whitespace-nowrap {
+  border-radius: 3px !important;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+}
+
+/* Modals — accent-tinted frame. Everything with `.shadow-e3` (our
+   modal elevation token) picks up a 1px accent halo + stronger
+   perimeter shadow so modals feel like HUD panels. */
+:root[data-style='prime'] .shadow-e3 {
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--accent) 30%, transparent),
+              0 24px 60px rgba(0, 0, 0, 0.55),
+              0 0 40px color-mix(in oklab, var(--accent) 20%, transparent) !important;
+}
+
+/* KPI headline digits — big tabular-nums numbers pick up accent
+   text-shadow. Selector targets .text-3xl.tabular-nums (Overview KPI
+   pattern) or .text-2xl.tabular-nums (project dashboard). */
+:root[data-style='prime'] .text-3xl.tabular-nums,
+:root[data-style='prime'] .text-2xl.tabular-nums,
+:root[data-style='prime'] .text-3xl.font-bold.tabular-nums {
+  text-shadow: 0 0 12px color-mix(in oklab, var(--accent) 45%, transparent);
+}
+
+/* Sidebar project row — selected state gets accent inner glow.
+   Selector matches App.tsx's `bg-sidebar-active border-accent` combo. */
+:root[data-style='prime'] .bg-sidebar-active {
+  background: color-mix(in oklab, var(--accent) 12%, var(--sidebar-active)) !important;
+  box-shadow: inset 0 0 12px color-mix(in oklab, var(--accent) 25%, transparent);
+}
+
+/* Context menus + dropdowns — sharp corners, accent hover row.
+   Selector matches the App.tsx pattern:
+   `fixed z-50 bg-bg-secondary border border-border rounded-lg` */
+:root[data-style='prime'] .fixed.z-50.rounded-lg {
+  border-radius: 5px !important;
+  border-color: color-mix(in oklab, var(--accent) 30%, var(--border-default)) !important;
+  box-shadow: 0 0 20px color-mix(in oklab, var(--accent) 25%, transparent),
+              var(--elevation-3);
+}
+:root[data-style='prime'] .fixed.z-50 button:hover {
+  background: color-mix(in oklab, var(--accent) 12%, transparent) !important;
+  color: var(--accent) !important;
+}
+
+/* Every h1..h6 heading picks up the mono treatment + subtle glow so
+   page titles like "Overview", "App Settings", "Project settings"
+   read as HUD panel captions. */
+:root[data-style='prime'] h1,
+:root[data-style='prime'] h2,
+:root[data-style='prime'] h3,
+:root[data-style='prime'] h4,
+:root[data-style='prime'] h5 {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  letter-spacing: 0.02em;
+}
+:root[data-style='prime'] h1 {
+  text-shadow: 0 0 12px color-mix(in oklab, var(--accent) 25%, transparent);
+}
+
 h1, h2, h3, h4, h5, h6 {
   font-family: 'Space Grotesk', sans-serif;
 }
