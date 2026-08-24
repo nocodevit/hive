@@ -202,9 +202,35 @@ describe('OverviewPage', () => {
         agentTasks={{}}
         onOpenAgent={onOpenAgent}
         onCloseSession={noop}
+        onSwitchProject={noop}
       />
     )
     fireEvent.click(screen.getByText('Wake Me'))
     expect(onOpenAgent).toHaveBeenCalledWith(agent)
+  })
+
+  it('clicking a project card header calls onSwitchProject with that project id', () => {
+    // v2.7.0 fix: project cards used to be inert divs. User could see the
+    // Projects grid but had no way to jump into a project from Overview
+    // (only per-avatar clicks routed anywhere). Make the header a real
+    // button that switches to the project's office view.
+    const onSwitchProject = vi.fn()
+    render(
+      <OverviewPage
+        projects={[makeProject('p1', 'Alpha'), makeProject('p2', 'Beta')]}
+        agents={[]}
+        activeTerminals={new Set()}
+        activeHandoffAgentIds={new Set()}
+        agentTasks={{}}
+        onOpenAgent={noop}
+        onCloseSession={noop}
+        onSwitchProject={onSwitchProject}
+      />
+    )
+    // The Beta project card header (inside the Projects section grid).
+    // Two "Beta" texts appear on the page: the KPI card "Projects" and
+    // the actual project card. Use role=button + name to disambiguate.
+    fireEvent.click(screen.getByTitle('Open Beta'))
+    expect(onSwitchProject).toHaveBeenCalledWith('p2')
   })
 })

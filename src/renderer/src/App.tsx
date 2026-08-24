@@ -2810,6 +2810,12 @@ export default function App() {
                 return next
               })
             }}
+            onSwitchProject={(projectId) => {
+              setSelectedProjectId(projectId)
+              setSelectedAgentId(null)
+              setProjectTab('office')
+              setMainScreen('projects')
+            }}
           />
         </div>
       )}
