@@ -88,42 +88,106 @@
     --sidebar-active: #2d1f48;
   }
 
-  /* v2.6.0 — palette overlays. Layered on top of the base theme (light or
-     dark), only the accent/tint tokens shift; layout tokens stay stable.
-     Default palette (no data-palette attribute) = neon-purple, matches the
-     existing look. */
+  /* v2.6.0 — palette overlays. Layered on top of the base theme.
+     v2.7.1: expanded to shift the WHOLE hue family (bg-*, border-*,
+     sidebar-bg) not just --accent — user pointed out that swapping
+     accent alone still showed a purple background on Tech Blue /
+     Future Pink, which reads as broken. Base neon-purple palette
+     is still the un-attributed default (`[data-theme='dark']` block
+     above). --bg-terminal is deliberately NOT tinted — it holds the
+     Crush palette Pepper (#201F26) required by the color contract. */
 
+  /* ---------- Tech Blue ---------- */
   [data-palette='tech-blue'] {
+    --bg-primary: #0a0f1c;
+    --bg-secondary: #10182b;
+    --bg-tertiary: #17223b;
+    --bg-hover: #1e2c4a;
+    --bg-active: #263860;
+
+    --border-default: #263352;
+    --border-subtle: #16203a;
+
+    --text-primary: #edf3ff;
+    --text-secondary: #b8cdff;
+    --text-muted: #7e8dad;
+    --text-on-purple: #ffffff;
+
     --accent: #38bdf8;
     --accent-hover: #7dd3fc;
     --accent-subtle: #082f49;
     --accent-muted: #0284c7;
+
+    --sidebar-bg: #060c1a;
     --sidebar-active: #0c2033;
   }
   [data-palette='tech-blue'][data-theme='light'] {
+    --bg-primary: #f5f8fe;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #e4edfa;
+    --bg-hover: #d3e2f6;
+    --bg-active: #b8d1f0;
+
+    --border-default: #c9dcf4;
+    --border-subtle: #e2ecf9;
+
+    --text-primary: #08172e;
+    --text-secondary: #103a7a;
+    --text-muted: #506783;
+
     --accent: #0284c7;
     --accent-hover: #0369a1;
     --accent-subtle: #e0f2fe;
     --accent-muted: #38bdf8;
-    /* v2.6.0 fix: also override sidebar-active for light — the dark-mode
-       value (#0c2033) would render as a black tile on the light lavender
-       sidebar bg. */
+
+    --sidebar-bg: #eaf2fc;
     --sidebar-active: #dbeafe;
   }
 
+  /* ---------- Future Pink ---------- */
   [data-palette='future-pink'] {
+    --bg-primary: #170a12;
+    --bg-secondary: #23111d;
+    --bg-tertiary: #2f1728;
+    --bg-hover: #3d1f31;
+    --bg-active: #4e2841;
+
+    --border-default: #422538;
+    --border-subtle: #2e1926;
+
+    --text-primary: #fff0f7;
+    --text-secondary: #ffc5e0;
+    --text-muted: #b48aa0;
+    --text-on-purple: #ffffff;
+
     --accent: #f472b6;
     --accent-hover: #f9a8d4;
     --accent-subtle: #3d0d2b;
     --accent-muted: #db2777;
+
+    --sidebar-bg: #100710;
     --sidebar-active: #2a0f22;
   }
   [data-palette='future-pink'][data-theme='light'] {
+    --bg-primary: #fdf5f9;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #fce4ee;
+    --bg-hover: #f9d3e2;
+    --bg-active: #f6b8d0;
+
+    --border-default: #f4c9dc;
+    --border-subtle: #fbe2ec;
+
+    --text-primary: #2b0716;
+    --text-secondary: #7a1043;
+    --text-muted: #83506a;
+
     --accent: #db2777;
     --accent-hover: #be185d;
     --accent-subtle: #fce7f3;
     --accent-muted: #f472b6;
-    /* v2.6.0 fix: same reason as tech-blue-light above. */
+
+    --sidebar-bg: #fbeaf1;
     --sidebar-active: #fbcfe8;
   }
 }
