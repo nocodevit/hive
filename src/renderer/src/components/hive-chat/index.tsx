@@ -46,6 +46,10 @@ interface Props {
   rebaseOnStart?: boolean
   visible: boolean
   onCloseTerminal?: () => void
+  /// v2.7.1: per-project chat base font size. Falls back to 13
+  /// (historic baseline) when undefined so existing projects don't
+  /// visually reflow the moment they upgrade.
+  chatFontSize?: number
 }
 
 /**
@@ -55,7 +59,12 @@ interface Props {
  * We flatten those into a TimelineEntry list and render each entry with
  * a Crush-styled component.
  */
-export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible, onCloseTerminal }: Props) {
+export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible, onCloseTerminal, chatFontSize }: Props) {
+  // v2.7.1: base font-size for the message body. All the smaller sub-element
+  // sizes (11/12) stay hardcoded — those are label/caption tier, meant to
+  // read smaller than the body regardless of the user's chosen base.
+  const baseFontSize = (typeof chatFontSize === 'number' && chatFontSize >= 11 && chatFontSize <= 20)
+    ? chatFontSize : 13
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
@@ -1556,7 +1565,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       // invisibility. Don't follow var(--bg-primary).
       background: '#150e24',  // matches --sidebar-bg dark mode (project list)
       color: CRUSH.Ash,
-      fontFamily: FONT_MONO, fontSize: 13,
+      fontFamily: FONT_MONO, fontSize: baseFontSize,
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden'
     }}>
@@ -1762,7 +1771,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   borderRadius: 6,
                   padding: '8px 16px',
                   color: CRUSH.Squid,
-                  fontFamily: FONT_MONO, fontSize: 13, fontWeight: 500,
+                  fontFamily: FONT_MONO, fontSize: baseFontSize, fontWeight: 500,
                   cursor: 'pointer'
                 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = CRUSH.Squid; e.currentTarget.style.color = CRUSH.Butter }}
@@ -1777,7 +1786,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   borderRadius: 6,
                   padding: '8px 16px',
                   color: CRUSH.Butter,
-                  fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700,
+                  fontFamily: FONT_MONO, fontSize: baseFontSize, fontWeight: 700,
                   cursor: 'pointer'
                 }}
               >OK · close session</button>
@@ -1923,7 +1932,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 borderRadius: 6,
                 padding: '8px 16px',
                 color: CRUSH.Butter,
-                fontFamily: FONT_MONO, fontSize: 13, fontWeight: 700,
+                fontFamily: FONT_MONO, fontSize: baseFontSize, fontWeight: 700,
                 cursor: 'pointer',
                 width: '100%'
               }}
@@ -2057,7 +2066,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 flex: 1, resize: 'none',
                 background: 'transparent', color: CRUSH.Butter,
                 border: 'none', outline: 'none',
-                fontFamily: FONT_MONO, fontSize: 13, lineHeight: 1.4,
+                fontFamily: FONT_MONO, fontSize: baseFontSize, lineHeight: 1.4,
                 height: 20,        // 1 line default
                 maxHeight: 40,     // 2 lines cap; overflow scrolls past
                 overflowY: 'auto',
@@ -2266,7 +2275,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               {authState === 'failed' && '✕ Sign-in failed'}
             </div>
             {authState === 'needed' && (
-              <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
+              <div style={{ color: CRUSH.Ash, fontSize: baseFontSize, marginBottom: 16, lineHeight: 1.5 }}>
                 Claude Code needs to authenticate before it can chat. This opens a browser
                 to anthropic.com for your subscription login — no API key required.
               </div>
@@ -2284,7 +2293,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               <div style={{ color: CRUSH.Sriracha, fontSize: 12, marginBottom: 12 }}>{authError}</div>
             )}
             {authState === 'success' && (
-              <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 16, lineHeight: 1.5 }}>
+              <div style={{ color: CRUSH.Ash, fontSize: baseFontSize, marginBottom: 16, lineHeight: 1.5 }}>
                 You're signed in. Click <strong style={{ color: CRUSH.Bok }}>Resume</strong> on
                 the session below to retry, or close this dialog.
               </div>
@@ -2399,7 +2408,7 @@ class HiveChatErrorBoundary extends React.Component<
     return (
       <div style={{
         width: '100%', height: '100%', background: '#150e24',
-        color: CRUSH.Ash, fontFamily: FONT_MONO, fontSize: 13,
+        color: CRUSH.Ash, fontFamily: FONT_MONO, fontSize: baseFontSize,
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: 24, gap: 12
       }}>
@@ -2475,7 +2484,7 @@ function PermissionFallback({ req, onDecide }: {
         <div style={{ color: CRUSH.Sriracha, fontWeight: 700, fontSize: 11, textTransform: 'uppercase' as const, letterSpacing: '0.08em', marginBottom: 8 }}>
           Permission required (fallback ui)
         </div>
-        <div style={{ color: CRUSH.Ash, fontSize: 13, marginBottom: 4 }}>
+        <div style={{ color: CRUSH.Ash, fontSize: baseFontSize, marginBottom: 4 }}>
           Claude wants to use <strong style={{ color: CRUSH.Charple }}>{String(req.toolName || 'unknown tool')}</strong>
         </div>
         <div style={{ color: CRUSH.Squid, fontSize: 11, marginBottom: 14 }}>
