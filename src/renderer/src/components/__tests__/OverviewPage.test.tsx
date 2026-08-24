@@ -69,6 +69,7 @@ describe('OverviewPage', () => {
         agentTasks={{}}
         onOpenAgent={noop}
         onCloseSession={noop}
+        onClose={noop}
       />
     )
     // KPI cards live in a specific grid; scope lookups to it so the
@@ -100,6 +101,7 @@ describe('OverviewPage', () => {
         agentTasks={{ w1: { title: 'building X', active: true } }}
         onOpenAgent={noop}
         onCloseSession={noop}
+        onClose={noop}
       />
     )
     // The Working now count chip is next to the "Working now" heading.
@@ -130,6 +132,7 @@ describe('OverviewPage', () => {
         agentTasks={{}}
         onOpenAgent={noop}
         onCloseSession={onCloseSession}
+        onClose={noop}
       />
     )
     // Working agent must NOT have a Close button (only idle ones do)
@@ -157,6 +160,7 @@ describe('OverviewPage', () => {
         agentTasks={{}}
         onOpenAgent={noop}
         onCloseSession={onCloseSession}
+        onClose={noop}
       />
     )
     const batchBtn = screen.getByRole('button', { name: /Close 2 ready/ })
@@ -180,6 +184,7 @@ describe('OverviewPage', () => {
         agentTasks={{}}
         onOpenAgent={noop}
         onCloseSession={noop}
+        onClose={noop}
       />
     )
     const sleepingSection = screen.getByText('Closed').parentElement!
@@ -202,11 +207,33 @@ describe('OverviewPage', () => {
         agentTasks={{}}
         onOpenAgent={onOpenAgent}
         onCloseSession={noop}
+        onClose={noop}
         onSwitchProject={noop}
       />
     )
     fireEvent.click(screen.getByText('Wake Me'))
     expect(onOpenAgent).toHaveBeenCalledWith(agent)
+  })
+
+  it('close X button calls onClose', () => {
+    // v2.9.0: Overview page must have an explicit close affordance.
+    // User: "再次点击[sidebar Overview]才关闭也太傻了".
+    const onClose = vi.fn()
+    render(
+      <OverviewPage
+        projects={[makeProject('p1', 'P')]}
+        agents={[]}
+        activeTerminals={new Set()}
+        activeHandoffAgentIds={new Set()}
+        agentTasks={{}}
+        onOpenAgent={noop}
+        onCloseSession={noop}
+        onSwitchProject={noop}
+        onClose={onClose}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /Close Overview/i }))
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 
   it('clicking a project card header calls onSwitchProject with that project id', () => {
@@ -224,6 +251,7 @@ describe('OverviewPage', () => {
         agentTasks={{}}
         onOpenAgent={noop}
         onCloseSession={noop}
+        onClose={noop}
         onSwitchProject={onSwitchProject}
       />
     )
