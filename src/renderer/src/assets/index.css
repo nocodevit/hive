@@ -98,8 +98,14 @@
      accent alone still showed a purple background on Tech Blue /
      Future Pink, which reads as broken. Base neon-purple palette
      is still the un-attributed default (`[data-theme='dark']` block
-     above). --bg-terminal is deliberately NOT tinted — it holds the
-     Crush palette Pepper (#201F26) required by the color contract. */
+     above).
+     v2.15.0: --bg-terminal (chat pane surface) is now ALSO palette-
+     tinted with explicit user approval. Prior behavior kept it at
+     Crush Pepper #201F26 across all palettes; user asked for the
+     chat surface to follow the theme so Tech Blue and Future Pink
+     don't feel like they end at the chat pane border. Other Crush
+     colors used inside chat (Sriracha user bubbles, Julep buttons,
+     Squid/Ash text, Dolly/Mochi tabs) STAY at their locked hexes. */
 
   /* ---------- Tech Blue ---------- */
   [data-palette='tech-blue'] {
@@ -124,6 +130,11 @@
 
     --sidebar-bg: #060c1a;
     --sidebar-active: #0c2033;
+
+    /* v2.15.0 — chat pane bg follows the palette. Deep blue-black
+       so Tech Blue extends into the chat surface instead of stopping
+       at a warm-grey Pepper border. */
+    --bg-terminal: #0b1424;
   }
   [data-palette='tech-blue'][data-theme='light'] {
     --bg-primary: #f5f8fe;
@@ -148,51 +159,63 @@
     --sidebar-active: #dbeafe;
   }
 
-  /* ---------- Future Pink ---------- */
+  /* ---------- Future Pink (v2.15.0 — Neon Fuchsia rework) ----------
+     Old palette read as warm-plum / brown because bg-* values had
+     R>G>B luminance ratios (warm shift) and text-muted was #b48aa0
+     (a desaturated mauve that reads taupe on OLED). Users kept
+     saying "too brown, want neon pink."
+     Reworked: all bg-* now R>B>G (cool-pink shift), text-muted
+     bumped to real bubblegum pink, accent pushed to hot neon fuchsia
+     for the vaporwave-cyberpunk read the user asked for. */
   [data-palette='future-pink'] {
-    --bg-primary: #170a12;
-    --bg-secondary: #23111d;
-    --bg-tertiary: #2f1728;
-    --bg-hover: #3d1f31;
-    --bg-active: #4e2841;
+    --bg-primary: #120515;
+    --bg-secondary: #1e0a22;
+    --bg-tertiary: #2b0f2f;
+    --bg-hover: #3d1745;
+    --bg-active: #521e5e;
 
-    --border-default: #422538;
-    --border-subtle: #2e1926;
+    --border-default: #4a1858;
+    --border-subtle: #2b0f2f;
 
-    --text-primary: #fff0f7;
-    --text-secondary: #ffc5e0;
-    --text-muted: #b48aa0;
-    --text-on-purple: #ffffff;
+    --text-primary: #fff2fa;
+    --text-secondary: #ffb5dd;
+    --text-muted: #e59bc6;
+    --text-on-purple: #150318;
 
-    --accent: #f472b6;
-    --accent-hover: #f9a8d4;
-    --accent-subtle: #3d0d2b;
-    --accent-muted: #db2777;
+    --accent: #ff2eaa;
+    --accent-hover: #ff69c8;
+    --accent-subtle: #3d0d2f;
+    --accent-muted: #ff007f;
 
-    --sidebar-bg: #100710;
-    --sidebar-active: #2a0f22;
+    --sidebar-bg: #0d040f;
+    --sidebar-active: #2e0f2f;
+
+    /* v2.15.0 — chat surface takes on a deep neon-pink base so the
+       chat pane no longer stops at the Pepper grey border. R=42
+       G=10 B=30 gives a visible pink undertone at low luminance. */
+    --bg-terminal: #2a0a1e;
   }
   [data-palette='future-pink'][data-theme='light'] {
-    --bg-primary: #fdf5f9;
+    --bg-primary: #fff5fb;
     --bg-secondary: #ffffff;
-    --bg-tertiary: #fce4ee;
-    --bg-hover: #f9d3e2;
-    --bg-active: #f6b8d0;
+    --bg-tertiary: #ffe1f0;
+    --bg-hover: #ffd0e5;
+    --bg-active: #ffb2d5;
 
-    --border-default: #f4c9dc;
-    --border-subtle: #fbe2ec;
+    --border-default: #ffc9e2;
+    --border-subtle: #ffe1f0;
 
-    --text-primary: #2b0716;
-    --text-secondary: #7a1043;
-    --text-muted: #83506a;
+    --text-primary: #2b0522;
+    --text-secondary: #8b0f56;
+    --text-muted: #b06888;
 
-    --accent: #db2777;
-    --accent-hover: #be185d;
-    --accent-subtle: #fce7f3;
-    --accent-muted: #f472b6;
+    --accent: #e6008a;
+    --accent-hover: #c40072;
+    --accent-subtle: #ffe7f4;
+    --accent-muted: #ff2eaa;
 
-    --sidebar-bg: #fbeaf1;
-    --sidebar-active: #fbcfe8;
+    --sidebar-bg: #ffeaf4;
+    --sidebar-active: #ffcae0;
   }
 }
 
