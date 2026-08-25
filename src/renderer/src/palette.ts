@@ -123,7 +123,7 @@ export const PALETTE_META: Record<Palette, PaletteMeta> = {
   'future-pink': {
     id: 'future-pink',
     name: 'Future Pink',
-    swatch: '#f472b6',
-    tagline: 'Hot magenta · vaporwave forward',
+    swatch: '#ff2eaa',
+    tagline: 'Neon fuchsia · vaporwave forward',
   },
 }
