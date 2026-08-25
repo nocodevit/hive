@@ -1,7 +1,7 @@
 {
   "name": "hive",
   "productName": "Hive",
-  "version": "2.13.0",
+  "version": "2.14.0",
   "description": "Multi-agent Claude Code manager with soul",
   "main": "out/main/index.js",
   "build": {
@@ -40,6 +40,7 @@
     "@xterm/headless": "^6.0.0",
     "@xterm/xterm": "^5.5.0",
     "lucide-react": "^1.11.0",
+    "marked": "^18.0.11",
     "node-pty": "^1.0.0",
     "prism-react-renderer": "^2.4.1",
     "react-markdown": "^10.1.0",

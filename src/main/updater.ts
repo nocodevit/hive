@@ -1,26 +1,25 @@
 /**
- * Hive self-updater (v2.4.0) — GitHub Releases based, no code signing
- * required. Distributes as unsigned .dmg from the nocodevit/hive repo.
+ * Hive self-updater — GitHub Releases based, no code signing required.
+ * Distributes unsigned .dmg from the nocodevit/hive repo.
  *
- * Design:
+ * Design (v2.14.0):
  *   1. Menu → Hive → "Check for Updates…" runs checkForUpdates() manually.
  *   2. On app startup, autoCheckIfDue() runs once per 24h (state persists
  *      in ~/.hive/updater-state.json — timestamp only).
- *   3. When a newer release is found, dialog.showMessageBox offers:
- *      - Download → net.download the .dmg to ~/Downloads, then
- *        shell.showItemInFolder so user drags into /Applications
- *      - Release notes → shell.openExternal(release.html_url)
- *      - Later → dismiss (auto-check will re-offer next day)
- *   4. When no update, dialog says "You're on the latest (vX.Y.Z) ✓"
- *      unless silent=true (auto-check path stays silent on no-update).
- *
- * All operations are graceful: network fail = silent skip on auto-check,
- * informative dialog on manual check. Never blocks app startup.
+ *   3. When a newer release is found, showReleaseNotes() opens a custom
+ *      BrowserWindow (see release-notes-window.ts) that renders the full
+ *      markdown release body, keeps the "View on GitHub" link click
+ *      non-destructive, and streams download progress inline. Native
+ *      dialog.showMessageBox is only used for the tiny "up to date" and
+ *      "check failed" states where scroll/markdown don't matter.
+ *   4. All operations are graceful: network fail = silent skip on
+ *      auto-check, informative dialog on manual check.
  */
-import { app, dialog, shell, net, Notification } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, createWriteStream } from 'node:fs'
+import { app, dialog, net } from 'electron'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
+import { showReleaseNotes } from './release-notes-window.js'
 
 const RELEASES_API = 'https://api.github.com/repos/nocodevit/hive/releases/latest'
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000  // 24h
@@ -172,108 +171,26 @@ export async function checkForUpdates(silent = false): Promise<void> {
   if (silent && state.snoozedTag === release.tag_name) return
 
   const asset = pickDmgAsset(release)
-  const notesText = (release.body || '').slice(0, 800) + ((release.body || '').length > 800 ? '\n\n…(truncated)' : '')
+  const tagStripped = release.tag_name.replace(/^v/, '')
 
-  const choice = await dialog.showMessageBox({
-    type: 'info',
-    title: `Hive ${release.tag_name} available`,
-    message: `A new version is available.\nCurrent: ${currentVersion} · Latest: ${release.tag_name}`,
-    detail: notesText || 'No release notes provided.',
-    buttons: asset
-      ? ['Download & Reveal', 'View release notes', 'Later']
-      : ['View release notes', 'Later'],
-    defaultId: 0,
-    cancelId: asset ? 2 : 1
+  // v2.14.0: swap dialog.showMessageBox for a self-owned BrowserWindow.
+  // The native NSAlert route lost markdown, lost scrolling, closed on
+  // "View release notes" click, and gave zero download progress —
+  // four separate bugs all rooted in the wrong primitive. The window
+  // owns render + download-with-progress + external-link handling
+  // without ever closing itself for a link click.
+  showReleaseNotes({
+    currentVersion,
+    latestVersion: tagStripped,
+    releaseTitle: release.name || `Hive v${tagStripped}`,
+    bodyMarkdown: release.body || '',
+    releaseUrl: release.html_url,
+    dmg: asset ? { url: asset.url, name: asset.name, size: asset.size } : null,
+    onLater: () => {
+      state.snoozedTag = release.tag_name
+      saveState(state)
+    }
   })
-
-  const btnIdx = choice.response
-  const btnLabel = asset
-    ? ['Download & Reveal', 'View release notes', 'Later'][btnIdx]
-    : ['View release notes', 'Later'][btnIdx]
-
-  if (btnLabel === 'Later') {
-    state.snoozedTag = release.tag_name
-    saveState(state)
-    return
-  }
-  if (btnLabel === 'View release notes') {
-    shell.openExternal(release.html_url)
-    return
-  }
-  if (btnLabel === 'Download & Reveal' && asset) {
-    downloadAndReveal(asset.url, asset.name)
-  }
-}
-
-/**
- * Download the .dmg to ~/Downloads, then AUTO-MOUNT it (`shell.openPath`)
- * so Finder shows the drag-Hive-to-Applications overlay directly. User
- * only needs to drag once. Then a follow-up dialog reminds them to quit
- * the running Hive before overwriting /Applications/Hive.app.
- *
- * v2.10.0: previously used shell.showItemInFolder (Finder reveal only);
- * user still had to double-click the .dmg. openPath eliminates that
- * step — mount happens immediately after download.
- */
-function downloadAndReveal(url: string, filename: string): void {
-  const downloadsDir = join(homedir(), 'Downloads')
-  const target = join(downloadsDir, filename)
-  const notify = (title: string, body: string) => {
-    try { new Notification({ title, body }).show() } catch { /* silent */ }
-  }
-  notify('Hive update download started', filename)
-  try {
-    const req = net.request({ url, redirect: 'follow' })
-    req.setHeader('User-Agent', 'Hive-updater')
-    req.on('response', (res) => {
-      if (res.statusCode !== 200) {
-        notify('Hive update download failed', `HTTP ${res.statusCode}`)
-        return
-      }
-      const out = createWriteStream(target)
-      res.on('data', (chunk) => out.write(chunk))
-      res.on('end', () => {
-        out.end(async () => {
-          notify('Hive update downloaded', 'Opening installer…')
-          // Auto-mount the DMG. On success Finder pops up the standard
-          // drag-to-Applications window; on failure fall back to reveal.
-          try {
-            const errMsg = await shell.openPath(target)
-            if (errMsg) {
-              // openPath returned a non-empty string = error. Fall back.
-              shell.showItemInFolder(target)
-            }
-          } catch {
-            shell.showItemInFolder(target)
-          }
-
-          // Follow-up dialog explains the two steps the user still owns:
-          // drag Hive → Applications, then quit + relaunch the app.
-          dialog.showMessageBox({
-            type: 'info',
-            title: 'Installer opened',
-            message: `Hive ${filename.replace(/^Hive-|-arm64\.dmg$/g, '')} ready to install`,
-            detail:
-              '1. Drag Hive.app into the Applications folder shown in Finder.\n' +
-              '   (If asked, replace the existing Hive.)\n' +
-              '2. Quit this running Hive from the app menu.\n' +
-              '3. Reopen Hive from Applications to run the new version.',
-            buttons: ['OK'],
-          })
-        })
-      })
-      res.on('error', (err) => {
-        notify('Hive update download failed', String(err))
-        out.end()
-      })
-    })
-    req.on('error', (err) => {
-      notify('Hive update download failed', String(err))
-    })
-    req.end()
-  } catch (err) {
-    notify('Hive update download failed', String(err))
-  }
 }
 
 /**
