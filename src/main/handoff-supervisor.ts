@@ -207,15 +207,29 @@ export function detectAskUserQuestion(event: Record<string, unknown>): boolean {
 
 /**
  * Pure state transition: apply one stream-json event.
- * - `type:result` events are the turn boundaries — increment turnCount + add cost.
- * - Everything else is metadata: refresh elapsedMs so the banner clock stays live.
- * Pause bookkeeping is done by the runtime (start/end pause helpers below).
+ *
+ * v2.15.1 turn-count fix:
+ *   Prior version only bumped `turnCount` on `type: 'result'` events —
+ *   but claude's `/goal` autonomous loop emits ONE result at the very
+ *   end (an hour later) and MANY `assistant` events during. So a
+ *   real-world hour-long handoff with 20 LLM turns and 2 pushed MRs
+ *   showed "turn 0" in the banner until the whole loop settled.
+ *   Fix: count `assistant` events as turn boundaries (each = one
+ *   LLM round-trip = user's mental model of "turn"). `result` events
+ *   still contribute to cost tracking (they carry `total_cost_usd`),
+ *   just no longer to the turn counter.
+ *   `stream_event` sub-frames are ignored — they'd multi-count each
+ *   assistant message; we want the whole-message boundary.
+ *
+ * Pause bookkeeping is done by the runtime (start/end pause helpers).
  */
 export function applyEvent(state: HandoffState, event: Record<string, unknown>, now: number): HandoffState {
   const next = { ...state, elapsedMs: liveElapsedMs(state, now) }
+  if (event.type === 'assistant') {
+    next.turnCount = state.turnCount + 1
+  }
   if (event.type === 'result') {
     const cost = typeof event.total_cost_usd === 'number' ? event.total_cost_usd : 0
-    next.turnCount = state.turnCount + 1
     next.totalCostUsd = state.totalCostUsd + Math.max(0, cost)
   }
   return next

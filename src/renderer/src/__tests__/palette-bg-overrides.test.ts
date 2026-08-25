@@ -57,19 +57,14 @@ describe('palette overlays (v2.7.1)', () => {
         }
       })
 
-      it('DOES override --bg-terminal in dark mode (v2.15.0 palette-aware chat bg)', () => {
-        // v2.15.0: user explicitly approved deviating from the Crush
-        // Pepper lock for the chat surface so Tech Blue / Future Pink
-        // extend into the chat pane instead of stopping at a warm-grey
-        // border. Other Crush colors used inside chat (Sriracha bubbles,
-        // Julep buttons, Squid/Ash text) still ship at locked hexes.
-        expect(darkBody, `dark ${palette} must set --bg-terminal`).toContain('--bg-terminal:')
-      })
-
-      it('leaves --bg-terminal untouched in light mode (light Pepper is fine as-is)', () => {
-        // Light mode base bg-terminal already leans pale; palette light
-        // variants inherit and stay legible. No override needed.
-        expect(lightBody, `light ${palette} should not override --bg-terminal`).not.toContain('--bg-terminal:')
+      it('does NOT override --bg-terminal (v2.15.1 — Crush Pepper lock restored)', () => {
+        // v2.15.0 briefly tinted chat bg per palette. User rejected:
+        // pink chat bg + pink agent column bg went muddy and no longer
+        // matched. Restored to Crush Pepper #201F26 across every palette
+        // so agent column (which stays neutral dark grey) and chat pane
+        // match perfectly. Only accents / borders carry the hue.
+        expect(darkBody).not.toContain('--bg-terminal:')
+        expect(lightBody).not.toContain('--bg-terminal:')
       })
     })
   }

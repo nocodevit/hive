@@ -160,13 +160,18 @@ export function startHandoff(input: StartHandoffInput, win: BrowserWindow): Star
     const inputTok = extractInputTokens(event)
     if (inputTok !== null && h) h.lastInputTokens = inputTok
 
-    const before = state.turnCount
+    const beforeTurn = state.turnCount
+    const beforeCost = state.totalCostUsd
     const next = applyEvent(state, event, now)
     Object.assign(state, next)
 
-    // Only re-check breakers on interesting boundaries (turn/cost change).
-    const turnAdvanced = state.turnCount > before
-    if (!turnAdvanced) return
+    // v2.15.1: emit on turn advance OR cost advance so the banner
+    // updates on the final /goal result event (assistants advance
+    // turns, results advance cost — before this fix cost updates
+    // were silent because turn didn't advance).
+    const turnAdvanced = state.turnCount > beforeTurn
+    const costAdvanced = state.totalCostUsd > beforeCost
+    if (!turnAdvanced && !costAdvanced) return
 
     emitProgress(win, state)
 
