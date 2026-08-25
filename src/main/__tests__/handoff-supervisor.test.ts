@@ -125,20 +125,48 @@ describe('detectAskUserQuestion', () => {
   })
 })
 
-describe('applyEvent', () => {
-  it('increments turnCount + adds cost on a result event', () => {
-    const s = applyEvent(baseState(), { type: 'result', total_cost_usd: 0.15 }, T0 + 30_000)
+describe('applyEvent (v2.15.1 — assistant events drive turnCount)', () => {
+  // Regression pin: prior version incremented turnCount on `result`
+  // events, which fire ONCE at the end of a /goal loop — so hour-long
+  // loops with dozens of assistant turns showed "turn 0" in the banner.
+  // v2.15.1 counts `assistant` events (each = one LLM round-trip).
+
+  it('increments turnCount on an assistant event', () => {
+    const s = applyEvent(baseState(), { type: 'assistant' }, T0 + 30_000)
     expect(s.turnCount).toBe(1)
-    expect(s.totalCostUsd).toBeCloseTo(0.15, 6)
     expect(s.elapsedMs).toBe(30_000)
   })
 
-  it('leaves turnCount/cost untouched on non-result events', () => {
-    for (const type of ['assistant', 'user', 'system']) {
+  it('does NOT increment turnCount on a result event (cost only)', () => {
+    // result is now a cost-carrier, not a turn boundary.
+    const s = applyEvent(baseState({ turnCount: 3 }), { type: 'result', total_cost_usd: 0.15 }, T0 + 1000)
+    expect(s.turnCount).toBe(3)
+    expect(s.totalCostUsd).toBeCloseTo(0.15, 6)
+  })
+
+  it('adds cost on a result event with total_cost_usd', () => {
+    const s = applyEvent(baseState({ totalCostUsd: 0.5 }), { type: 'result', total_cost_usd: 0.15 }, T0 + 1000)
+    expect(s.totalCostUsd).toBeCloseTo(0.65, 6)
+  })
+
+  it('leaves turnCount/cost untouched on user/system/tool events', () => {
+    for (const type of ['user', 'system', 'tool_use', 'stream_event']) {
       const s = applyEvent(baseState({ turnCount: 3, totalCostUsd: 0.9 }), { type }, T0 + 5_000)
-      expect(s.turnCount).toBe(3)
+      expect(s.turnCount, `type=${type} should not bump turnCount`).toBe(3)
       expect(s.totalCostUsd).toBeCloseTo(0.9, 6)
     }
+  })
+
+  it('20 assistants + 1 final result → turn=20, cost from result (simulates hour-long /goal loop)', () => {
+    // Real /goal shape: many assistant turns during the loop, ONE result
+    // at the end. Pre-fix this reported turn=1; now reports turn=20.
+    let s = baseState()
+    for (let i = 0; i < 20; i++) {
+      s = applyEvent(s, { type: 'assistant' }, T0 + i * 60_000)
+    }
+    s = applyEvent(s, { type: 'result', total_cost_usd: 3.42 }, T0 + 20 * 60_000)
+    expect(s.turnCount).toBe(20)
+    expect(s.totalCostUsd).toBeCloseTo(3.42, 6)
   })
 
   it('elapsed excludes accumulated pausedMs', () => {
@@ -157,9 +185,11 @@ describe('applyEvent', () => {
     expect(s.totalCostUsd).toBe(0)
   })
 
-  it('non-numeric total_cost_usd counted as 0 (still increments turn)', () => {
-    const s = applyEvent(baseState(), { type: 'result', total_cost_usd: 'nope' }, T0 + 1000)
-    expect(s.turnCount).toBe(1)
+  it('non-numeric total_cost_usd counted as 0 on a result event', () => {
+    // v2.15.1: result no longer increments turn; only asserts cost
+    // coercion to 0 on a malformed payload.
+    const s = applyEvent(baseState({ turnCount: 5 }), { type: 'result', total_cost_usd: 'nope' }, T0 + 1000)
+    expect(s.turnCount).toBe(5)
     expect(s.totalCostUsd).toBe(0)
   })
 })

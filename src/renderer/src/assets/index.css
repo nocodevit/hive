@@ -94,18 +94,16 @@
 
   /* v2.6.0 — palette overlays. Layered on top of the base theme.
      v2.7.1: expanded to shift the WHOLE hue family (bg-*, border-*,
-     sidebar-bg) not just --accent — user pointed out that swapping
-     accent alone still showed a purple background on Tech Blue /
-     Future Pink, which reads as broken. Base neon-purple palette
-     is still the un-attributed default (`[data-theme='dark']` block
-     above).
-     v2.15.0: --bg-terminal (chat pane surface) is now ALSO palette-
-     tinted with explicit user approval. Prior behavior kept it at
-     Crush Pepper #201F26 across all palettes; user asked for the
-     chat surface to follow the theme so Tech Blue and Future Pink
-     don't feel like they end at the chat pane border. Other Crush
-     colors used inside chat (Sriracha user bubbles, Julep buttons,
-     Squid/Ash text, Dolly/Mochi tabs) STAY at their locked hexes. */
+     sidebar-bg) not just --accent.
+     v2.15.0: --bg-terminal briefly tinted per palette (user asked
+     chat to follow theme). REVERTED in v2.15.1 — user rejected the
+     result: 'pink 应该搭配深灰 (dark theme)'. Pink on dark grey is
+     the classic cyberpunk high-contrast look; pink on dark pink
+     went muddy and made agent column vs chat pane clash. From
+     v2.15.1 forward: bg-primary/secondary/etc stay dark-grey for
+     Future Pink too, chat-pane bg-terminal stays at Crush Pepper
+     #201F26 across every palette. Only accents / borders /
+     text-muted carry the palette hue. */
 
   /* ---------- Tech Blue ---------- */
   [data-palette='tech-blue'] {
@@ -130,11 +128,6 @@
 
     --sidebar-bg: #060c1a;
     --sidebar-active: #0c2033;
-
-    /* v2.15.0 — chat pane bg follows the palette. Deep blue-black
-       so Tech Blue extends into the chat surface instead of stopping
-       at a warm-grey Pepper border. */
-    --bg-terminal: #0b1424;
   }
   [data-palette='tech-blue'][data-theme='light'] {
     --bg-primary: #f5f8fe;
@@ -159,27 +152,28 @@
     --sidebar-active: #dbeafe;
   }
 
-  /* ---------- Future Pink (v2.15.0 — Neon Fuchsia rework) ----------
-     Old palette read as warm-plum / brown because bg-* values had
-     R>G>B luminance ratios (warm shift) and text-muted was #b48aa0
-     (a desaturated mauve that reads taupe on OLED). Users kept
-     saying "too brown, want neon pink."
-     Reworked: all bg-* now R>B>G (cool-pink shift), text-muted
-     bumped to real bubblegum pink, accent pushed to hot neon fuchsia
-     for the vaporwave-cyberpunk read the user asked for. */
+  /* ---------- Future Pink (v2.15.1 — Neon Fuchsia on dark grey) ----
+     v2.15.0 tried dark-pink bases; user rejected: '粉应该搭配深灰',
+     and 'agent 的背景和 chat 的背景不协调统一'. Reworked so the
+     BASE surfaces are neutral dark-grey (Pepper family) and only
+     the accents / borders / text-muted carry the neon-pink hue.
+     This is the classic cyberpunk pattern — pink pops HARDER on
+     grey than on pink-tinted grey. bg-terminal (chat pane) stays
+     at Crush Pepper #201F26 so the agent column and chat pane
+     match perfectly instead of clashing. */
   [data-palette='future-pink'] {
-    --bg-primary: #120515;
-    --bg-secondary: #1e0a22;
-    --bg-tertiary: #2b0f2f;
-    --bg-hover: #3d1745;
-    --bg-active: #521e5e;
+    --bg-primary: #1a181c;
+    --bg-secondary: #232127;
+    --bg-tertiary: #2a2830;
+    --bg-hover: #332f3a;
+    --bg-active: #3f3a48;
 
-    --border-default: #4a1858;
-    --border-subtle: #2b0f2f;
+    --border-default: #3a2f38;
+    --border-subtle: #2a2528;
 
     --text-primary: #fff2fa;
     --text-secondary: #ffb5dd;
-    --text-muted: #e59bc6;
+    --text-muted: #b8a3ac;
     --text-on-purple: #150318;
 
     --accent: #ff2eaa;
@@ -187,13 +181,8 @@
     --accent-subtle: #3d0d2f;
     --accent-muted: #ff007f;
 
-    --sidebar-bg: #0d040f;
-    --sidebar-active: #2e0f2f;
-
-    /* v2.15.0 — chat surface takes on a deep neon-pink base so the
-       chat pane no longer stops at the Pepper grey border. R=42
-       G=10 B=30 gives a visible pink undertone at low luminance. */
-    --bg-terminal: #2a0a1e;
+    --sidebar-bg: #131114;
+    --sidebar-active: #2d1f2c;
   }
   [data-palette='future-pink'][data-theme='light'] {
     --bg-primary: #fff5fb;
