@@ -810,6 +810,19 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         if (isCompactSummaryEvent(ev)) {
           const hint = extractCompactSummaryHint(ev)
           addEntry({ kind: 'compact_summary_hint', transcriptPath: hint.transcriptPath, summaryChars: hint.summaryChars } as any)
+          // v2.13.0: reset ctx% RIGHT HERE at the compact_boundary event
+          // — the earliest 100%-reliable "compact finished" signal from
+          // claude's stream. v2.5.3 tried to do this by string-matching
+          // `/compact done` in text output, but recent claude CLI emits
+          // `<local-command-stdout>Compacted </local-command-stdout>`
+          // instead, so the string never matched and ctx% stayed pegged
+          // at the pre-compact number until the next assistant.usage
+          // event landed (which requires the user to type first — the
+          // exact bug the user reported). Fires here, no text parsing.
+          setLatestInputTokens(0)
+          setCompactStartedAt(null)
+          setCompactStuck(null)
+          setCtxNagDismissed({ warn: false, urgent: false })
           return  // onEvent is per-event callback, not a loop — `return` not `continue`
         }
         const content = (ev as any).message?.content
@@ -984,24 +997,20 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         setPendingPermissions([])
         setPendingQuestion(null)
       } else if (
+        // v2.13.0: recognize BOTH the historical `/compact done` text
+        // and the current `<local-command-stdout>Compacted `
+        // fragment claude CLI actually emits today. Also keep the
+        // `context UNCHANGED` failure-path settler. Primary reset
+        // now happens in the isCompactSummaryEvent branch above
+        // (compact_boundary event), so this text-match branch is
+        // just a belt-and-suspenders settle for `compactStartedAt`.
         text.includes('/compact done') ||
+        text.includes('Compacted ') ||
         (text.includes('/compact ') && text.includes('context UNCHANGED'))
       ) {
-        // Either success or failure path emits a settle line; both
-        // mean the child is being respawned so the input is usable
-        // again.
         setCompactStartedAt(null)
         setCompactStuck(null)
-        // v2.5.3: on compact SUCCESS, reset ctx% immediately so the
-        // top bar reflects the just-compacted state without waiting
-        // for the user to type a new message. Prior behavior: bar
-        // stayed pegged at pre-compact % until the next assistant
-        // event landed (which needs user input first — 68% → typed
-        // "hi" → suddenly 8% = confusing UX user complained about).
-        // Failure path (context UNCHANGED) also resets — the old
-        // number is stale either way; better to show 0% than lie.
-        // Real value refreshes on the next assistant.usage event.
-        if (text.includes('/compact done')) {
+        if (text.includes('/compact done') || text.includes('Compacted ')) {
           setLatestInputTokens(0)
         }
       }

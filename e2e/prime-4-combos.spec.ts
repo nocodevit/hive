@@ -65,6 +65,21 @@ test.afterAll(async () => {
 test('capture all 4 Prime combos', async () => {
   await page.getByText('PrimeDemo').first().click()
   await page.waitForTimeout(400)
+  // Click Missy so the chat pane mounts (in chooser mode).
+  await page.getByText('Missy').first().click()
+  await page.waitForTimeout(1200)
+  // Click "Start new" so the chat pane leaves chooser mode and shows
+  // the actual message stream + textarea input. Claude may or may
+  // not spawn under HEADLESS — either way the chat pane's
+  // post-chooser layout renders.
+  // Enter = the chooser's default action (Start new). Under HEADLESS
+  // claude won't actually spawn, but the HiveChat component leaves
+  // chooserMode and mounts the real chat surface (empty timeline +
+  // textarea input at the bottom) which is what we want to screenshot.
+  try {
+    await page.keyboard.press('Enter')
+    await page.waitForTimeout(3000)
+  } catch { /* silent */ }
 
   const combos: Array<{ theme: 'light' | 'dark'; palette: 'neon-purple' | 'tech-blue' }> = [
     { theme: 'dark',  palette: 'neon-purple' },
