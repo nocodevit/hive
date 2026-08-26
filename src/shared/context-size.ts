@@ -32,3 +32,24 @@ export function parseContextSize(s: string | undefined | null): number {
   if (m[2] === 'K') return n * 1_000
   return n
 }
+
+/**
+ * Resolve a token budget from claude's `system:init` event, gracefully
+ * handling the case where recent claude-opus-5 emits no `contextSize`
+ * field at all. Prefer the explicit string when present, otherwise
+ * infer from model name (haiku = 200K, everything else = 1M).
+ *
+ * v2.15.4: renderer already had this fallback inline; extracted here
+ * so the handoff supervisor (main process) can use the SAME rule and
+ * auto-compact stops silently failing when contextSize is absent.
+ */
+export function resolveContextSizeTokens(explicit: unknown, model: unknown): number {
+  if (typeof explicit === 'string' && explicit.length > 0) {
+    const n = parseContextSize(explicit)
+    if (n > 0) return n
+  }
+  if (typeof model === 'string' && model.length > 0) {
+    return parseContextSize(/haiku/i.test(model) ? '200K' : '1M')
+  }
+  return 0
+}

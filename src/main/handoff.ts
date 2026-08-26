@@ -34,12 +34,12 @@ import {
   foldStats,
   initialState,
   liveElapsedMs,
-  parseContextSize,
   shouldTriggerAutoCompact,
   type HandoffBreakers,
   type HandoffConfig,
   type HandoffState
 } from './handoff-supervisor'
+import { resolveContextSizeTokens } from '../shared/context-size'
 
 interface RunningHandoff {
   config: HandoffConfig
@@ -153,9 +153,20 @@ export function startHandoff(input: StartHandoffInput, win: BrowserWindow): Star
     // v2.5.0: track context tokens for auto-compact detection.
     // system:init events carry `contextSize`; assistant events carry
     // `usage.input_tokens` on each turn.
-    if (event.type === 'system' && (event as any).subtype === 'init') {
-      const cs = (event as any).contextSize
-      if (typeof cs === 'string' && h) h.contextSizeTokens = parseContextSize(cs)
+    //
+    // v2.15.4 fix: claude-opus-5's system:init DROPPED the `contextSize`
+    // field entirely — the event now emits only {type, subtype,
+    // session_id, model}. Pre-fix: h.contextSizeTokens stayed 0
+    // forever, the auto-compact gate `contextSizeTokens > 0` always
+    // failed, /goal loops ran to 81%+ ctx with no auto-compact.
+    // Mirror the renderer's fallback (index.tsx ~L648): if contextSize
+    // absent, infer from model name — haiku = 200K, everything else
+    // = 1M. Same rule both places so main + UI can't drift.
+    if (event.type === 'system' && (event as any).subtype === 'init' && h) {
+      h.contextSizeTokens = resolveContextSizeTokens(
+        (event as any).contextSize,
+        (event as any).model
+      )
     }
     const inputTok = extractInputTokens(event)
     if (inputTok !== null && h) h.lastInputTokens = inputTok
