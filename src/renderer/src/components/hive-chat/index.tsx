@@ -1286,31 +1286,49 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setSending(false)
   }
 
-  // v2.15.2 fix — the auto-send useEffect must re-fire when the NEW
-  // --print child comes alive, not just when compactInProgress flips.
+  // v2.15.2 fix — queue-flush bug introduced by v2.13.0.
   //
-  // Real timing during /compact:
-  //   1. User types → stash into pendingDraft, compactInProgress=true.
-  //   2. Old --print child killed → onExit → setExited(1) AND
-  //      setCompactStartedAt(null). compactInProgress flips true→false
-  //      HERE. useEffect fires. But `exited === null` fails (just set
-  //      to 1), so auto-send is skipped.
-  //   3. Compaction runs 30-90s.
-  //   4. New --print spawned → system:init → setExited(null). If deps
-  //      is only [compactInProgress] React DOES NOT re-fire the effect
-  //      because compactInProgress didn't change. → pendingDraft is
-  //      stuck forever, the "Queued: ..." chip lies to the user.
+  // Pre-v2.13.0: setCompactStartedAt(null) fired ONLY from the stderr
+  // "✅ /compact done" line, which HIVE emits from compactSession()
+  // AFTER startChat() returns and the new --print child's session is
+  // registered. So by the time useEffect fired, chat.send would reach
+  // an alive child.
   //
-  // Fix: depend on all three signals. Body still clears pendingDraft
-  // on entry so a follow-up fire is a no-op (condition fails).
+  // v2.13.0: I added a SECOND clear path — the isCompactSummary user
+  // event branch. That event comes from the new child's stream, and
+  // can arrive during a narrow window where the child is booting but
+  // sessions.get(id)?.child is still the un-piped placeholder from
+  // startChat, or main-process ipcMain handler races the child spawn.
+  // chat.send returns {ok:false} in that window — but the prior code
+  // did `.finally(() => setSending(false))` and never checked res.ok.
+  // pendingDraft was cleared unconditionally → message silently lost.
+  //
+  // Two fixes stacked:
+  //   1. Deps include exited + pendingDraft so the effect re-runs on
+  //      any of the three state changes, not just compactInProgress.
+  //   2. On {ok:false}, RESTORE pendingDraft and surface a system
+  //      entry. The restored draft triggers the useEffect again on
+  //      the next render, so it retries automatically once the child
+  //      is truly ready.
   useEffect(() => {
     if (!compactInProgress && pendingDraft !== null && exited === null) {
       const draft = pendingDraft
       setPendingDraft(null)
-      addEntry({ kind: 'system', text: '✓ Sent queued draft' })
       setSending(true)
-      addEntry({ kind: 'user', text: draft })
-      window.api.chat.send(id, draft).finally(() => setSending(false))
+      window.api.chat.send(id, draft).then((res) => {
+        if (res && res.ok) {
+          addEntry({ kind: 'system', text: '✓ Sent queued draft' })
+          addEntry({ kind: 'user', text: draft })
+        } else {
+          // Restore the draft so the useEffect retries next tick — a
+          // {ok:false} here almost always means the new --print child
+          // hasn't finished booting yet. The retry will succeed once
+          // system:init lands and sessions.get(id).child is piped.
+          setPendingDraft(draft)
+        }
+      }).catch(() => {
+        setPendingDraft(draft)
+      }).finally(() => setSending(false))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [compactInProgress, exited, pendingDraft])
