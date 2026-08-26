@@ -1286,11 +1286,23 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setSending(false)
   }
 
-  // When /compact settles AND a draft was queued, flush it to the
-  // freshly-respawned --print child. We wait one tick so React has
-  // already cleared compactStartedAt before we re-enter send(); without
-  // the timeout, send() would still see compactInProgress=true and
-  // re-stash the same draft into pendingDraft.
+  // v2.15.2 fix — the auto-send useEffect must re-fire when the NEW
+  // --print child comes alive, not just when compactInProgress flips.
+  //
+  // Real timing during /compact:
+  //   1. User types → stash into pendingDraft, compactInProgress=true.
+  //   2. Old --print child killed → onExit → setExited(1) AND
+  //      setCompactStartedAt(null). compactInProgress flips true→false
+  //      HERE. useEffect fires. But `exited === null` fails (just set
+  //      to 1), so auto-send is skipped.
+  //   3. Compaction runs 30-90s.
+  //   4. New --print spawned → system:init → setExited(null). If deps
+  //      is only [compactInProgress] React DOES NOT re-fire the effect
+  //      because compactInProgress didn't change. → pendingDraft is
+  //      stuck forever, the "Queued: ..." chip lies to the user.
+  //
+  // Fix: depend on all three signals. Body still clears pendingDraft
+  // on entry so a follow-up fire is a no-op (condition fails).
   useEffect(() => {
     if (!compactInProgress && pendingDraft !== null && exited === null) {
       const draft = pendingDraft
@@ -1301,7 +1313,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       window.api.chat.send(id, draft).finally(() => setSending(false))
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [compactInProgress])
+  }, [compactInProgress, exited, pendingDraft])
 
   const resumeFromRc = async () => {
     addEntry({ kind: 'system', text: 'Resuming session — picking up any mobile turns…' })
