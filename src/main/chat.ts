@@ -482,6 +482,24 @@ export function isCompactStuck(elapsedMs: number, lastOutputAgeMs: number): bool
   return elapsedMs > COMPACT_STUCK_ELAPSED_MS && lastOutputAgeMs > COMPACT_STUCK_IDLE_MS
 }
 
+/**
+ * "Success" result event with $0 cost + sub-10s duration = claude's
+ * /compact command returned success WITHOUT ever calling the LLM
+ * summarization API. Empirically this happens when the session is
+ * too fresh (e.g. just compacted moments ago) or when --resume
+ * loaded an already-compacted view. The subtype is 'success' and
+ * is_error is false — from Hive's perspective it "succeeded" — but
+ * nothing was actually compacted. User sees ctx% unchanged and
+ * concludes "compact failed". v2.15.3 detects this specifically so
+ * the caller can broadcast a clear warning instead of a false ✅.
+ */
+export function isCompactNoop(resultEvent: any, durationMs: number): boolean {
+  if (!resultEvent) return false
+  const cost = typeof resultEvent.total_cost_usd === 'number' ? resultEvent.total_cost_usd : NaN
+  if (Number.isNaN(cost)) return false
+  return cost === 0 && durationMs < 10_000
+}
+
 async function runCompactViaPrint(
   cwd: string,
   sid: string,
@@ -489,7 +507,7 @@ async function runCompactViaPrint(
   timeoutMs = 600_000,
   onProgress?: (msg: string) => void,
   chatId?: string
-): Promise<{ ok: boolean; error?: string; durationMs: number; resultEvent?: any }> {
+): Promise<{ ok: boolean; error?: string; durationMs: number; resultEvent?: any; noop?: boolean }> {
   const startedAt = Date.now()
   return new Promise(resolve => {
     let settled = false
@@ -522,20 +540,34 @@ async function runCompactViaPrint(
       clearInterval(progressTimer)
       try { child.kill() } catch {}
       const durationMs = Date.now() - startedAt
-      // Persist every attempt — success or fail — so the user can
-      // verify "did compact actually run". Append-only JSONL.
+      // v2.15.3: detect claude returning "success" without actually
+      // doing any LLM work. If we let it through as ok=true the
+      // caller broadcasts ✅ /compact done and the user sees ctx%
+      // unchanged, concludes compact is broken. Flag it as a distinct
+      // failure mode so the caller can broadcast a truthful warning.
+      const noop = ok && isCompactNoop(resultEvent, durationMs)
+      const finalOk = ok && !noop
+      const finalError = noop ? 'no-op (LLM never called — session may be already-compacted or too small)' : error
       try {
         const logPath = join(homedir(), '.hive', 'compact-log.jsonl')
         try { mkdirSync(join(homedir(), '.hive'), { recursive: true }) } catch {}
         appendFileSync(logPath, JSON.stringify({
           ts: new Date().toISOString(),
-          sid, cwd, ok, error, durationMs,
+          sid, cwd,
+          ok: finalOk,
+          error: finalError,
+          durationMs,
           resultSubtype: resultEvent?.subtype,
           resultUsd: resultEvent?.total_cost_usd,
-          resultDurationMs: resultEvent?.duration_ms
+          resultDurationMs: resultEvent?.duration_ms,
+          // v2.15.3: capture the actual result text so no-op cases
+          // can be diagnosed without repro. Truncate to keep the log
+          // append-only and cheap.
+          resultText: typeof resultEvent?.result === 'string' ? resultEvent.result.slice(0, 500) : undefined,
+          noop: noop || undefined
         }) + '\n')
       } catch {}
-      resolve({ ok, error, durationMs, resultEvent })
+      resolve({ ok: finalOk, error: finalError, durationMs, resultEvent, noop })
     }
 
     // CRITICAL: pass `--agent` so claude loads the same custom system
