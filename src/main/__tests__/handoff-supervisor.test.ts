@@ -244,13 +244,26 @@ describe('checkCircuitBreakers', () => {
 })
 
 describe('initialState', () => {
-  it('starts running with zero counters + no pause + empty stats', () => {
+  it('starts running with zero counters + no pause + empty stats + goals from config', () => {
+    // v2.15.5: goals now copied from config into state so the banner
+    // can echo them to the user (previously they existed only on the
+    // main-process config object and never flowed to renderer).
     expect(initialState(baseConfig(), T0)).toEqual({
       runId: 'hnd_1', chatId: 'chat-agent-1', agentId: 'agent-1',
       status: 'running', turnCount: 0, totalCostUsd: 0,
       startedAt: T0, elapsedMs: 0, pausedMs: 0,
-      stats: { filesEdited: [], commits: [], toolErrorsRecovered: 0, autoCompactCount: 0, autoCompactCostUsd: 0 }
+      stats: { filesEdited: [], commits: [], toolErrorsRecovered: 0, autoCompactCount: 0, autoCompactCostUsd: 0 },
+      goals: ['do stuff']
     })
+  })
+
+  it('copies goals as a NEW array (mutating config later must not tunnel in)', () => {
+    // Immutability guarantee — the state snapshot must not share
+    // reference with the caller's config.goals.
+    const cfg = baseConfig({ goals: ['a', 'b'] })
+    const s = initialState(cfg, T0)
+    cfg.goals.push('c')
+    expect(s.goals).toEqual(['a', 'b'])
   })
 })
 

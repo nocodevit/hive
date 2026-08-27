@@ -109,6 +109,12 @@ export interface HandoffState {
   stopReason?: string
   stats?: HandoffStats         // v2.3.0: accumulated during run, sent with handoff:done
   askedQuestion?: { question: string; options?: Array<{ label: string; description?: string }> } // v2.3.0 pause payload
+  /**
+   * v2.15.5: the goals the user typed at start. Shipped from main→renderer
+   * so the running-banner detail can echo "I forgot what I asked for" —
+   * the exact user complaint that motivated exposing them.
+   */
+  goals?: string[]
 }
 
 export type CircuitBreakerResult =
@@ -280,7 +286,11 @@ export function initialState(config: HandoffConfig, startedAt: number): HandoffS
     startedAt,
     elapsedMs: 0,
     pausedMs: 0,
-    stats: emptyStats()
+    stats: emptyStats(),
+    // v2.15.5: copy goals into state so the banner can surface them.
+    // Shallow copy so mutating the array later doesn't tunnel back
+    // into config (kept immutable — treated as start-time facts).
+    goals: [...config.goals]
   }
 }
 

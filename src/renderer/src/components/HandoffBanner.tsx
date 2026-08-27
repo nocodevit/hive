@@ -21,6 +21,12 @@ export interface HandoffLiveState {
   pausedMs?: number
   stopReason?: string
   askedQuestion?: { question: string; options?: Array<{ label: string; description?: string }> }
+  /**
+   * v2.15.5: goals the user typed at handoff start. Ships from main via
+   * emitProgress so the running banner's ⓘ detail can echo them back —
+   * "handoff running 好久了, 我目标是啥来着" was the exact user gripe.
+   */
+  goals?: string[]
   stats?: {
     filesEdited: string[]
     commits: Array<{ sha?: string; msg: string }>
@@ -168,35 +174,77 @@ function RunningStrip({ state, expanded, onToggle }: { state: HandoffLiveState; 
     if (!confirm('Stop this handoff? Claude will get SIGTERM immediately.')) return
     await (window as any).api.handoff.stop(state.runId)
   }
+  // v2.15.5: user complaint 'handoff running 的 detail 应该 show goal 我输入的
+  // 内容, 不然我忘了'. Show the goal INLINE (not just behind ⓘ) — the running
+  // banner is a long-lived HUD, hunting for a click-to-expand for the most
+  // important piece of context is wrong. First goal truncated to ~80 chars
+  // shows on the strip; ⓘ expand keeps full multi-goal detail + runId.
+  const goals = state.goals ?? []
+  const goalPreview = goals.length === 0
+    ? ''
+    : goals.length === 1
+      ? goals[0]
+      : `${goals[0]} (+${goals.length - 1} more)`
   return (
-    <div style={{ ...runningStripStyle, background: (paused || compacting) ? 'rgba(232,254,150,0.10)' : 'rgba(255,96,255,0.10)', borderColor: color }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1 }}>
-        <span style={{ fontSize: 14 }}>{icon}</span>
-        <span style={{ fontWeight: 600, color }}>{label}</span>
-        <span style={{ opacity: 0.7 }}>·</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{elapsedStr}</span>
-        <span style={{ opacity: 0.7 }}>·</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11 }}>turn {state.turnCount}</span>
-        <span style={{ opacity: 0.7 }}>·</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11 }}>${state.totalCostUsd.toFixed(2)}</span>
+    <div style={{ ...runningStripStyle, background: (paused || compacting) ? 'rgba(232,254,150,0.10)' : 'rgba(255,96,255,0.10)', borderColor: color, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
+        <span style={{ fontWeight: 600, color, flexShrink: 0 }}>{label}</span>
+        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>{elapsedStr}</span>
+        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>turn {state.turnCount}</span>
+        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
+        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>${state.totalCostUsd.toFixed(2)}</span>
+        {goalPreview && (
+          <>
+            <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
+            <span
+              data-testid="handoff-goal-inline"
+              title={goals.join('\n\n')}
+              style={{
+                fontSize: 11,
+                fontStyle: 'italic',
+                opacity: 0.9,
+                minWidth: 0,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                color: '#DFDBDD'
+              }}
+            >🎯 {goalPreview}</span>
+          </>
+        )}
       </div>
       <button
         type="button"
         onClick={onToggle}
         title={expanded ? 'Hide meta' : 'Show meta'}
-        style={infoButtonStyle}
+        style={{ ...infoButtonStyle, flexShrink: 0 }}
       >
         ⓘ
       </button>
       <button
         type="button"
         onClick={onStop}
-        style={stopButtonStyle}
+        style={{ ...stopButtonStyle, flexShrink: 0 }}
       >
         Stop
       </button>
       {expanded && (
         <div style={metaBoxStyle}>
+          {goals.length > 0 && (
+            <div data-testid="handoff-goal-full" style={{ marginBottom: 6 }}>
+              <div style={{ opacity: 0.6, marginBottom: 2 }}>
+                {goals.length === 1 ? 'goal:' : `goals (${goals.length}):`}
+              </div>
+              {goals.map((g, i) => (
+                <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', paddingLeft: 8 }}>
+                  {goals.length > 1 ? `${i + 1}. ` : ''}{g}
+                </div>
+              ))}
+            </div>
+          )}
           <div>runId: {state.runId}</div>
           {state.stopReason && <div>reason: {state.stopReason}</div>}
         </div>
