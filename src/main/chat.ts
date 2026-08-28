@@ -299,20 +299,48 @@ type CcUsage = Awaited<ReturnType<typeof queryUsageViaCcusage>>
 type PctUsage = Awaited<ReturnType<typeof queryUsagePctViaPty>>
 const usageCaches = new Map<string, UsageCache<NonNullable<CcUsage>, NonNullable<PctUsage>>>()
 
+/**
+ * v2.15.6: ccusage is ACCOUNT-scoped — it scans `~/.claude/projects/`
+ * and returns the same number regardless of cwd. Previously each per-cwd
+ * UsageCache called ccusage independently → N agents in N worktrees =
+ * N × 12s @ 75% CPU ccusage scans firing simultaneously every 5 min.
+ * User report 2026-08-28: `ccusage blocks --json` pegged 75% CPU
+ * long-term — traced back to this cwd-fanout.
+ *
+ * Fix: dedupe ccusage across ALL cwds via a module-scope single-flight
+ * cache. Per-cwd UsageCache still owns the PTY /usage scrape (needs
+ * cwd for the workspace-trust dialog), but its `fetchCc` closure now
+ * points at the shared ccusage runner.
+ */
+let sharedCcCache: { value: NonNullable<CcUsage> | null; ts: number } | null = null
+let sharedCcInFlight: Promise<NonNullable<CcUsage> | null> | null = null
+async function sharedCcusageQuery(): Promise<NonNullable<CcUsage> | null> {
+  const now = Date.now()
+  if (sharedCcCache && now - sharedCcCache.ts < USAGE_TTL_MS) return sharedCcCache.value
+  if (sharedCcInFlight) return sharedCcInFlight
+  sharedCcInFlight = (async () => {
+    try {
+      const v = await queryUsageViaCcusage()
+      sharedCcCache = { value: v, ts: Date.now() }
+      return v
+    } finally {
+      sharedCcInFlight = null
+    }
+  })()
+  return sharedCcInFlight
+}
+
 async function getSharedUsage(scrapeCwd?: string) {
-  // Subscription %% IS account-level (same answer regardless of cwd),
-  // BUT the interactive `claude` PTY we spawn here gates input on a
-  // workspace-trust dialog the first time it sees an unfamiliar dir.
-  // $HOME is unfamiliar → trust dialog blocks → /usage never sent →
-  // scrape times out and caches a null. Key the cache by the cwd so
-  // that an agent in a known-trusted dir can populate it; subsequent
-  // agents in the same dir reuse the value.
+  // Per-cwd cache still exists — the `claude --print /usage` PTY scrape
+  // gates on a workspace-trust dialog the first time it sees an unfamiliar
+  // dir, so we must key that by cwd. But ccusage is account-scoped and
+  // now dedupes via `sharedCcusageQuery` (see above).
   const key = scrapeCwd || process.env.HOME || '/'
   let cache = usageCaches.get(key)
   if (!cache) {
     cache = new UsageCache({
       ttlMs: USAGE_TTL_MS,
-      fetchCc: queryUsageViaCcusage,
+      fetchCc: sharedCcusageQuery,
       fetchPct: () => queryUsagePctViaPty(key)
     })
     usageCaches.set(key, cache)
