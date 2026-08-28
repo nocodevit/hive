@@ -21,6 +21,7 @@ import { projectListState } from './projectListState'
 import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
 import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
+import { pickLRUToEvict } from './lru-terminals'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
@@ -74,6 +75,14 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [activeTerminals, setActiveTerminals] = useState<Set<string>>(new Set())
+  // v2.15.7: last-touched timestamp per agent (Map in a ref instead of
+  // useState so bumping doesn't churn re-renders). Read by pickLRUToEvict
+  // when the set hits MAX_ACTIVE_TERMINALS to choose which sticky
+  // HiveChat to unmount for memory reclamation.
+  const lastAccessedAtRef = useRef<Map<string, number>>(new Map())
+  useEffect(() => {
+    if (selectedAgentId) lastAccessedAtRef.current.set(selectedAgentId, Date.now())
+  }, [selectedAgentId])
   // v2.1.0: agent IDs currently running a Handoff. Drives the 🥴 sticker
   // overlay on AvatarPreview. Refreshed from handoff:progress/done events +
   // a 4s poll fallback (handles cases where events were missed during a
@@ -628,7 +637,30 @@ export default function App() {
       setAgentNames((prev) => ({ ...prev, [agent.id]: result.agentName! }))
     }
 
-    setActiveTerminals((prev) => new Set(prev).add(agent.id))
+    // v2.15.7: LRU eviction. Before adding another sticky-mounted
+    // HiveChat + xterm to the process, see if we're at the cap and
+    // if so evict the oldest un-pinned one. See lru-terminals.ts for
+    // the picker + why (2.2 GB / 2 day report).
+    setActiveTerminals((prev) => {
+      const evict = pickLRUToEvict({
+        incomingId: agent.id,
+        activeIds: prev,
+        selectedId: selectedAgentId,
+        pinnedIds: activeHandoffAgentIds,
+        lastAccessed: lastAccessedAtRef.current
+      })
+      const next = new Set(prev)
+      if (evict) {
+        // Same teardown path as user-clicked close: kill the child +
+        // remove from set. Renderer unmounts the Terminal/HiveChat →
+        // useEffect cleanups fire → memory reclaimed.
+        try { window.api.chat.stop(`chat-${evict}`) } catch { /* silent */ }
+        next.delete(evict)
+      }
+      next.add(agent.id)
+      return next
+    })
+    lastAccessedAtRef.current.set(agent.id, Date.now())
     setSelectedAgentId(agent.id)
     setMainView('terminal')
   }
