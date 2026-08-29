@@ -11,7 +11,14 @@ import { render, screen, cleanup, fireEvent, within } from '@testing-library/rea
 import { OverviewPage } from '../OverviewPage'
 import type { Agent, Project } from '../../types'
 
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  // v2.15.9: OverviewPage's Close buttons now go through the themed
+  // confirmDialog singleton which mounts to a body-level host. Its
+  // singleton state persists across tests; scrub the host node so
+  // the next test's dialog mounts fresh.
+  document.querySelectorAll('[data-confirm-dialog-host]').forEach((el) => el.remove())
+})
 
 // Stub AvatarPreview so we don't have to instantiate the real component;
 // this test file only cares about the OverviewPage's own logic.
@@ -116,7 +123,7 @@ describe('OverviewPage', () => {
     expect(aliceHits.length).toBeGreaterThan(0)
   })
 
-  it('Close session button calls onCloseSession only for idle-open agents', () => {
+  it('Close session button calls onCloseSession only for idle-open agents', async () => {
     const onCloseSession = vi.fn()
     const agents = [
       makeAgent({ id: 'working-1', name: 'Working One', status: 'working' }),
@@ -139,12 +146,17 @@ describe('OverviewPage', () => {
     const closeButtons = screen.getAllByRole('button', { name: /^Close$/ })
     expect(closeButtons).toHaveLength(2)
     fireEvent.click(closeButtons[0])
+    // v2.15.9: click now opens the themed confirmDialog. Wait for it
+    // to mount then click "Close session" to actually fire the callback.
+    await new Promise((r) => setTimeout(r, 0))
+    fireEvent.click(screen.getByTestId('confirm-ok'))
+    await new Promise((r) => setTimeout(r, 0))
     expect(onCloseSession).toHaveBeenCalledTimes(1)
     // Must be one of the idle ids, never the working one
     expect(onCloseSession.mock.calls[0][0]).not.toBe('working-1')
   })
 
-  it('Close N idle button batch-closes only idle-open agents', () => {
+  it('Close N idle button batch-closes only idle-open agents', async () => {
     const onCloseSession = vi.fn()
     const agents = [
       makeAgent({ id: 'w1', status: 'working' }),
@@ -165,6 +177,10 @@ describe('OverviewPage', () => {
     )
     const batchBtn = screen.getByRole('button', { name: /Close 2 ready/ })
     fireEvent.click(batchBtn)
+    // v2.15.9: click opens confirmDialog — click through to fire callbacks.
+    await new Promise((r) => setTimeout(r, 0))
+    fireEvent.click(screen.getByTestId('confirm-ok'))
+    await new Promise((r) => setTimeout(r, 0))
     expect(onCloseSession).toHaveBeenCalledTimes(2)
     const closedIds = onCloseSession.mock.calls.map((c) => c[0]).sort()
     expect(closedIds).toEqual(['i1', 'i2'])

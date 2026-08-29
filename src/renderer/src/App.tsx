@@ -22,6 +22,7 @@ import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES
 import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
 import { pickLRUToEvict } from './lru-terminals'
+import { confirmDialog } from './components/ConfirmDialog'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
@@ -2351,13 +2352,18 @@ export default function App() {
                   {/* Danger Zone */}
                   <div className="pt-4 border-t border-border">
                     <button
-                      onClick={() => {
-                        if (confirm('Delete this project and all its agents?')) {
-                          setAgents((prev) => prev.filter((a) => a.projectId !== selectedProject.id))
-                          setProjects((prev) => prev.filter((p) => p.id !== selectedProject.id))
-                          setSelectedProjectId(null)
-                          setSelectedAgentId(null)
-                        }
+                      onClick={async () => {
+                        const ok = await confirmDialog({
+                          title: 'Delete this project?',
+                          message: `Deleting "${selectedProject.name}" removes it and all its agents from Hive. Files on disk are untouched.`,
+                          confirmLabel: 'Delete project',
+                          cancelLabel: 'Keep'
+                        })
+                        if (!ok) return
+                        setAgents((prev) => prev.filter((a) => a.projectId !== selectedProject.id))
+                        setProjects((prev) => prev.filter((p) => p.id !== selectedProject.id))
+                        setSelectedProjectId(null)
+                        setSelectedAgentId(null)
                       }}
                       className="px-4 py-2 rounded-lg text-sm text-red-400 hover:bg-red-400/10
                         transition-colors cursor-pointer"
