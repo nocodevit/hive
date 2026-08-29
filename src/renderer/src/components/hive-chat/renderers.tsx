@@ -1276,7 +1276,19 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
   const questions: AskQuestion[] = Array.isArray(input.questions) ? (input.questions as AskQuestion[]) : []
   const [selected, setSelected] = useState<Record<number, string | string[] | undefined>>({})
   const [submitted, setSubmitted] = useState(false)
-  const interactive = !!ctx && !submitted
+  // v2.15.8: user-triggered local dismissal. Fixes "选项不能选择的时候怎么办呢！！！" —
+  // when ctx is null (control_request orphaned: claude died mid-question, or
+  // history replay after the request already resolved) every option button
+  // was disabled with no way out. Now a ✕ Dismiss button collapses the
+  // card whether or not the request is still live.
+  const [dismissed, setDismissed] = useState(false)
+  // v2.15.8: free-text answer path. Some AskUserQuestion prompts don't
+  // cover the answer the user wants to give ("None of these — I actually
+  // want X"). Rather than force a canned pick, let them type. Applied to
+  // question 0 only; multi-question AskUserQuestion is exotic and the
+  // canned buttons still work for those.
+  const [freeText, setFreeText] = useState('')
+  const interactive = !!ctx && !submitted && !dismissed
 
   const submitAll = (final: Record<number, string | string[] | undefined>) => {
     if (!ctx || submitted) return
@@ -1289,6 +1301,53 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
     })
     ctx.submit(answers)
     setSubmitted(true)
+  }
+
+  const submitFreeText = () => {
+    if (!ctx || submitted || !freeText.trim()) return
+    const answers: Record<string, string | string[]> = {}
+    if (questions[0]) answers[questions[0].question] = freeText.trim()
+    ctx.submit(answers)
+    setSubmitted(true)
+  }
+
+  const dismiss = () => {
+    // If claude is still waiting on the control_response, send an empty
+    // payload so it moves on (claude interprets missing answers as
+    // 'user declined to answer'). If ctx is already null (orphaned),
+    // just visually collapse — nothing on the wire to satisfy.
+    if (ctx && !submitted) {
+      try { ctx.submit({}) } catch { /* channel dead — proceed to visual close */ }
+      setSubmitted(true)
+    }
+    setDismissed(true)
+  }
+
+  if (dismissed) {
+    return (
+      <div style={{
+        border: `1px dashed ${CRUSH.Charcoal}`,
+        borderRadius: 8,
+        padding: '6px 12px',
+        background: 'transparent',
+        marginTop: 4,
+        color: CRUSH.Squid,
+        fontSize: 11,
+        fontStyle: 'italic',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8
+      }}>
+        <span>? AskUserQuestion (dismissed)</span>
+        <button
+          onClick={() => setDismissed(false)}
+          style={{
+            background: 'transparent', border: 'none', color: CRUSH.Charple,
+            fontFamily: 'inherit', fontSize: 11, cursor: 'pointer', padding: 0
+          }}
+        >↺ show</button>
+      </div>
+    )
   }
 
   const pickSingle = (qIdx: number, label: string) => {
@@ -1325,6 +1384,25 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
         <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>AskUserQuestion</span>
         {!ctx && !submitted && <span style={{ color: CRUSH.Squid, fontSize: 11 }}>(awaiting request — read-only)</span>}
         {submitted && <span style={{ color: CRUSH.Bok, fontSize: 11 }}>✓ submitted</span>}
+        {/* v2.15.8 escape hatch: always available. When interactive, sends
+            an empty answer so claude moves on. When orphaned, just closes
+            the card locally so the user isn't stuck staring at disabled
+            option buttons with no way out. */}
+        <button
+          onClick={dismiss}
+          title={interactive ? 'Send empty answer + close' : 'Close (no live request)'}
+          style={{
+            marginLeft: 'auto',
+            background: 'transparent',
+            border: `1px solid ${CRUSH.Charcoal}`,
+            borderRadius: 4,
+            color: CRUSH.Squid,
+            padding: '2px 8px',
+            fontFamily: 'inherit',
+            fontSize: 11,
+            cursor: 'pointer'
+          }}
+        >✕ Dismiss</button>
       </div>
       {questions.map((q, qIdx) => {
         const sel = selected[qIdx]
@@ -1386,6 +1464,54 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
               fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer'
             }}
           >Submit →</button>
+        </div>
+      )}
+      {/* v2.15.8 free-text escape hatch — for when none of the canned
+          options fit the answer the user actually wants to give. Only
+          shown for single-question AskUserQuestion; multi-question is
+          rare and would need a per-question textarea grid. */}
+      {interactive && questions.length === 1 && (
+        <div style={{ marginTop: 10, display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+          <textarea
+            data-testid="ask-user-question-freetext"
+            value={freeText}
+            onChange={(e) => setFreeText(e.target.value)}
+            onKeyDown={(e) => {
+              // Enter (no shift) → submit. Matches the main chat input.
+              if (e.key === 'Enter' && !e.shiftKey && freeText.trim()) {
+                e.preventDefault()
+                submitFreeText()
+              }
+            }}
+            placeholder="Or type your own answer…"
+            rows={1}
+            style={{
+              flex: 1,
+              minHeight: 28,
+              maxHeight: 120,
+              background: CRUSH.Pepper,
+              border: `1px solid ${CRUSH.Charcoal}`,
+              borderRadius: 4,
+              padding: '5px 8px',
+              color: CRUSH.Butter,
+              fontFamily: 'inherit',
+              fontSize: 12,
+              resize: 'vertical'
+            }}
+          />
+          <button
+            onClick={submitFreeText}
+            disabled={!freeText.trim()}
+            style={{
+              background: freeText.trim() ? CRUSH.Charple : 'transparent',
+              border: `1px solid ${freeText.trim() ? CRUSH.Charple : CRUSH.Charcoal}`,
+              color: freeText.trim() ? CRUSH.Butter : CRUSH.Squid,
+              padding: '5px 12px', borderRadius: 4,
+              fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
+              cursor: freeText.trim() ? 'pointer' : 'not-allowed',
+              whiteSpace: 'nowrap'
+            }}
+          >Send text →</button>
         </div>
       )}
     </div>
