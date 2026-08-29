@@ -8,6 +8,7 @@
  * Matches HandoffModal's "developer-free by default" principle.
  */
 import { useEffect, useState, type CSSProperties } from 'react'
+import { confirmDialog } from './ConfirmDialog'
 
 export interface HandoffLiveState {
   runId: string
@@ -171,7 +172,13 @@ function RunningStrip({ state, expanded, onToggle }: { state: HandoffLiveState; 
   const icon = compacting ? '⏳' : paused ? '⏸' : '🥴'
   const color = compacting ? '#E8FE96' : paused ? '#E8FE96' : '#FF60FF'
   const onStop = async () => {
-    if (!confirm('Stop this handoff? Claude will get SIGTERM immediately.')) return
+    const ok = await confirmDialog({
+      title: 'Stop this handoff?',
+      message: 'Claude will get SIGTERM immediately. The /goal loop stops where it is; any un-committed work stays where the agent left it.',
+      confirmLabel: 'Stop handoff',
+      cancelLabel: 'Keep running'
+    })
+    if (!ok) return
     await (window as any).api.handoff.stop(state.runId)
   }
   // v2.15.5: user complaint 'handoff running 的 detail 应该 show goal 我输入的

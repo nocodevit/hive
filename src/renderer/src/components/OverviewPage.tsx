@@ -20,6 +20,7 @@ import { useEffect, useMemo } from 'react'
 import type { Project, Agent } from '../types'
 import { AvatarPreview } from './AvatarEditor'
 import { StatusPill } from './StatusPill'
+import { confirmDialog } from './ConfirmDialog'
 
 interface OverviewPageProps {
   projects: Project[]
@@ -375,10 +376,15 @@ function OpenSessionsSection({
                     <LocalStatusPill status={isWorking ? 'working' : 'idle'} />
                     {!isWorking && (
                       <button
-                        onClick={() => {
-                          if (window.confirm(`Close ${agent.name}'s Claude session?`)) {
-                            onCloseSession(agent.id)
-                          }
+                        onClick={async () => {
+                          const ok = await confirmDialog({
+                            title: 'Close this Claude session?',
+                            message: `Close ${agent.name}'s Claude session and free its memory. You can restart it any time by clicking the agent.`,
+                            confirmLabel: 'Close session',
+                            cancelLabel: 'Keep open'
+                          })
+                          if (!ok) return
+                          onCloseSession(agent.id)
                         }}
                         className="px-2.5 py-1 rounded-lg text-[12px] font-medium
                           bg-bg-hover text-text-muted hover:bg-status-danger/15 hover:text-status-danger
@@ -411,7 +417,7 @@ function CloseAllIdleButton({
   if (idleCount === 0) return null
   return (
     <button
-      onClick={() => {
+      onClick={async () => {
         // v2.6.0 fix: re-derive the idle set from the *current* agent list
         // at click time, not from the workingSet captured at render. Between
         // render and click a queued task can flip an agent to status='working';
@@ -419,9 +425,14 @@ function CloseAllIdleButton({
         const freshWorking = new Set(allAgents.filter((a) => a.status === 'working').map((a) => a.id))
         const toClose = openAgents.filter((a) => !freshWorking.has(a.id))
         if (toClose.length === 0) return
-        if (window.confirm(`Close ${toClose.length} ready session pane${toClose.length > 1 ? 's' : ''}? Working sessions (currently running a turn) will be kept.`)) {
-          toClose.forEach((a) => onCloseSession(a.id))
-        }
+        const ok = await confirmDialog({
+          title: `Close ${toClose.length} ready session pane${toClose.length > 1 ? 's' : ''}?`,
+          message: 'Working sessions (currently running a turn) will be kept. You can restart any closed session by clicking its agent.',
+          confirmLabel: 'Close all ready',
+          cancelLabel: 'Keep'
+        })
+        if (!ok) return
+        toClose.forEach((a) => onCloseSession(a.id))
       }}
       className="px-2.5 py-1 rounded-lg text-[12px] font-medium
         bg-bg-hover text-text-muted hover:bg-status-danger/15 hover:text-status-danger
