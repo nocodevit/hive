@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import Modal from './Modal'
+import { confirmDialog } from './ConfirmDialog'
 import type { Project, Zone } from '../types'
 
 interface Props {
@@ -132,11 +133,16 @@ export default function ProjectSettingsModal({ open, onClose, project, onUpdate,
 
         <div className="pt-2 border-t border-border">
           <button
-            onClick={() => {
-              if (confirm('Delete this project? Agents will also be removed.')) {
-                onDelete()
-                onClose()
-              }
+            onClick={async () => {
+              const ok = await confirmDialog({
+                title: 'Delete this project?',
+                message: `Deleting "${project.name}" removes it and its agents from Hive. Files on disk are untouched.`,
+                confirmLabel: 'Delete project',
+                cancelLabel: 'Keep'
+              })
+              if (!ok) return
+              onDelete()
+              onClose()
             }}
             className="w-full py-2 rounded-lg text-sm text-red-400 hover:bg-red-400/10
               transition-colors cursor-pointer"
