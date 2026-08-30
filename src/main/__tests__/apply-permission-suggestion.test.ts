@@ -110,11 +110,11 @@ describe('settings:addClaudeAllowRule (permission save path)', () => {
 
   it('REGRESSION: SKILL.md edit prompt no longer no-ops', () => {
     // Exact repro of the bug user reported 2026-04-30:
-    // Editing  /Users/meiyang/FrontEndProjects/psle-alex-web-hodas/.claude/skills/critic/pr-review/SKILL.md
+    // Editing  /Users/test/Projects/example-project/.claude/skills/critic/pr-review/SKILL.md
     // → claude sends suggestion {type:'addDirectories', directories:[<that-dir>]}
     // → user clicks "Allow & trust …"
     // → settings.json must gain that path under additionalDirectories
-    const dir = '/Users/meiyang/FrontEndProjects/psle-alex-web-hodas/.claude/skills/critic'
+    const dir = '/Users/test/Projects/example-project/.claude/skills/critic'
     const r = applySuggestion(settingsPath, {
       suggestion: { type: 'addDirectories', directories: [dir], destination: 'session' }
     })

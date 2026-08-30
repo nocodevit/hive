@@ -143,9 +143,9 @@ describe('PermissionModal regression (04-29 black-screen scenario)', () => {
       if (!desc) return null
       return <button title={desc.hover}>{desc.label}</button>
     }
-    const payload = { type: 'addDirectories', directories: ['/Users/meiyang/.claude'], destination: 'session' }
+    const payload = { type: 'addDirectories', directories: ['/Users/test/.claude'], destination: 'session' }
     render(<Shim suggestion={payload} />)
-    expect(screen.getByRole('button', { name: /Allow & trust \/Users\/meiyang\/\.claude/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Allow & trust \/Users\/test\/\.claude/ })).toBeInTheDocument()
   })
 })
 

@@ -270,7 +270,7 @@ Hive receives report-human:
 
 2.3  Implement notification in /report-human and /task-blocked handlers:
      macOS:    exec(osascript -e 'display notification "..." with title "Hive" sound name "Glass"')
-     Telegram: exec(echo '...' | /Users/meiyang/.claude/hooks/notify-telegram.sh)
+     Telegram: exec(echo '...' | $HIVE_NOTIFY_SCRIPT) — opt-in via env var
      UI:       win.webContents.send('manager:report', data)
 
 2.4  Tests: new endpoints.test.ts (mock HTTP requests)

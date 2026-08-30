@@ -11,27 +11,27 @@ describe('shortenPath', () => {
   })
 
   it('substitutes $HOME with ~ when prefix matches (explicit homeGuess)', () => {
-    expect(shortenPath('/Users/meiyang/Projects/foo', '/Users/meiyang'))
+    expect(shortenPath('/Users/test/Projects/foo', '/Users/test'))
       .toBe('~/Projects/foo')
   })
 
   it('infers /Users/<name> prefix when homeGuess is missing', () => {
-    expect(shortenPath('/Users/meiyang/Projects/foo')).toBe('~/Projects/foo')
+    expect(shortenPath('/Users/test/Projects/foo')).toBe('~/Projects/foo')
   })
 
   it('leaves paths outside home untouched', () => {
-    expect(shortenPath('/etc/hosts', '/Users/meiyang')).toBe('/etc/hosts')
+    expect(shortenPath('/etc/hosts', '/Users/test')).toBe('/etc/hosts')
   })
 
   it('returns the path as-is when it has 5 or fewer segments', () => {
-    expect(shortenPath('/Users/meiyang/a/b/c')).toBe('~/a/b/c')
+    expect(shortenPath('/Users/test/a/b/c')).toBe('~/a/b/c')
   })
 
   it('elides middle segments when deeper than 5', () => {
     // Absolute path with 6+ segments under home.
     // parts (no empties) = ['~', 'Projects', 'hive', 'src', 'renderer', 'src', 'lib']
     // parts.length > 5 so elide: [head='~', parts[1]='Projects', '…', parts[-2]='src', parts[-1]='lib']
-    expect(shortenPath('/Users/meiyang/Projects/hive/src/renderer/src/lib'))
+    expect(shortenPath('/Users/test/Projects/hive/src/renderer/src/lib'))
       .toBe('~/Projects/…/src/lib')
   })
 
@@ -43,11 +43,11 @@ describe('shortenPath', () => {
   })
 
   it('preserves path when homeGuess does not match prefix', () => {
-    expect(shortenPath('/opt/foo/bar', '/Users/meiyang')).toBe('/opt/foo/bar')
+    expect(shortenPath('/opt/foo/bar', '/Users/test')).toBe('/opt/foo/bar')
   })
 
   it('preserves depth-5 home path without eliding', () => {
     // ~/a/b/c/d  ← parts = ['~','a','b','c','d'] length 5, NOT > 5.
-    expect(shortenPath('/Users/meiyang/a/b/c/d')).toBe('~/a/b/c/d')
+    expect(shortenPath('/Users/test/a/b/c/d')).toBe('~/a/b/c/d')
   })
 })

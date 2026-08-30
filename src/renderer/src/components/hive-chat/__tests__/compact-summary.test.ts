@@ -6,7 +6,7 @@ import { isCompactSummaryEvent, extractCompactSummaryHint, COMPACT_SUMMARY_OPENI
  * after `/compact`. Truncated to the trailing sentence + a chunk of
  * middle prose so tests stay readable.
  */
-const REAL_TAIL = "…Summary of prior work continues…\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/meiyang/.claude/projects/-Users-meiyang-FrontEndProjects-cube-new-wendy/b9e59b6b-66d4-42cc-a27c-91910bf132c6.jsonl"
+const REAL_TAIL = "…Summary of prior work continues…\n\nIf you need specific details from before compaction (like exact code snippets, error messages, or content you generated), read the full transcript at: /Users/test/.claude/projects/-Users-test-Projects-example/abc12345-0000-0000-0000-000000000000.jsonl"
 
 const realEvent = {
   type: 'user',
@@ -82,7 +82,7 @@ describe('isCompactSummaryEvent', () => {
 describe('extractCompactSummaryHint', () => {
   it('pulls the jsonl path out of the trailing "transcript at:" sentence', () => {
     const h = extractCompactSummaryHint(realEvent)
-    expect(h.transcriptPath).toBe('/Users/meiyang/.claude/projects/-Users-meiyang-FrontEndProjects-cube-new-wendy/b9e59b6b-66d4-42cc-a27c-91910bf132c6.jsonl')
+    expect(h.transcriptPath).toBe('/Users/test/.claude/projects/-Users-test-Projects-example/abc12345-0000-0000-0000-000000000000.jsonl')
     expect(h.summaryChars).toBe(REAL_TAIL.length)
   })
 
@@ -91,7 +91,7 @@ describe('extractCompactSummaryHint', () => {
       type: 'user', isCompactSummary: true,
       message: { role: 'user', content: [{ type: 'text', text: REAL_TAIL }] }
     })
-    expect(h.transcriptPath).toBe('/Users/meiyang/.claude/projects/-Users-meiyang-FrontEndProjects-cube-new-wendy/b9e59b6b-66d4-42cc-a27c-91910bf132c6.jsonl')
+    expect(h.transcriptPath).toBe('/Users/test/.claude/projects/-Users-test-Projects-example/abc12345-0000-0000-0000-000000000000.jsonl')
   })
 
   it('returns transcriptPath=undefined but still reports char count when the "transcript at:" line is absent', () => {

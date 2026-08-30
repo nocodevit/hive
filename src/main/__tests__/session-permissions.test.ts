@@ -18,14 +18,14 @@ describe('shouldAutoAllow', () => {
         request: {
           subtype: 'can_use_tool',
           tool_name: 'mcp__stargate__jira_update_issue',
-          input: { issue_key: 'P4-5954', labels: 'cube-new' }
+          input: { issue_key: 'PROJ-1234', labels: 'example-project' }
         }
       }
       expect(shouldAutoAllow(ev, allowlist)).toEqual({
         autoAllow: true,
         requestId: 'req-1',
         toolName: 'mcp__stargate__jira_update_issue',
-        input: { issue_key: 'P4-5954', labels: 'cube-new' }
+        input: { issue_key: 'PROJ-1234', labels: 'example-project' }
       })
     })
 

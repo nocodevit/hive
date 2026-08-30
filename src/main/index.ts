@@ -418,10 +418,18 @@ function notifyHuman(title: string, message: string) {
     const escaped = message.replace(/"/g, '\\"').replace(/'/g, "'")
     execSync(`osascript -e 'display notification "${escaped}" with title "Hive: ${title}" sound name "Glass"'`)
   } catch {}
-  try {
-    const payload = JSON.stringify({ last_assistant_message: message, cwd: process.cwd() })
-    execSync(`echo '${payload.replace(/'/g, "'\\''")}' | /Users/meiyang/.claude/hooks/notify-telegram.sh`, { timeout: 5000 })
-  } catch {}
+  // v2.15.10: telegram notify path was hard-coded to a personal user's
+  // home dir — broke for every other user + leaked username to the
+  // public repo. Now opt-in via HIVE_NOTIFY_SCRIPT env var pointing at
+  // any executable that reads a JSON payload from stdin. Unset →
+  // silently skip (macOS notification above still fires).
+  const notifyScript = process.env.HIVE_NOTIFY_SCRIPT
+  if (notifyScript) {
+    try {
+      const payload = JSON.stringify({ last_assistant_message: message, cwd: process.cwd() })
+      execSync(`echo '${payload.replace(/'/g, "'\\''")}' | ${notifyScript}`, { timeout: 5000 })
+    } catch {}
+  }
 }
 
 // Lookup helpers — delegate to extracted pure functions for testability

@@ -5,12 +5,12 @@ describe('redact — disabled by default', () => {
   beforeEach(() => { configureRedact({ enabled: false, tokens: [] }) })
 
   it('returns input unchanged when disabled', () => {
-    expect(redact('hello meiyang /Users/meiyang/foo')).toBe('hello meiyang /Users/meiyang/foo')
+    expect(redact('hello myname /Users/test/foo')).toBe('hello myname /Users/test/foo')
   })
 
   it('isRedactEnabled reflects current state', () => {
     expect(isRedactEnabled()).toBe(false)
-    configureRedact({ enabled: true, tokens: ['meiyang'] })
+    configureRedact({ enabled: true, tokens: ['myname'] })
     expect(isRedactEnabled()).toBe(true)
   })
 
@@ -20,20 +20,20 @@ describe('redact — disabled by default', () => {
 })
 
 describe('redact — token masking (first + ** + last)', () => {
-  beforeEach(() => { configureRedact({ enabled: true, tokens: ['meiyang'] }) })
+  beforeEach(() => { configureRedact({ enabled: true, tokens: ['myname'] }) })
 
   it('masks the username wherever it appears', () => {
-    expect(redact('hi meiyang')).toBe('hi m**g')
+    expect(redact('hi myname')).toBe('hi m**e')
   })
 
   it('masks inside paths', () => {
-    expect(redact('/Users/meiyang/foo')).toBe('/Users/m**g/foo')
+    expect(redact('/Users/test/foo')).toBe('/Users/test/foo')
   })
 
   it('case-insensitive match, keeps original case... via mask of original token', () => {
     // The mask is generated from the configured token's first+last chars.
     // Case in the matched input doesn't affect the mask output.
-    expect(redact('hi MEIYANG!')).toBe('hi m**g!')
+    expect(redact('hi MYNAME!')).toBe('hi m**e!')
   })
 
   it('does not mask substrings shorter than the token', () => {
@@ -41,13 +41,13 @@ describe('redact — token masking (first + ** + last)', () => {
   })
 
   it('multiple occurrences all masked', () => {
-    expect(redact('meiyang /home/meiyang/.cache/meiyang-lock')).toBe('m**g /home/m**g/.cache/m**g-lock')
+    expect(redact('myname /home/myname/.cache/myname-lock')).toBe('m**e /home/m**e/.cache/m**e-lock')
   })
 
   it('masks multiple tokens', () => {
-    configureRedact({ enabled: true, tokens: ['meiyang', 'acme-corp'] })
+    configureRedact({ enabled: true, tokens: ['myname', 'acme-corp'] })
     // Mask format is always first + ** + last — length of token doesn't change stars.
-    expect(redact('hello meiyang @ acme-corp')).toBe('hello m**g @ a**p')
+    expect(redact('hello myname @ acme-corp')).toBe('hello m**e @ a**p')
   })
 
   it('tokens shorter than 2 chars are ignored (no-op pattern)', () => {
@@ -105,9 +105,9 @@ describe('redact — secret-value masking', () => {
   })
 
   it('supports tokens + secrets in same string', () => {
-    configureRedact({ enabled: true, tokens: ['meiyang'] })
-    const out = redact('User meiyang hit key API_KEY=supersecret999')
-    expect(out).toContain('m**g')
+    configureRedact({ enabled: true, tokens: ['myname'] })
+    const out = redact('User myname hit key API_KEY=supersecret999')
+    expect(out).toContain('m**e')
     expect(out).not.toContain('supersecret')
   })
 })

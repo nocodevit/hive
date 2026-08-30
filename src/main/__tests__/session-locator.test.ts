@@ -35,9 +35,9 @@ describe('recordedCwdFromSession', () => {
     // Mirrors real claude jsonl: first summary line has no cwd, then records do.
     const lines = [
       JSON.stringify({ type: 'summary', cwd: null }),
-      JSON.stringify({ type: 'user', cwd: '/Users/me/Development/cube-new' })
+      JSON.stringify({ type: 'user', cwd: '/Users/test/Projects/example' })
     ]
-    expect(recordedCwdFromSession(lines)).toBe('/Users/me/Development/cube-new')
+    expect(recordedCwdFromSession(lines)).toBe('/Users/test/Projects/example')
   })
 
   it('returns null when no absolute cwd is present', () => {
@@ -57,14 +57,14 @@ describe('locateSessionBucket', () => {
   it('finds the bucket holding <sid>.jsonl and reads its real cwd', () => {
     const projects = join(root, 'projects')
     // The session lives in the MAIN-repo bucket, not the worktree bucket.
-    const bucket = join(projects, '-Users-me-Development-cube-new')
+    const bucket = join(projects, '-Users-test-Projects-example')
     mkdirSync(bucket, { recursive: true })
     writeFileSync(
       join(bucket, 'sid-123.jsonl'),
-      JSON.stringify({ type: 'user', cwd: '/Users/me/Development/cube-new' }) + '\n'
+      JSON.stringify({ type: 'user', cwd: '/Users/test/Projects/example' }) + '\n'
     )
     const r = locateSessionBucket(projects, 'sid-123')
-    expect(r?.cwd).toBe('/Users/me/Development/cube-new')
+    expect(r?.cwd).toBe('/Users/test/Projects/example')
     expect(r?.file).toBe(join(bucket, 'sid-123.jsonl'))
   })
 
@@ -123,13 +123,13 @@ describe('resolveAgentSession (end-to-end across temp dirs)', () => {
     const logs = join(root, 'chat-logs')
     mkdirSync(logs, { recursive: true })
     // Session stored under main-repo bucket (the mismatch we are healing).
-    const bucket = join(projects, '-Users-me-Development-cube-new')
+    const bucket = join(projects, '-Users-test-Projects-example')
     mkdirSync(bucket, { recursive: true })
     writeFileSync(
       join(bucket, 'cf587f60.jsonl'),
       [
         JSON.stringify({ type: 'summary', cwd: null }),
-        JSON.stringify({ type: 'user', cwd: '/Users/me/Development/cube-new' })
+        JSON.stringify({ type: 'user', cwd: '/Users/test/Projects/example' })
       ].join('\n') + '\n'
     )
     // Hive chat-log links the agent to that session_id.
@@ -141,7 +141,7 @@ describe('resolveAgentSession (end-to-end across temp dirs)', () => {
     const r = resolveAgentSession(projects, logs, 'chat-agent-555')
     expect(r).toEqual({
       sid: 'cf587f60',
-      cwd: '/Users/me/Development/cube-new',
+      cwd: '/Users/test/Projects/example',
       file: join(bucket, 'cf587f60.jsonl')
     })
   })

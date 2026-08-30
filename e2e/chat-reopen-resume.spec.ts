@@ -50,7 +50,7 @@ const FIXTURE_DIR = join(require('os').homedir(), 'FrontEndProjects', 'hive-e2e-
 //     string replace and never adds /private → bucket mismatch.
 //   - a leading-dot dir (e.g. .hive-e2e) → claude replaces '.' with '-' in
 //     its bucket slug, but getPrevSessionInfo only replaces '/' → mismatch.
-// Real projects (~/Development/psle-alex-web) have neither, so a plain
+// Real project directories have neither, so a plain
 // dot-free $HOME dir reproduces the real environment.
 const TMP_FIXTURE = join(require('os').homedir(), 'hive-e2e-reopen-resume-fixture')
 
