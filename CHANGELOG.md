@@ -278,7 +278,7 @@ This log was back-filled from git history at v1.7.28.
 
 ### Fixed
 - **Ctx % bar now updates from every assistant event, not just turn-end
-  `result` events.** Long-running agents (alex-data, david, hodas all hit
+  `result` events.** Long-running agents (multiple long-lived agents hit
   this) accumulate hundreds of thousands of context tokens across an
   agentic turn, but `result` events only fire when the turn completes
   with `stop_reason=end_turn`. Sessions stuck mid-loop, or sessions read
@@ -288,7 +288,7 @@ This log was back-filled from git history at v1.7.28.
   extraction; moved usage extraction ABOVE the early-return so live and
   historical events both feed the ctx % counter. Verified against
   ~/.claude/projects/.../*.jsonl: alex-data 556k tokens, david 557k,
-  hodas 421k — all now visible.
+  another-agent 421k — all now visible.
 - **Agent header "current task" pill rehydrates on app restart.** The
   pill is fed by `agent:report` IPC events (`task_start` / `task_done`
   emitted by `.claude/hive-report.sh`). State was renderer-only, so a
@@ -304,8 +304,8 @@ This log was back-filled from git history at v1.7.28.
   reports go to the wrong agent's bucket. Fix: click the "↻ Restart
   terminal (reloads data)" button in the chat header — that re-runs
   `writeAgentDefinition` and rewrites the script with the correct ID.
-  Confirmed bad scripts on this machine: `psle-alex-web-david` and
-  `psle-alex-web-drake` (both currently have hodas's id baked in).
+  Confirmed bad scripts on this machine: `example-project-agent-a` and
+  `example-project-agent-b` (both currently have a stale peer's id baked in).
 
 ---
 
@@ -341,7 +341,7 @@ This log was back-filled from git history at v1.7.28.
 ### Fixed
 - **File Explorer now loads the full project tree.** `fs:scanFiles` had a
   `files.length > limit * 2` early-bail that fired mid-DFS, so any project
-  with >1000 files (e.g. `psle-alex-web-alex-data` at 14k files,
+  with >1000 files (e.g. `example-project-agent-big` at 14k files,
   `question-bank/` alone at 4.5k) silently dropped every directory walked
   after the threshold. Refresh re-ran the same broken scan, hence "only
   two folders" symptom. Replaced with three independent guards —
@@ -1399,7 +1399,7 @@ This log was back-filled from git history at v1.7.28.
 ## [1.7.8] — 2026-04-23
 
 ### Added / Fixed
-- **Screen redact** — `meiyang → m****g` et al. on-screen only (no JSONL
+- **Screen redact** — `myname → m****e` et al. on-screen only (no JSONL
   mutation).
 - Fixed a **duplicate-render bug** where the same assistant message
   appeared twice (stream_event vs cumulative assistant snapshot keying).
