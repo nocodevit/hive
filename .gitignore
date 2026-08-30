@@ -21,6 +21,14 @@ docs/**/*-audit.md
 docs/**/*-review.md
 docs/**/*-transcript.md
 
+# v2.15.10: project rules for Claude Code sessions stay LOCAL, not in
+# the public repo. .claude/CLAUDE.md historically contained references
+# to private project names as "don't do this" examples — those references
+# leaked simply by being in a public repo. Untracked so future edits
+# never ship. New contributors won't get the Hive-specific dev rules;
+# that's the accepted trade-off.
+.claude/CLAUDE.md
+
 # Test artifacts — never commit, regenerated on every test run
 # (note: a handful of legacy files are still tracked from before this
 # rule existed; the ignore here only stops NEW ones from accumulating.)
