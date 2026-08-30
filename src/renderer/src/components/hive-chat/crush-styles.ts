@@ -68,7 +68,7 @@ interface RedactConfig {
 }
 const CONFIG: RedactConfig = { enabled: false, patterns: [] }
 
-/** First char + '**' + last char. 'meiyang' → 'm**g', 'ada' → 'a**a'. */
+/** First char + '**' + last char. 'myname' → 'm**e', 'ada' → 'a**a'. */
 function maskToken(s: string): string {
   if (s.length <= 1) return s
   if (s.length === 2) return s[0] + '*'
@@ -87,7 +87,7 @@ export function configureRedact(opts: { enabled: boolean; tokens: string[] }) {
   CONFIG.patterns = opts.tokens
     .filter(t => t && t.length >= 2)
     .map(t => ({
-      // Word-boundary-ish: don't mask "meiyang" inside "somemeiyangfoo" randomly,
+      // Word-boundary-ish: don't mask "myname" inside "somemynamefoo" randomly,
       // but DO mask it anywhere in path segments. We match the literal string
       // case-insensitively — path segments surround it with / or other non-
       // alphanumeric chars so that's fine.

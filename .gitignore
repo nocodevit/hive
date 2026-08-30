@@ -8,13 +8,18 @@ resources/icon.iconset/
 coverage/
 .claude/memory
 
-# v2.15.10: docs/taskgroup-user-manual.md was a raw claude jsonl
-# transcript (not a rendered manual) — every line carried cwd, sessionId,
-# agentId, model refs. Removed to protect the public-repo attack surface.
-# Ignore the exact path + any future *-user-manual.md files so a debug
-# dump can't sneak back into docs/.
+# v2.15.10: three "docs" turned out to be raw claude jsonl transcript
+# dumps — every line carried cwd, sessionId, agentId, model refs, tool
+# payloads. Removed and pattern-blocked. If you generate a claude
+# transcript into docs/ for research, keep it OUT of the repo — commit
+# a rendered summary instead.
 docs/taskgroup-user-manual.md
+docs/dispatcher-tools-audit.md
+docs/overnight-readiness-review.md
 docs/**/*-user-manual.md
+docs/**/*-audit.md
+docs/**/*-review.md
+docs/**/*-transcript.md
 
 # Test artifacts — never commit, regenerated on every test run
 # (note: a handful of legacy files are still tracked from before this

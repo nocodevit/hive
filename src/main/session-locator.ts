@@ -10,8 +10,8 @@
 // finds nothing, falls back to `claude -c`, and claude reports
 // "No conversation found".
 //
-// Proven on acme-app's Cutis: worktreePath = …/acme-app-cutis, but the
-// session's 978 records all record cwd = …/acme-app. psle-alex agents never
+// Proven on a project we run internally: worktreePath = …/<project>-<agent>, but the
+// session's records all record cwd = …/<project>. Other project agents never
 // hit it (their sessions' cwd == worktreePath), which is exactly why their
 // resume always worked.
 //
