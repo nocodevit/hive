@@ -7,6 +7,26 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [2.16.0](https://github.com/nocodevit/hive/compare/v2.15.4...v2.16.0) (2026-09-01)
+
+
+### Features
+
+* v2.15.5 — Handoff running banner shows the user's goal(s) ([db3ebcb](https://github.com/nocodevit/hive/commit/db3ebcb8424dfe492658d22480d815e93f8e8646))
+* v2.17.0 — standing-rule reminders under the handoff plan preset ([75af725](https://github.com/nocodevit/hive/commit/75af72551b0d873968179ea95f02f9e38fa9bcf8))
+* v2.18.0 — custom standing rule under Plan Mode + HandoffModal style-guide pass ([4f2cb4f](https://github.com/nocodevit/hive/commit/4f2cb4fd5a5e446390e20f09155392bf284767a3))
+
+
+### Bug Fixes
+
+* v2.15.6 — ccusage thundering-herd (per-cwd cache → shared singleton) ([19fa036](https://github.com/nocodevit/hive/commit/19fa036a113847431fc82049da7613b4b8b1d10c))
+* v2.15.7 — LRU eviction on activeTerminals set (2.2 GB after 2 days) ([5166bcd](https://github.com/nocodevit/hive/commit/5166bcd2e31c19c4f1b350c927563a3bfa834339))
+* v2.15.8 — AskUserQuestion escape hatches (✕ Dismiss + free-text) ([d4c30c4](https://github.com/nocodevit/hive/commit/d4c30c4071687ae764428320e472caeefe29686b))
+* v2.15.9 — themed ConfirmDialog replaces every window.confirm() (style-guide breach) ([fd5e806](https://github.com/nocodevit/hive/commit/fd5e8064163f6fd78f102fb8eb2f08da9eda2121))
+* v2.16.0 — resolve claude binary from known install paths before shell scrape ([a379a0c](https://github.com/nocodevit/hive/commit/a379a0cd8de03f822d9c78f2df36b10841ffc3e8))
+* v2.16.1 — strip host-session env vars that forced an endless sign-in loop ([7ab8673](https://github.com/nocodevit/hive/commit/7ab8673d3940dfff6e4d647710eee73381e6d4cb))
+* v2.17.1 — ctx % read a turn-cumulative token count as context size (1400%) ([dc517f5](https://github.com/nocodevit/hive/commit/dc517f556cb971ddd4eb573b1dd7f6a7a21220aa))
+
 ## [Unreleased]
 
 - *nothing yet*
