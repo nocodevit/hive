@@ -63,9 +63,22 @@ export const DEFAULT_REMINDER_KEYS: readonly string[] = PLAN_REMINDERS.map((r) =
  * guardrail block. Returns the base text unchanged when nothing is checked, so
  * an empty selection can never alter the goal. Order follows PLAN_REMINDERS (not
  * the set's insertion order) for a stable, deterministic string.
+ *
+ * `customRule` is the user's own one-off rule for this run, typed into the
+ * "Custom rule" box under the standing list. It is appended LAST so the fixed
+ * rules keep their stable numbering no matter what is typed, and it is treated
+ * as absent when blank — an empty or whitespace-only box must never add a
+ * dangling numbered item. It carries no checkbox of its own: typing text is the
+ * opt-in, clearing it is the opt-out.
  */
-export function appendPlanReminders(basePlanText: string, checkedKeys: ReadonlySet<string>): string {
+export function appendPlanReminders(
+  basePlanText: string,
+  checkedKeys: ReadonlySet<string>,
+  customRule?: string
+): string {
   const rules = PLAN_REMINDERS.filter((r) => checkedKeys.has(r.key)).map((r) => r.rule)
+  const custom = (customRule || '').trim()
+  if (custom) rules.push(custom)
   if (rules.length === 0) return basePlanText
   const block = rules.map((r, i) => `${i + 1}. ${r}`).join(' ')
   return `${basePlanText}. While doing so, follow these standing rules: ${block}`

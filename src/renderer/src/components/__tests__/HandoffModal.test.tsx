@@ -176,6 +176,37 @@ describe('HandoffModal (v2.2.0)', () => {
     expect(call.goals[0]).toMatch(/briefly state/)  // v2.2.3 per-item report
   })
 
+  // v2.18.0 — the custom standing-rule box under the Plan Mode preset.
+  it('custom standing rule appears only under Plan Mode and rides into the goal', async () => {
+    render(<HandoffModal {...baseProps} />)
+    // Hidden until the plan preset is checked — the sub-items belong to it.
+    expect(screen.queryByPlaceholderText(/your own rule for this run/)).toBeNull()
+
+    fireEvent.click(screen.getByText(/Execute the plan I approved above/))
+    const box = screen.getByPlaceholderText(/your own rule for this run/)
+    fireEvent.change(box, { target: { value: 'never force-push to master' } })
+    fireEvent.click(screen.getByRole('button', { name: /Start handoff/ }))
+    await new Promise(r => setTimeout(r, 10))
+
+    const call = (window as any).api.handoff.start.mock.calls[0][0]
+    // Rides INSIDE the single plan goal as a standing rule, not as its own goal.
+    expect(call.goals.length).toBe(1)
+    expect(call.goals[0]).toMatch(/never force-push to master/)
+    expect(call.goals[0]).toMatch(/standing rules/)
+  })
+
+  it('an empty custom rule box adds nothing to the goal', async () => {
+    render(<HandoffModal {...baseProps} />)
+    fireEvent.click(screen.getByText(/Execute the plan I approved above/))
+    fireEvent.change(screen.getByPlaceholderText(/your own rule for this run/), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: /Start handoff/ }))
+    await new Promise(r => setTimeout(r, 10))
+    const call = (window as any).api.handoff.start.mock.calls[0][0]
+    // Six standing rules, numbered 1-6, and no dangling 7th from the blank box.
+    expect(call.goals[0]).toMatch(/6\. /)
+    expect(call.goals[0]).not.toMatch(/7\. /)
+  })
+
   it('Plan Mode preset stacks with other goals (AND ALSO on backend)', async () => {
     render(<HandoffModal {...baseProps} />)
     fireEvent.click(screen.getByText(/Execute the plan I approved above/))

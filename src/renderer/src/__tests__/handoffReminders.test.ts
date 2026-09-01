@@ -79,3 +79,44 @@ describe('appendPlanReminders', () => {
     expect(out).not.toContain('2. ')
   })
 })
+
+describe('appendPlanReminders — custom rule (v2.18.0)', () => {
+  it('appends the custom rule LAST so fixed rules keep stable numbers', () => {
+    const out = appendPlanReminders(PLAN_BASE, new Set(DEFAULT_REMINDER_KEYS), 'never force-push')
+    const lastFixed = PLAN_REMINDERS[PLAN_REMINDERS.length - 1].rule
+    expect(out).toContain('never force-push')
+    expect(out.indexOf(lastFixed)).toBeLessThan(out.indexOf('never force-push'))
+    // Six standing + one custom.
+    expect(out).toContain('7. never force-push')
+  })
+
+  it('works as the ONLY rule when every standing box is unchecked', () => {
+    const out = appendPlanReminders(PLAN_BASE, new Set(), 'ship behind a feature flag')
+    expect(out).toBe(`${PLAN_BASE}. While doing so, follow these standing rules: 1. ship behind a feature flag`)
+  })
+
+  it('is ignored when blank — an empty box never adds a dangling item', () => {
+    // The box has no checkbox of its own: empty text IS the opt-out, so these
+    // must be byte-identical to passing nothing at all.
+    const noneChecked = appendPlanReminders(PLAN_BASE, new Set())
+    expect(appendPlanReminders(PLAN_BASE, new Set(), '')).toBe(noneChecked)
+    expect(appendPlanReminders(PLAN_BASE, new Set(), '   ')).toBe(noneChecked)
+    expect(appendPlanReminders(PLAN_BASE, new Set(), '\n\t ')).toBe(noneChecked)
+    expect(appendPlanReminders(PLAN_BASE, new Set(), undefined)).toBe(noneChecked)
+    // …and must not leave a trailing numbered stub when others ARE checked.
+    const one = appendPlanReminders(PLAN_BASE, new Set(['code-quality']), '  ')
+    expect(one).toContain('1. ')
+    expect(one).not.toContain('2. ')
+  })
+
+  it('trims surrounding whitespace off the custom rule', () => {
+    const out = appendPlanReminders(PLAN_BASE, new Set(), '  keep the diff small  ')
+    expect(out).toContain('1. keep the diff small')
+    expect(out).not.toContain('1.   keep')
+  })
+
+  it('still never introduces a separate /goal condition', () => {
+    const out = appendPlanReminders(PLAN_BASE, new Set(DEFAULT_REMINDER_KEYS), 'anything')
+    expect(out).not.toContain('AND ALSO')
+  })
+})
