@@ -68,23 +68,54 @@ import { isHeadlessMode } from './headless'
 // nothing recorded that hydration had failed.
 ;(function resolveClaudeBinPath() {
   const shell = process.env.SHELL || '/bin/zsh'
+  const home = app.getPath('home')
   let resolved: string | null = null
   let via = 'none'
-  for (const { file, args } of claudeBinStrategies(shell)) {
+
+  // First: probe well-known install locations on disk DIRECTLY. A GUI launch
+  // can't see nvm/homebrew/~/.local/bin on its PATH, but those are FIXED paths,
+  // so an existsSync/statSync beats scraping an interactive login shell — which
+  // under a TTY-less packaged .app routinely times out or skips nvm, leaving the
+  // old resolver at `null` even though claude was installed all along. Fast,
+  // deterministic, no shell required.
+  let nvmDirs: string[] = []
+  try {
+    nvmDirs = readdirSync(join(home, '.nvm', 'versions', 'node'))
+  } catch {
+    // No nvm on this machine — fine, the fixed locations still cover it.
+  }
+  for (const p of claudeBinCandidates(home, nvmDirs)) {
     try {
-      const out = execFileSync(file, args, { encoding: 'utf-8', timeout: 7000 })
-      const p = pickClaudeBinPath(out)
-      if (p) {
+      const st = statSync(p)
+      if (st.isFile() && (st.mode & 0o111) !== 0) {
         resolved = p
-        via = args.join(' ')
+        via = 'known-path'
         process.env[CLAUDE_BIN_ENV] = p
         break
       }
     } catch {
-      // Try the next strategy. If all fail, claudeBin() falls back to the bare
-      // name and the gate reports not-installed — the honest outcome.
+      // Nothing at this candidate path; try the next.
     }
   }
+
+  // Fallback: ask the shell for claude's path. Covers exotic installs not in the
+  // known list. Only runs when the disk probe found nothing.
+  if (!resolved)
+    for (const { file, args } of claudeBinStrategies(shell)) {
+      try {
+        const out = execFileSync(file, args, { encoding: 'utf-8', timeout: 7000 })
+        const p = pickClaudeBinPath(out)
+        if (p) {
+          resolved = p
+          via = args.join(' ')
+          process.env[CLAUDE_BIN_ENV] = p
+          break
+        }
+      } catch {
+        // Try the next strategy. If all fail, claudeBin() falls back to the bare
+        // name and the gate reports not-installed — the honest outcome.
+      }
+    }
   try {
     const dir = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
@@ -123,6 +154,7 @@ import {
   pathHydrationStrategies,
   claudeBinStrategies,
   claudeProbeStrategies,
+  claudeBinCandidates,
   type ClaudeStatus
 } from './claude-env'
 

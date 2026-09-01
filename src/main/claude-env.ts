@@ -137,3 +137,56 @@ export function pickClaudeBinPath(shellOutput: string): string | null {
   }
   return null
 }
+
+/**
+ * Well-known ABSOLUTE locations a `claude` binary installs to, in priority
+ * order. Probing these on disk directly is the robust fix for the GUI-launch
+ * PATH problem: a Finder/Dock-launched app inherits only launchd's minimal PATH
+ * and can't see nvm/homebrew/~/.local/bin, so the shell scrape (command -v in a
+ * login shell) used to be the ONLY resolver — and it silently returned null
+ * whenever the interactive shell timed out or its rc didn't load nvm. The
+ * native installer (claude.ai/install.sh) always drops the binary at the fixed,
+ * node-independent ~/.local/bin/claude, so a plain existsSync beats scraping a
+ * shell. `home` is injected so the function stays pure/testable.
+ */
+export function knownClaudeBinPaths(home: string): string[] {
+  return [
+    `${home}/.local/bin/claude`,
+    '/opt/homebrew/bin/claude',
+    '/usr/local/bin/claude',
+    '/usr/bin/claude'
+  ]
+}
+
+/**
+ * Candidate claude paths inside nvm's per-version node bins, NEWEST version
+ * first. nvm installs to ~/.nvm/versions/node/<vX.Y.Z>/bin/claude, so the exact
+ * path depends on which node versions exist — the caller passes the directory
+ * listing (readdirSync of ~/.nvm/versions/node) and we turn it into ordered
+ * candidates. Newest-first so a stale old-node claude never shadows a current
+ * one; unparseable names sort last. Pure w.r.t. the filesystem.
+ */
+export function nvmClaudeCandidates(home: string, versionDirs: readonly string[]): string[] {
+  const parse = (v: string): [number, number, number] => {
+    const m = v.match(/^v?(\d+)\.(\d+)\.(\d+)/)
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [-1, -1, -1]
+  }
+  return [...versionDirs]
+    .sort((a, b) => {
+      const pa = parse(a)
+      const pb = parse(b)
+      for (let i = 0; i < 3; i++) if (pb[i] !== pa[i]) return pb[i] - pa[i]
+      return 0
+    })
+    .map((v) => `${home}/.nvm/versions/node/${v}/bin/claude`)
+}
+
+/**
+ * The full ordered list of absolute claude paths to probe on disk BEFORE
+ * falling back to the shell scrape. Fixed install locations first (fast,
+ * deterministic), then nvm's per-version bins newest-first. Caller checks each
+ * for existence + executability and takes the first hit.
+ */
+export function claudeBinCandidates(home: string, nvmVersionDirs: readonly string[]): string[] {
+  return [...knownClaudeBinPaths(home), ...nvmClaudeCandidates(home, nvmVersionDirs)]
+}
