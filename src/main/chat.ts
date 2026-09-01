@@ -10,6 +10,7 @@ import { UsageCache } from './usage-cache'
 import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
 import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
 import { shouldAutoAllow } from './session-permissions'
+import { perRequestContextTokens, contextTokensFromResultUsage } from '../shared/context-size'
 import { claudeBin } from './claude-env'
 import { releasePty, spawnPty } from './ptyRegistry'
 
@@ -1125,25 +1126,44 @@ function readContextPctFromJsonl(cwd: string | undefined, sid: string): number |
     const file = join(homedir(), '.claude', 'projects', slug, `${sid}.jsonl`)
     if (!existsSync(file)) return null
     const lines = readFileSync(file, 'utf8').split('\n').filter(Boolean)
-    // Walk backward looking for type=result with usage + modelUsage.
-    for (let i = lines.length - 1; i >= 0; i--) {
+    // Walk backward for two independent facts:
+    //
+    //   tokens — from the newest ASSISTANT event's usage, which is
+    //     PER-REQUEST and therefore the real context. This used to read the
+    //     result event's top-level input + cache_read, but a result's
+    //     cache_read is the CUMULATIVE sum over every tool-loop iteration of
+    //     the turn — 14,003,445 on a session whose true context was 620,606.
+    //     Feeding that ratio to the >50% test below meant smart-resume fired
+    //     a /compact on essentially every resume of a tool-heavy session.
+    //     (Same defect as the renderer's 1400% ctx nag.) A result's
+    //     `iterations[-1]` is per-request and is accepted as a fallback;
+    //     its top-level fields are never used.
+    //
+    //   contextWindow — only result events carry modelUsage, so that still
+    //     comes from the newest result.
+    let tokens = 0
+    let contextWindow = 0
+    for (let i = lines.length - 1; i >= 0 && !(tokens > 0 && contextWindow > 0); i--) {
       try {
         const ev = JSON.parse(lines[i])
+        if (ev.type === 'assistant' && tokens === 0) {
+          tokens = perRequestContextTokens(ev?.message?.usage)
+          continue
+        }
         if (ev.type !== 'result') continue
-        const inp = ev?.usage?.input_tokens
-        const cacheRead = ev?.usage?.cache_read_input_tokens || 0
-        const total = (typeof inp === 'number' ? inp : 0) + cacheRead
-        const mu = ev?.modelUsage
-        if (mu && typeof mu === 'object') {
-          for (const k of Object.keys(mu)) {
-            const cw = mu[k]?.contextWindow
-            if (typeof cw === 'number' && cw > 0) {
-              return total / cw
+        if (tokens === 0) tokens = contextTokensFromResultUsage(ev?.usage)
+        if (contextWindow === 0) {
+          const mu = ev?.modelUsage
+          if (mu && typeof mu === 'object') {
+            for (const k of Object.keys(mu)) {
+              const cw = mu[k]?.contextWindow
+              if (typeof cw === 'number' && cw > 0) { contextWindow = cw; break }
             }
           }
         }
       } catch {}
     }
+    if (tokens > 0 && contextWindow > 0) return tokens / contextWindow
   } catch {}
   return null
 }

@@ -7,6 +7,7 @@ import { isCompactSummaryEvent, extractCompactSummaryHint } from './compact-summ
 import { createFrameCoalescer } from './streamCoalescer'
 import { mergeUsage, preserveAccountUsage } from './usage-state'
 import { shortenPath } from '../../lib/path-display'
+import { contextTokensFromResultUsage } from '../../../../shared/context-size'
 import type { ContentBlock, StreamEvent, TimelineEntry } from './types'
 import { clampChatFontSize } from '../../types'
 import HandoffModal from '../HandoffModal'
@@ -864,13 +865,18 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         // turns this balloons to multiples of the context window
         // (we saw 25M on a 1M model = 2498%).
         //
-        // The real context size is the LAST iteration's input.
-        // Each iteration object holds its own `input_tokens` /
-        // `cache_read_input_tokens` / `cache_creation_input_tokens`,
-        // and `iterations[-1]` represents the final model-visible
-        // state. Fallback to top-level if iterations is missing.
+        // The real context size is the LAST iteration's input, so we
+        // read `iterations[-1]`. There is deliberately NO fallback to
+        // the top-level object when `iterations` is absent: that
+        // fallback returned the very cumulative number this guard
+        // exists to reject, and shipped a real "1400% used
+        // (14,003,445 / 1,000,000 tokens) · run /compact" nag on a
+        // session that was actually at 62%. 0 means "this event can't
+        // tell us", and the `total > 0` check below then keeps the
+        // last per-request value from assistant.usage — which is
+        // accurate and arrives on every assistant event anyway.
         const isSubagentResult = e.parent_tool_use_id != null
-        const total = isSubagentResult ? 0 : extractCtxTotalFromUsage(e.usage)
+        const total = isSubagentResult ? 0 : contextTokensFromResultUsage(e.usage)
         if (total > 0) {
           // Auto-compact heuristic: total context dropped to less than
           // half of the prior peak (and ≥30K delta) → claude compacted.
@@ -2771,18 +2777,18 @@ const CTX_CAT_COLOR: Record<string, string> = {
 }
 
 /**
- * Extract the model-visible context size in tokens from a Claude
- * `usage` payload. Same math used by:
- *   - live `result` events (debounced setLatestInputTokens on every turn)
- *   - historical replay assistant events (seeds the ctx % bar after
- *     a session resume, BEFORE any new turn fires a result event)
+ * Extract the model-visible context size in tokens from an ASSISTANT
+ * event's `usage` payload — live and historical-replay alike. Assistant
+ * usage is PER-REQUEST (one model call), so the top-level fields are
+ * already the real context and reading them directly is correct.
  *
- * Why iterations[-1] not the top level: a single agentic turn can have
- * dozens of tool-use loops; top-level cache_read_input_tokens is the
- * cumulative sum across them all and balloons to multiples of the
- * window. Each `iterations[i]` records that loop's own usage; the LAST
- * loop is what's currently visible to the model. Falls back to top-level
- * if iterations is missing (early claude versions / non-agentic turns).
+ * Do NOT call this on a `result` event. A result's top-level usage is
+ * TURN-CUMULATIVE — `cache_read_input_tokens` sums every tool-loop
+ * iteration and runs 10-40x the window — and this function's fallback
+ * would hand that number straight through. Result events go to
+ * contextTokensFromResultUsage (shared/context-size), which reads
+ * `iterations[-1]` and reports 0 rather than guessing. See the
+ * "1400% used (14,003,445 / 1,000,000 tokens)" incident.
  */
 export function extractCtxTotalFromUsage(usage: any): number {
   if (!usage || typeof usage !== 'object') return 0
