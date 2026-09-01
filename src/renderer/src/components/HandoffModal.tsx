@@ -20,6 +20,7 @@
  */
 import { useState } from 'react'
 import Modal from './Modal'
+import { PLAN_REMINDERS, DEFAULT_REMINDER_KEYS, appendPlanReminders } from './handoffReminders'
 
 export type RopeKey = 'quick' | 'normal' | 'marathon'
 
@@ -65,6 +66,11 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
   const [checkedPresets, setCheckedPresets] = useState<Set<string>>(new Set())
   const [presetSpecify, setPresetSpecify] = useState<Record<string, string>>({})
   const [freeText, setFreeText] = useState('')
+  // Standing reminders under the 'plan' preset — all on by default so the user's
+  // fixed instructions ride along automatically; they can uncheck any per run.
+  const [checkedReminders, setCheckedReminders] = useState<Set<string>>(
+    new Set(DEFAULT_REMINDER_KEYS)
+  )
 
   const [enableTurns, setEnableTurns] = useState(true)
   const [enableCost, setEnableCost] = useState(true)
@@ -94,6 +100,9 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
         const s = (presetSpecify[preset.key] || '').trim()
         if (!s) continue
         out.push(preset.render(s))
+      } else if (preset.key === 'plan') {
+        // Ride the checked standing reminders along inside the single plan goal.
+        out.push(appendPlanReminders(preset.render(''), checkedReminders))
       } else {
         out.push(preset.render(''))
       }
@@ -142,6 +151,15 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
     })
   }
 
+  const toggleReminder = (key: string) => {
+    setCheckedReminders(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
+
   return (
     <Modal open={open} onClose={onCancel} title={`Hand off to ${agentName}`}>
       <div className="space-y-4">
@@ -154,20 +172,37 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
             {GOAL_PRESETS.map(p => {
               const checked = checkedPresets.has(p.key)
               return (
-                <label key={p.key} className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
-                  <input type="checkbox" checked={checked} onChange={() => togglePreset(p.key)} disabled={starting} className="accent-[var(--accent)]" />
-                  <span className={p.needsSpecify ? '' : 'flex-1'}>{p.label}</span>
-                  {p.needsSpecify && checked && (
-                    <input
-                      type="text"
-                      placeholder="specify…"
-                      value={presetSpecify[p.key] || ''}
-                      onChange={e => setPresetSpecify(prev => ({ ...prev, [p.key]: e.target.value }))}
-                      disabled={starting}
-                      className="flex-1 px-2 py-1 rounded bg-bg-hover text-text-primary border border-border text-xs focus:outline-none focus:border-accent"
-                    />
+                <div key={p.key}>
+                  <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer">
+                    <input type="checkbox" checked={checked} onChange={() => togglePreset(p.key)} disabled={starting} className="accent-[var(--accent)]" />
+                    <span className={p.needsSpecify ? '' : 'flex-1'}>{p.label}</span>
+                    {p.needsSpecify && checked && (
+                      <input
+                        type="text"
+                        placeholder="specify…"
+                        value={presetSpecify[p.key] || ''}
+                        onChange={e => setPresetSpecify(prev => ({ ...prev, [p.key]: e.target.value }))}
+                        disabled={starting}
+                        className="flex-1 px-2 py-1 rounded bg-bg-hover text-text-primary border border-border text-xs focus:outline-none focus:border-accent"
+                      />
+                    )}
+                  </label>
+                  {/* Standing reminders — appear only when the plan preset is on,
+                      indented beneath it. All default-checked; uncheck to drop. */}
+                  {p.key === 'plan' && checked && (
+                    <div className="mt-1.5 ml-6 pl-3 border-l border-border space-y-1">
+                      <div className="text-[10px] text-text-muted">
+                        Standing rules <span className="opacity-70">— on by default; uncheck any to drop</span>
+                      </div>
+                      {PLAN_REMINDERS.map(r => (
+                        <label key={r.key} className="flex items-start gap-2 text-xs text-text-primary cursor-pointer">
+                          <input type="checkbox" checked={checkedReminders.has(r.key)} onChange={() => toggleReminder(r.key)} disabled={starting} className="accent-[var(--accent)] mt-0.5" />
+                          <span>{r.label}</span>
+                        </label>
+                      ))}
+                    </div>
                   )}
-                </label>
+                </div>
               )
             })}
             <label className="flex items-start gap-2 text-sm text-text-primary pt-1">
