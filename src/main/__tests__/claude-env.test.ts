@@ -11,7 +11,11 @@ import {
   claudeProbeStrategies,
   knownClaudeBinPaths,
   nvmClaudeCandidates,
-  claudeBinCandidates
+  claudeBinCandidates,
+  hostEnvVarsToStrip,
+  sanitizedClaudeEnv,
+  HOST_MANAGED_AUTH_ENV_VARS,
+  EMPTY_ONLY_AUTH_ENV_VARS
 } from '../claude-env'
 
 describe('CLAUDE_INSTALL_COMMAND', () => {
@@ -229,5 +233,82 @@ describe('claudeBinCandidates', () => {
       ...knownClaudeBinPaths('/Users/me'),
       '/Users/me/.nvm/versions/node/v20.0.0/bin/claude'
     ])
+  })
+})
+
+describe('host-session env scrubbing (the infinite sign-in loop)', () => {
+  // The exact environment observed on the failing machine: Hive.app launched
+  // from Claude Desktop, so the host's own session vars were inherited and
+  // handed to every spawned `claude` child.
+  const poisonedEnv = (): Record<string, string | undefined> => ({
+    HOME: '/Users/me',
+    USER: 'me',
+    PATH: '/usr/bin:/bin',
+    ANTHROPIC_API_KEY: '',
+    ANTHROPIC_BASE_URL: 'https://api.anthropic.com',
+    CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: '1',
+    CLAUDE_CODE_SDK_HAS_OAUTH_REFRESH: '1',
+    CLAUDE_CODE_ENTRYPOINT: 'claude-desktop',
+    CLAUDE_CODE_SESSION_ID: 'ddc83e9f-64ea-4f21-9695-efcdd6dcb8ab',
+    USE_LOCAL_OAUTH: '',
+    USE_STAGING_OAUTH: '',
+    CLAUDECODE: '1'
+  })
+
+  it('strips CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST — the single proven cause', () => {
+    // Isolated experiment on the real CLI: baseline `claude auth status` reports
+    // loggedIn:true; adding ONLY this var flips it to loggedIn:false, which is
+    // what surfaced as "Not logged in · Please run /login" on every turn.
+    expect(hostEnvVarsToStrip({ CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: '1' }))
+      .toEqual(['CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST'])
+    expect(sanitizedClaudeEnv({ CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: '1' }))
+      .not.toHaveProperty('CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST')
+  })
+
+  it('strips it even when set to something other than "1" (presence is the trigger)', () => {
+    expect(hostEnvVarsToStrip({ CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: '' }))
+      .toEqual(['CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST'])
+    expect(hostEnvVarsToStrip({ CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST: '0' }))
+      .toEqual(['CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST'])
+  })
+
+  it('removes every host var from the real poisoned environment', () => {
+    const clean = sanitizedClaudeEnv(poisonedEnv())
+    for (const k of HOST_MANAGED_AUTH_ENV_VARS) expect(clean).not.toHaveProperty(k)
+    expect(clean.ANTHROPIC_API_KEY).toBeUndefined()
+  })
+
+  it('keeps the vars a claude child legitimately needs', () => {
+    const clean = sanitizedClaudeEnv(poisonedEnv())
+    // USER in particular: the Keychain credential is stored under the account
+    // name, so dropping it would reintroduce a "not logged in" of our own.
+    expect(clean.USER).toBe('me')
+    expect(clean.HOME).toBe('/Users/me')
+    expect(clean.PATH).toBe('/usr/bin:/bin')
+    expect(clean.ANTHROPIC_BASE_URL).toBe('https://api.anthropic.com')
+  })
+
+  it('drops ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN only when empty', () => {
+    for (const k of EMPTY_ONLY_AUTH_ENV_VARS) {
+      expect(hostEnvVarsToStrip({ [k]: '' })).toEqual([k])
+      expect(hostEnvVarsToStrip({ [k]: '   ' })).toEqual([k])
+      // A user deliberately running Hive on their own API key must keep working.
+      expect(hostEnvVarsToStrip({ [k]: 'sk-ant-real-key' })).toEqual([])
+      expect(sanitizedClaudeEnv({ [k]: 'sk-ant-real-key' })[k]).toBe('sk-ant-real-key')
+    }
+  })
+
+  it('reports nothing for a clean environment (normal Finder/Dock launch)', () => {
+    expect(hostEnvVarsToStrip({ HOME: '/Users/me', USER: 'me', PATH: '/usr/bin' })).toEqual([])
+  })
+
+  it('reports only vars actually present, so the boot log is meaningful', () => {
+    expect(hostEnvVarsToStrip({ CLAUDECODE: '1', USER: 'me' })).toEqual(['CLAUDECODE'])
+  })
+
+  it('never mutates the caller-supplied env', () => {
+    const env = poisonedEnv()
+    sanitizedClaudeEnv(env)
+    expect(env.CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST).toBe('1')
   })
 })
