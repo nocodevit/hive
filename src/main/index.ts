@@ -50,6 +50,19 @@ import { isHeadlessMode } from './headless'
   }
 })()
 
+// Scrub host-session env vars that make every spawned `claude` child report
+// "Not logged in" no matter how many times the user signs in. See
+// HOST_MANAGED_AUTH_ENV_VARS in claude-env.ts for the full incident write-up.
+//
+// Done ONCE here, by mutating process.env itself, rather than at each spawn
+// site: chat.ts (x4), the PTY, the gate probe and auth:login all pass
+// `process.env` through, and a per-site fix would silently regress the first
+// time a new spawn site is added. Cleaning the source is the only version that
+// stays correct. The names removed are the host's, never Hive's own — nothing
+// in Hive reads them.
+const strippedHostEnv = hostEnvVarsToStrip(process.env)
+for (const k of strippedHostEnv) delete process.env[k]
+
 // Resolve claude's ABSOLUTE path once at boot and stash it in the environment
 // so every spawn (chat.ts, PTY, gate) uses the same concrete binary instead of
 // the bare name `claude` against a possibly-unhydrated PATH.
@@ -125,6 +138,10 @@ import { isHeadlessMode } from './headless'
         t: Date.now(),
         resolvedClaudeBin: resolved,
         via,
+        // Which host-session vars we had to scrub. Non-empty here means Hive
+        // was launched from another Claude surface — the exact condition that
+        // used to cause the endless sign-in loop.
+        strippedHostEnv,
         pathHydrated: process.env.PATH !== '/usr/bin:/bin:/usr/sbin:/sbin'
       }) + '\n'
     )
@@ -155,6 +172,7 @@ import {
   claudeBinStrategies,
   claudeProbeStrategies,
   claudeBinCandidates,
+  hostEnvVarsToStrip,
   type ClaudeStatus
 } from './claude-env'
 
