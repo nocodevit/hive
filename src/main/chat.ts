@@ -13,6 +13,7 @@ import { shouldAutoAllow } from './session-permissions'
 import { perRequestContextTokens, contextTokensFromResultUsage } from '../shared/context-size'
 import { claudeBin } from './claude-env'
 import { activityForEvent, agentIdFromChatId, liveAgentIdsFromSessions } from './chatActivity'
+import { buildRebaseOnStartCommand, REBASE_ON_START_TIMEOUT_MS, isFetchTimeout } from './rebaseOnStart'
 import { releasePty, spawnPty } from './ptyRegistry'
 
 export type { RecentSession, PrevSessionInfo }
@@ -713,11 +714,28 @@ export function startChat(id: string, opts: StartOpts = {}) {
   // what happened.
   if (opts.rebaseOnStart && opts.cwd) {
     try {
-      const cmd = `git fetch origin 2>&1 && BASE=$(for b in develop main master; do git rev-parse --verify origin/$b >/dev/null 2>&1 && echo $b && break; done) && [ -n "$BASE" ] && echo "⏳ Rebasing onto origin/$BASE" && git rebase origin/$BASE && echo "✅ Rebase done" || echo "⏭️ Rebase skipped"`
-      const out = execSync(cmd, { cwd: opts.cwd, encoding: 'utf8', shell: '/bin/bash' })
+      // Hard timeout backstop: a stalled `git fetch` used to block this
+      // synchronous call — and with it the whole Electron main thread — forever,
+      // freezing Hive and trapping the resume before the agent spawned. The
+      // command itself also self-aborts on a low-speed transfer (see
+      // buildRebaseOnStartCommand); this timeout covers a hung connect/DNS.
+      const out = execSync(buildRebaseOnStartCommand(), {
+        cwd: opts.cwd,
+        encoding: 'utf8',
+        shell: '/bin/bash',
+        timeout: REBASE_ON_START_TIMEOUT_MS,
+        killSignal: 'SIGKILL'
+      })
       broadcast(`chat:stderr:${id}`, out)
     } catch (e: any) {
-      broadcast(`chat:stderr:${id}`, `Rebase failed: ${e.stdout ?? ''}${e.stderr ?? ''}\n`)
+      // A fetch timeout/stall is NOT fatal to the resume: report it and fall
+      // through to spawn the agent on its current branch (as if rebase skipped).
+      broadcast(
+        `chat:stderr:${id}`,
+        isFetchTimeout(e)
+          ? `⏭️ Rebase skipped — git fetch exceeded ${Math.round(REBASE_ON_START_TIMEOUT_MS / 1000)}s (network stall); starting on current branch.\n`
+          : `Rebase failed: ${e.stdout ?? ''}${e.stderr ?? ''}\n`
+      )
     }
   }
 
