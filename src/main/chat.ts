@@ -1051,6 +1051,34 @@ export function stopChat(id: string) {
   sessions.delete(id)
 }
 
+// Kill EVERY live chat `claude --print` child. Called on app quit so these
+// children never get reparented to launchd (ppid 1) and left spinning for days
+// — the orphan-accumulation bug that drained memory and helped kill Hive. Graceful
+// SIGTERM first (its exit handler runs), then SIGKILL survivors after a grace
+// period. The startup reaper (orphanReaper.ts) covers the uncatchable case
+// (crash/OOM) where this can't run at all.
+// UNTESTABLE: sends real OS signals to live child pids. The selection logic it
+// mirrors — which claude processes are Hive's — is the unit-tested orphanReaper.
+export function killAllChatChildren(): number[] {
+  const pids: number[] = []
+  for (const [, s] of sessions) {
+    const pid = s.child?.pid
+    if (s.child && typeof pid === 'number') {
+      pids.push(pid)
+      try { s.child.kill('SIGTERM') } catch { /* already gone */ }
+    }
+  }
+  if (pids.length) {
+    const t = setTimeout(() => {
+      for (const pid of pids) {
+        try { process.kill(pid, 'SIGKILL') } catch { /* gone */ }
+      }
+    }, 2000)
+    t.unref?.()
+  }
+  return pids
+}
+
 /**
  * Duck-typed shape of a chat session for `recycleSessionInPlace`.
  * Kept minimal so unit tests can pass a plain object without stubbing
