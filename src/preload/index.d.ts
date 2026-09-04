@@ -92,6 +92,7 @@ declare global {
       }
       chat: {
         start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean }) => Promise<{ ok: boolean }>
+        liveAgents: () => Promise<string[]>
         send: (id: string, text: string) => Promise<{ ok: boolean; error?: string }>
         respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny', input?: Record<string, unknown>, denyMessage?: string) => Promise<{ ok: boolean; error?: string }>
         allowToolForSession: (id: string, toolName: string) => Promise<{ ok: boolean; error?: string }>
