@@ -147,6 +147,38 @@ export function getRecentSessions(cwd: string, limit = 5): RecentSession[] {
  * Falls back to "" when unknowable; chooser then renders a token count
  * instead of a percentage.
  */
+/**
+ * From a session's parsed events (oldest→newest), pick the model + input-token
+ * total of the latest REAL assistant turn. Skips '<synthetic>' turns — claude
+ * emits these (compact boundaries, injected/system messages) with model
+ * '<synthetic>' and ~0 usage; letting one win last-write-wins is exactly the
+ * "Model <synthetic> · Context 0.0K" chooser bug. Latest (not peak) real usage
+ * is intentional: post-/compact the JSONL keeps its stale high pre-compact
+ * counts, and the live chat shows the post-compact figure on resume.
+ */
+export function latestRealSessionUsage(
+  events: Array<{ type?: string; message?: { model?: string; usage?: unknown } } | null>
+): { model: string; peakInputTokens: number } {
+  let model = ''
+  let peakInputTokens = 0
+  for (const ev of events) {
+    if (!ev || ev.type !== 'assistant') continue
+    const msg = ev.message || {}
+    if (msg.model === '<synthetic>') continue // not a real turn — ignore entirely
+    if (msg.model) model = msg.model
+    const u = msg.usage as
+      | { iterations?: unknown; input_tokens?: number; cache_read_input_tokens?: number; cache_creation_input_tokens?: number }
+      | undefined
+    if (u) {
+      const its = Array.isArray(u.iterations) ? (u.iterations as Array<Record<string, number>>) : []
+      const last = its.length > 0 ? its[its.length - 1] : (u as Record<string, number>)
+      peakInputTokens =
+        (last.input_tokens || 0) + (last.cache_read_input_tokens || 0) + (last.cache_creation_input_tokens || 0)
+    }
+  }
+  return { model, peakInputTokens }
+}
+
 export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInfo | null {
   if (!cwd) return null
   try {
@@ -194,25 +226,9 @@ export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInf
     // high token counts. Using the latest assistant.usage matches what
     // the live chat would show on resume — i.e. post-compact ~12%, not
     // the 97% peak we hit before the compact.
-    let model = ''
-    let peakInputTokens = 0
     const lines = readFileSync(sessionFile, 'utf8').split('\n').filter(Boolean)
-    for (const line of lines) {
-      try {
-        const ev = JSON.parse(line)
-        if (ev.type === 'assistant') {
-          const msg = ev.message || {}
-          if (msg.model) model = msg.model
-          const u = msg.usage
-          if (u) {
-            const its = Array.isArray(u.iterations) ? u.iterations : []
-            const last = its.length > 0 ? its[its.length - 1] : u
-            const total = (last.input_tokens || 0) + (last.cache_read_input_tokens || 0) + (last.cache_creation_input_tokens || 0)
-            peakInputTokens = total  // last-write-wins, so loop end = newest
-          }
-        }
-      } catch {}
-    }
+    const events = lines.map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
+    const { model, peakInputTokens } = latestRealSessionUsage(events)
 
     let contextSize = ''
     try {
