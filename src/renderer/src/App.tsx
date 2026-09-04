@@ -328,6 +328,25 @@ export default function App() {
           }
         }
         setAgents(resetAgents)
+        // The reset above paints EVERY agent gray ('done') because persisted
+        // status is untrustworthy. But a chat --print child may still be alive
+        // after a renderer reload — seed those as 'waiting' (non-gray) so a live
+        // session isn't shown as finished. If it's actively generating, its next
+        // stream event upgrades it to 'working' within ms; if it's alive but
+        // idle, no event ever comes, so this seed is the only thing keeping it
+        // off gray. (Live truth comes from the main process, not persisted data.)
+        try {
+          window.api.chat
+            .liveAgents?.()
+            ?.then((liveIds) => {
+              if (!liveIds?.length) return
+              const live = new Set(liveIds)
+              setAgents((prev) =>
+                prev.map((a) => (live.has(a.id) && a.status === 'done' ? { ...a, status: 'waiting' as const } : a))
+              )
+            })
+            ?.catch(() => { /* main not ready / no sessions — leave the reset as-is */ })
+        } catch { /* liveAgents unavailable (older preload / test mock) — reset stands */ }
       }
       if (data.appPrefs) setAppPrefs((prev) => ({ ...prev, ...(data.appPrefs as Record<string, unknown>) }))
       if (tgs.length) setTaskGroups(tgs)

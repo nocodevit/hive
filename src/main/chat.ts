@@ -12,6 +12,7 @@ import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo }
 import { shouldAutoAllow } from './session-permissions'
 import { perRequestContextTokens, contextTokensFromResultUsage } from '../shared/context-size'
 import { claudeBin } from './claude-env'
+import { activityForEvent, agentIdFromChatId, liveAgentIdsFromSessions } from './chatActivity'
 import { releasePty, spawnPty } from './ptyRegistry'
 
 export type { RecentSession, PrevSessionInfo }
@@ -83,6 +84,10 @@ interface ChatSession {
   // `no_session` until the respawn lands.
   internalRecycle?: boolean
   autoContinueAt?: number
+  // Last activity ('working'/'waiting') emitted to the renderer from the stream,
+  // so we only broadcast agent:status on an actual transition (the stream emits
+  // many working-events per turn). Undefined until the first event.
+  lastActivity?: 'working' | 'waiting'
 }
 
 const sessions = new Map<string, ChatSession>()
@@ -810,6 +815,14 @@ export function startChat(id: string, opts: StartOpts = {}) {
       // shouldn't be perturbed by history that predates its start).
       try { chatEventBus.emit('event', { sessionId: id, event: ev }) } catch {}
       try { appendFileSync(session.logPath, JSON.stringify(ev) + '\n') } catch {}
+      // Drive the agent status dot from the live stream (turn-based), replacing
+      // reliance on the out-of-band PreToolUse/Stop curl hooks that miss the
+      // thinking/streaming-before-a-tool window. Only broadcast on a transition.
+      const activity = activityForEvent(ev)
+      if (activity && session.lastActivity !== activity) {
+        session.lastActivity = activity
+        broadcast('agent:status', { agentId: agentIdFromChatId(id), status: activity })
+      }
       if (ev?.type === 'stream_event' && ev.event?.type === 'message_stop') sawMessageStop = true
       // Stash the claude session_id from system/init so remote-control
       // can --resume exactly this session after the TUI round-trip.
@@ -877,6 +890,10 @@ export function startChat(id: string, opts: StartOpts = {}) {
       return
     }
     broadcast(`chat:exit:${id}`, code ?? 0)
+    // Real exit (not a stale child, not an internal compact/resume respawn):
+    // the session is truly gone, so the status dot goes gray. Placed after both
+    // guards above so a respawn never flashes 'done'.
+    broadcast('agent:status', { agentId: agentIdFromChatId(id), status: 'done' })
     // Keep the session entry alive (null out the dead child) so that
     // resumeSmart / startWithSummary can still read claudeSid + startOpts
     // and the Resume / Compact+Resume buttons in the renderer work.
@@ -1484,7 +1501,17 @@ function refreshUsage(session: ChatSession) {
 }
 
 
+/**
+ * agentIds of every chat session with a live child. The renderer calls this once
+ * at boot to seed still-running agents as non-gray (it hard-resets all agents to
+ * 'done' on load). Delegates the filtering to the pure liveAgentIdsFromSessions.
+ */
+export function listLiveChatAgentIds(): string[] {
+  return liveAgentIdsFromSessions(sessions.entries())
+}
+
 export function registerChatIpc() {
+  ipcMain.handle('chat:liveAgents', () => listLiveChatAgentIds())
   ipcMain.handle('chat:start', async (_e, { id, cwd, agent, name, continueSession, rebaseOnStart, resumeSid, forkSession, forceCompact }) => {
     if (forceCompact && cwd && resumeSid) {
       // User explicitly clicked Compact + Resume. If a stale child --print

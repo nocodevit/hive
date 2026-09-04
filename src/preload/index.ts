@@ -93,6 +93,9 @@ const api = {
   chat: {
     start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean; resumeSid?: string; forkSession?: boolean; forceCompact?: boolean }) =>
       ipcRenderer.invoke('chat:start', { id, ...opts }) as Promise<{ ok: boolean; compacted?: boolean; error?: string }>,
+    // agentIds whose --print child is live right now — renderer seeds these as
+    // non-gray at boot instead of the blanket 'done' reset.
+    liveAgents: () => ipcRenderer.invoke('chat:liveAgents') as Promise<string[]>,
     getPrevSessionInfo: (cwd: string, chatId?: string) =>
       ipcRenderer.invoke('chat:getPrevSessionInfo', { cwd, chatId }) as Promise<{ sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number; cwd: string } | null>,
     getRecentSessions: (cwd: string, limit?: number) =>
