@@ -160,7 +160,8 @@ import { generateReportScript } from './utils'
 import { registerChatIpc, killAllChatChildren } from './chat'
 import { parsePsForReap, orphanedHiveClaudePids } from './orphanReaper'
 import { registerStorageIpc } from './storage'
-import { parsePsRows, hasClaudeDescendant, collectDescendantPids } from './ptyProcessTree'
+import { parsePsRows, hasClaudeDescendant } from './ptyProcessTree'
+import { killProcessSubtree } from './killProcessSubtree'
 import { authUrlToOpen } from './authUrl'
 import {
   CLAUDE_INSTALL_COMMAND,
@@ -1042,39 +1043,12 @@ function startPtyHealthMonitor(): void {
 // child then exits on its own when the tty closes. But a *wedged* claude
 // (busy-loop, ignoring SIGHUP) survives, gets orphaned to launchd (PPID 1), and
 // spins at ~99% CPU forever — observed: 5 agents stuck 2+ days after Hive quit.
-// So we explicitly: (1) snapshot the shell's descendants via `ps`, (2) SIGTERM
-// the shell + every descendant, (3) after a grace period SIGKILL whatever
-// ignored SIGTERM.
-// UNTESTABLE: sends real OS signals to live pids. The pure part — collecting
-// descendant pids from `ps` output — is collectDescendantPids() in
-// ptyProcessTree.ts, unit-tested in __tests__/ptyProcessTree.test.ts. Manual
-// reproducer in docs/manual-test-plan.md ("Quit cleanup kills wedged children").
+// The snapshot-descendants → SIGTERM-all → SIGKILL-survivors logic is shared
+// with the chat `claude --print` teardown in chat.ts via killProcessSubtree()
+// (one implementation, unit-tested in __tests__/killProcessSubtree.test.ts);
+// here the root is the login shell, signalled through releasePty(term).
 function killProcessTree(term: pty.IPty): void {
-  let descendants: number[] = []
-  try {
-    const stdout = execFileSync('ps', ['-Ao', 'pid=,ppid=,command='], {
-      encoding: 'utf-8',
-      timeout: 5000,
-      maxBuffer: 8 * 1024 * 1024
-    })
-    descendants = collectDescendantPids(parsePsRows(stdout), term.pid)
-  } catch {
-    // ps failed (vanishingly rare) — fall back to just killing the shell below.
-  }
-  // Graceful pass: SIGHUP the shell (node-pty default), SIGTERM each descendant.
-  releasePty(term)
-  for (const pid of descendants) {
-    try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ }
-  }
-  // Escalation: SIGKILL anything that ignored SIGTERM (the wedged-claude case).
-  if (descendants.length) {
-    const timer = setTimeout(() => {
-      for (const pid of descendants) {
-        try { process.kill(pid, 'SIGKILL') } catch { /* gone */ }
-      }
-    }, 2000)
-    timer.unref()
-  }
+  killProcessSubtree(term.pid, () => releasePty(term))
 }
 
 ipcMain.handle('pty:kill', (_event, { id }) => {
