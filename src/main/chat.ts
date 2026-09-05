@@ -15,6 +15,7 @@ import { claudeBin } from './claude-env'
 import { activityForEvent, agentIdFromChatId, liveAgentIdsFromSessions } from './chatActivity'
 import { buildRebaseOnStartCommand, REBASE_ON_START_TIMEOUT_MS, isFetchTimeout } from './rebaseOnStart'
 import { releasePty, spawnPty } from './ptyRegistry'
+import { killProcessSubtree } from './killProcessSubtree'
 
 export type { RecentSession, PrevSessionInfo }
 export type { ContextRow, ContextDetailRow, ContextSnapshot } from './chat-context-parser'
@@ -573,7 +574,7 @@ async function runCompactViaPrint(
       if (settled) return
       settled = true
       clearInterval(progressTimer)
-      try { child.kill() } catch {}
+      killChatChildTree(child)
       const durationMs = Date.now() - startedAt
       // v2.15.3: detect claude returning "success" without actually
       // doing any LLM work. If we let it through as ok=true the
@@ -1039,10 +1040,22 @@ export function sendUserMessage(id: string, text: string) {
   }
 }
 
+// Kill a chat `claude --print` child AND its whole descendant subtree. A plain
+// `child.kill()` only SIGTERMs the direct claude pid — the tool subprocesses it
+// spawned (tsc, esbuild, vitest, node, bash…) get reparented to launchd and spin
+// as 99%-CPU orphans (the "closed the session but the machine stayed pegged"
+// bug). Delegates to the shared killProcessSubtree so the chat and PTY paths use
+// ONE implementation. Route EVERY claude-child teardown here (close, recycle,
+// compact/resume respawn, /context and /usage scrapes) so none can leak a tree.
+function killChatChildTree(child: ChildProcessWithoutNullStreams | undefined | null): void {
+  if (!child) return
+  killProcessSubtree(child.pid, () => { child.kill('SIGTERM') })
+}
+
 export function stopChat(id: string) {
   const session = sessions.get(id)
   if (!session) return
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   releasePty(session.rcPty)
   if (session.usageTimer) clearInterval(session.usageTimer)
   if (session.autoContinueTimer) clearTimeout(session.autoContinueTimer)
@@ -1065,16 +1078,11 @@ export function killAllChatChildren(): number[] {
     const pid = s.child?.pid
     if (s.child && typeof pid === 'number') {
       pids.push(pid)
-      try { s.child.kill('SIGTERM') } catch { /* already gone */ }
+      // Full subtree, not just the direct pid — otherwise a wedged tsc/node
+      // tool child orphans to launchd and spins for days (the memory-drain →
+      // Hive-death → more-orphans cycle). killChatChildTree escalates to SIGKILL.
+      killChatChildTree(s.child)
     }
-  }
-  if (pids.length) {
-    const t = setTimeout(() => {
-      for (const pid of pids) {
-        try { process.kill(pid, 'SIGKILL') } catch { /* gone */ }
-      }
-    }, 2000)
-    t.unref?.()
   }
   return pids
 }
@@ -1114,7 +1122,7 @@ export interface RecyclableSession {
  */
 export function recycleSessionInPlace(session: RecyclableSession): void {
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
   releasePty(session.rcPty as pty.IPty | null | undefined)
   session.rcPty = undefined
@@ -1148,7 +1156,7 @@ export function startRemoteControl(id: string) {
   if (session.mode === 'rc') return { ok: false, error: 'already_in_rc' }
   if (!session.claudeSid) return { ok: false, error: 'no_sid_yet' }
   const sid = session.claudeSid
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
   session.mode = 'rc'
   const rcPty = spawnPty('chat-rc', claudeBin(), ['--resume', sid], {
@@ -1259,7 +1267,7 @@ export async function resumeSmart(id: string) {
   // Plain resume — flag recycle so chat:exit isn't broadcast during the
   // brief kill→spawn gap (renderer would otherwise flip to closed-panel).
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   sessions.delete(id)
   startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
   return { ok: true, sid, compacted: false }
@@ -1282,7 +1290,7 @@ export async function startWithSummary(id: string) {
   const cwd = session.cwd || process.env.HOME || '/'
   broadcast(`chat:stderr:${id}`, '⏳ Compacting old context, then forking to new session-id…\n')
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
   const r = await runCompactViaPrint(cwd, sid, opts.agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`), id)
   // Always respawn — even on compact failure the user asked to fork,
@@ -1322,7 +1330,7 @@ export async function compactSession(id: string): Promise<{ ok: boolean; error?:
   // sessions.delete. Without this, renderer flips to "session closed"
   // panel and any concurrent resumeSmart() races into `no_session`.
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
 
   // Run /compact via the throwaway --print --resume <sid> /compact
@@ -1417,7 +1425,7 @@ export async function scrapeContextLive(id: string, force = false): Promise<{ ok
   broadcast(`chat:stderr:${id}`, '⏳ Pausing chat for /context scrape (~7s)…\n')
 
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
 
   return new Promise((resolve) => {
@@ -1428,7 +1436,7 @@ export async function scrapeContextLive(id: string, force = false): Promise<{ ok
     const finish = (ok: boolean, error?: string) => {
       if (settled) return
       settled = true
-      try { child.kill() } catch {}
+      killChatChildTree(child)
       sessions.delete(id)  // so startChat doesn't short-circuit
       startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
       if (ok && snapshot) {
@@ -1531,7 +1539,7 @@ async function queryUsage(cwd?: string): Promise<{ fiveHour?: number; sevenDay?:
 
       // Safety timeout: /usage should come back within ~15s on a good network.
       setTimeout(() => {
-        try { child.kill() } catch {}
+        killChatChildTree(child)
         finish(null)
       }, 30000)
     } catch {
