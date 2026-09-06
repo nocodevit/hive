@@ -159,6 +159,7 @@ import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
 import { registerChatIpc, killAllChatChildren } from './chat'
 import { parsePsForReap, orphanedHiveClaudePids } from './orphanReaper'
+import { buildMemSample, MEM_LOG_FILENAME, MEM_LOG_INTERVAL_MS } from './memLog'
 import { registerStorageIpc } from './storage'
 import { parsePsRows, hasClaudeDescendant } from './ptyProcessTree'
 import { killProcessSubtree } from './killProcessSubtree'
@@ -1821,6 +1822,20 @@ app.whenReady().then(() => {
   // Reap chat claude children orphaned by a prior Hive that died uncleanly,
   // before spawning anything new. Fixes the zombie-accumulation memory drain.
   reapOrphanedClaudeChildren()
+
+  // Memory self-observation → ~/.hive/mem-log.jsonl. Hive kept no record of its
+  // own memory, so "is it leaking?" meant ad-hoc ps sampling after the fact.
+  // One snapshot/min (main heap + every Electron child's working set + cpu) turns
+  // that into a real timeline: a leak is a monotonic climb, normal load isn't.
+  // Best-effort — a log-write failure must never crash the app. UNTESTABLE: the
+  // interval + fs append is glue; the snapshot shape is unit-tested (buildMemSample).
+  const memLogTimer = setInterval(() => {
+    try {
+      const sample = buildMemSample(Date.now(), process.memoryUsage(), app.getAppMetrics())
+      appendFileSync(join(DATA_DIR, MEM_LOG_FILENAME), JSON.stringify(sample) + '\n')
+    } catch { /* diagnostics only — swallow */ }
+  }, MEM_LOG_INTERVAL_MS)
+  memLogTimer.unref()
 
   // v2.4.0: application menu with "Check for Updates…" — macOS convention
   // is under the app menu, below About. On other platforms we install
