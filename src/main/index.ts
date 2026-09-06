@@ -157,9 +157,12 @@ import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './
 import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
-import { registerChatIpc } from './chat'
+import { registerChatIpc, killAllChatChildren } from './chat'
+import { parsePsForReap, orphanedHiveClaudePids } from './orphanReaper'
+import { buildMemSample, MEM_LOG_FILENAME, MEM_LOG_INTERVAL_MS } from './memLog'
 import { registerStorageIpc } from './storage'
-import { parsePsRows, hasClaudeDescendant, collectDescendantPids } from './ptyProcessTree'
+import { parsePsRows, hasClaudeDescendant } from './ptyProcessTree'
+import { killProcessSubtree } from './killProcessSubtree'
 import { authUrlToOpen } from './authUrl'
 import {
   CLAUDE_INSTALL_COMMAND,
@@ -1041,39 +1044,12 @@ function startPtyHealthMonitor(): void {
 // child then exits on its own when the tty closes. But a *wedged* claude
 // (busy-loop, ignoring SIGHUP) survives, gets orphaned to launchd (PPID 1), and
 // spins at ~99% CPU forever — observed: 5 agents stuck 2+ days after Hive quit.
-// So we explicitly: (1) snapshot the shell's descendants via `ps`, (2) SIGTERM
-// the shell + every descendant, (3) after a grace period SIGKILL whatever
-// ignored SIGTERM.
-// UNTESTABLE: sends real OS signals to live pids. The pure part — collecting
-// descendant pids from `ps` output — is collectDescendantPids() in
-// ptyProcessTree.ts, unit-tested in __tests__/ptyProcessTree.test.ts. Manual
-// reproducer in docs/manual-test-plan.md ("Quit cleanup kills wedged children").
+// The snapshot-descendants → SIGTERM-all → SIGKILL-survivors logic is shared
+// with the chat `claude --print` teardown in chat.ts via killProcessSubtree()
+// (one implementation, unit-tested in __tests__/killProcessSubtree.test.ts);
+// here the root is the login shell, signalled through releasePty(term).
 function killProcessTree(term: pty.IPty): void {
-  let descendants: number[] = []
-  try {
-    const stdout = execFileSync('ps', ['-Ao', 'pid=,ppid=,command='], {
-      encoding: 'utf-8',
-      timeout: 5000,
-      maxBuffer: 8 * 1024 * 1024
-    })
-    descendants = collectDescendantPids(parsePsRows(stdout), term.pid)
-  } catch {
-    // ps failed (vanishingly rare) — fall back to just killing the shell below.
-  }
-  // Graceful pass: SIGHUP the shell (node-pty default), SIGTERM each descendant.
-  releasePty(term)
-  for (const pid of descendants) {
-    try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ }
-  }
-  // Escalation: SIGKILL anything that ignored SIGTERM (the wedged-claude case).
-  if (descendants.length) {
-    const timer = setTimeout(() => {
-      for (const pid of descendants) {
-        try { process.kill(pid, 'SIGKILL') } catch { /* gone */ }
-      }
-    }, 2000)
-    timer.unref()
-  }
+  killProcessSubtree(term.pid, () => releasePty(term))
 }
 
 ipcMain.handle('pty:kill', (_event, { id }) => {
@@ -1083,6 +1059,38 @@ ipcMain.handle('pty:kill', (_event, { id }) => {
     terminals.delete(id)
   }
 })
+
+// Reap `claude --print` chat children orphaned (ppid 1) by a PRIOR Hive that
+// died without cleanup — a crash / OOM / SIGKILL, none of which can run the
+// on-quit cleanup. Left alone they spin for days and drain memory, feeding the
+// pressure→death→orphan cycle. Run once at startup, before we spawn any new
+// sessions. The selection is the unit-tested orphanReaper; only the signals are
+// untestable. Manual reproducer: docs/manual-test-plan.md.
+function reapOrphanedClaudeChildren(): void {
+  let pids: number[] = []
+  try {
+    const stdout = execFileSync('ps', ['-Ao', 'pid=,ppid=,command='], {
+      encoding: 'utf-8',
+      timeout: 5000,
+      maxBuffer: 8 * 1024 * 1024
+    })
+    pids = orphanedHiveClaudePids(parsePsForReap(stdout), process.pid)
+  } catch {
+    return // ps failed (vanishingly rare) — nothing to reap this launch.
+  }
+  for (const pid of pids) {
+    try { process.kill(pid, 'SIGTERM') } catch { /* already gone */ }
+  }
+  if (pids.length) {
+    const t = setTimeout(() => {
+      for (const pid of pids) {
+        try { process.kill(pid, 'SIGKILL') } catch { /* gone */ }
+      }
+    }, 2000)
+    t.unref()
+    try { writeCrashLog('reaped-orphans', { count: pids.length, pids }) } catch { /* best-effort */ }
+  }
+}
 
 // "Is there a live claude agent session inside this terminal's shell?"
 // The Term pane uses this to decide whether to launch claude on open: if a
@@ -1811,6 +1819,24 @@ app.whenReady().then(() => {
   app.setName('Hive')
   electronApp.setAppUserModelId('com.hive.app')
 
+  // Reap chat claude children orphaned by a prior Hive that died uncleanly,
+  // before spawning anything new. Fixes the zombie-accumulation memory drain.
+  reapOrphanedClaudeChildren()
+
+  // Memory self-observation → ~/.hive/mem-log.jsonl. Hive kept no record of its
+  // own memory, so "is it leaking?" meant ad-hoc ps sampling after the fact.
+  // One snapshot/min (main heap + every Electron child's working set + cpu) turns
+  // that into a real timeline: a leak is a monotonic climb, normal load isn't.
+  // Best-effort — a log-write failure must never crash the app. UNTESTABLE: the
+  // interval + fs append is glue; the snapshot shape is unit-tested (buildMemSample).
+  const memLogTimer = setInterval(() => {
+    try {
+      const sample = buildMemSample(Date.now(), process.memoryUsage(), app.getAppMetrics())
+      appendFileSync(join(DATA_DIR, MEM_LOG_FILENAME), JSON.stringify(sample) + '\n')
+    } catch { /* diagnostics only — swallow */ }
+  }, MEM_LOG_INTERVAL_MS)
+  memLogTimer.unref()
+
   // v2.4.0: application menu with "Check for Updates…" — macOS convention
   // is under the app menu, below About. On other platforms we install
   // the same menu structure but macOS puts it in the top-most system bar.
@@ -2114,3 +2140,22 @@ app.on('window-all-closed', () => {
   try { unlinkSync(portLockFile) } catch {}
   if (process.platform !== 'darwin') app.quit()
 })
+
+// Kill every chat `claude --print` child when Hive quits, so none orphan to
+// launchd. before-quit covers Cmd-Q / app.quit / auto-update relaunch; the
+// SIGTERM/SIGINT handlers cover a terminal kill or a controlled shutdown (the
+// signals Electron does not always surface as before-quit). A hard SIGKILL/OOM
+// can't run any of this — that case is swept on the NEXT launch by
+// reapOrphanedClaudeChildren().
+app.on('before-quit', () => {
+  try { killAllChatChildren() } catch { /* best-effort */ }
+})
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    try { killAllChatChildren() } catch { /* best-effort */ }
+    for (const [, term] of terminals) {
+      try { killProcessTree(term) } catch { /* best-effort */ }
+    }
+    process.exit(0)
+  })
+}

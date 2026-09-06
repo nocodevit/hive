@@ -12,7 +12,10 @@ import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo }
 import { shouldAutoAllow } from './session-permissions'
 import { perRequestContextTokens, contextTokensFromResultUsage } from '../shared/context-size'
 import { claudeBin } from './claude-env'
+import { activityForEvent, agentIdFromChatId, liveAgentIdsFromSessions } from './chatActivity'
+import { buildRebaseOnStartCommand, REBASE_ON_START_TIMEOUT_MS, isFetchTimeout } from './rebaseOnStart'
 import { releasePty, spawnPty } from './ptyRegistry'
+import { killProcessSubtree } from './killProcessSubtree'
 
 export type { RecentSession, PrevSessionInfo }
 export type { ContextRow, ContextDetailRow, ContextSnapshot } from './chat-context-parser'
@@ -83,6 +86,10 @@ interface ChatSession {
   // `no_session` until the respawn lands.
   internalRecycle?: boolean
   autoContinueAt?: number
+  // Last activity ('working'/'waiting') emitted to the renderer from the stream,
+  // so we only broadcast agent:status on an actual transition (the stream emits
+  // many working-events per turn). Undefined until the first event.
+  lastActivity?: 'working' | 'waiting'
 }
 
 const sessions = new Map<string, ChatSession>()
@@ -567,7 +574,7 @@ async function runCompactViaPrint(
       if (settled) return
       settled = true
       clearInterval(progressTimer)
-      try { child.kill() } catch {}
+      killChatChildTree(child)
       const durationMs = Date.now() - startedAt
       // v2.15.3: detect claude returning "success" without actually
       // doing any LLM work. If we let it through as ok=true the
@@ -708,11 +715,28 @@ export function startChat(id: string, opts: StartOpts = {}) {
   // what happened.
   if (opts.rebaseOnStart && opts.cwd) {
     try {
-      const cmd = `git fetch origin 2>&1 && BASE=$(for b in develop main master; do git rev-parse --verify origin/$b >/dev/null 2>&1 && echo $b && break; done) && [ -n "$BASE" ] && echo "⏳ Rebasing onto origin/$BASE" && git rebase origin/$BASE && echo "✅ Rebase done" || echo "⏭️ Rebase skipped"`
-      const out = execSync(cmd, { cwd: opts.cwd, encoding: 'utf8', shell: '/bin/bash' })
+      // Hard timeout backstop: a stalled `git fetch` used to block this
+      // synchronous call — and with it the whole Electron main thread — forever,
+      // freezing Hive and trapping the resume before the agent spawned. The
+      // command itself also self-aborts on a low-speed transfer (see
+      // buildRebaseOnStartCommand); this timeout covers a hung connect/DNS.
+      const out = execSync(buildRebaseOnStartCommand(), {
+        cwd: opts.cwd,
+        encoding: 'utf8',
+        shell: '/bin/bash',
+        timeout: REBASE_ON_START_TIMEOUT_MS,
+        killSignal: 'SIGKILL'
+      })
       broadcast(`chat:stderr:${id}`, out)
     } catch (e: any) {
-      broadcast(`chat:stderr:${id}`, `Rebase failed: ${e.stdout ?? ''}${e.stderr ?? ''}\n`)
+      // A fetch timeout/stall is NOT fatal to the resume: report it and fall
+      // through to spawn the agent on its current branch (as if rebase skipped).
+      broadcast(
+        `chat:stderr:${id}`,
+        isFetchTimeout(e)
+          ? `⏭️ Rebase skipped — git fetch exceeded ${Math.round(REBASE_ON_START_TIMEOUT_MS / 1000)}s (network stall); starting on current branch.\n`
+          : `Rebase failed: ${e.stdout ?? ''}${e.stderr ?? ''}\n`
+      )
     }
   }
 
@@ -810,6 +834,14 @@ export function startChat(id: string, opts: StartOpts = {}) {
       // shouldn't be perturbed by history that predates its start).
       try { chatEventBus.emit('event', { sessionId: id, event: ev }) } catch {}
       try { appendFileSync(session.logPath, JSON.stringify(ev) + '\n') } catch {}
+      // Drive the agent status dot from the live stream (turn-based), replacing
+      // reliance on the out-of-band PreToolUse/Stop curl hooks that miss the
+      // thinking/streaming-before-a-tool window. Only broadcast on a transition.
+      const activity = activityForEvent(ev)
+      if (activity && session.lastActivity !== activity) {
+        session.lastActivity = activity
+        broadcast('agent:status', { agentId: agentIdFromChatId(id), status: activity })
+      }
       if (ev?.type === 'stream_event' && ev.event?.type === 'message_stop') sawMessageStop = true
       // Stash the claude session_id from system/init so remote-control
       // can --resume exactly this session after the TUI round-trip.
@@ -877,6 +909,10 @@ export function startChat(id: string, opts: StartOpts = {}) {
       return
     }
     broadcast(`chat:exit:${id}`, code ?? 0)
+    // Real exit (not a stale child, not an internal compact/resume respawn):
+    // the session is truly gone, so the status dot goes gray. Placed after both
+    // guards above so a respawn never flashes 'done'.
+    broadcast('agent:status', { agentId: agentIdFromChatId(id), status: 'done' })
     // Keep the session entry alive (null out the dead child) so that
     // resumeSmart / startWithSummary can still read claudeSid + startOpts
     // and the Resume / Compact+Resume buttons in the renderer work.
@@ -1004,16 +1040,51 @@ export function sendUserMessage(id: string, text: string) {
   }
 }
 
+// Kill a chat `claude --print` child AND its whole descendant subtree. A plain
+// `child.kill()` only SIGTERMs the direct claude pid — the tool subprocesses it
+// spawned (tsc, esbuild, vitest, node, bash…) get reparented to launchd and spin
+// as 99%-CPU orphans (the "closed the session but the machine stayed pegged"
+// bug). Delegates to the shared killProcessSubtree so the chat and PTY paths use
+// ONE implementation. Route EVERY claude-child teardown here (close, recycle,
+// compact/resume respawn, /context and /usage scrapes) so none can leak a tree.
+function killChatChildTree(child: ChildProcessWithoutNullStreams | undefined | null): void {
+  if (!child) return
+  killProcessSubtree(child.pid, () => { child.kill('SIGTERM') })
+}
+
 export function stopChat(id: string) {
   const session = sessions.get(id)
   if (!session) return
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   releasePty(session.rcPty)
   if (session.usageTimer) clearInterval(session.usageTimer)
   if (session.autoContinueTimer) clearTimeout(session.autoContinueTimer)
   // NB: don't wipe the persisted entry — user may close+reopen the chat
   // and want the timer to resume. Hydration on next startChat handles it.
   sessions.delete(id)
+}
+
+// Kill EVERY live chat `claude --print` child. Called on app quit so these
+// children never get reparented to launchd (ppid 1) and left spinning for days
+// — the orphan-accumulation bug that drained memory and helped kill Hive. Graceful
+// SIGTERM first (its exit handler runs), then SIGKILL survivors after a grace
+// period. The startup reaper (orphanReaper.ts) covers the uncatchable case
+// (crash/OOM) where this can't run at all.
+// UNTESTABLE: sends real OS signals to live child pids. The selection logic it
+// mirrors — which claude processes are Hive's — is the unit-tested orphanReaper.
+export function killAllChatChildren(): number[] {
+  const pids: number[] = []
+  for (const [, s] of sessions) {
+    const pid = s.child?.pid
+    if (s.child && typeof pid === 'number') {
+      pids.push(pid)
+      // Full subtree, not just the direct pid — otherwise a wedged tsc/node
+      // tool child orphans to launchd and spins for days (the memory-drain →
+      // Hive-death → more-orphans cycle). killChatChildTree escalates to SIGKILL.
+      killChatChildTree(s.child)
+    }
+  }
+  return pids
 }
 
 /**
@@ -1051,7 +1122,7 @@ export interface RecyclableSession {
  */
 export function recycleSessionInPlace(session: RecyclableSession): void {
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
   releasePty(session.rcPty as pty.IPty | null | undefined)
   session.rcPty = undefined
@@ -1085,7 +1156,7 @@ export function startRemoteControl(id: string) {
   if (session.mode === 'rc') return { ok: false, error: 'already_in_rc' }
   if (!session.claudeSid) return { ok: false, error: 'no_sid_yet' }
   const sid = session.claudeSid
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
   session.mode = 'rc'
   const rcPty = spawnPty('chat-rc', claudeBin(), ['--resume', sid], {
@@ -1196,7 +1267,7 @@ export async function resumeSmart(id: string) {
   // Plain resume — flag recycle so chat:exit isn't broadcast during the
   // brief kill→spawn gap (renderer would otherwise flip to closed-panel).
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   sessions.delete(id)
   startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
   return { ok: true, sid, compacted: false }
@@ -1219,7 +1290,7 @@ export async function startWithSummary(id: string) {
   const cwd = session.cwd || process.env.HOME || '/'
   broadcast(`chat:stderr:${id}`, '⏳ Compacting old context, then forking to new session-id…\n')
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
   const r = await runCompactViaPrint(cwd, sid, opts.agent, undefined, msg => broadcast(`chat:stderr:${id}`, `⏳ ${msg}\n`), id)
   // Always respawn — even on compact failure the user asked to fork,
@@ -1259,7 +1330,7 @@ export async function compactSession(id: string): Promise<{ ok: boolean; error?:
   // sessions.delete. Without this, renderer flips to "session closed"
   // panel and any concurrent resumeSmart() races into `no_session`.
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
 
   // Run /compact via the throwaway --print --resume <sid> /compact
@@ -1354,7 +1425,7 @@ export async function scrapeContextLive(id: string, force = false): Promise<{ ok
   broadcast(`chat:stderr:${id}`, '⏳ Pausing chat for /context scrape (~7s)…\n')
 
   session.internalRecycle = true
-  try { session.child?.kill() } catch {}
+  killChatChildTree(session.child)
   session.child = null
 
   return new Promise((resolve) => {
@@ -1365,7 +1436,7 @@ export async function scrapeContextLive(id: string, force = false): Promise<{ ok
     const finish = (ok: boolean, error?: string) => {
       if (settled) return
       settled = true
-      try { child.kill() } catch {}
+      killChatChildTree(child)
       sessions.delete(id)  // so startChat doesn't short-circuit
       startChat(id, { ...opts, resumeSid: sid, continueSession: false, rebaseOnStart: false })
       if (ok && snapshot) {
@@ -1468,7 +1539,7 @@ async function queryUsage(cwd?: string): Promise<{ fiveHour?: number; sevenDay?:
 
       // Safety timeout: /usage should come back within ~15s on a good network.
       setTimeout(() => {
-        try { child.kill() } catch {}
+        killChatChildTree(child)
         finish(null)
       }, 30000)
     } catch {
@@ -1484,7 +1555,17 @@ function refreshUsage(session: ChatSession) {
 }
 
 
+/**
+ * agentIds of every chat session with a live child. The renderer calls this once
+ * at boot to seed still-running agents as non-gray (it hard-resets all agents to
+ * 'done' on load). Delegates the filtering to the pure liveAgentIdsFromSessions.
+ */
+export function listLiveChatAgentIds(): string[] {
+  return liveAgentIdsFromSessions(sessions.entries())
+}
+
 export function registerChatIpc() {
+  ipcMain.handle('chat:liveAgents', () => listLiveChatAgentIds())
   ipcMain.handle('chat:start', async (_e, { id, cwd, agent, name, continueSession, rebaseOnStart, resumeSid, forkSession, forceCompact }) => {
     if (forceCompact && cwd && resumeSid) {
       // User explicitly clicked Compact + Resume. If a stale child --print
