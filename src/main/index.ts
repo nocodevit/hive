@@ -1911,6 +1911,24 @@ app.whenReady().then(() => {
     })
   })
 
+  // Write a pasted authorization code to the live `claude auth login` child's
+  // stdin. `claude auth login` normally finishes via a localhost browser
+  // redirect, but when that callback can't be reached it prompts for a pasted
+  // code — and Hive previously had NO input wired to the child's stdin, so the
+  // sign-in hung forever at "Paste code here". The renderer reveals its input
+  // only when expectsPasteCode() sees that prompt, then calls this.
+  // UNTESTABLE: writes to a real child's stdin; the paste-prompt *detection* is
+  // unit-tested (authPrompt.test.ts).
+  ipcMain.handle('auth:submitCode', (_e, { code }: { code: string }): { ok: boolean; error?: string } => {
+    if (!authChild || !authChild.stdin) return { ok: false, error: 'no_active_login' }
+    try {
+      authChild.stdin.write((code ?? '').trim() + '\n')
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, error: String(e) }
+    }
+  })
+
   // Kill a hung `claude auth login` so the renderer can always escape the
   // sign-in modal. Best-effort: SIGTERM the child (its 'exit' handler resolves
   // the pending login promise). Safe to call when nothing is running.

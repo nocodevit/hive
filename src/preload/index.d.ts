@@ -80,6 +80,7 @@ declare global {
       auth: {
         login: () => Promise<{ ok: boolean; code: number; error?: string }>
         cancel: () => Promise<{ ok: boolean }>
+        submitCode: (code: string) => Promise<{ ok: boolean; error?: string }>
         onOutput: (cb: (payload: { kind: 'stdout' | 'stderr'; text: string }) => void) => () => void
       }
       crash: {
