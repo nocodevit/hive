@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { UsageCache } from '../usage-cache'
+import { UsageCache, parsePersistedUsage, usageCacheFilename } from '../usage-cache'
 
 describe('UsageCache', () => {
   describe('TTL caching', () => {
@@ -136,5 +136,77 @@ describe('UsageCache', () => {
 
       expect(fetchCc).toHaveBeenCalledTimes(1)
     })
+  })
+})
+
+describe('parsePersistedUsage', () => {
+  it('parses a valid persisted value', () => {
+    expect(parsePersistedUsage('{"cc":{"costUSD":1},"pct":{"fiveHour":25},"ts":999}')).toEqual({
+      cc: { costUSD: 1 }, pct: { fiveHour: 25 }, ts: 999
+    })
+  })
+  it('normalizes missing cc/pct to null', () => {
+    expect(parsePersistedUsage('{"cc":null,"pct":null,"ts":5}')).toEqual({ cc: null, pct: null, ts: 5 })
+  })
+  it('returns null for corrupt or shape-invalid input (must not break startup)', () => {
+    expect(parsePersistedUsage('')).toBeNull()
+    expect(parsePersistedUsage('not json')).toBeNull()
+    expect(parsePersistedUsage('{"cc":1}')).toBeNull()        // no ts
+    expect(parsePersistedUsage('{"ts":"x","cc":1,"pct":1}')).toBeNull() // ts not number
+  })
+})
+
+describe('usageCacheFilename', () => {
+  it('is deterministic and filesystem-safe (no path separators)', () => {
+    const a = usageCacheFilename('/Users/me/Development/psle')
+    expect(a).toBe(usageCacheFilename('/Users/me/Development/psle'))
+    expect(a).toMatch(/^usage-[a-z0-9]+\.json$/)
+    expect(a).not.toContain('/')
+  })
+  it('differs by key', () => {
+    expect(usageCacheFilename('/a')).not.toBe(usageCacheFilename('/b'))
+  })
+})
+
+describe('disk persistence + stale-while-revalidate', () => {
+  const memFs = (seed?: string) => {
+    const store: Record<string, string> = seed ? { '/p': seed } : {}
+    return {
+      store,
+      fs: {
+        readFileSync: (p: string) => { if (!(p in store)) throw new Error('ENOENT'); return store[p] },
+        writeFileSync: (p: string, d: string) => { store[p] = d }
+      }
+    }
+  }
+
+  it('persists the scraped value to disk on fetch', async () => {
+    const { fs, store } = memFs()
+    const cache = new UsageCache({ ttlMs: 5000, fetchCc: async () => ({ costUSD: 2 }), fetchPct: async () => ({ fiveHour: 40 }), now: () => 1000, persistPath: '/p', fs })
+    await cache.get()
+    expect(JSON.parse(store['/p'])).toEqual({ cc: { costUSD: 2 }, pct: { fiveHour: 40 }, ts: 1000 })
+  })
+
+  it('serves the disk seed IMMEDIATELY on restart even past TTL, then revalidates in background', async () => {
+    // Seed written "long ago" (ts 1) — well past a 5s TTL at now=100000.
+    const { fs } = memFs('{"cc":{"costUSD":9},"pct":{"fiveHour":88},"ts":1}')
+    const fetchCc = vi.fn().mockResolvedValue({ costUSD: 3 })
+    const fetchPct = vi.fn().mockResolvedValue({ fiveHour: 12 })
+    const cache = new UsageCache({ ttlMs: 5000, fetchCc, fetchPct, now: () => 100000, persistPath: '/p', fs })
+
+    const first = await cache.get()
+    expect(first).toEqual({ cc: { costUSD: 9 }, pct: { fiveHour: 88 }, ts: 1 }) // the stale seed, shown at once
+
+    await new Promise((r) => setTimeout(r, 0)) // let the background revalidation settle
+    const second = await cache.get()
+    expect(second.pct).toEqual({ fiveHour: 12 }) // now the fresh value
+    expect(fetchCc).toHaveBeenCalledTimes(1)
+  })
+
+  it('a corrupt seed file is ignored (no crash, normal fetch)', async () => {
+    const { fs } = memFs('garbage{')
+    const cache = new UsageCache({ ttlMs: 5000, fetchCc: async () => ({ costUSD: 1 }), fetchPct: async () => null, now: () => 1, persistPath: '/p', fs })
+    const v = await cache.get()
+    expect(v.cc).toEqual({ costUSD: 1 })
   })
 })

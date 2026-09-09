@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
+import { expectsPasteCode } from './authPrompt'
 import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext, SignInContext, classifyResultError, dismissActionForAuthState } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
 import { isCompactSummaryEvent, extractCompactSummaryHint } from './compact-summary'
@@ -285,6 +286,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // device-code URL) into authOutput. On exit 0 → 'success'.
   const [authState, setAuthState] = useState<'idle' | 'needed' | 'in-progress' | 'success' | 'failed'>('idle')
   const [authOutput, setAuthOutput] = useState('')
+  const [authCode, setAuthCode] = useState('')
   const [authError, setAuthError] = useState<string | null>(null)
 
   const [streamingMode, setStreamingMode] = useState<boolean>(true)
@@ -2348,6 +2350,40 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 fontFamily: FONT_MONO, whiteSpace: 'pre-wrap',
                 maxHeight: 220, overflowY: 'auto', wordBreak: 'break-all'
               }}>{authOutput || (authState === 'in-progress' ? 'Waiting for claude auth login…' : '(no output)')}</div>
+            )}
+            {authState === 'in-progress' && expectsPasteCode(authOutput) && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+                <input
+                  type="text"
+                  value={authCode}
+                  onChange={(e) => setAuthCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && authCode.trim()) {
+                      window.api.auth.submitCode(authCode.trim()).catch(() => {})
+                      setAuthCode('')
+                    }
+                  }}
+                  placeholder="Paste the code from your browser, then Enter"
+                  autoFocus
+                  style={{
+                    flex: 1, background: CRUSH.Pepper, color: CRUSH.Butter,
+                    border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 4,
+                    padding: '8px 12px', fontFamily: FONT_MONO, fontSize: 12
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    if (!authCode.trim()) return
+                    window.api.auth.submitCode(authCode.trim()).catch(() => {})
+                    setAuthCode('')
+                  }}
+                  style={{
+                    background: CRUSH.Bok, border: 'none', color: CRUSH.Pepper,
+                    padding: '8px 14px', borderRadius: 6, fontFamily: FONT_MONO,
+                    fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                  }}
+                >Submit</button>
+              </div>
             )}
             {authState === 'failed' && authError && (
               <div style={{ color: CRUSH.Sriracha, fontSize: 12, marginBottom: 12 }}>{authError}</div>
