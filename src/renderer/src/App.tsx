@@ -16,7 +16,8 @@ import ClaudeGate from './components/ClaudeGate'
 import Markdown from 'react-markdown'
 import type { Project, Agent, Zone, SkillInfo, TaskGroup, Task } from './types'
 import { BUILTIN_TEMPLATES, clampChatFontSize, CHAT_FONT_SIZE_MIN, CHAT_FONT_SIZE_MAX } from './types'
-import { NoteTag } from './noteTag'
+import { NoteTag, NOTE_TAG_COLORS } from './noteTag'
+import { NUDGE_MESSAGE, nudgeTargets } from './nudge'
 import { projectListState } from './projectListState'
 import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
 import { OverviewPage } from './components/OverviewPage'
@@ -214,6 +215,8 @@ export default function App() {
   const [projectGroupInput, setProjectGroupInput] = useState('')
   const [agentNotePrompt, setAgentNotePrompt] = useState<{ agentId: string; current: string } | null>(null)
   const [agentNoteInput, setAgentNoteInput] = useState('')
+  const [agentNoteColor, setAgentNoteColor] = useState('') // '' = auto (id-hash)
+  const [agentNoteSolid, setAgentNoteSolid] = useState(false)
   // Two-step delete confirmation for the trash icon on an agent card. See
   // AgentDeleteConfirmModal.tsx for why (accidental one-click deletes lost
   // the "David" agent + its worktree in 2026-08).
@@ -328,6 +331,25 @@ export default function App() {
           }
         }
         setAgents(resetAgents)
+        // The reset above paints EVERY agent gray ('done') because persisted
+        // status is untrustworthy. But a chat --print child may still be alive
+        // after a renderer reload — seed those as 'waiting' (non-gray) so a live
+        // session isn't shown as finished. If it's actively generating, its next
+        // stream event upgrades it to 'working' within ms; if it's alive but
+        // idle, no event ever comes, so this seed is the only thing keeping it
+        // off gray. (Live truth comes from the main process, not persisted data.)
+        try {
+          window.api.chat
+            .liveAgents?.()
+            ?.then((liveIds) => {
+              if (!liveIds?.length) return
+              const live = new Set(liveIds)
+              setAgents((prev) =>
+                prev.map((a) => (live.has(a.id) && a.status === 'done' ? { ...a, status: 'waiting' as const } : a))
+              )
+            })
+            ?.catch(() => { /* main not ready / no sessions — leave the reset as-is */ })
+        } catch { /* liveAgents unavailable (older preload / test mock) — reset stands */ }
       }
       if (data.appPrefs) setAppPrefs((prev) => ({ ...prev, ...(data.appPrefs as Record<string, unknown>) }))
       if (tgs.length) setTaskGroups(tgs)
@@ -833,6 +855,27 @@ export default function App() {
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
                 (Re)start All Agents
               </button>
+              {(() => {
+                const targets = nudgeTargets(agents, contextMenu.projectId, (id) => activeTerminals.has(id))
+                return (
+                  <button
+                    onClick={() => {
+                      // Poke every active session to continue — for flaky-connection
+                      // stalls. Fire-and-forget: each is an independent nudge, and a
+                      // failed send on one dead session must not block the others.
+                      for (const id of targets) {
+                        window.api.chat.send(`chat-${id}`, NUDGE_MESSAGE).catch(() => {})
+                      }
+                      setContextMenu(null)
+                    }}
+                    disabled={targets.length === 0}
+                    className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2 ${targets.length === 0 ? 'text-text-muted opacity-50 cursor-not-allowed' : 'text-text-primary hover:bg-bg-hover cursor-pointer'}`}
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                    Nudge all agents{targets.length ? ` (${targets.length})` : ''}
+                  </button>
+                )
+              })()}
               <button
                 onClick={() => {
                   setProjectGroupPrompt({ projectId: contextMenu.projectId })
@@ -870,6 +913,8 @@ export default function App() {
                 <button
                   onClick={() => {
                     setAgentNoteInput(ag.note || '')
+                    setAgentNoteColor(ag.noteColor || '')
+                    setAgentNoteSolid(!!ag.noteSolid)
                     setAgentNotePrompt({ agentId: ag.id, current: ag.note || '' })
                     setAgentContextMenu(null)
                   }}
@@ -905,7 +950,7 @@ export default function App() {
                   onChange={(e) => setAgentNoteInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
-                      updateAgent(agentNotePrompt.agentId, { note: agentNoteInput.trim() || undefined })
+                      updateAgent(agentNotePrompt.agentId, { note: agentNoteInput.trim() || undefined, noteColor: agentNoteColor || undefined, noteSolid: agentNoteSolid || undefined })
                       setAgentNotePrompt(null)
                     }
                     if (e.key === 'Escape') setAgentNotePrompt(null)
@@ -913,10 +958,34 @@ export default function App() {
                   placeholder="What is this agent doing?"
                   className="w-full bg-bg-primary border border-border rounded-lg px-3 py-2 text-sm text-text-primary mb-2"
                 />
+                {/* Tag color: 'auto' (id-hash) + the Crush palette swatches */}
+                <div className="flex items-center gap-1.5 flex-wrap mb-2">
+                  <button
+                    onClick={() => setAgentNoteColor('')}
+                    title="Auto (per-agent color)"
+                    className={`w-4 h-4 rounded-full cursor-pointer border-2 flex items-center justify-center text-[8px] text-text-muted ${agentNoteColor === '' ? 'border-text-primary scale-110' : 'border-transparent'}`}
+                    style={{ background: 'var(--bg-primary)' }}
+                  >A</button>
+                  {NOTE_TAG_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setAgentNoteColor(c)}
+                      className={`w-4 h-4 rounded-full cursor-pointer border-2 transition-transform ${agentNoteColor === c ? 'border-text-primary scale-125' : 'border-transparent'}`}
+                      style={{ background: c }}
+                    />
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 text-xs text-text-primary cursor-pointer mb-2">
+                  <input type="checkbox" checked={agentNoteSolid} onChange={(e) => setAgentNoteSolid(e.target.checked)} className="accent-[var(--accent)]" />
+                  Solid background
+                </label>
+                {agentNoteInput.trim() && (
+                  <div className="mb-3"><NoteTag id={agentNotePrompt.agentId} note={agentNoteInput.trim()} color={agentNoteColor || undefined} solid={agentNoteSolid} /></div>
+                )}
                 <div className="flex gap-2">
                   <button
                     onClick={() => {
-                      updateAgent(agentNotePrompt.agentId, { note: agentNoteInput.trim() || undefined })
+                      updateAgent(agentNotePrompt.agentId, { note: agentNoteInput.trim() || undefined, noteColor: agentNoteColor || undefined, noteSolid: agentNoteSolid || undefined })
                       setAgentNotePrompt(null)
                     }}
                     className="flex-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-accent text-text-on-purple cursor-pointer hover:opacity-90"
@@ -1164,7 +1233,7 @@ export default function App() {
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
                                   <span className="truncate min-w-0 flex-shrink">{agent.name}</span>
-                                  {agent.note && <NoteTag id={agent.id} note={agent.note} />}
+                                  {agent.note && <NoteTag id={agent.id} note={agent.note} color={agent.noteColor} solid={agent.noteSolid} />}
                                 </span>
                                 <span className="text-[10px] font-semibold uppercase tracking-wider truncate group-hover:invisible text-text-muted flex items-center gap-1.5" title={agent.role}>
                                   <span className="truncate">{agent.role}</span>
