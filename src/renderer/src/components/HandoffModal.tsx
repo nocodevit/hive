@@ -29,7 +29,7 @@
  */
 import { useState } from 'react'
 import Modal from './Modal'
-import { PLAN_REMINDERS, DEFAULT_REMINDER_KEYS, appendPlanReminders } from './handoffReminders'
+import { PLAN_REMINDERS, DEFAULT_REMINDER_KEYS, appendPlanReminders, TEST_METHODS, DEFAULT_TEST_METHOD, resolveTestRule } from './handoffReminders'
 
 export type RopeKey = 'quick' | 'normal' | 'marathon'
 
@@ -127,6 +127,9 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
   // One-off rule for THIS run, typed under the standing list. No checkbox:
   // non-empty text is the opt-in, clearing it is the opt-out.
   const [customReminder, setCustomReminder] = useState('')
+  // "How to test" — a single choice (local pr:check / remote gate / other).
+  const [testMethod, setTestMethod] = useState<string>(DEFAULT_TEST_METHOD)
+  const [testCustom, setTestCustom] = useState('')
 
   const [enableTurns, setEnableTurns] = useState(true)
   const [enableCost, setEnableCost] = useState(true)
@@ -159,7 +162,7 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
       } else if (preset.key === 'plan') {
         // Ride the checked standing reminders — plus this run's custom rule —
         // along inside the single plan goal.
-        out.push(appendPlanReminders(preset.render(''), checkedReminders, customReminder))
+        out.push(appendPlanReminders(preset.render(''), checkedReminders, customReminder, resolveTestRule(testMethod, testCustom)))
       } else {
         out.push(preset.render(''))
       }
@@ -259,6 +262,29 @@ export default function HandoffModal({ open, chatId, agentName, onCancel, onStar
                             <span>{r.label}</span>
                           </label>
                         ))}
+                      </div>
+                      {/* How to test — a single choice; 'Other' reveals a field. */}
+                      <div className="pt-0.5">
+                        <div className={`${SECTION_LABEL} mb-1`}>How to test</div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          {TEST_METHODS.map(m => (
+                            <label key={m.key} className="flex items-center gap-1.5 text-xs text-text-primary cursor-pointer">
+                              <input type="radio" name="test-method" checked={testMethod === m.key} onChange={() => setTestMethod(m.key)} disabled={starting} className="accent-[var(--accent)]" />
+                              <span>{m.label}</span>
+                            </label>
+                          ))}
+                          {testMethod === 'other' && (
+                            <input
+                              type="text"
+                              value={testCustom}
+                              onChange={e => setTestCustom(e.target.value)}
+                              placeholder="how to test…"
+                              maxLength={300}
+                              disabled={starting}
+                              className={`flex-1 min-w-[140px] ${FIELD}`}
+                            />
+                          )}
+                        </div>
                       </div>
                       {/* Custom rule — no checkbox on purpose: typing IS the
                           opt-in, clearing it is the opt-out, so there is no way
