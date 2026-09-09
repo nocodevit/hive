@@ -99,6 +99,8 @@ export interface Agent {
   tagColor?: string       // name tag color (hex), shown in sidebar
   taskGroupRole?: TaskGroupRole
   note?: string           // free-text label shown under name in sidebar
+  noteColor?: string      // chosen note-tag color (hex); falls back to id-hash
+  noteSolid?: boolean     // render the note tag with a solid fill vs translucent
 }
 
 export const defaultPreferences: AgentPreferences = {
