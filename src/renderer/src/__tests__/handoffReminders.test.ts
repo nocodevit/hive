@@ -2,17 +2,19 @@ import { describe, it, expect } from 'vitest'
 import {
   PLAN_REMINDERS,
   DEFAULT_REMINDER_KEYS,
-  appendPlanReminders
+  appendPlanReminders,
+  TEST_METHODS,
+  DEFAULT_TEST_METHOD,
+  resolveTestRule
 } from '../components/handoffReminders'
 
 const PLAN_BASE =
   'work through the plan you presented via ExitPlanMode above, item by item'
 
 describe('PLAN_REMINDERS', () => {
-  it('captures the six standing reminders the user dictated', () => {
+  it('captures the standing reminders (testing is now a separate choice)', () => {
     expect(PLAN_REMINDERS.map((r) => r.key)).toEqual([
       'dev-workflow',
-      'vitest-only',
       'styleguide',
       'code-quality',
       'batch-confirm',
@@ -55,7 +57,7 @@ describe('appendPlanReminders', () => {
     // Every rule text is present, numbered.
     for (const r of PLAN_REMINDERS) expect(out).toContain(r.rule)
     expect(out).toContain('1. ')
-    expect(out).toContain('6. ')
+    expect(out).toContain('5. ')
     // Must NOT introduce a separate /goal condition (that joiner is "AND ALSO").
     expect(out).not.toContain('AND ALSO')
   })
@@ -86,8 +88,8 @@ describe('appendPlanReminders — custom rule (v2.18.0)', () => {
     const lastFixed = PLAN_REMINDERS[PLAN_REMINDERS.length - 1].rule
     expect(out).toContain('never force-push')
     expect(out.indexOf(lastFixed)).toBeLessThan(out.indexOf('never force-push'))
-    // Six standing + one custom.
-    expect(out).toContain('7. never force-push')
+    // Five standing + one custom.
+    expect(out).toContain('6. never force-push')
   })
 
   it('works as the ONLY rule when every standing box is unchecked', () => {
@@ -118,5 +120,36 @@ describe('appendPlanReminders — custom rule (v2.18.0)', () => {
   it('still never introduces a separate /goal condition', () => {
     const out = appendPlanReminders(PLAN_BASE, new Set(DEFAULT_REMINDER_KEYS), 'anything')
     expect(out).not.toContain('AND ALSO')
+  })
+})
+
+describe('test method choice', () => {
+  it('offers local pr:check, remote gate, and other', () => {
+    expect(TEST_METHODS.map((t) => t.key)).toEqual(['local', 'remote', 'other'])
+    expect(DEFAULT_TEST_METHOD).toBe('local')
+  })
+
+  it('resolveTestRule returns the fixed rule for local/remote', () => {
+    expect(resolveTestRule('local')).toContain('pr:check')
+    expect(resolveTestRule('remote')).toContain('remote gate')
+  })
+
+  it("resolveTestRule uses the trimmed custom text for 'other', or '' when blank", () => {
+    expect(resolveTestRule('other', '  run e2e on staging  ')).toBe('run e2e on staging')
+    expect(resolveTestRule('other', '   ')).toBe('')
+    expect(resolveTestRule('other')).toBe('')
+  })
+
+  it('appendPlanReminders injects the test rule right after dev-workflow (as rule 2)', () => {
+    const out = appendPlanReminders(PLAN_BASE, new Set(DEFAULT_REMINDER_KEYS), '', resolveTestRule('local'))
+    // dev-workflow is rule 1; the test rule must be rule 2.
+    expect(out).toMatch(/1\. Start every MR/)
+    expect(out).toMatch(/2\. Test by running the local pr:check\./)
+  })
+
+  it('a blank test rule injects nothing', () => {
+    const withNone = appendPlanReminders(PLAN_BASE, new Set(DEFAULT_REMINDER_KEYS))
+    const withBlank = appendPlanReminders(PLAN_BASE, new Set(DEFAULT_REMINDER_KEYS), '', '  ')
+    expect(withBlank).toBe(withNone)
   })
 })

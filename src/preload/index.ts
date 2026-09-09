@@ -67,6 +67,7 @@ const api = {
   auth: {
     login: () => ipcRenderer.invoke('auth:login') as Promise<{ ok: boolean; code: number; error?: string }>,
     cancel: () => ipcRenderer.invoke('auth:cancel') as Promise<{ ok: boolean }>,
+    submitCode: (code: string) => ipcRenderer.invoke('auth:submitCode', { code }) as Promise<{ ok: boolean; error?: string }>,
     onOutput: (cb: (payload: { kind: 'stdout' | 'stderr'; text: string }) => void) => {
       const handler = (_e: any, data: { kind: 'stdout' | 'stderr'; text: string }) => cb(data)
       ipcRenderer.on('auth:output', handler)
@@ -93,6 +94,9 @@ const api = {
   chat: {
     start: (id: string, opts: { cwd?: string; agent?: string; name?: string; continueSession?: boolean; rebaseOnStart?: boolean; resumeSid?: string; forkSession?: boolean; forceCompact?: boolean }) =>
       ipcRenderer.invoke('chat:start', { id, ...opts }) as Promise<{ ok: boolean; compacted?: boolean; error?: string }>,
+    // agentIds whose --print child is live right now — renderer seeds these as
+    // non-gray at boot instead of the blanket 'done' reset.
+    liveAgents: () => ipcRenderer.invoke('chat:liveAgents') as Promise<string[]>,
     getPrevSessionInfo: (cwd: string, chatId?: string) =>
       ipcRenderer.invoke('chat:getPrevSessionInfo', { cwd, chatId }) as Promise<{ sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number; cwd: string } | null>,
     getRecentSessions: (cwd: string, limit?: number) =>
