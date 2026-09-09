@@ -25,18 +25,20 @@ export interface PlanReminder {
 export const PLAN_REMINDERS: PlanReminder[] = [
   {
     key: 'dev-workflow',
-    label: 'Follow the repo dev-workflow each MR (sync → implement → test → bump → commit)',
-    rule: 'For every MR, follow the repository dev-workflow end to end — sync the branch, implement, test, bump the version, then commit — never skipping or reordering those steps.'
-  },
-  {
-    key: 'vitest-only',
-    label: "Verify with the relevant unit tests only — don't re-run them in the PR check",
-    rule: 'Verify changes with the relevant unit tests only; do not duplicate that same test run again inside the PR/CI check step.'
+    // The label deliberately does NOT list the steps. The previous wording
+    // spelled out "sync → implement → test → bump → commit", and an agent read
+    // that enumeration AS the workflow: it never opened the skill, so the
+    // self-review step — which is IN the skill and not in the list — was
+    // skipped on 18 consecutive MRs and the external reviewer caught what it
+    // should have. A partial restatement of a sequence is the thing that gets
+    // followed, because it is nearer and cheaper than the source.
+    label: 'Invoke the repo dev-workflow skill for every MR — every step, in order',
+    rule: 'Start every MR by invoking Skill(dev-workflow) — actually invoke it; do not recite its steps from memory.'
   },
   {
     key: 'styleguide',
-    label: "Follow the project's existing UI style guide — don't invent styles",
-    rule: "For any UI work, follow the project's existing style guide exactly; do not invent new styles or deviate from it."
+    label: "If there is UI, strictly follow the style guide — don't invent components or styles",
+    rule: 'If there is UI, strictly follow the style guide; do not invent any component or style.'
   },
   {
     key: 'code-quality',
@@ -58,6 +60,32 @@ export const PLAN_REMINDERS: PlanReminder[] = [
 /** Every reminder key — the default-checked set (all reminders on by default). */
 export const DEFAULT_REMINDER_KEYS: readonly string[] = PLAN_REMINDERS.map((r) => r.key)
 
+// "How to test" is a single CHOICE, not a checkbox — the user picks ONE way the
+// agent should verify. 'other' takes free text. The chosen method's rule is
+// injected into the plan goal (right after the dev-workflow rule).
+export interface TestMethod {
+  key: string
+  label: string
+  /** Goal text for this method; empty for 'other' (the custom text is used). */
+  rule: string
+}
+export const TEST_METHODS: TestMethod[] = [
+  { key: 'local', label: 'Local pr:check', rule: 'Test by running the local pr:check.' },
+  { key: 'remote', label: 'Remote gate', rule: 'Test via the remote gate.' },
+  { key: 'other', label: 'Other', rule: '' }
+]
+export const DEFAULT_TEST_METHOD = 'local'
+
+/**
+ * The goal text for the chosen test method. For 'other', the trimmed custom text
+ * is used; a blank custom text yields '' (nothing injected). Pure/testable.
+ */
+export function resolveTestRule(methodKey: string, customText?: string): string {
+  if (methodKey === 'other') return (customText || '').trim()
+  const m = TEST_METHODS.find((t) => t.key === methodKey)
+  return m ? m.rule : ''
+}
+
 /**
  * Append the checked standing-rule reminders to the base plan goal as ONE
  * guardrail block. Returns the base text unchanged when nothing is checked, so
@@ -74,9 +102,15 @@ export const DEFAULT_REMINDER_KEYS: readonly string[] = PLAN_REMINDERS.map((r) =
 export function appendPlanReminders(
   basePlanText: string,
   checkedKeys: ReadonlySet<string>,
-  customRule?: string
+  customRule?: string,
+  testRule?: string
 ): string {
   const rules = PLAN_REMINDERS.filter((r) => checkedKeys.has(r.key)).map((r) => r.rule)
+  // The chosen "how to test" rule sits right after dev-workflow (index 0), so it
+  // reads as rule 2 — matching the standing-rules ordering the user set. splice
+  // at 1 lands at the end when the list is shorter, so it's always included.
+  const test = (testRule || '').trim()
+  if (test) rules.splice(1, 0, test)
   const custom = (customRule || '').trim()
   if (custom) rules.push(custom)
   if (rules.length === 0) return basePlanText
