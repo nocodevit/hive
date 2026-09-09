@@ -6,7 +6,7 @@ import { EventEmitter } from 'node:events'
 import { ipcMain, BrowserWindow, app } from 'electron'
 import * as pty from 'node-pty'
 import { queryUsageViaCcusage, queryUsagePctViaPty } from './chat-usage-query'
-import { UsageCache } from './usage-cache'
+import { UsageCache, usageCacheFilename } from './usage-cache'
 import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
 import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
 import { shouldAutoAllow } from './session-permissions'
@@ -346,10 +346,20 @@ async function getSharedUsage(scrapeCwd?: string) {
   const key = scrapeCwd || process.env.HOME || '/'
   let cache = usageCaches.get(key)
   if (!cache) {
+    // Persist per-cwd usage to ~/.hive/usage-cache so the 5h/7d bars survive a
+    // Hive restart (they were in-memory only, blanking on every relaunch).
+    let persistPath: string | undefined
+    try {
+      const dir = join(process.env.HIVE_DATA_DIR || join(homedir(), '.hive'), 'usage-cache')
+      mkdirSync(dir, { recursive: true })
+      persistPath = join(dir, usageCacheFilename(key))
+    } catch { /* can't persist — fall back to in-memory only */ }
     cache = new UsageCache({
       ttlMs: USAGE_TTL_MS,
       fetchCc: sharedCcusageQuery,
-      fetchPct: () => queryUsagePctViaPty(key)
+      fetchPct: () => queryUsagePctViaPty(key),
+      persistPath,
+      fs: { readFileSync: (p) => readFileSync(p, 'utf-8'), writeFileSync: (p, d) => writeFileSync(p, d) }
     })
     usageCaches.set(key, cache)
   }
