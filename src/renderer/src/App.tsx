@@ -77,6 +77,10 @@ export default function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [activeTerminals, setActiveTerminals] = useState<Set<string>>(new Set())
+  // Agents whose chat should auto-launch (ctx-based resume) on mount — drives the
+  // project "Restart all" / "Whip lazy bones" bulk actions. Cleared per agent once
+  // its HiveChat fires (onAutoResumed).
+  const [restartPending, setRestartPending] = useState<Set<string>>(new Set())
   // v2.15.7: last-touched timestamp per agent (Map in a ref instead of
   // useState so bumping doesn't churn re-renders). Read by pickLRUToEvict
   // when the set hits MAX_ACTIVE_TERMINALS to choose which sticky
@@ -699,6 +703,32 @@ export default function App() {
     setAgents((prev) => prev.map((a) => (a.id === id ? { ...a, ...updates } : a)))
   }
 
+  // Bulk-resume a set of agents: mount each chat (activeTerminals) and flag it to
+  // auto-launch (HiveChat picks compact+resume vs resume by ctx ≥ 30%). The flag
+  // clears itself once each pane fires (onAutoResumed).
+  const bulkResume = (agentList: Agent[]) => {
+    if (!agentList.length) return
+    const ids = agentList.map(a => a.id)
+    setActiveTerminals(prev => { const next = new Set(prev); for (const id of ids) next.add(id); return next })
+    setRestartPending(prev => { const next = new Set(prev); for (const id of ids) next.add(id); return next })
+  }
+  // "Whip lazy bones": resume only the agents that are NOT currently running.
+  const whipLazyBones = (projectId: string) => {
+    bulkResume(agents.filter(a => a.projectId === projectId && !activeTerminals.has(a.id)))
+  }
+  // "Restart all agents": restart EVERY agent — stop the live ones first, then
+  // resume all from disk (ctx-based compact). Stopping a running session flips its
+  // HiveChat back to the chooser, where the autoResume flag then fires.
+  const restartAllAgents = async (projectId: string) => {
+    const projAgents = agents.filter(a => a.projectId === projectId)
+    for (const a of projAgents) {
+      if (activeTerminals.has(a.id)) {
+        try { await window.api.chat.stop(`chat-${a.id}`) } catch { /* already gone */ }
+      }
+    }
+    bulkResume(projAgents)
+  }
+
   const resizePanel = useCallback((panel: 'projects' | 'agents' | 'files', delta: number) => {
     setPanelWidths((prev) => ({
       ...prev,
@@ -837,45 +867,44 @@ export default function App() {
             <p className="text-xs text-text-muted text-center py-6">No projects yet</p>
           )}
           {/* Project context menu */}
-          {contextMenu && (
+          {contextMenu && (() => {
+            const projAgents = agents.filter(a => a.projectId === contextMenu.projectId)
+            const lazy = projAgents.filter(a => !activeTerminals.has(a.id))
+            const nudge = nudgeTargets(agents, contextMenu.projectId, (id) => activeTerminals.has(id))
+            const item = 'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-[13px] transition-colors'
+            const on = 'text-text-primary hover:bg-bg-hover cursor-pointer'
+            const off = 'text-text-muted opacity-50 cursor-not-allowed'
+            const count = (n: number) => n ? <span className="ml-auto text-[11px] tabular-nums text-text-muted">{n}</span> : null
+            return (
             <div
-              className="fixed z-50 bg-bg-secondary border border-border rounded-lg shadow-e3 py-1 min-w-[200px]"
+              className="fixed z-50 bg-bg-secondary border border-border rounded-2xl shadow-2xl p-1.5 min-w-[236px]"
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
               <button
-                onClick={() => {
-                  const projAgents = agents.filter(a => a.projectId === contextMenu.projectId)
-                  for (const ag of projAgents) {
-                    if (!activeTerminals.has(ag.id)) startAgent(ag)
-                  }
-                  setContextMenu(null)
-                }}
-                className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer flex items-center gap-2"
+                onClick={() => { void restartAllAgents(contextMenu.projectId); setContextMenu(null) }}
+                disabled={projAgents.length === 0}
+                className={`${item} ${projAgents.length ? on : off}`}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="5 3 19 12 5 21 5 3" /></svg>
-                (Re)start All Agents
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+                <span>Restart all agents</span>{count(projAgents.length)}
               </button>
-              {(() => {
-                const targets = nudgeTargets(agents, contextMenu.projectId, (id) => activeTerminals.has(id))
-                return (
-                  <button
-                    onClick={() => {
-                      // Poke every active session to continue — for flaky-connection
-                      // stalls. Fire-and-forget: each is an independent nudge, and a
-                      // failed send on one dead session must not block the others.
-                      for (const id of targets) {
-                        window.api.chat.send(`chat-${id}`, NUDGE_MESSAGE).catch(() => {})
-                      }
-                      setContextMenu(null)
-                    }}
-                    disabled={targets.length === 0}
-                    className={`w-full text-left px-3 py-2 text-[13px] flex items-center gap-2 ${targets.length === 0 ? 'text-text-muted opacity-50 cursor-not-allowed' : 'text-text-primary hover:bg-bg-hover cursor-pointer'}`}
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-                    Nudge all agents{targets.length ? ` (${targets.length})` : ''}
-                  </button>
-                )
-              })()}
+              <button
+                onClick={() => { whipLazyBones(contextMenu.projectId); setContextMenu(null) }}
+                disabled={lazy.length === 0}
+                className={`${item} ${lazy.length ? on : off}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 19 22 12 13 5 13 19"/><polygon points="2 19 11 12 2 5 2 19"/></svg>
+                <span>Whip lazy bones</span>{count(lazy.length)}
+              </button>
+              <button
+                onClick={() => { for (const id of nudge) window.api.chat.send(`chat-${id}`, NUDGE_MESSAGE).catch(() => {}); setContextMenu(null) }}
+                disabled={nudge.length === 0}
+                className={`${item} ${nudge.length ? on : off}`}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+                <span>Nudge all agents</span>{count(nudge.length)}
+              </button>
+              <div className="my-1 h-px bg-border" />
               <button
                 onClick={() => {
                   setProjectGroupPrompt({ projectId: contextMenu.projectId })
@@ -883,23 +912,24 @@ export default function App() {
                   setProjectGroupInput(proj?.group || '')
                   setContextMenu(null)
                 }}
-                className="w-full text-left px-3 py-2 text-[13px] text-text-primary hover:bg-bg-hover cursor-pointer flex items-center gap-2"
+                className={`${item} ${on}`}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
-                Move to Group…
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                <span>Move to group…</span>
               </button>
               <button
                 onClick={() => {
                   setProjects(prev => prev.map(p => p.id === contextMenu.projectId ? { ...p, group: undefined } : p))
                   setContextMenu(null)
                 }}
-                className="w-full text-left px-3 py-2 text-[13px] text-text-muted hover:bg-bg-hover cursor-pointer flex items-center gap-2"
+                className={`${item} text-text-muted hover:bg-bg-hover hover:text-text-primary cursor-pointer`}
               >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                Remove from Group
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <span>Remove from group</span>
               </button>
             </div>
-          )}
+            )
+          })()}
           {/* Agent context menu */}
           {agentContextMenu && (() => {
             const ag = agents.find(a => a.id === agentContextMenu.agentId)
@@ -2473,6 +2503,8 @@ export default function App() {
                   rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath && !newAgentIds.has(agent.id)}
                   onCloseTerminal={() => setActiveTerminals(prev => { const next = new Set(prev); next.delete(agentId); return next })}
                   chatFontSize={appPrefs.chatFontSize}
+                  autoResume={restartPending.has(agentId)}
+                  onAutoResumed={() => setRestartPending(prev => { if (!prev.has(agentId)) return prev; const next = new Set(prev); next.delete(agentId); return next })}
                 />
               </div>
             )
