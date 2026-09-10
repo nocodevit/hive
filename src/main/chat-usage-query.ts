@@ -150,6 +150,31 @@ export function isSettingsWarningVisible(text: string): boolean {
 }
 
 /**
+ * The workspace / config TRUST dialog ("Quick safety check … Is this a project
+ * you trust?" or the settings-permissions "Only proceed if you trust this
+ * configuration"), whose options are "❯ No, exit" (default) then "Yes, I trust
+ * this folder". It ALSO prints "Enter to confirm", so isSettingsWarningVisible
+ * matches it too — but hitting Enter here selects the highlighted "No, exit" and
+ * claude quits, so the /usage scrape returned null (5h/7d bars blank). Detect it
+ * specifically so we can navigate to the Yes option instead.
+ */
+export function isTrustDialogVisible(text: string): boolean {
+  return /trust this folder|Yes, I trust|Only proceed if you trust|safety check/i.test(text)
+}
+
+/**
+ * The keystrokes that dismiss whatever blocking dialog is on screen, or '' when
+ * none. Trust dialog → Down then Enter (move off "No, exit" onto "Yes, I trust
+ * this folder", confirm). Settings warning → Enter. Pure so the choice is
+ * unit-testable; the actual PTY write stays in queryUsagePctViaPty.
+ */
+export function dialogDismissKeys(grid: string): string {
+  if (isTrustDialogVisible(grid)) return '\x1b[B\r' // ↓ then Enter → "Yes, I trust this folder"
+  if (isSettingsWarningVisible(grid)) return '\r'
+  return ''
+}
+
+/**
  * Spawn a headless interactive `claude` under a PTY, pipe every byte
  * into `@xterm/headless` so the terminal state machine handles ANSI
  * cursor moves / erase / scroll correctly, then read the TUI's grid.
@@ -221,17 +246,19 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<UsagePctResult 
       return lines.join('\n')
     }
 
-    // Repeatedly hit Enter until the Settings Warning menu is gone. See
-    // isSettingsWarningVisible for why one shot isn't enough.
+    // Repeatedly dismiss whatever blocking dialog is up (settings warning OR
+    // the trust dialog) until it's gone — one shot isn't enough (staged render).
+    // Trust dialog needs ↓+Enter, not bare Enter (see dialogDismissKeys).
     const scheduleWarningRetry = () => {
       if (warningRetryTimer) return
       warningRetryTimer = setTimeout(() => {
         warningRetryTimer = null
         if (done) return
-        if (!isSettingsWarningVisible(dumpGrid())) return
+        const grid = dumpGrid()
+        if (!isTrustDialogVisible(grid) && !isSettingsWarningVisible(grid)) return
         if (warningRetries >= MAX_WARNING_RETRIES) return
         warningRetries++
-        try { child?.write('\r') } catch {}
+        try { child?.write(dialogDismissKeys(grid)) } catch {}
         scheduleWarningRetry()
       }, 1500)
     }
@@ -239,13 +266,15 @@ export async function queryUsagePctViaPty(cwd?: string): Promise<UsagePctResult 
     child.onData((d: string) => {
       term.write(d, () => {
         const grid = dumpGrid()
-        // A. Settings Warning menu still on screen → dismiss and retry.
-        //    Blocks the prompt from rendering, so nothing else can
-        //    progress until this is cleared.
-        if (isSettingsWarningVisible(grid)) {
+        // A. A blocking dialog (settings warning OR trust dialog) is on screen →
+        //    dismiss and retry. Blocks the prompt from rendering, so nothing
+        //    else can progress until this is cleared. The trust dialog must be
+        //    answered "Yes, I trust this folder" (↓+Enter) — bare Enter selects
+        //    the highlighted "No, exit" and claude quits (the 5h/7d-blank bug).
+        if (isTrustDialogVisible(grid) || isSettingsWarningVisible(grid)) {
           if (warningRetries === 0) {
             warningRetries = 1
-            setTimeout(() => { try { child?.write('\r') } catch {} }, 500)
+            setTimeout(() => { try { child?.write(dialogDismissKeys(dumpGrid())) } catch {} }, 500)
             scheduleWarningRetry()
           }
           return
