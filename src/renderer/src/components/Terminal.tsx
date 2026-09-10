@@ -23,9 +23,12 @@ interface TerminalProps {
   onCloseTerminal?: () => void
   /// v2.7.1: per-project chat font-size, forwarded to HiveChat.
   chatFontSize?: number
+  /// Bulk restart / whip: auto-launch the session (ctx-based) without the chooser.
+  autoResume?: boolean
+  onAutoResumed?: () => void
 }
 
-export default function Terminal({ id, agentId, agentName, cwd, visible, autoRunClaude, continueSession, startupCommand, rebaseOnStart, onCloseTerminal, chatFontSize }: TerminalProps) {
+export default function Terminal({ id, agentId, agentName, cwd, visible, autoRunClaude, continueSession, startupCommand, rebaseOnStart, onCloseTerminal, chatFontSize, autoResume, onAutoResumed }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const wrapperRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<XTerm | null>(null)
@@ -636,6 +639,8 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
             continueSession={continueSession}
             rebaseOnStart={rebaseOnStart}
             visible={chatMode && visible}
+            autoResume={autoResume}
+            onAutoResumed={onAutoResumed}
             onCloseTerminal={onCloseTerminal}
             chatFontSize={chatFontSize}
           />

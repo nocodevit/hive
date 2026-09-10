@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
+import { ctxPctFromPrev, restartResumeMode } from './bulkRestart'
 import { expectsPasteCode } from './authPrompt'
 import { TimelineRow, ThinkingSpinner, HiveChatPausedContext, AskUserQuestionContext, SignInContext, classifyResultError, dismissActionForAuthState } from './renderers'
 import { flattenHistoricalEvents } from './flatten'
@@ -53,6 +54,13 @@ interface Props {
   /// (historic baseline) when undefined so existing projects don't
   /// visually reflow the moment they upgrade.
   chatFontSize?: number
+  /// When set, skip the StartChooser and auto-launch: a prior session
+  /// resumes (compact+resume when ctx ≥ 30%, else resume), no prior → new.
+  /// Drives the project "Restart all" / "Whip lazy bones" bulk actions.
+  autoResume?: boolean
+  /// Called once after an autoResume fires, so the parent can clear its
+  /// pending flag (the fire is also one-shot-guarded internally).
+  onAutoResumed?: () => void
 }
 
 /**
@@ -62,7 +70,7 @@ interface Props {
  * We flatten those into a TimelineEntry list and render each entry with
  * a Crush-styled component.
  */
-export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible, onCloseTerminal, chatFontSize }: Props) {
+export default function HiveChat({ id, cwd, agent, agentName, continueSession, rebaseOnStart, visible, onCloseTerminal, chatFontSize, autoResume, onAutoResumed }: Props) {
   // v2.7.1: base font-size for the message body. Reuses the same clamp
   // helper ProjectSettingsModal uses so the range/default can only ever
   // widen or narrow in ONE place. Sub-element sizes (11/12) stay
@@ -498,6 +506,19 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     setAuthState('idle')
     setChooserMode(false)
   }
+
+  // Bulk restart / whip: once the prior-session info has loaded, auto-pick the
+  // launch mode by context and fire it — no user click. One-shot (ref guard) so
+  // a re-render can't re-launch; parent is told so it can clear its flag.
+  const autoResumeFiredRef = useRef(false)
+  useEffect(() => {
+    if (!autoResume || !chooserMode || !prevInfoLoaded || autoResumeFiredRef.current) return
+    autoResumeFiredRef.current = true
+    const pct = ctxPctFromPrev(prevInfo, parseContextSize)
+    launchSession(restartResumeMode(!!prevInfo?.sid, pct))
+    onAutoResumed?.()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoResume, chooserMode, prevInfoLoaded])
 
   useEffect(() => {
     if (chooserMode) return  // wait for user pick
