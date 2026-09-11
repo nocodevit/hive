@@ -881,7 +881,20 @@ export default function App() {
               style={{ left: contextMenu.x, top: contextMenu.y }}
             >
               <button
-                onClick={() => { void restartAllAgents(contextMenu.projectId); setContextMenu(null) }}
+                onClick={async () => {
+                  const pid = contextMenu.projectId
+                  const n = projAgents.length
+                  const running = projAgents.filter(a => activeTerminals.has(a.id)).length
+                  setContextMenu(null)
+                  // High-risk: it interrupts running agents. Require confirmation.
+                  const ok = await confirmDialog({
+                    title: `Restart all ${n} agent${n === 1 ? '' : 's'}?`,
+                    message: `Every agent in this project is restarted — each resumes its last session (compact+resume when context ≥ 30%, else resume).${running ? `\n\n${running} agent${running === 1 ? ' is' : 's are'} currently running; their in-flight work is interrupted.` : ''}`,
+                    confirmLabel: 'Restart all',
+                    destructive: true
+                  })
+                  if (ok) void restartAllAgents(pid)
+                }}
                 disabled={projAgents.length === 0}
                 className={`${item} ${projAgents.length ? on : off}`}
               >
