@@ -1223,7 +1223,14 @@ export default function App() {
                               onDragEnd={() => setDragAgentId(null)}
                               className={`group w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5 relative
                                 transition-colors cursor-grab active:cursor-grabbing border-l-2 ${
-                                grp ? 'ml-2' : ''
+                                /* v2.20.3: `ml-2` alone (in-group) made the row
+                                   10px asymmetric — 8px margin + 2px status
+                                   border on the left, nothing on the right,
+                                   compounded by note tags clipped by the
+                                   name-line's overflow-hidden. Add matching
+                                   `mr-2` so the row sits centered inside the
+                                   dept container. */
+                                grp ? 'ml-2 mr-2' : ''
                               } ${
                                 dragAgentId === agent.id ? 'opacity-50' : ''
                               } ${

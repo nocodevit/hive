@@ -1,7 +1,7 @@
 {
   "name": "hive",
   "productName": "Hive",
-  "version": "2.20.2",
+  "version": "2.20.3",
   "description": "Multi-agent Claude Code manager with soul",
   "main": "out/main/index.js",
   "build": {
@@ -15,7 +15,11 @@
     "mac": {
       "icon": "resources/icon.icns",
       "entitlements": "entitlements.mac.plist",
-      "entitlementsInherit": "entitlements.mac.plist"
+      "entitlementsInherit": "entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Hive needs microphone access to transcribe your voice into agent prompts.",
+        "NSSpeechRecognitionUsageDescription": "Hive uses on-device speech recognition to convert your voice into text for the agent chat."
+      }
     },
     "extraResources": [
       {

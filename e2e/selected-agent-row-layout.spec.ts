@@ -115,3 +115,59 @@ test('selected agent row: content symmetric, no right-drift', async () => {
   // is visibly lopsided.
   expect(Math.abs(leftGap - rightGap)).toBeLessThan(8)
 })
+
+// v2.20.3 regression: the ungrouped path above stayed symmetric, but a
+// row in a `group` (e.g. "DATA" → team "engineering") also gets `ml-2`
+// with no matching `mr-2`, producing a 10px left-vs-right gap plus a
+// note tag clipped by the name-line's overflow-hidden. Same seed as
+// above, but the agent joins a real team so the `grp` branch fires.
+test('grouped agent row: content symmetric with ml-2 / mr-2 pair', async () => {
+  const projectDir = mkdtempSync(join(tmpdir(), 'hive-e2e-proj-grp-'))
+  await page.evaluate(async (path) => {
+    const proj = {
+      id: 'p-grp', name: 'GrpProj', officePath: path,
+      zones: [{ id: 'z1', name: 'root', path, type: 'rnd', hasGit: false }],
+    }
+    const agent = {
+      id: 'a-grp', projectId: 'p-grp', zoneId: 'z1',
+      name: 'Alexandra', role: 'coder', type: 'coding',
+      department: 'DATA', group: 'engineering', order: 0, status: 'done',
+      soul: '',
+      avatar: { skinTone: '#f5d0a9', hairStyle: 'short', hairColor: '#2c1810',
+                topStyle: 'tee', topColor: '#7c3aed', bottomStyle: 'pants',
+                bottomColor: '#1e293b', hat: 'none', accessories: [] },
+      enabledSkills: [], preferences: { autoRunClaude: false, startupCommand: '' },
+      model: 'inherit', effort: 'high',
+      note: 'test note — a moderately long chip label',
+    }
+    await window.api.data.save({ projects: [proj], agents: [agent], appPrefs: {}, taskGroups: [] })
+    location.reload()
+  }, projectDir)
+
+  await page.waitForTimeout(2000)
+  await page.getByText('GrpProj').first().click()
+  await page.waitForTimeout(400)
+  const agentRow = page.locator('div[draggable="true"]').filter({ hasText: 'Alexandra' }).first()
+  await agentRow.click()
+  await page.waitForTimeout(400)
+
+  const rowBox = await agentRow.boundingBox()
+  const avatarBox = await agentRow.locator('canvas').first().boundingBox()
+  expect(rowBox).not.toBeNull()
+  expect(avatarBox).not.toBeNull()
+
+  const leftGap = (avatarBox!.x - rowBox!.x)
+  const rightEdgeEls = await agentRow.locator('span').all()
+  let rightmostRight = rowBox!.x
+  for (const el of rightEdgeEls) {
+    const b = await el.boundingBox()
+    if (b && b.x + b.width > rightmostRight) rightmostRight = b.x + b.width
+  }
+  const rightGap = (rowBox!.x + rowBox!.width) - rightmostRight
+
+  // eslint-disable-next-line no-console
+  console.log(`[diagnostic grouped] rowBox=${JSON.stringify(rowBox)} leftGap=${leftGap.toFixed(1)}px rightGap=${rightGap.toFixed(1)}px`)
+
+  // Same 8px tolerance. Pre-fix this was ~10px asymmetric.
+  expect(Math.abs(leftGap - rightGap)).toBeLessThan(8)
+})
