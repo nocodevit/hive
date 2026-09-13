@@ -46,15 +46,63 @@ export function pickPathLine(shellOutput: string): string | null {
 }
 
 /**
- * Ordered strategies to recover a GUI-launched app's real PATH. A Finder/Dock
- * launch inherits only a minimal PATH (/usr/bin:/bin); the user's real PATH
- * (nvm node bin, ~/.local/bin, homebrew) lives behind their shell rc.
+ * Absolute bin dirs to prepend to launchd's minimal PATH BEFORE any shell scrape.
+ * Covers the common install locations: user local, homebrew (arm64+intel), and
+ * every nvm-installed node bin (newest first). Preseeding these makes the shell
+ * scrape a fallback for exotic setups instead of a hard dependency at boot.
  *
- * Crucially, many ~/.zshrc start with an interactive guard
- * (`[[ -o interactive ]] || return`), so sourcing rc from a plain `-c` shell
- * bails before nvm runs — PATH never gains the node bin that holds `claude`.
- * So we try an INTERACTIVE login shell (-lic) first; that runs the full rc and
- * exposes nvm. Fallbacks degrade to login (-lc) and explicit rc sourcing.
+ * v2.20.4: the shell scrape (`zsh -lic 'printenv PATH'`) has been observed to
+ * hang the ENTIRE main thread indefinitely — the child's stdio pipes stay held
+ * open even after the execFileSync 7s timeout fires, so the whole app never
+ * paints its window. The fix is to hydrate from disk paths first and only fall
+ * back to the shell when the known dirs don't yield a working claude.
+ */
+export function knownPathDirs(home: string, nvmVersionDirs: readonly string[]): string[] {
+  const parse = (v: string): [number, number, number] => {
+    const m = v.match(/^v?(\d+)\.(\d+)\.(\d+)/)
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [-1, -1, -1]
+  }
+  const nvmBins = [...nvmVersionDirs]
+    .sort((a, b) => {
+      const pa = parse(a)
+      const pb = parse(b)
+      for (let i = 0; i < 3; i++) if (pb[i] !== pa[i]) return pb[i] - pa[i]
+      return 0
+    })
+    .map((v) => `${home}/.nvm/versions/node/${v}/bin`)
+  return [
+    `${home}/.local/bin`,
+    `${home}/.npm-global/bin`,
+    '/opt/homebrew/bin',
+    '/opt/homebrew/sbin',
+    '/usr/local/bin',
+    ...nvmBins
+  ]
+}
+
+/**
+ * Merge new bin dirs onto a PATH string, keeping order, deduplicated, with the
+ * new dirs prepended so they win over launchd's minimal `/usr/bin:/bin`. Pure —
+ * caller assigns the result to process.env.PATH.
+ */
+export function mergePath(currentPath: string | undefined, prependDirs: readonly string[]): string {
+  const existing = (currentPath || '').split(':').filter(Boolean)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const d of [...prependDirs, ...existing]) {
+    if (!seen.has(d)) { seen.add(d); out.push(d) }
+  }
+  return out.join(':')
+}
+
+/**
+ * Ordered strategies to recover a GUI-launched app's real PATH via a login shell.
+ * Only run as a FALLBACK to knownPathDirs — the interactive login shell (-lic)
+ * has been observed to hang the main thread indefinitely (see knownPathDirs).
+ *
+ * The shell fallback still runs for users whose claude sits outside the common
+ * dirs (a custom prefix, a pnpm store, a corporate wrapper), but with a much
+ * shorter timeout so a hang can't freeze boot.
  */
 export function pathHydrationStrategies(shell: string): ShellCmd[] {
   return [

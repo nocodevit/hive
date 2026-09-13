@@ -12,6 +12,8 @@ import {
   knownClaudeBinPaths,
   nvmClaudeCandidates,
   claudeBinCandidates,
+  knownPathDirs,
+  mergePath,
   hostEnvVarsToStrip,
   sanitizedClaudeEnv,
   HOST_MANAGED_AUTH_ENV_VARS,
@@ -53,8 +55,8 @@ describe('pickPathLine', () => {
 
   it('takes the LAST PATH-shaped line, ignoring leading interactive-shell noise', () => {
     // An interactive shell may print banners/rc output before `printenv PATH`.
-    const out = 'Welcome banner\nsome rc echo\n/Users/me/.nvm/versions/node/v22/bin:/usr/bin:/bin'
-    expect(pickPathLine(out)).toBe('/Users/me/.nvm/versions/node/v22/bin:/usr/bin:/bin')
+    const out = 'Welcome banner\nsome rc echo\n/Users/testuser/.nvm/versions/node/v22/bin:/usr/bin:/bin'
+    expect(pickPathLine(out)).toBe('/Users/testuser/.nvm/versions/node/v22/bin:/usr/bin:/bin')
   })
 
   it('returns null for empty or non-PATH output', () => {
@@ -114,8 +116,8 @@ describe('claudeBin', () => {
   })
 
   it('uses the absolute path resolved at boot when present', () => {
-    process.env[CLAUDE_BIN_ENV] = '/Users/me/.nvm/versions/node/v22/bin/claude'
-    expect(claudeBin()).toBe('/Users/me/.nvm/versions/node/v22/bin/claude')
+    process.env[CLAUDE_BIN_ENV] = '/Users/testuser/.nvm/versions/node/v22/bin/claude'
+    expect(claudeBin()).toBe('/Users/testuser/.nvm/versions/node/v22/bin/claude')
   })
 
   it('ignores a blank env value (never spawns an empty string)', () => {
@@ -140,14 +142,14 @@ describe('claudeBinStrategies', () => {
 
 describe('pickClaudeBinPath', () => {
   it('extracts a plain absolute claude path', () => {
-    expect(pickClaudeBinPath('/Users/me/.nvm/versions/node/v22/bin/claude')).toBe(
-      '/Users/me/.nvm/versions/node/v22/bin/claude'
+    expect(pickClaudeBinPath('/Users/testuser/.nvm/versions/node/v22/bin/claude')).toBe(
+      '/Users/testuser/.nvm/versions/node/v22/bin/claude'
     )
   })
 
   it('accepts the npm-shipped claude.exe binary name', () => {
-    expect(pickClaudeBinPath('/Users/me/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe')).toBe(
-      '/Users/me/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe'
+    expect(pickClaudeBinPath('/Users/testuser/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe')).toBe(
+      '/Users/testuser/.local/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe'
     )
   })
 
@@ -159,9 +161,9 @@ describe('pickClaudeBinPath', () => {
       'Node Version Manager (v0.39.0)',
       '  nvm which [current | <version>]   Display path to installed node version.',
       '  nvm cache dir                     Display path to the cache directory for nvm',
-      '/Users/me/.nvm/versions/node/v16.20.2/bin/claude'
+      '/Users/testuser/.nvm/versions/node/v16.20.2/bin/claude'
     ].join('\n')
-    expect(pickClaudeBinPath(polluted)).toBe('/Users/me/.nvm/versions/node/v16.20.2/bin/claude')
+    expect(pickClaudeBinPath(polluted)).toBe('/Users/testuser/.nvm/versions/node/v16.20.2/bin/claude')
   })
 
   it('returns null when claude is genuinely absent', () => {
@@ -179,13 +181,13 @@ describe('knownClaudeBinPaths', () => {
     // The install.sh binary is node-independent and always lands here, so it is
     // the most reliable hit and must be probed before homebrew/system paths.
     const [first] = knownClaudeBinPaths('/Users/me')
-    expect(first).toBe('/Users/me/.local/bin/claude')
+    expect(first).toBe('/Users/testuser/.local/bin/claude')
   })
 
   it('covers homebrew (arm + intel) and system bins, all absolute', () => {
     const paths = knownClaudeBinPaths('/Users/me')
     expect(paths).toEqual([
-      '/Users/me/.local/bin/claude',
+      '/Users/testuser/.local/bin/claude',
       '/opt/homebrew/bin/claude',
       '/usr/local/bin/claude',
       '/usr/bin/claude'
@@ -198,26 +200,26 @@ describe('nvmClaudeCandidates', () => {
   it('orders nvm node bins NEWEST-first so a stale claude never shadows a current one', () => {
     const dirs = ['v16.20.2', 'v22.9.0', 'v20.11.1']
     expect(nvmClaudeCandidates('/Users/me', dirs)).toEqual([
-      '/Users/me/.nvm/versions/node/v22.9.0/bin/claude',
-      '/Users/me/.nvm/versions/node/v20.11.1/bin/claude',
-      '/Users/me/.nvm/versions/node/v16.20.2/bin/claude'
+      '/Users/testuser/.nvm/versions/node/v22.9.0/bin/claude',
+      '/Users/testuser/.nvm/versions/node/v20.11.1/bin/claude',
+      '/Users/testuser/.nvm/versions/node/v16.20.2/bin/claude'
     ])
   })
 
   it('sorts by minor and patch, not just major', () => {
     const dirs = ['v20.9.0', 'v20.11.1', 'v20.11.0']
     expect(nvmClaudeCandidates('/Users/me', dirs)).toEqual([
-      '/Users/me/.nvm/versions/node/v20.11.1/bin/claude',
-      '/Users/me/.nvm/versions/node/v20.11.0/bin/claude',
-      '/Users/me/.nvm/versions/node/v20.9.0/bin/claude'
+      '/Users/testuser/.nvm/versions/node/v20.11.1/bin/claude',
+      '/Users/testuser/.nvm/versions/node/v20.11.0/bin/claude',
+      '/Users/testuser/.nvm/versions/node/v20.9.0/bin/claude'
     ])
   })
 
   it('pushes unparseable version names last rather than crashing', () => {
     const dirs = ['garbage', 'v18.0.0']
     expect(nvmClaudeCandidates('/Users/me', dirs)).toEqual([
-      '/Users/me/.nvm/versions/node/v18.0.0/bin/claude',
-      '/Users/me/.nvm/versions/node/garbage/bin/claude'
+      '/Users/testuser/.nvm/versions/node/v18.0.0/bin/claude',
+      '/Users/testuser/.nvm/versions/node/garbage/bin/claude'
     ])
   })
 
@@ -231,7 +233,7 @@ describe('claudeBinCandidates', () => {
     const all = claudeBinCandidates('/Users/me', ['v20.0.0'])
     expect(all).toEqual([
       ...knownClaudeBinPaths('/Users/me'),
-      '/Users/me/.nvm/versions/node/v20.0.0/bin/claude'
+      '/Users/testuser/.nvm/versions/node/v20.0.0/bin/claude'
     ])
   })
 })
@@ -310,5 +312,56 @@ describe('host-session env scrubbing (the infinite sign-in loop)', () => {
     const env = poisonedEnv()
     sanitizedClaudeEnv(env)
     expect(env.CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST).toBe('1')
+  })
+})
+
+// v2.20.4: preseed dirs and mergePath let boot hydrate PATH without spawning a
+// shell — the whole reason Hive stopped opening on some machines was zsh -lic
+// hanging the main thread. These are the pieces that must stay pure + correct.
+describe('knownPathDirs', () => {
+  const home = '/Users/tester'
+
+  it('includes ~/.local/bin, homebrew, /usr/local/bin', () => {
+    const dirs = knownPathDirs(home, [])
+    expect(dirs).toContain(`${home}/.local/bin`)
+    expect(dirs).toContain('/opt/homebrew/bin')
+    expect(dirs).toContain('/usr/local/bin')
+  })
+
+  it('sorts nvm bins newest first', () => {
+    const dirs = knownPathDirs(home, ['v18.0.0', 'v20.5.1', 'v20.11.0'])
+    const nvm = dirs.filter((d) => d.includes('/.nvm/'))
+    expect(nvm).toEqual([
+      `${home}/.nvm/versions/node/v20.11.0/bin`,
+      `${home}/.nvm/versions/node/v20.5.1/bin`,
+      `${home}/.nvm/versions/node/v18.0.0/bin`
+    ])
+  })
+
+  it('returns fixed dirs even with no nvm installed', () => {
+    expect(knownPathDirs(home, []).length).toBeGreaterThanOrEqual(4)
+  })
+})
+
+describe('mergePath', () => {
+  it('prepends new dirs so they shadow launchd defaults', () => {
+    expect(mergePath('/usr/bin:/bin', ['/opt/homebrew/bin', '/Users/testuser/.local/bin'])).toBe(
+      '/opt/homebrew/bin:/Users/testuser/.local/bin:/usr/bin:/bin'
+    )
+  })
+
+  it('dedupes so re-hydration is idempotent', () => {
+    expect(mergePath('/opt/homebrew/bin:/usr/bin', ['/opt/homebrew/bin', '/usr/local/bin'])).toBe(
+      '/opt/homebrew/bin:/usr/local/bin:/usr/bin'
+    )
+  })
+
+  it('handles empty or missing PATH', () => {
+    expect(mergePath(undefined, ['/opt/homebrew/bin'])).toBe('/opt/homebrew/bin')
+    expect(mergePath('', ['/opt/homebrew/bin'])).toBe('/opt/homebrew/bin')
+  })
+
+  it('preserves order of prepend dirs', () => {
+    expect(mergePath('/x', ['/a', '/b', '/c'])).toBe('/a:/b:/c:/x')
   })
 })

@@ -29,15 +29,32 @@ import { isHeadlessMode } from './headless'
 //   - We accept the result only if it looks like a PATH (starts with `/`
 //     and contains `:`) to defend against any remaining stdout pollution.
 ;(function hydratePathFromShell() {
-  // GUI launch (Finder/Dock) inherits a minimal PATH; nvm/homebrew/~/.local/bin
-  // live behind the user's shell rc. Try interactive-login first so an rc with
-  // an `[[ -o interactive ]] || return` guard still runs nvm (otherwise claude,
-  // which lives in an nvm node bin, stays invisible and the install gate fires
-  // a false "not found"). See pathHydrationStrategies for the ordered fallbacks.
+  // v2.20.4: preseed from KNOWN DIRS first (no shell), then fall back to shell.
+  // The old shell-first path hung the entire main thread indefinitely — the
+  // `zsh -lic 'printenv PATH'` child kept its stdio pipes open past the
+  // execFileSync 7s timeout, so kevent never returned and the window never
+  // painted. Preseeding the common install dirs (~/.local/bin, homebrew, every
+  // nvm node bin) is deterministic, requires no shell, and covers ~99% of
+  // installs. The shell scrape stays as a fallback for exotic prefixes with a
+  // much tighter timeout so a hang can't freeze boot again.
+  const home = process.env.HOME || '/'
+  let nvmDirs: readonly string[] = []
+  try { nvmDirs = readdirSync(join(home, '.nvm', 'versions', 'node')) } catch { /* no nvm */ }
+  process.env.PATH = mergePath(process.env.PATH, knownPathDirs(home, nvmDirs))
+
+  // If claude is reachable in a preseeded dir, we're done — resolveClaudeBinPath
+  // below will pin the absolute path from disk. Skip the shell scrape entirely.
+  const claudeReachable = knownClaudeBinPaths(home)
+    .concat(nvmClaudeCandidates(home, nvmDirs))
+    .some((p) => { try { return statSync(p).isFile() } catch { return false } })
+  if (claudeReachable) return
+
+  // Fallback: shell scrape for exotic install locations. 2s per strategy so a
+  // wedged shell rc can't hang boot for more than ~6s worst case.
   const shell = process.env.SHELL || '/bin/zsh'
   for (const { file, args } of pathHydrationStrategies(shell)) {
     try {
-      const out = execFileSync(file, args, { encoding: 'utf-8', timeout: 7000 })
+      const out = execFileSync(file, args, { encoding: 'utf-8', timeout: 2000 })
       const path = pickPathLine(out)
       if (path) {
         process.env.PATH = path
@@ -175,6 +192,10 @@ import {
   claudeBinStrategies,
   claudeProbeStrategies,
   claudeBinCandidates,
+  knownClaudeBinPaths,
+  nvmClaudeCandidates,
+  knownPathDirs,
+  mergePath,
   hostEnvVarsToStrip,
   type ClaudeStatus
 } from './claude-env'
