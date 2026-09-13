@@ -7,6 +7,41 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [2.16.0](https://github.com/nocodevit/hive/compare/v2.15.4...v2.16.0) (2026-09-13)
+
+
+### Features
+
+* **diag:** v2.18.4 — memory self-log to ~/.hive/mem-log.jsonl ([f80a6cf](https://github.com/nocodevit/hive/commit/f80a6cfd2063aa5cbfd8e44b4cd387897dc70cb2))
+* v2.15.5 — Handoff running banner shows the user's goal(s) ([db3ebcb](https://github.com/nocodevit/hive/commit/db3ebcb8424dfe492658d22480d815e93f8e8646))
+* v2.17.0 — standing-rule reminders under the handoff plan preset ([75af725](https://github.com/nocodevit/hive/commit/75af72551b0d873968179ea95f02f9e38fa9bcf8))
+* v2.18.0 — custom standing rule under Plan Mode + HandoffModal style-guide pass ([4f2cb4f](https://github.com/nocodevit/hive/commit/4f2cb4fd5a5e446390e20f09155392bf284767a3))
+* v2.18.0 — drive agent status dot from the live claude stream ([94d3498](https://github.com/nocodevit/hive/commit/94d3498eca35564adc878e9b6a964f00d2dc679a))
+* v2.19.0 — note tag color/solid picker + project 'nudge all agents' ([a43351e](https://github.com/nocodevit/hive/commit/a43351e0ed27fdd36b4191911f5fe2e1af3ba0c4))
+* v2.19.1 — persist 5h/7d usage across restarts ([6a2e190](https://github.com/nocodevit/hive/commit/6a2e190d193037c241c212c75d4dce7166f35cc8))
+* v2.19.2 — trim dev-workflow rule, styleguide reword, testing as a choice ([c3a8aea](https://github.com/nocodevit/hive/commit/c3a8aea48c971fcf3a8f9ae7fa665c009af4041f))
+* v2.20.0 — project menu: Restart all / Whip lazy bones / Nudge all + restyle ([96788b2](https://github.com/nocodevit/hive/commit/96788b2714954450c9f24340b5cf088175956e3b))
+
+
+### Bug Fixes
+
+* **chat:** kill full descendant tree on session close, not just direct claude pid ([c6710db](https://github.com/nocodevit/hive/commit/c6710dbac36b76c2b04f643de46f99e953c77974))
+* v2.15.6 — ccusage thundering-herd (per-cwd cache → shared singleton) ([19fa036](https://github.com/nocodevit/hive/commit/19fa036a113847431fc82049da7613b4b8b1d10c))
+* v2.15.7 — LRU eviction on activeTerminals set (2.2 GB after 2 days) ([5166bcd](https://github.com/nocodevit/hive/commit/5166bcd2e31c19c4f1b350c927563a3bfa834339))
+* v2.15.8 — AskUserQuestion escape hatches (✕ Dismiss + free-text) ([d4c30c4](https://github.com/nocodevit/hive/commit/d4c30c4071687ae764428320e472caeefe29686b))
+* v2.15.9 — themed ConfirmDialog replaces every window.confirm() (style-guide breach) ([fd5e806](https://github.com/nocodevit/hive/commit/fd5e8064163f6fd78f102fb8eb2f08da9eda2121))
+* v2.16.0 — resolve claude binary from known install paths before shell scrape ([a379a0c](https://github.com/nocodevit/hive/commit/a379a0cd8de03f822d9c78f2df36b10841ffc3e8))
+* v2.16.1 — strip host-session env vars that forced an endless sign-in loop ([7ab8673](https://github.com/nocodevit/hive/commit/7ab8673d3940dfff6e4d647710eee73381e6d4cb))
+* v2.17.1 — ctx % read a turn-cumulative token count as context size (1400%) ([dc517f5](https://github.com/nocodevit/hive/commit/dc517f556cb971ddd4eb573b1dd7f6a7a21220aa))
+* v2.18.1 — resume can no longer hang on a stalled git fetch ([e07014d](https://github.com/nocodevit/hive/commit/e07014da65ec12d8d3b4809146604ae08303073c))
+* v2.18.2 — kill chat claude children on quit + reap orphans on start ([03956f9](https://github.com/nocodevit/hive/commit/03956f98fab52f247430a92c1f42eb9950f9dc90))
+* v2.18.3 — start-chooser showed 'Context 0.0K' from a &lt;synthetic&gt; turn ([eb58c62](https://github.com/nocodevit/hive/commit/eb58c62d3bcb6eca085c2e691948d2d2b46062a3))
+* v2.18.5 — sign-in hung at 'Paste code here' with no input ([04cc14f](https://github.com/nocodevit/hive/commit/04cc14f94b7d01cb6ba74e5b80970ce4ed61433d))
+* v2.20.1 — 5h/7d usage blank: /usage scrape killed by the trust dialog ([c2a611f](https://github.com/nocodevit/hive/commit/c2a611f07601b839a5055c25eacd2f833650ee50))
+* v2.20.2 — Restart all agents requires confirmation (high-risk) ([a44d69f](https://github.com/nocodevit/hive/commit/a44d69f8ec7798464be4ada8a1b358b0a9cd84f9))
+* v2.20.3 — grouped agent row 10px asymmetric + voice input SIGABRT ([af6bb2c](https://github.com/nocodevit/hive/commit/af6bb2c9eff6ab15896660fc8768763152e0ff35))
+* v2.20.4 — Hive won't open (main thread hung in zsh -lic PATH scrape) ([0a58443](https://github.com/nocodevit/hive/commit/0a58443cab2f9f1c0b1b9e462a35ebbcf6fac5c7))
+
 ## [Unreleased]
 
 - *nothing yet*
