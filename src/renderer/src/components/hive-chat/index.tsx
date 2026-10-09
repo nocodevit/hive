@@ -1,5 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { CRUSH, FONT_MONO, redact, configureRedact } from './crush-styles'
+import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, redact, configureRedact } from './crush-styles'
+import { useSpeechLang, speechLangLabel } from '../../lib/speech-lang'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
 import { ctxPctFromPrev, restartResumeMode } from './bulkRestart'
 import { expectsPasteCode } from './authPrompt'
@@ -1262,7 +1263,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // onChange so we must reset the inline height ourselves.
   const resetInputHeight = () => {
     // v2.8.6: snap to one line — height derived from current baseFontSize.
-    if (textareaRef.current) textareaRef.current.style.height = Math.ceil(baseFontSize * 1.4) + 'px'
+    if (textareaRef.current) textareaRef.current.style.height = Math.ceil((baseFontSize + 1) * 1.4) + 'px'
   }
   const send = async () => {
     const text = input.trim()
@@ -1601,6 +1602,93 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // (and its claude --print subprocess) alive across agent/tab switches.
   // Parent controls visibility via CSS. The `visible` prop is still
   // threaded in for any future "skip expensive paint when hidden"
+  // Right end of the composer's control row: Stop while a turn runs,
+  // the compact hourglass while compacting, otherwise Send.
+  const composerTrailing = (
+    <>
+    {/* Stop button — appears at the right of the input while
+        claude is generating (sending or thinking). Sends a
+        control_request {subtype:"interrupt"} on stdin which
+        cancels the current turn without ending the session.
+        Hidden during compact since the --print child is dead;
+        we show a disabled Send glyph instead so the user has
+        a visual signal that Enter will be queued, not sent. */}
+    {!compactInProgress && (sending || thinking) && (
+      <button
+        onClick={() => {
+          window.api.chat.interrupt(id).catch(() => {})
+          setThinking(null)
+        }}
+        title="Stop generation (interrupt current turn)"
+        style={{
+          flexShrink: 0,
+          background: 'transparent',
+          border: `1px solid ${CRUSH.Sriracha}`,
+          color: CRUSH.Sriracha,
+          width: 30, height: 30,
+          borderRadius: 10,
+          fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
+          cursor: 'pointer',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.background = CRUSH.Sriracha
+          e.currentTarget.style.color = CRUSH.Butter
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.background = 'transparent'
+          e.currentTarget.style.color = CRUSH.Sriracha
+        }}
+      >■</button>
+    )}
+    {/* Disabled Send-while-compacting glyph. aria-disabled so
+        screen readers announce the gated state; visually a
+        muted spinner so the user can see why Enter just
+        stashed their text instead of firing. */}
+    {compactInProgress && (
+      <span
+        data-testid="hive-chat-send-disabled"
+        role="button"
+        aria-disabled={true}
+        aria-label="Send disabled — compacting"
+        title="Compact running — your draft will auto-send when done"
+        style={{
+          flexShrink: 0,
+          background: 'transparent',
+          border: `1px solid ${CRUSH.Squid}`,
+          color: CRUSH.Squid,
+          width: 30, height: 30,
+          borderRadius: 10,
+          fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
+          cursor: 'not-allowed',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          opacity: 0.7
+        }}
+      >⏳</span>
+    )}
+    {!compactInProgress && !(sending || thinking) && (
+      <button
+        onClick={() => send()}
+        disabled={!input.trim() || exited !== null}
+        title="Send (Enter)"
+        aria-label="Send"
+        style={{
+          flexShrink: 0,
+          width: 30, height: 30,
+          borderRadius: 10,
+          border: 'none',
+          background: input.trim() ? CRUSH.Charple : CHAT.surface2,
+          color: input.trim() ? '#FFFFFF' : CHAT.muted,
+          cursor: input.trim() ? 'pointer' : 'default',
+          display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+          fontFamily: FONT_PROSE, fontSize: 15, fontWeight: 700,
+          transition: 'background 120ms'
+        }}
+      >↑</button>
+    )}
+    </>
+  )
+
   // optimizations, but mount/unmount must NOT be tied to visibility.
 
   return (
@@ -1630,11 +1718,9 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       onDrop={handleDrop}
       style={{
       width: '100%', height: '100%',
-      // Locked to deep-purple regardless of system/app theme. The Crush
-      // palette is engineered for a dark base; on a light background the
-      // accents (Charple/Dolly/Julep) and Butter/Ash text collapse into
-      // invisibility. Don't follow var(--bg-primary).
-      background: '#150e24',  // matches --sidebar-bg dark mode (project list)
+      // Follows the app theme: CRUSH/CHAT are CSS variables with a light
+      // set (white card) and the original dark Crush set (assets/index.css).
+      background: CHAT.bg,
       color: CRUSH.Ash,
       fontFamily: FONT_MONO, fontSize: baseFontSize,
       // v2.8.3: expose baseFontSize as a CSS var so message-body
@@ -1662,11 +1748,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
          height exceeds the viewport, it shrinks + scrolls internally and
          the input pins to the viewport bottom. */}
       <div ref={scrollRef} style={{
-        flex: '0 1 auto',          // no grow, can shrink
+        flex: '1 1 auto',          // fill, so the composer pins to the bottom
         minHeight: 0,              // enables shrinking inside flex parent
         overflowY: 'auto',
         overflowX: 'hidden',       // wide content scrolls inside its own block, not the whole timeline
-        padding: '12px 16px',
+        padding: '8px 28px 16px',
         scrollBehavior: 'smooth',
         minWidth: 0
       }}>
@@ -2018,9 +2104,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         </div>
       ) : (
         <div style={{
-          borderTop: `1px solid ${CRUSH.Charcoal}`,
-          background: CRUSH.BBQ,
-          padding: 8,
+          padding: '0 20px',
           position: 'relative' as const
         }}>
           {/* Show whenever the chat has overflowed the viewport at any
@@ -2051,55 +2135,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               onMouseLeave={e => { e.currentTarget.style.background = isAtBottom ? CRUSH.Charcoal : CRUSH.Charple }}
             >↓</button>
           )}
-          <ActionToolbar
-            usedTokens={latestInputTokens}
-            contextSize={contextSize}
-            rateLimit5h={rateLimit5h}
-            rateLimit7d={rateLimit7d}
-            autoContinueAt={autoContinueAt}
-            onCancelAutoContinue={() => window.api.chat.cancelAutoContinue(id)}
-            modelKnown={!!modelName}
-            onViewContext={openContextModal}
-            compacting={compactBusy || compactInProgress}
-            onCompact={runCompact}
-            onFork={async () => {
-              // Surface IPC failure so the user sees what happened. The
-              // bare `() => api.chat.startWithSummary(id)` was a silent
-              // fire-and-forget: backend `{ok:false, error}` returns were
-              // dropped, leaving the user staring at an unchanged panel
-              // with no clue why nothing happened (e.g. spawn ENOENT after
-              // claude symlink broke). pr-review skill Gate 12 enforces.
-              const res = await window.api.chat.startWithSummary(id).catch(e => ({ ok: false as const, error: String(e) }))
-              if (!('ok' in res) || !res.ok) {
-                const err = (res as any).error || 'unknown'
-                addEntry({ kind: 'system', text: `Fork failed: ${err}` })
-              }
-            }}
-            onResume={async () => {
-              const res = await window.api.chat.resumeSmart(id).catch(e => ({ ok: false as const, error: String(e) }))
-              if (!('ok' in res) || !res.ok) {
-                const err = (res as any).error || 'unknown'
-                addEntry({ kind: 'system', text: `Resume failed: ${err}` })
-              }
-            }}
-            onNewSession={startNewSession}
-            onRemoteControl={async () => {
-              const res = await window.api.chat.startRemoteControl(id)
-              if (res.ok) setRcState('active')
-              else addEntry({ kind: 'system', text: `Remote control failed: ${res.error}` })
-            }}
-            onClose={() => setCloseConfirming(true)}
-            onHandoff={() => setHandoffModalOpen(true)}
-            sessionActive={exited === null && !!sessionId}
-          />
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'rgba(255,96,255,0.08)',
-            border: `1px solid ${CRUSH.Dolly}`,
-            borderRadius: 14,
-            padding: '8px 12px'
+            display: 'flex', flexDirection: 'column', gap: 10,
+            background: CHAT.surface,
+            borderRadius: 16,
+            padding: '12px 14px 10px'
           }}>
-            <span style={{ color: CRUSH.Julep, fontWeight: 700, fontSize: 16 }}>❯</span>
             <textarea
               ref={textareaRef}
               value={input}
@@ -2110,7 +2151,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 // × 1.4. Cap = 5 × that. Reset to 'auto' first so shrinking
                 // back down on delete works.
                 const ta = e.currentTarget
-                const oneLine = Math.ceil(baseFontSize * 1.4)
+                const oneLine = Math.ceil((baseFontSize + 1) * 1.4)
                 const maxLines = 5
                 ta.style.height = 'auto'
                 ta.style.height = Math.min(ta.scrollHeight, oneLine * maxLines) + 'px'
@@ -2140,83 +2181,65 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                     }`
                   : isHandoffActive
                     ? '⚠ Handoff active — your message will feed the /goal loop, NOT stop it. To stop, press Stop in the banner above.'
-                    : 'Message Claude… (Enter to send, Shift+Enter for newline)'
+                    : `给 ${agentName || 'Claude'} 发消息… (Enter 发送，Shift+Enter 换行)`
               }
               style={{
-                flex: 1, resize: 'none',
-                background: 'transparent', color: CRUSH.Butter,
+                resize: 'none',
+                background: 'transparent', color: CHAT.ink,
                 border: 'none', outline: 'none',
-                fontFamily: FONT_MONO, fontSize: baseFontSize, lineHeight: 1.4,
+                fontFamily: FONT_PROSE, fontSize: baseFontSize + 1, lineHeight: 1.4,
                 // v2.8.6: 1 line default, cap 5 lines then scroll. Heights
                 // derive from baseFontSize × 1.4 so the input scales
                 // with the user's chosen font size.
-                height: Math.ceil(baseFontSize * 1.4),
-                maxHeight: Math.ceil(baseFontSize * 1.4) * 5,
+                height: Math.ceil((baseFontSize + 1) * 1.4),
+                maxHeight: Math.ceil((baseFontSize + 1) * 1.4) * 5,
                 overflowY: 'auto',
                 padding: 0
               }}
               rows={1}
             />
-            {/* Stop button — appears at the right of the input while
-                claude is generating (sending or thinking). Sends a
-                control_request {subtype:"interrupt"} on stdin which
-                cancels the current turn without ending the session.
-                Hidden during compact since the --print child is dead;
-                we show a disabled Send glyph instead so the user has
-                a visual signal that Enter will be queued, not sent. */}
-            {!compactInProgress && (sending || thinking) && (
-              <button
-                onClick={() => {
-                  window.api.chat.interrupt(id).catch(() => {})
-                  setThinking(null)
-                }}
-                title="Stop generation (interrupt current turn)"
-                style={{
-                  flexShrink: 0,
-                  background: 'transparent',
-                  border: `1px solid ${CRUSH.Sriracha}`,
-                  color: CRUSH.Sriracha,
-                  width: 22, height: 22,
-                  borderRadius: 8,
-                  fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
-                  cursor: 'pointer',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
-                }}
-                onMouseEnter={e => {
-                  e.currentTarget.style.background = CRUSH.Sriracha
-                  e.currentTarget.style.color = CRUSH.Butter
-                }}
-                onMouseLeave={e => {
-                  e.currentTarget.style.background = 'transparent'
-                  e.currentTarget.style.color = CRUSH.Sriracha
-                }}
-              >■</button>
-            )}
-            {/* Disabled Send-while-compacting glyph. aria-disabled so
-                screen readers announce the gated state; visually a
-                muted spinner so the user can see why Enter just
-                stashed their text instead of firing. */}
-            {compactInProgress && (
-              <span
-                data-testid="hive-chat-send-disabled"
-                role="button"
-                aria-disabled={true}
-                aria-label="Send disabled — compacting"
-                title="Compact running — your draft will auto-send when done"
-                style={{
-                  flexShrink: 0,
-                  background: 'transparent',
-                  border: `1px solid ${CRUSH.Squid}`,
-                  color: CRUSH.Squid,
-                  width: 22, height: 22,
-                  borderRadius: 8,
-                  fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
-                  cursor: 'not-allowed',
-                  display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-                  opacity: 0.7
-                }}
-              >⏳</span>
-            )}
+              <ActionToolbar
+                leading={<>
+                  <VoicePill agentId={id.startsWith('chat-') ? id.slice(5) : id} />
+                  <StreamingPill on={streamingMode} onToggle={toggleStreamingMode} />
+                </>}
+                trailing={composerTrailing}
+              usedTokens={latestInputTokens}
+              contextSize={contextSize}
+              modelKnown={!!modelName}
+              onViewContext={openContextModal}
+              compacting={compactBusy || compactInProgress}
+              onCompact={runCompact}
+              onFork={async () => {
+                // Surface IPC failure so the user sees what happened. The
+                // bare `() => api.chat.startWithSummary(id)` was a silent
+                // fire-and-forget: backend `{ok:false, error}` returns were
+                // dropped, leaving the user staring at an unchanged panel
+                // with no clue why nothing happened (e.g. spawn ENOENT after
+                // claude symlink broke). pr-review skill Gate 12 enforces.
+                const res = await window.api.chat.startWithSummary(id).catch(e => ({ ok: false as const, error: String(e) }))
+                if (!('ok' in res) || !res.ok) {
+                  const err = (res as any).error || 'unknown'
+                  addEntry({ kind: 'system', text: `Fork failed: ${err}` })
+                }
+              }}
+              onResume={async () => {
+                const res = await window.api.chat.resumeSmart(id).catch(e => ({ ok: false as const, error: String(e) }))
+                if (!('ok' in res) || !res.ok) {
+                  const err = (res as any).error || 'unknown'
+                  addEntry({ kind: 'system', text: `Resume failed: ${err}` })
+                }
+              }}
+              onNewSession={startNewSession}
+              onRemoteControl={async () => {
+                const res = await window.api.chat.startRemoteControl(id)
+                if (res.ok) setRcState('active')
+                else addEntry({ kind: 'system', text: `Remote control failed: ${res.error}` })
+              }}
+              onClose={() => setCloseConfirming(true)}
+              onHandoff={() => setHandoffModalOpen(true)}
+              sessionActive={exited === null && !!sessionId}
+            />
           </div>
           {/* Inline draft-queued indicator — confirms to the user that
               their Enter while compacting wasn't lost. The auto-send
@@ -2244,7 +2267,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       {/* Model / usage line — stays under input */}
       <ModelUsageBar
         modelName={modelName} contextSize={contextSize} usage={usage} rateLimit={rateLimit}
-        streamingMode={streamingMode} onToggleStreaming={toggleStreamingMode}
+        rateRow={<RateRow
+          rateLimit5h={rateLimit5h}
+          rateLimit7d={rateLimit7d}
+          autoContinueAt={autoContinueAt}
+          onCancelAutoContinue={() => window.api.chat.cancelAutoContinue(id)}
+        />}
         onCloseSession={closeSession}
         sessionActive={exited === null && rcState === 'idle'}
         contextUsedTokens={latestInputTokens}
@@ -2524,7 +2552,7 @@ class HiveChatErrorBoundary extends React.Component<
     const stack = `${this.state.err?.message}\n${this.state.err?.stack}\n--- component ---\n${this.state.info?.componentStack || ''}`
     return (
       <div style={{
-        width: '100%', height: '100%', background: '#150e24',
+        width: '100%', height: '100%', background: CHAT.bg,
         color: CRUSH.Ash, fontFamily: FONT_MONO, fontSize: 'var(--chat-fs, 13px)',
         display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
         padding: 24, gap: 12
@@ -3734,7 +3762,9 @@ function ChooserBtn({ icon, label, desc, color, disabled, isDefault, onClick }: 
       disabled={disabled}
       style={{
         background: isDefault && !disabled ? tinted : CRUSH.Pepper,
-        border: isDefault && !disabled ? `2px solid ${color}` : `1px solid ${CRUSH.Charcoal}`,
+        borderWidth: isDefault && !disabled ? 2 : 1,
+        borderStyle: 'solid',
+        borderColor: isDefault && !disabled ? color : CRUSH.Charcoal,
         color: disabled ? CRUSH.Squid : (isDefault ? color : CRUSH.Ash),
         fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
         padding: isDefault && !disabled ? '15px 11px' : '16px 12px',
@@ -3904,8 +3934,10 @@ export function CrushTooltip({ text, children, side = 'top', block = false }: {
  */
 function ActionToolbar({
   usedTokens, contextSize, onCompact, compacting, onFork, onResume, onNewSession, onRemoteControl, onClose, onHandoff, sessionActive,
-  rateLimit5h, rateLimit7d, autoContinueAt, onCancelAutoContinue, modelKnown, onViewContext
+  modelKnown, onViewContext, leading, trailing
 }: {
+  leading?: React.ReactNode
+  trailing?: React.ReactNode
   usedTokens: number
   contextSize: string
   onCompact: () => void
@@ -3917,10 +3949,6 @@ function ActionToolbar({
   onClose: () => void
   onHandoff: () => void
   sessionActive: boolean
-  rateLimit5h: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null
-  rateLimit7d: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null
-  autoContinueAt: number | null
-  onCancelAutoContinue: () => void
   modelKnown: boolean
   onViewContext: () => void
 }) {
@@ -3933,14 +3961,6 @@ function ActionToolbar({
   const compactLabel = tier === 'normal' ? 'Compact' : `Compact (⚠ ${pct}%)`
 
   // 60s heartbeat so `resets in Xh Ym` ticks down without waiting for new events.
-  const [, force] = useState(0)
-  const paused = useContext(HiveChatPausedContext)
-  useEffect(() => {
-    if (paused) return
-    if (!rateLimit5h?.resetsAt && !rateLimit7d?.resetsAt && !autoContinueAt) return
-    const iv = setInterval(() => force(n => n + 1), 60_000)
-    return () => clearInterval(iv)
-  }, [paused, rateLimit5h?.resetsAt, rateLimit7d?.resetsAt, autoContinueAt])
 
   // Click-outside to close menu
   const menuRef = useRef<HTMLDivElement>(null)
@@ -3953,66 +3973,25 @@ function ActionToolbar({
     return () => document.removeEventListener('mousedown', onClick)
   }, [menuOpen])
 
-  const showRateRow = !!(rateLimit5h || rateLimit7d || autoContinueAt)
-
   return (
     <>
-      {/* Line 1 — rate-limit + auto-continue (BBQ background, hidden
-         until claude actually emits its first rate_limit_event or a
-         whip schedules an auto-continue) */}
-      {showRateRow && (
-        <div style={{
-          display: 'flex', alignItems: 'center', flexWrap: 'wrap',
-          padding: '4px 12px',
-          background: CRUSH.BBQ,
-          fontFamily: FONT_MONO, fontSize: 10,
-          color: CRUSH.Squid,
-          gap: 10
-        }}>
-          <RateChip info={rateLimit5h} typeLabel="5h" />
-          {rateLimit5h && (rateLimit7d || autoContinueAt) && <span style={{ color: CRUSH.Oyster }}>|</span>}
-          <RateChip info={rateLimit7d} typeLabel="7d" />
-          {rateLimit7d && autoContinueAt && <span style={{ color: CRUSH.Oyster }}>|</span>}
-          {autoContinueAt && (
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ color: CRUSH.Charple }}>
-                ⏱ auto-continue in {humanEta(Math.floor(autoContinueAt / 1000))}
-              </span>
-              <button
-                onClick={onCancelAutoContinue}
-                style={{
-                  background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
-                  color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 9,
-                  padding: '0 5px', borderRadius: 6, cursor: 'pointer'
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.borderColor = CRUSH.Charple; e.currentTarget.style.color = CRUSH.Charple }}
-                onMouseLeave={(e) => { e.currentTarget.style.borderColor = CRUSH.Charcoal; e.currentTarget.style.color = CRUSH.Squid }}
-              >cancel</button>
-            </span>
-          )}
-        </div>
-      )}
-
       {/* Line 2 — context progress bar + Compact + kebab. Background
          matches the chat surface (no BBQ panel) so the bar feels part
          of the conversation column. When no model has emitted yet,
          left side shows a subdued "waiting for first message…". */}
       <div style={{
         display: 'flex', alignItems: 'center',
-        padding: '6px 12px',
-        background: CHAT_SURFACE_BG,
-        fontFamily: FONT_MONO, fontSize: 10,
-        color: CRUSH.Squid,
-        gap: 10,
+        fontFamily: FONT_MONO, fontSize: 11.5,
+        color: CHAT.muted,
+        gap: 8,
         position: 'relative' as const
       }}>
+        {leading}
         {pct > 0 ? (
-          <>
-            <span style={{ color: CRUSH.Squid, fontSize: 10 }}>context</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span>context</span>
             <CtxProgressBar pct={pct} tier={tier} />
-            <span style={{
-              color: compactColor, fontWeight: 600, minWidth: 36, textAlign: 'right' as const
-            }}>{pct}%</span>
+            <span style={{ color: tier === 'normal' ? CHAT.muted : compactColor }}>{pct}%</span>
             <CrushTooltip text="View context breakdown · ~7s session pause to scrape /context">
               <button
                 onClick={onViewContext}
@@ -4030,13 +4009,13 @@ function ActionToolbar({
                 onMouseLeave={e => { e.currentTarget.style.color = CRUSH.Squid }}
               >ⓘ</button>
             </CrushTooltip>
-          </>
+          </span>
         ) : !modelKnown ? (
-          <span style={{ color: CRUSH.Oyster, fontStyle: 'italic' as const }}>
+          <span style={{ fontStyle: 'italic' as const }}>
             waiting for first message…
           </span>
         ) : (
-          <span style={{ color: CRUSH.Oyster }}>context —</span>
+          <span>context —</span>
         )}
         <span style={{ marginLeft: 'auto', display: 'inline-flex', gap: 6, alignItems: 'center' }}>
         <CrushTooltip text={compacting ? 'Compacting in progress — please wait (up to 10 min)' : 'Run /compact · summarize history into a smaller prompt · up to 10 min'}>
@@ -4045,18 +4024,18 @@ function ActionToolbar({
             disabled={compacting}
             style={{
               display: 'inline-flex', alignItems: 'center', gap: 5,
-              background: compactBg,
-              border: `1px solid ${compactColor}`,
-              color: compactColor,
-              fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600,
-              padding: '2px 8px',
-              borderRadius: 8,
+              background: tier === 'normal' ? CHAT.surface2 : compactBg,
+              border: 'none',
+              color: tier === 'normal' ? CHAT.muted : compactColor,
+              fontFamily: FONT_PROSE, fontSize: 11.5, fontWeight: 600,
+              padding: '4px 10px',
+              borderRadius: 999,
               cursor: compacting ? 'not-allowed' : 'pointer',
               opacity: compacting ? 0.5 : 1,
               transition: 'all 120ms'
             }}
-            onMouseEnter={e => { if (compacting) return; e.currentTarget.style.background = compactColor; e.currentTarget.style.color = CRUSH.Pepper }}
-            onMouseLeave={e => { if (compacting) return; e.currentTarget.style.background = compactBg; e.currentTarget.style.color = compactColor }}
+            onMouseEnter={e => { if (compacting) return; e.currentTarget.style.color = tier === 'normal' ? CHAT.ink : compactColor }}
+            onMouseLeave={e => { if (compacting) return; e.currentTarget.style.color = tier === 'normal' ? CHAT.muted : compactColor }}
           >
             <span style={{ fontSize: 11, lineHeight: 1 }}>⎙</span>{compacting ? 'Compacting…' : compactLabel}
           </button>
@@ -4066,12 +4045,12 @@ function ActionToolbar({
           <button
             onClick={() => setMenuOpen(o => !o)}
             style={{
-              background: 'transparent',
-              border: `1px solid ${menuOpen ? CRUSH.Charple : CRUSH.Charcoal}`,
-              color: menuOpen ? CRUSH.Charple : CRUSH.Squid,
-              fontFamily: FONT_MONO, fontSize: 11,
-              padding: '2px 8px',
-              borderRadius: 8,
+              background: CHAT.surface2,
+              border: 'none',
+              color: menuOpen ? CHAT.accent : CHAT.muted,
+              fontFamily: FONT_PROSE, fontSize: 12, fontWeight: 700,
+              padding: '4px 9px',
+              borderRadius: 999,
               cursor: 'pointer',
               transition: 'all 120ms',
               lineHeight: 1
@@ -4082,12 +4061,12 @@ function ActionToolbar({
             <div style={{
               position: 'absolute' as const,
               right: 0, bottom: 'calc(100% + 4px)',
-              background: CRUSH.BBQ,
-              border: `1px solid ${CRUSH.Charple}`,
-              borderRadius: 10,
-              padding: 4,
+              background: CHAT.bg,
+              border: 'none',
+              borderRadius: 14,
+              padding: 6,
               minWidth: 220,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+              boxShadow: '0 12px 32px rgba(30,27,46,0.16), 0 2px 6px rgba(30,27,46,0.08)',
               zIndex: 20
             }}>
               <MenuItem icon="🥴" label="Handoff…" desc="autonomous /goal loop" onClick={() => { setMenuOpen(false); onHandoff() }} hover="Hand a goal off to the agent and walk away. It runs claude -p /goal in the background with cost/turn/wall-time circuit breakers. Stop button always visible while running." />
@@ -4101,13 +4080,127 @@ function ActionToolbar({
             </div>
           )}
         </div>
+        {trailing}
       </span>
       </div>
     </>
   )
 }
 
-const CHAT_SURFACE_BG = '#150e24'
+const pillStyle = (active = false): React.CSSProperties => ({
+  display: 'inline-flex', alignItems: 'center', gap: 6,
+  background: active ? 'rgba(124,58,237,0.12)' : CHAT.surface2,
+  color: active ? CHAT.accent : CHAT.muted,
+  border: 'none',
+  borderRadius: 999,
+  padding: '4px 10px',
+  fontFamily: FONT_PROSE, fontSize: 11.5, fontWeight: 600,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap'
+})
+
+/** Mic + language in one pill: click the mic to start/stop, click the
+ *  中/EN label to switch language. App.tsx owns the speech process and
+ *  answers `hive:voice-toggle` / reports `hive:voice-state`. */
+function VoicePill({ agentId }: { agentId: string }) {
+  const [lang, toggleLang] = useSpeechLang()
+  const [state, setState] = useState<{ listening: boolean; partial: string }>({ listening: false, partial: '' })
+  useEffect(() => {
+    const onState = (e: Event) => setState((e as CustomEvent<{ listening: boolean; partial: string }>).detail)
+    window.addEventListener('hive:voice-state', onState)
+    return () => window.removeEventListener('hive:voice-state', onState)
+  }, [])
+  return (
+    <span style={{ ...pillStyle(state.listening), padding: 0, gap: 0, overflow: 'hidden' }}>
+      <button
+        onClick={() => window.dispatchEvent(new CustomEvent('hive:voice-toggle', { detail: { agentId, lang } }))}
+        title={state.listening ? 'Stop listening' : 'Voice input'}
+        aria-label={state.listening ? 'Stop listening' : 'Voice input'}
+        style={{ ...pillStyle(state.listening), background: 'transparent', padding: '4px 4px 4px 10px', color: state.listening ? CRUSH.Sriracha : 'inherit' }}
+      >{state.listening ? '■' : '🎙'}</button>
+      <button
+        onClick={toggleLang}
+        title={`Voice language: ${lang} (click to switch, applies next time)`}
+        style={{ ...pillStyle(state.listening), background: 'transparent', padding: '4px 10px 4px 4px', color: 'inherit' }}
+      >{speechLangLabel(lang)}</button>
+      {state.listening && state.partial && (
+        <span style={{ padding: '0 10px 0 2px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{state.partial}</span>
+      )}
+    </span>
+  )
+}
+
+function StreamingPill({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <CrushTooltip text={on
+      ? 'Streaming mode ON · username + secrets masked in display'
+      : 'Streaming mode OFF · real values shown'}>
+      <button onClick={onToggle} style={pillStyle(on)}>Streaming</button>
+    </CrushTooltip>
+  )
+}
+
+/** Rate-limit + auto-continue line, shown in the status line under the
+ *  composer. Hidden until claude emits its first rate_limit_event or a
+ *  whip schedules an auto-continue. */
+function RateRow({ rateLimit5h, rateLimit7d, autoContinueAt, onCancelAutoContinue }: {
+  rateLimit5h: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null
+  rateLimit7d: { status?: string; rateLimitType?: string; resetsAt?: number; isUsingOverage?: boolean } | null
+  autoContinueAt: number | null
+  onCancelAutoContinue: () => void
+}) {
+  const [, force] = useState(0)
+  const paused = useContext(HiveChatPausedContext)
+  useEffect(() => {
+    if (paused) return
+    if (!rateLimit5h?.resetsAt && !rateLimit7d?.resetsAt && !autoContinueAt) return
+    const iv = setInterval(() => force(n => n + 1), 60_000)
+    return () => clearInterval(iv)
+  }, [paused, rateLimit5h?.resetsAt, rateLimit7d?.resetsAt, autoContinueAt])
+  // "allowed" is the normal state and the 5h/7d % already sit in the
+  // status line, so only warnings / rejections / overage earn a chip.
+  const notable = (r: typeof rateLimit5h) => !!r && (r.status !== 'allowed' || !!r.isUsingOverage)
+  const show5h = notable(rateLimit5h)
+  const show7d = notable(rateLimit7d)
+  const showRateRow = show5h || show7d || !!autoContinueAt
+
+  return (
+    <>
+      {/* Line 1 — rate-limit + auto-continue (BBQ background, hidden
+         until claude actually emits its first rate_limit_event or a
+         whip schedules an auto-continue) */}
+      {showRateRow && (
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', flexWrap: 'wrap',
+          gap: 10
+        }}>
+          <RateChip info={rateLimit5h} typeLabel="5h" />
+          {show5h && (show7d || autoContinueAt) && <span style={{ color: CRUSH.Oyster }}>|</span>}
+          <RateChip info={rateLimit7d} typeLabel="7d" />
+          {show7d && autoContinueAt && <span style={{ color: CRUSH.Oyster }}>|</span>}
+          {autoContinueAt && (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ color: CRUSH.Charple }}>
+                ⏱ auto-continue in {humanEta(Math.floor(autoContinueAt / 1000))}
+              </span>
+              <button
+                onClick={onCancelAutoContinue}
+                style={{
+                  background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
+                  color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 9,
+                  padding: '0 5px', borderRadius: 6, cursor: 'pointer'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.borderColor = CRUSH.Charple; e.currentTarget.style.color = CRUSH.Charple }}
+                onMouseLeave={(e) => { e.currentTarget.style.borderColor = CRUSH.Charcoal; e.currentTarget.style.color = CRUSH.Squid }}
+              >cancel</button>
+            </span>
+          )}
+        </span>
+      )}
+
+    </>
+  )
+}
 
 /** Inline chip rendering "● {type} {status} resets in {eta}" for one
  * rate-limit window. Returns null when there's no event yet for this
@@ -4116,7 +4209,7 @@ function RateChip({ info, typeLabel }: {
   info: { status?: string; resetsAt?: number; isUsingOverage?: boolean } | null
   typeLabel: string
 }) {
-  if (!info) return null
+  if (!info || (info.status === 'allowed' && !info.isUsingOverage)) return null
   const color = info.status === 'allowed' ? CRUSH.Julep
     : info.status === 'rejected' || info.status === 'blocked' ? CRUSH.Sriracha
     : CRUSH.Zest
@@ -4146,20 +4239,19 @@ function CtxProgressBar({ pct, tier }: { pct: number; tier: 'normal' | 'warn' | 
     : `linear-gradient(90deg, ${CRUSH.Charple}, ${CRUSH.Mochi})`
   return (
     <span style={{
-      flex: '1 1 auto',
+      width: 54, flexShrink: 0,
       position: 'relative' as const,
-      height: 6,
-      background: 'rgba(255,255,255,0.04)',
-      borderRadius: 3,
-      overflow: 'hidden' as const,
-      border: `1px solid ${CRUSH.Charcoal}`
+      height: 4,
+      background: CHAT.surface2,
+      borderRadius: 4,
+      overflow: 'hidden' as const
     }}>
       <span style={{
         display: 'block',
         height: '100%',
         width: `${Math.min(100, pct)}%`,
-        background: grad,
-        borderRadius: 2,
+        background: tier === 'normal' ? CHAT.accent : grad,
+        borderRadius: 4,
         transition: 'width 200ms'
       }} />
     </span>
@@ -4459,22 +4551,7 @@ function BurnBar({ cost, projected }: { cost?: number; projected?: number }) {
   )
 }
 
-/** Grain-style text bar — `█` for filled, `░` for empty, monospace.
- * Empty uses Oyster `#605F6B` (not Charcoal `#3A3943` which was too
- * close to BBQ bg `#2D2C35` to be visible — preview was wrong, fixed
- * in v1.7.70 per user feedback). Math extracted to ./progress-bar
- * for unit-testing in node-env vitest. */
-function PctBar({ pct, fullColor = CRUSH.Julep, total = 10 }: { pct?: number; fullColor?: string; total?: number }) {
-  const { filled, empty } = computeGrainBar(pct, total)
-  return (
-    <span style={{ letterSpacing: 0 }}>
-      <span style={{ color: fullColor }}>{'█'.repeat(filled)}</span>
-      <span style={{ color: CRUSH.Oyster }}>{'░'.repeat(empty)}</span>
-    </span>
-  )
-}
-
-function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode, onToggleStreaming, onCloseSession, sessionActive, contextUsedTokens }: {
+function ModelUsageBar({ modelName, contextSize, usage, rateLimit, rateRow, onCloseSession, sessionActive, contextUsedTokens }: {
   modelName: string
   contextSize: string
   usage: {
@@ -4483,8 +4560,7 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
     fiveHourReset?: string; sevenDayReset?: string
   }
   rateLimit: any
-  streamingMode: boolean
-  onToggleStreaming: () => void
+  rateRow?: React.ReactNode
   onCloseSession: () => void
   sessionActive: boolean
   contextUsedTokens: number
@@ -4507,90 +4583,53 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
     : CRUSH.Bok
   return (
     <div style={{
-      padding: '6px 12px',
-      borderTop: `1px solid ${CRUSH.Charcoal}`,
-      background: CRUSH.BBQ,
+      padding: '8px 24px 14px',
       fontFamily: FONT_MONO, fontSize: 11,
       display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap',
-      color: CRUSH.Squid
+      color: CHAT.muted
     }}>
       {modelName && (
         <>
-          <span style={{ color: CRUSH.Charple, fontWeight: 700 }}>{modelName}</span>
-          {contextSize && <span style={{ color: CRUSH.Squid }}>({contextSize})</span>}
+          <span>{modelName}{contextSize ? ` · ${contextSize}` : ''}</span>
           {/* Context %% lives in the dedicated row above input now (line 2
               of the new 4-line layout); no longer rendered inline here.
               Color tier still computed for the (unused) ctxColor var so
               future re-additions remain trivial. */}
-          <span style={{ color: CRUSH.Oyster }}>|</span>
         </>
       )}
       {/* Subscription tier %% + reset countdown (both scraped from
           /usage TUI). reset string is verbatim from claude — could be
           "4h 12m" / "6d 14h" / "Apr 30 14:00" depending on locale. */}
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ color: CRUSH.Squid }}>5h</span>
-        <PctBar pct={usage.fiveHour} />
-        <span style={{ color: CRUSH.Butter, minWidth: 28 }}>
-          {usage.fiveHour != null ? `${usage.fiveHour}%` : '—'}
-        </span>
-        {usage.fiveHourReset && (
-          <span style={{ color: CRUSH.Oyster, fontSize: 10 }}>· in {usage.fiveHourReset}</span>
-        )}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        <span>5h</span>
+        <span>{usage.fiveHour != null ? `${usage.fiveHour}%` : '—'}</span>
+        {usage.fiveHourReset && <span>· {usage.fiveHourReset}</span>}
       </span>
-      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-        <span style={{ color: CRUSH.Squid }}>7d</span>
-        <PctBar pct={usage.sevenDay} />
-        <span style={{ color: CRUSH.Butter, minWidth: 28 }}>
-          {usage.sevenDay != null ? `${usage.sevenDay}%` : '—'}
-        </span>
-        {usage.sevenDayReset && (
-          <span style={{ color: CRUSH.Oyster, fontSize: 10 }}>· in {usage.sevenDayReset}</span>
-        )}
+      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+        <span>7d</span>
+        <span>{usage.sevenDay != null ? `${usage.sevenDay}%` : '—'}</span>
+        {usage.sevenDayReset && <span>· {usage.sevenDayReset}</span>}
       </span>
       {/* eta "Xh Ym left" removed — RateLimitBar above the input
           already shows the same reset countdown. */}
+      {rateRow}
       <span style={{ marginLeft: 'auto' }} />
-      <CrushTooltip text={streamingMode
-        ? 'Streaming mode ON · username + secrets masked in display'
-        : 'Streaming mode OFF · real values shown'}>
-        <button
-          onClick={onToggleStreaming}
-          style={{
-            background: streamingMode ? 'rgba(255,96,255,0.14)' : 'transparent',
-            border: `1px solid ${streamingMode ? CRUSH.Dolly : CRUSH.Charcoal}`,
-            color: streamingMode ? CRUSH.Dolly : CRUSH.Squid,
-            padding: '2px 8px',
-            borderRadius: 8,
-            fontFamily: FONT_MONO, fontSize: 10,
-            cursor: 'pointer'
-          }}
-        >
-          {streamingMode ? '● streaming mode' : '○ streaming mode'}
-        </button>
-      </CrushTooltip>
       {sessionActive && (
         <CrushTooltip text="End this claude session · a confirm panel will appear">
           <button
             onClick={onCloseSession}
             style={{
               background: 'transparent',
-              border: `1px solid ${CRUSH.Charcoal}`,
-              color: CRUSH.Squid,
-              padding: '2px 6px',
-              borderRadius: 8,
-              fontFamily: FONT_MONO, fontSize: 10,
+              border: 'none',
+              color: CHAT.muted,
+              padding: '2px 4px',
+              borderRadius: 6,
+              fontFamily: FONT_MONO, fontSize: 11,
               cursor: 'pointer',
               whiteSpace: 'nowrap'
             }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = CRUSH.Sriracha
-              e.currentTarget.style.color = CRUSH.Sriracha
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = CRUSH.Charcoal
-              e.currentTarget.style.color = CRUSH.Squid
-            }}
+            onMouseEnter={e => { e.currentTarget.style.color = CRUSH.Sriracha }}
+            onMouseLeave={e => { e.currentTarget.style.color = CHAT.muted }}
           >close ✕</button>
         </CrushTooltip>
       )}

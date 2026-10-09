@@ -6,8 +6,8 @@ import '@xterm/xterm/css/xterm.css'
 import RichTerminal from './RichTerminal'
 import { crushifyColors } from '../lib/crushify-colors'
 import HiveChat from './hive-chat'
+import { CHAT } from './hive-chat/crush-styles'
 import { shouldCheckAgentSession, buildTerminalClaudeCmd } from '../terminalAutoRun'
-import { useSpeechLang, speechLangLabel } from '../lib/speech-lang'
 
 type ViewMode = 'raw' | 'pretty'
 
@@ -45,8 +45,6 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   const isAtBottom = useRef(true)
   const visibleRef = useRef(visible)
   const [showScrollDown, setShowScrollDown] = useState(false)
-  const [isRecording, setIsRecording] = useState(false)
-  const [speechLang, toggleSpeechLang] = useSpeechLang()
   // Pretty-mode decoration path is suspended — runtime stays on Raw xterm.
   // See pretty-term/SUSPENDED.md for history. The decoration code below
   // remains compiled so it's trivial to re-enable, but the Pretty button
@@ -625,11 +623,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
           position: 'absolute',
           inset: 0,
           zIndex: 100,
-          // Locked to deep-purple regardless of system/app theme. The Crush
-          // palette (Charple/Dolly/Julep accents + Butter/Ash text) is
-          // engineered for a dark base; on a light background the text
-          // and high-saturation accents collapse into invisibility.
-          background: '#150e24',  // matches --sidebar-bg dark mode
+          background: CHAT.bg,
           visibility: (chatMode && visible) ? 'visible' : 'hidden',
           pointerEvents: (chatMode && visible) ? 'auto' : 'none'
         }}>
@@ -671,48 +665,6 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
         }}>
           <RichTerminal lines={richLines} visible={visible} />
         </div>
-      )}
-      {/* Voice input button */}
-      {visible && (
-        <button
-          onClick={async () => {
-            if (isRecording) {
-              await window.api.speech.stop()
-              setIsRecording(false)
-            } else {
-              setIsRecording(true)
-              await window.api.speech.start(speechLang)
-            }
-          }}
-          className={`absolute bottom-4 left-4 w-9 h-9 rounded-full flex items-center justify-center shadow-lg cursor-pointer transition-all ${
-            isRecording
-              ? 'bg-red-500 animate-pulse'
-              : 'bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover'
-          }`}
-          style={{ zIndex: 9999 }}
-          title={isRecording ? 'Stop recording' : 'Voice input'}
-        >
-          {isRecording ? (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" /></svg>
-          ) : (
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-              <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-              <line x1="12" y1="19" x2="12" y2="23" />
-              <line x1="8" y1="23" x2="16" y2="23" />
-            </svg>
-          )}
-        </button>
-      )}
-      {visible && (
-        <button
-          onClick={toggleSpeechLang}
-          className="absolute bottom-6 left-14 h-6 px-2 rounded-full text-[11px] font-semibold shadow cursor-pointer bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover"
-          style={{ zIndex: 9999 }}
-          title={`Voice language: ${speechLang} (click to switch, applies next time)`}
-        >
-          {speechLangLabel(speechLang)}
-        </button>
       )}
       {showScrollDown && visible && (
         <button
