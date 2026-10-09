@@ -2503,7 +2503,7 @@ export default function App() {
             return (
               <div
                 key={agentId}
-                className="absolute inset-0"
+                className="absolute top-0 left-2 right-2 bottom-2 rounded-xl overflow-hidden"
                 style={{
                   background: '#201F26',
                   visibility: isVisible ? 'visible' : 'hidden',

@@ -183,13 +183,13 @@ const MD_COMPONENTS: Record<string, any> = {
       const code = text.replace(/\n$/, '')
       return <CodeBlockWithCopy code={code} language={lang} />
     }
-    return <code style={{ color: CRUSH.Bok, background: CRUSH.BBQ, padding: '0 4px', borderRadius: 3, fontFamily: FONT_MONO, fontSize: 12 }}>{children}</code>
+    return <code style={{ color: CRUSH.Bok, background: CRUSH.BBQ, padding: '0 4px', borderRadius: 4, fontFamily: FONT_MONO, fontSize: 12 }}>{children}</code>
   },
   pre: ({ children }: any) => (
     <pre style={{
       background: CRUSH.BBQ,
       borderLeft: `3px solid ${CRUSH.Charple}`,
-      borderRadius: 4,
+      borderRadius: 6,
       padding: '8px 12px',
       fontSize: 12,
       overflow: 'auto',
@@ -214,7 +214,7 @@ const MD_COMPONENTS: Record<string, any> = {
         borderCollapse: 'collapse',
         fontFamily: FONT_MONO, fontSize: 12,
         border: `1px solid ${CRUSH.Charcoal}`,
-        borderRadius: 4,
+        borderRadius: 6,
         overflow: 'hidden'
       }}>{children}</table>
     </div>
@@ -268,7 +268,7 @@ function CodeBlockWithCopy({ code, language }: { code: string; language: string 
           border: `1px solid ${copied ? CRUSH.Julep : CRUSH.Charcoal}`,
           color: copied ? CRUSH.Pepper : CRUSH.Squid,
           padding: '1px 8px',
-          borderRadius: 3,
+          borderRadius: 5,
           fontFamily: FONT_MONO, fontSize: 10,
           cursor: 'pointer',
           opacity: copied ? 1 : 0,
@@ -348,7 +348,7 @@ export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRe
       <div style={{
         background: 'rgba(107, 80, 255, 0.12)',
         border: `1px solid ${CRUSH.Charple}`,
-        borderRadius: 8,
+        borderRadius: 12,
         padding: '7px 11px',
         margin: '6px 0',
         display: 'flex',
@@ -385,7 +385,7 @@ export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRe
     <div className="hive-user-msg" style={{
       background: 'rgba(255, 96, 255, 0.14)',
       border: `1px solid ${CRUSH.Dolly}`,
-      borderRadius: 8,
+      borderRadius: 12,
       padding: '7px 11px',
       margin: '6px 0',
       display: 'flex',
@@ -411,7 +411,7 @@ export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRe
             color: CRUSH.Dolly,
             cursor: 'pointer',
             padding: '2px 6px',
-            borderRadius: 4,
+            borderRadius: 6,
             fontSize: 12,
             opacity: 0,
             transition: 'opacity 120ms ease',
@@ -456,7 +456,7 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
               display: 'flex', alignItems: 'flex-start', gap: 10,
               padding: '6px 12px',
               border: `1px solid ${CRUSH.Charcoal}`,
-              borderRadius: 6,
+              borderRadius: 8,
               background: 'transparent',
               fontFamily: FONT_MONO, fontSize: 'var(--chat-fs, 13px)',
               color: CRUSH.Ash,
@@ -475,7 +475,7 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
                     border: `1px solid ${CRUSH.Julep}`,
                     color: CRUSH.Julep,
                     width: 22, height: 22,
-                    borderRadius: 3,
+                    borderRadius: 5,
                     fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
                     cursor: 'pointer',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
@@ -493,7 +493,7 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
                     border: `1px solid ${CRUSH.Charple}`,
                     color: CRUSH.Charple,
                     width: 22, height: 22,
-                    borderRadius: 3,
+                    borderRadius: 5,
                     fontFamily: FONT_MONO, fontSize: 11,
                     cursor: 'pointer',
                     display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
@@ -553,7 +553,7 @@ function PlainAssistantText({ text }: { text: string }) {
                   background: 'rgba(0,255,178,0.08)',
                   color: CRUSH.Julep,
                   padding: '1px 8px',
-                  borderRadius: 3,
+                  borderRadius: 5,
                   fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
                   letterSpacing: '0.06em',
                   textTransform: 'uppercase' as const
@@ -847,7 +847,7 @@ function DiffPanel({ oldStr, newStr }: { oldStr: string; newStr: string }) {
       margin: '6px 0 2px',
       fontFamily: FONT_MONO, fontSize: 12,
       background: CRUSH.BBQ,
-      borderRadius: 4,
+      borderRadius: 6,
       padding: '4px 0',
       overflow: 'auto'
     }}>
@@ -917,7 +917,7 @@ function TaskHeader({ input }: { input: Record<string, unknown> }) {
       {subagentType && (
         <span style={{
           color: CRUSH.Pepper, background: CRUSH.Dolly,
-          padding: '1px 6px', borderRadius: 3,
+          padding: '1px 6px', borderRadius: 5,
           fontWeight: 700, fontSize: 10, letterSpacing: '0.04em',
           textTransform: 'uppercase' as const
         }}>{subagentType}</span>
@@ -933,7 +933,7 @@ function McpHeader({ server, fn, input }: { server: string; fn: string; input: R
       <span style={{ color: CRUSH.Mochi, fontWeight: 700 }}>●</span>
       <span style={{
         color: CRUSH.Pepper, background: CRUSH.Mochi,
-        padding: '1px 8px', borderRadius: 4, fontWeight: 700, fontSize: 11, letterSpacing: '0.04em'
+        padding: '1px 8px', borderRadius: 6, fontWeight: 700, fontSize: 11, letterSpacing: '0.04em'
       }}>{server.toUpperCase()}</span>
       <span style={{ color: CRUSH.Violet, fontWeight: 700 }}>{fn}</span>
       <span style={{
@@ -1135,7 +1135,7 @@ function ReadResultPanel({ code, startLine, isError, filePath }: {
       marginTop: 4,
       background: CRUSH.BBQ,
       border: `1px solid ${CRUSH.Charcoal}`,
-      borderRadius: 4,
+      borderRadius: 6,
       padding: '6px 0',
       fontFamily: FONT_MONO, fontSize: 12,
       color: isError ? CRUSH.Sriracha : CRUSH.Ash,
@@ -1327,7 +1327,7 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
     return (
       <div style={{
         border: `1px dashed ${CRUSH.Charcoal}`,
-        borderRadius: 8,
+        borderRadius: 12,
         padding: '6px 12px',
         background: 'transparent',
         marginTop: 4,
@@ -1374,7 +1374,7 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
   return (
     <div style={{
       border: `1px solid ${CRUSH.Charple}`,
-      borderRadius: 8,
+      borderRadius: 12,
       padding: '10px 12px',
       background: CRUSH.BBQ,
       marginTop: 4
@@ -1395,7 +1395,7 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
             marginLeft: 'auto',
             background: 'transparent',
             border: `1px solid ${CRUSH.Charcoal}`,
-            borderRadius: 4,
+            borderRadius: 6,
             color: CRUSH.Squid,
             padding: '2px 8px',
             fontFamily: 'inherit',
@@ -1428,7 +1428,7 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
                       textAlign: 'left' as const,
                       background: picked ? CRUSH.Charple : 'transparent',
                       border: `1px solid ${picked ? CRUSH.Charple : CRUSH.Charcoal}`,
-                      borderRadius: 4,
+                      borderRadius: 6,
                       padding: '6px 10px',
                       color: picked ? CRUSH.Butter : CRUSH.Ash,
                       fontFamily: 'inherit',
@@ -1460,7 +1460,7 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
             })}
             style={{
               background: CRUSH.Charple, border: 'none',
-              color: CRUSH.Butter, padding: '6px 14px', borderRadius: 4,
+              color: CRUSH.Butter, padding: '6px 14px', borderRadius: 6,
               fontFamily: 'inherit', fontSize: 12, fontWeight: 700, cursor: 'pointer'
             }}
           >Submit →</button>
@@ -1491,7 +1491,7 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
               maxHeight: 120,
               background: CRUSH.Pepper,
               border: `1px solid ${CRUSH.Charcoal}`,
-              borderRadius: 4,
+              borderRadius: 6,
               padding: '5px 8px',
               color: CRUSH.Butter,
               fontFamily: 'inherit',
@@ -1506,7 +1506,7 @@ export function AskUserQuestionInline({ input }: { input: Record<string, unknown
               background: freeText.trim() ? CRUSH.Charple : 'transparent',
               border: `1px solid ${freeText.trim() ? CRUSH.Charple : CRUSH.Charcoal}`,
               color: freeText.trim() ? CRUSH.Butter : CRUSH.Squid,
-              padding: '5px 12px', borderRadius: 4,
+              padding: '5px 12px', borderRadius: 6,
               fontFamily: 'inherit', fontSize: 12, fontWeight: 600,
               cursor: freeText.trim() ? 'pointer' : 'not-allowed',
               whiteSpace: 'nowrap'
@@ -1670,7 +1670,7 @@ export function CompactSummaryHint({ transcriptPath, summaryChars }: {
       <details style={{
         background: 'rgba(107,80,255,0.06)',
         border: `1px solid ${CRUSH.Charcoal}`,
-        borderRadius: 6,
+        borderRadius: 8,
         padding: '4px 10px',
         maxWidth: 560, minWidth: 0
       }}>
@@ -1767,7 +1767,7 @@ export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, 
         margin: '8px 0',
         borderLeft: `3px solid ${CRUSH.Sriracha}`,
         background: CRUSH.BBQ,
-        borderRadius: 4,
+        borderRadius: 6,
         padding: '8px 12px',
         fontFamily: FONT_MONO, fontSize: 11,
         color: CRUSH.Ash,
@@ -1794,7 +1794,7 @@ export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, 
               background: CRUSH.Sriracha,
               color: CRUSH.Butter,
               border: 'none',
-              borderRadius: 4,
+              borderRadius: 6,
               padding: '4px 12px',
               fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
               cursor: 'pointer'
@@ -1829,7 +1829,7 @@ export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, 
       margin: '8px 0',
       borderLeft: `3px solid ${abnormal ? reasonColor : CRUSH.Charple}`,
       background: CRUSH.BBQ,
-      borderRadius: 4,
+      borderRadius: 6,
       padding: '6px 12px',
       fontFamily: FONT_MONO, fontSize: 11,
       color: CRUSH.Squid,
@@ -1925,7 +1925,7 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
           background: '#150e24',
           color: CRUSH.Mochi,
           fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
-          padding: '0 4px', borderRadius: 2
+          padding: '0 4px', borderRadius: 4
         }}>SUB</div>
         {row}
       </div>
