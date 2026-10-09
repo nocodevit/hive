@@ -485,8 +485,8 @@ export async function smartStartChat(id: string, opts: StartOpts = {}) {
  * (claude treats positional slash command as an instruction, runs it
  * locally with full session context, writes a `compact_boundary` event
  * to the JSONL, then exits). No PTY, no xterm headless, no regex
- * guessing. The stream-json `result` event with `subtype: 'success'`
- * is the canonical completion signal.
+ * guessing. The `result` that follows `compact_boundary` (see
+ * compactStreamStep) is the canonical completion signal.
  *
  * Why this beats the prior PTY-and-grep approach:
  *   - PTY path required loading TUI for ~10s on big sessions, then
@@ -546,6 +546,31 @@ export function isCompactNoop(resultEvent: any, durationMs: number): boolean {
   return cost === 0 && durationMs < 10_000
 }
 
+/**
+ * claude can queue other prompts AHEAD of the positional `/compact` —
+ * e.g. the "N background shell command task(s) from the previous session
+ * have no completion record" orphan notice it injects on every --resume.
+ * That turn emits its own `result` ($0, ~20ms) before /compact even
+ * starts. Settling on the first `result` killed the child mid-queue, so
+ * /compact never ran and every compact was logged as a no-op
+ * (cube-support, 2026-10-09). Only a `result` AFTER `compact_boundary`
+ * (or an error result) ends the run; anything else waits for more
+ * events or the child's exit.
+ */
+export function compactStreamStep(
+  state: { sawBoundary: boolean; resultEvent: any },
+  ev: any
+): 'continue' | 'done' {
+  if (ev?.type === 'system' && ev.subtype === 'compact_boundary') {
+    state.sawBoundary = true
+    return 'continue'
+  }
+  if (ev?.type !== 'result') return 'continue'
+  state.resultEvent = ev
+  const ok = ev.subtype === 'success' && !ev.is_error
+  return state.sawBoundary || !ok ? 'done' : 'continue'
+}
+
 async function runCompactViaPrint(
   cwd: string,
   sid: string,
@@ -558,7 +583,7 @@ async function runCompactViaPrint(
   return new Promise(resolve => {
     let settled = false
     let buffer = ''
-    let resultEvent: any = null
+    const stream = { sawBoundary: false, resultEvent: null as any }
     let lastByteAt = startedAt
     let stuckBroadcast = false
     // 30s heartbeat: if no result yet, broadcast `still running…Xs` so
@@ -585,6 +610,7 @@ async function runCompactViaPrint(
       settled = true
       clearInterval(progressTimer)
       killChatChildTree(child)
+      const resultEvent = stream.resultEvent
       const durationMs = Date.now() - startedAt
       // v2.15.3: detect claude returning "success" without actually
       // doing any LLM work. If we let it through as ok=true the
@@ -642,21 +668,31 @@ async function runCompactViaPrint(
         if (!line.trim()) continue
         try {
           const ev = JSON.parse(line)
-          if (ev.type === 'result') {
-            resultEvent = ev
-            const ok = ev.subtype === 'success' && !ev.is_error
-            finish(ok, ok ? undefined : (ev.subtype || 'error'))
+          if (compactStreamStep(stream, ev) === 'done') {
+            finishFromResult()
             return
           }
         } catch {}
       }
     })
+    const finishFromResult = () => {
+      const ev = stream.resultEvent
+      const ok = ev.subtype === 'success' && !ev.is_error
+      finish(ok, ok ? undefined : (ev.subtype || 'error'))
+    }
     child.on('error', (err) => finish(false, `spawn_error: ${err.message}`))
-    child.on('exit', (code) => {
-      // result event already settled us. If we get exit without one,
-      // treat as failure with the exit code.
-      if (resultEvent) return
-      finish(false, `exit_${code}`)
+    // 'close' (not 'exit'): stdout is fully drained, so the final result
+    // line can't be lost to an exit-before-data race.
+    child.on('close', (code) => {
+      if (settled) return
+      if (buffer.trim()) {
+        try { compactStreamStep(stream, JSON.parse(buffer)) } catch {}
+        buffer = ''
+      }
+      // No compact_boundary ever came (genuinely nothing to compact):
+      // judge by the last result. No result at all = failure.
+      if (stream.resultEvent) finishFromResult()
+      else finish(false, `exit_${code}`)
     })
 
     // Hard ceiling: 600s (10min). Even ~2k-line sessions on Opus 4.7
