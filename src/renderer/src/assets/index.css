@@ -246,6 +246,90 @@ body {
   --elevation-3: 0 24px 60px rgba(0, 0, 0, 0.55), 0 8px 20px rgba(0, 0, 0, 0.3);
 }
 
+
+/* Chat surface palette. Light = unified white card (scheme B); dark keeps
+   the original Crush hexes. */
+:root {
+  --crush-pepper: #FFFFFF;
+  --crush-bbq: #F6F3FB;
+  --crush-charcoal: #E7E2F0;
+  --crush-oyster: #A39DB5;
+  --crush-squid: #8C87A0;
+  --crush-ash: #3B3550;
+  --crush-butter: #1E1B2E;
+  --crush-sriracha: #E11D48;
+  --crush-julep: #059669;
+  --crush-zest: #A16207;
+  --crush-malibu: #0284C7;
+  --crush-dolly: #C026D3;
+  --crush-bok: #0D9488;
+  --crush-charple: #7C3AED;
+  --crush-violet: #9333EA;
+  --crush-mochi: #C026D3;
+  --crush-blush: #DB2777;
+  --crush-guac: #059669;
+  --crush-salmon: #E11D48;
+  --crush-cumin: #A16207;
+  --chat-bg: var(--bg-secondary);
+  --chat-ink: #1E1B2E;
+  --chat-ink-2: #4A4560;
+  --chat-muted: #8C87A0;
+  --chat-surface: #F6F3FB;
+  --chat-surface-2: #EFEBF7;
+  --chat-accent: #7C3AED;
+  --chat-code-ink: #3B3550;
+}
+:root[data-theme='dark'] {
+  --crush-pepper: #201F26;
+  --crush-bbq: #2D2C35;
+  --crush-charcoal: #3A3943;
+  --crush-oyster: #605F6B;
+  --crush-squid: #858392;
+  --crush-ash: #DFDBDD;
+  --crush-butter: #FFFAF1;
+  --crush-sriracha: #EB4268;
+  --crush-julep: #00FFB2;
+  --crush-zest: #E8FE96;
+  --crush-malibu: #00A4FF;
+  --crush-dolly: #FF60FF;
+  --crush-bok: #68FFD6;
+  --crush-charple: #6B50FF;
+  --crush-violet: #C259FF;
+  --crush-mochi: #EB5DFF;
+  --crush-blush: #FF84FF;
+  --crush-guac: #12C78F;
+  --crush-salmon: #FF7F90;
+  --crush-cumin: #BF976F;
+  --chat-bg: var(--bg-secondary);
+  --chat-ink: #E9E5F2;
+  --chat-ink-2: #B7B0C8;
+  --chat-muted: #7D7690;
+  --chat-surface: #221C2D;
+  --chat-surface-2: #2A2337;
+  --chat-accent: #C4A6FA;
+  --chat-code-ink: #D9D2EA;
+}
+
+.hive-card {
+  background: var(--bg-secondary);
+  border-radius: 18px;
+  box-shadow: 0 1px 2px rgba(30, 27, 46, 0.04), 0 6px 20px rgba(30, 27, 46, 0.05);
+  overflow: hidden;
+}
+:root[data-theme='dark'] .hive-card {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.25);
+}
+.hive-head {
+  height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  flex-shrink: 0;
+}
+.hive-head-title { font-family: 'Inter Tight', -apple-system, sans-serif; font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--text-primary); }
+.hive-head-sub { font-size: 12px; font-weight: 500; color: var(--text-muted); margin-left: 8px; }
+
 /* Focus ring — one global rule replaces macOS default blue.
    :focus-visible so mouse clicks don't leave a ring, but keyboard
    navigation does. Offset 2px so the ring reads as an outline, not

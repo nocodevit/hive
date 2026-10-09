@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react'
+import { CRUSH } from '../crush-styles'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { render, screen, fireEvent, waitFor, cleanup, act, within } from '@testing-library/react'
 
@@ -65,10 +66,10 @@ describe('StartChooser button highlight', () => {
     const resumeBtn = screen.getByRole('button', { name: /↻\s*Resume/ })
     const compactBtn = screen.getByRole('button', { name: /⎙\s*Compact \+ Resume/ })
 
-    // Resume has 2px Bok border initially. JSDOM serializes the Crush
-    // hex (#68FFD6) as rgb(104, 255, 214) — compare against normalized.
+    // Resume has the 2px Bok border initially. Crush colors are theme
+    // CSS variables now, so compare against the token, not a hex.
     expect(resumeBtn.style.borderWidth).toMatch(/2px/)
-    expect(resumeBtn.style.borderColor).toBe('rgb(104, 255, 214)')
+    expect(resumeBtn.style.borderColor).toBe(CRUSH.Bok)
 
     // Click Compact+Resume → opens picker → highlight should move
     fireEvent.click(compactBtn)
@@ -76,7 +77,7 @@ describe('StartChooser button highlight', () => {
 
     // Now Compact+Resume should have the 2px border, Resume should NOT
     expect(compactBtn.style.borderWidth).toMatch(/2px/)
-    expect(compactBtn.style.borderColor).toBe('rgb(107, 80, 255)')  // Charple
+    expect(compactBtn.style.borderColor).toBe(CRUSH.Charple)
     expect(resumeBtn.style.borderWidth).not.toMatch(/2px/)
   })
 

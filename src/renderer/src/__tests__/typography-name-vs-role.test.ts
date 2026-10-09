@@ -31,8 +31,10 @@ describe('typography — agent name vs role visual distinction', () => {
     // `flex-shrink` so name truncates first when tight and note tag
     // never spills the row (Playwright verified in
     // selected-agent-row-layout.spec.ts).
+    // v2.21.0 (unified card layout): plain font-semibold, family comes
+    // from body (Inter Tight).
     expect(APP_TSX).toMatch(
-      /className="flex items-center gap-1\.5 min-w-0 whitespace-nowrap overflow-hidden text-\[13px\] font-heading font-semibold text-text-primary"/
+      /className="flex items-center gap-1\.5 min-w-0 whitespace-nowrap overflow-hidden text-\[13px\] font-semibold text-text-primary"/
     )
     // Kanban card — v2.8.0 relaxed to font-medium (Inter Tight body weight)
     expect(APP_TSX).toMatch(
@@ -49,8 +51,12 @@ describe('typography — agent name vs role visual distinction', () => {
     // chip can align to the right. Test asserts the label bucket
     // (font-semibold + uppercase + tracking-wider + text-muted) via
     // regex fragments rather than a frozen class string.
-    const sidebarRole = /text-\[10px\] font-semibold uppercase tracking-wider[^"]*text-text-muted[^"]*flex items-center gap-1\.5/
-    expect(APP_TSX, 'sidebar role span must carry label style + flex layout').toMatch(sidebarRole)
+    // v2.21.0: the sidebar role reads as a quiet sub-line under the name
+    // (11px muted, sentence case) instead of an uppercase label — the
+    // distinction is weight + color + size, matching the approved mockup.
+    const sidebarRole = /text-\[11px\][^"]*text-text-muted[^"]*flex items-center gap-1\.5/
+    expect(APP_TSX, 'sidebar role span must be small + muted + flex layout').toMatch(sidebarRole)
+    expect(APP_TSX).not.toMatch(/text-\[11px\] mt-px[^"]*uppercase/)
 
     // Task-group inbox role — unchanged
     expect(APP_TSX).toMatch(

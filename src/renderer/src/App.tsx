@@ -24,7 +24,8 @@ import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
 import { pickLRUToEvict } from './lru-terminals'
 import { confirmDialog } from './components/ConfirmDialog'
-import { useSpeechLang, speechLangLabel } from './lib/speech-lang'
+import type { SpeechLang } from './lib/speech-lang'
+import { CHAT } from './components/hive-chat/crush-styles'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
@@ -122,8 +123,47 @@ export default function App() {
   const [teamNameInput, setTeamNameInput] = useState('')
   const [teamSelectedAgents, setTeamSelectedAgents] = useState<Set<string>>(new Set())
   const [isListening, setIsListening] = useState(false)
-  const [speechLang, toggleSpeechLang] = useSpeechLang()
   const [speechPartial, setSpeechPartial] = useState('')
+  const voiceCleanupRef = useRef<(() => void) | null>(null)
+  const toggleVoice = async (agentId: string, lang: SpeechLang) => {
+    if (isListening) {
+      await window.api.speech.stop()
+      voiceCleanupRef.current?.()
+      voiceCleanupRef.current = null
+      setIsListening(false)
+      setSpeechPartial('')
+      return
+    }
+    const cleanup = window.api.speech.onTranscript((line) => {
+      if (line.startsWith('final:')) {
+        // Broadcast so whichever surface is visible (xterm or HiveChat) consumes it.
+        window.dispatchEvent(new CustomEvent('hive:voice-final', { detail: { agentId, text: line.slice(6) } }))
+        setSpeechPartial('')
+      } else if (line.startsWith('partial:')) {
+        setSpeechPartial(line.slice(8))
+      }
+    })
+    const result = await window.api.speech.start(lang)
+    if (!result.ok) {
+      cleanup()
+      return
+    }
+    voiceCleanupRef.current = cleanup
+    setIsListening(true)
+  }
+  const toggleVoiceRef = useRef(toggleVoice)
+  toggleVoiceRef.current = toggleVoice
+  useEffect(() => {
+    const onToggle = (e: Event) => {
+      const { agentId, lang } = (e as CustomEvent<{ agentId: string; lang: SpeechLang }>).detail
+      toggleVoiceRef.current(agentId, lang)
+    }
+    window.addEventListener('hive:voice-toggle', onToggle)
+    return () => window.removeEventListener('hive:voice-toggle', onToggle)
+  }, [])
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent('hive:voice-state', { detail: { listening: isListening, partial: speechPartial } }))
+  }, [isListening, speechPartial])
   const [projectTab, setProjectTab] = useState<'dashboard' | 'office' | 'taskgroup' | 'settings'>('dashboard')
   // v2.6.0: top-level app screen. 'projects' = the historic project-focused
   // view (sidebar + agents + chat). 'overview' = the new cross-project
@@ -752,16 +792,16 @@ export default function App() {
   }
 
   return (
-    <div className="flex h-screen bg-bg-primary text-text-primary">
+    <div className="flex h-screen bg-sidebar-bg text-text-primary pr-2.5 pb-2.5">
       {/* Left: Projects */}
-      <div className="bg-sidebar-bg flex flex-col flex-shrink-0" style={{ width: panelWidths.projects }}>
-        <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
-          <h2 className="no-drag text-[13px] font-heading font-semibold text-text-muted uppercase tracking-widest">
-            Hive v{__APP_VERSION__}
+      <div className="flex flex-col flex-shrink-0 pl-2.5" style={{ width: panelWidths.projects }}>
+        <div className="drag-region h-[62px] flex items-end px-2 pb-2.5 justify-between">
+          <h2 className="no-drag text-[14px] font-bold text-text-primary">
+            Hive<span className="ml-1.5 text-[11px] font-medium text-text-muted">v{__APP_VERSION__}</span>
           </h2>
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
         </div>
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
+        <div className="flex-1 overflow-y-auto py-1 space-y-0.5">
           {(() => {
             const groups = [...new Set(projects.map(p => p.group || ''))]
             // Put ungrouped ('') first, then alphabetical
@@ -796,32 +836,26 @@ export default function App() {
                   e.preventDefault()
                   setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id })
                 }}
-                className={`w-full text-left px-3 py-2 rounded-lg text-sm cursor-pointer
-                  transition-colors flex items-center gap-2 border-l-2 ${
+                className={`w-full text-left px-2.5 py-[7px] rounded-[10px] text-[13px] cursor-pointer
+                  transition-colors flex items-center gap-2.5 ${
                   selectedProjectId === project.id
-                    ? 'bg-sidebar-active text-text-primary font-medium border-accent'
-                    : 'text-text-secondary border-transparent hover:bg-bg-hover hover:border-accent-muted hover:text-text-primary'
+                    ? 'hive-card !rounded-[10px] !overflow-visible text-text-primary font-semibold'
+                    : 'text-text-primary/75 font-medium hover:bg-bg-hover hover:text-text-primary'
                 }`}
               >
                 {(() => {
                   const projectAgents = agents.filter((a) => a.projectId === project.id)
                   const hasWorking = projectAgents.some((a) => a.status === 'working')
                   const hasWaiting = projectAgents.some((a) => a.status === 'waiting')
-                  if (projectAgents.length === 0) return (
-                    <span className="w-4 text-center flex-shrink-0 text-text-muted/60" title="No agents">
-                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block">
-                        <circle cx="12" cy="12" r="9"/>
-                      </svg>
-                    </span>
-                  )
-                  if (hasWorking) return <span className="w-4 text-center text-[13px] flex-shrink-0" title="Agents working">🏃</span>
-                  if (hasWaiting) return <span className="w-4 text-center text-[13px] flex-shrink-0" title="Agents idle">☕</span>
-                  return <span className="w-4 text-center text-[13px] flex-shrink-0" title="Agents offline">💤</span>
+                  if (projectAgents.length === 0) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 border border-text-muted/50" title="No agents" />
+                  if (hasWorking) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-working" title="Agents working" />
+                  if (hasWaiting) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-waiting" title="Agents idle" />
+                  return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-text-muted/40" title="Agents offline" />
                 })()}
                 <span className="truncate">{project.name}</span>
                 {(() => {
                   const count = agents.filter((a) => a.projectId === project.id).length
-                  return count > 0 ? <span className="ml-auto text-[13px] text-text-muted/50 flex-shrink-0">{count}</span> : null
+                  return count > 0 ? <span className="ml-auto text-[11px] text-text-muted flex-shrink-0">{count}</span> : null
                 })()}
               </button>
             )
@@ -834,7 +868,7 @@ export default function App() {
                 return grpProjects.map((p, i) => renderProject(p, i))
               }
               return (
-                <div key={grp} className="rounded-lg bg-bg-primary/30 border border-border/30 mb-1"
+                <div key={grp} className="mb-1"
                   onDragOver={(e) => e.preventDefault()}
                   onDrop={(e) => {
                     const draggedId = e.dataTransfer.getData('projectId')
@@ -1076,7 +1110,7 @@ export default function App() {
             </div>
           )}
         </div>
-        <div className="p-2 space-y-1">
+        <div className="py-2 space-y-0.5">
           {/* v2.6.0: Overview toggle. Highlighted (accent bg) when active
               so it reads as the currently-selected top-level view. */}
           <button
@@ -1124,10 +1158,11 @@ export default function App() {
       <ResizeHandle onResize={(d) => resizePanel('projects', d)} />
 
       {/* Middle: Agents */}
-      <div className="bg-bg-secondary flex flex-col flex-shrink-0" style={{ width: panelWidths.agents }}>
-        <div className="drag-region h-16 flex items-end px-4 pb-2">
-          <h2 className="no-drag text-[13px] font-heading font-semibold text-text-muted uppercase tracking-widest">
+      <div className="hive-card mt-2.5 flex flex-col flex-shrink-0" style={{ width: panelWidths.agents }}>
+        <div className="drag-region hive-head">
+          <h2 className="no-drag hive-head-title truncate">
             {selectedProject ? selectedProject.name : 'Agents'}
+            {selectedProject && <span className="hive-head-sub">{projectAgents.length} {projectAgents.length === 1 ? 'agent' : 'agents'}</span>}
           </h2>
         </div>
         {selectedProject ? (
@@ -1165,11 +1200,8 @@ export default function App() {
                 }
 
                 return (
-                  <div key={dept} className="rounded-xl bg-bg-primary/50 border border-border p-1.5 shadow-e1">
-                    <div className="px-2.5 py-1.5 text-[11px] font-medium text-text-muted uppercase tracking-[0.16em] flex items-center gap-1.5">
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-                      </svg>
+                  <div key={dept}>
+                    <div className="px-2.5 pt-2.5 pb-1.5 text-[11px] font-semibold text-text-muted flex items-center gap-1.5">
                       {dept}
                       {/* v2.8.0: dropped the R&D-only "⟳ Rebase" action —
                           crowded the dept header against "+ Team" and the
@@ -1178,7 +1210,7 @@ export default function App() {
                           scheduled case. */}
                       <button
                         onClick={() => { setTeamPrompt({ dept }); setTeamNameInput(''); setTeamSelectedAgents(new Set()) }}
-                        className="ml-auto text-[13px] text-accent hover:text-accent-hover cursor-pointer"
+                        className="ml-auto text-[11px] font-semibold text-accent hover:text-accent-hover cursor-pointer"
                         title="Add team"
                       >+ Team</button>
                     </div>
@@ -1201,7 +1233,7 @@ export default function App() {
                           }}
                         >
                           {grp && (
-                            <div className="px-5 py-1 text-[13px] font-heading font-medium text-text-muted/70 uppercase tracking-wider flex items-center">
+                            <div className="px-4 py-1 text-[11px] font-semibold text-text-muted flex items-center">
                               {grp}
                               <button
                                 onClick={() => {
@@ -1223,8 +1255,8 @@ export default function App() {
                               onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
                               onDrop={(e) => { e.stopPropagation(); handleDrop(agent.id, grp) }}
                               onDragEnd={() => setDragAgentId(null)}
-                              className={`group w-full text-left px-3 py-2 rounded-lg text-sm flex items-center gap-2.5 relative
-                                transition-colors cursor-grab active:cursor-grabbing border-l-2 ${
+                              className={`group w-full text-left px-2.5 py-[9px] rounded-xl text-sm flex items-center gap-2.5 relative
+                                transition-colors cursor-grab active:cursor-grabbing ${
                                 /* v2.20.3: `ml-2` alone (in-group) made the row
                                    10px asymmetric — 8px margin + 2px status
                                    border on the left, nothing on the right,
@@ -1241,12 +1273,8 @@ export default function App() {
                                    picked). Idle rows fade to 60% opacity so the
                                    working ones dominate the eye. */
                                 selectedAgentId === agent.id
-                                  ? 'bg-accent-subtle text-accent font-medium border-accent'
-                                  : agent.status === 'working'
-                                    ? 'text-text-primary border-status-working hover:bg-bg-hover'
-                                    : agent.status === 'waiting'
-                                      ? 'text-text-primary border-status-waiting hover:bg-bg-hover'
-                                      : 'text-text-secondary border-transparent hover:bg-bg-hover opacity-60'
+                                  ? 'bg-accent-subtle text-text-primary'
+                                  : 'text-text-primary hover:bg-bg-hover'
                               }`}
                               onClick={() => {
                                 if (agent.projectId !== selectedProjectId) setSelectedProjectId(agent.projectId)
@@ -1258,9 +1286,9 @@ export default function App() {
                                 setAgentContextMenu({ x: e.clientX, y: e.clientY, agentId: agent.id })
                               }}
                             >
-                              <div className="w-6 h-6 flex-shrink-0 relative">
+                              <div className="w-8 h-8 rounded-[10px] bg-sidebar-bg flex items-center justify-center flex-shrink-0 relative">
                                 <AvatarPreview config={agent.avatar} size={24} loopBusy={activeHandoffAgentIds.has(agent.id)} selected={selectedAgentId === agent.id} />
-                                <span className={`absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full border border-bg-secondary ${
+                                <span className={`absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full border-2 ${selectedAgentId === agent.id ? 'border-accent-subtle' : 'border-bg-secondary'} ${
                                   agent.status === 'working' ? 'bg-status-working' :
                                   agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
                                 }`} />
@@ -1280,14 +1308,14 @@ export default function App() {
                                     Back to natural inline flow: tag right
                                     after name; name truncates first when
                                     space is tight, tag never spills. */}
-                                <span className="flex items-center gap-1.5 min-w-0 whitespace-nowrap overflow-hidden text-[13px] font-heading font-semibold text-text-primary">
+                                <span className="flex items-center gap-1.5 min-w-0 whitespace-nowrap overflow-hidden text-[13px] font-semibold text-text-primary">
                                   {agent.tagColor && (
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
                                   <span className="truncate min-w-0 flex-shrink">{agent.name}</span>
                                   {agent.note && <NoteTag id={agent.id} note={agent.note} color={agent.noteColor} solid={agent.noteSolid} />}
                                 </span>
-                                <span className="text-[10px] font-semibold uppercase tracking-wider truncate group-hover:invisible text-text-muted flex items-center gap-1.5" title={agent.role}>
+                                <span className="text-[11px] mt-px truncate group-hover:invisible text-text-muted flex items-center gap-1.5" title={agent.role}>
                                   <span className="truncate">{agent.role}</span>
                                   {/* v2.8.0: time-since chip. Fixed-width
                                       mono cell so a row of chips lines up.
@@ -1297,7 +1325,7 @@ export default function App() {
                                     const ts = formatTimeSince(lastEventAt[agent.id], nowTick)
                                     if (!ts) return null
                                     return (
-                                      <span className="ml-auto font-mono tabular-nums text-[9.5px] text-text-muted/70 shrink-0" title="Last activity">
+                                      <span className="ml-auto tabular-nums text-[11px] text-text-muted shrink-0" title="Last activity">
                                         {ts}
                                       </span>
                                     )
@@ -1372,11 +1400,11 @@ export default function App() {
                 </p>
               )}
             </div>
-            <div className="p-2">
+            <div className="px-2 pt-1.5 pb-2.5">
               <button
                 onClick={() => setShowCreateAgent(true)}
-                className="w-full px-3 py-2 rounded-lg text-sm text-accent
-                  hover:bg-accent-subtle transition-colors cursor-pointer
+                className="w-full px-2.5 py-[9px] rounded-xl text-[13px] text-text-muted
+                  hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer
                   flex items-center gap-2 font-medium"
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1396,59 +1424,52 @@ export default function App() {
       <ResizeHandle onResize={(d) => resizePanel('agents', d)} />
 
       {/* Right: Main Panel */}
-      <div className="flex-1 flex flex-col bg-bg-primary min-w-0">
-        <div className="drag-region h-16 flex items-end px-4 pb-2 justify-between">
-          <div className="no-drag flex items-center gap-2">
-            <h2 className="text-[13px] font-heading font-semibold text-text-muted uppercase tracking-widest">
+      <div className="hive-card mt-2.5 flex-1 flex flex-col min-w-0">
+        <div className="drag-region hive-head gap-3">
+          <div className="no-drag flex items-center min-w-0">
+            <h2 className="hive-head-title flex-shrink-0">
               {selectedAgent ? selectedAgent.name : (selectedProject ? 'Dashboard' : 'Select an agent')}
             </h2>
-            {selectedAgent && (
-              <>
-                {agentTasks[selectedAgent.id]?.active && agentTasks[selectedAgent.id]?.title && (
-                  <span className="text-[13px] text-accent font-medium px-2 py-0.5 rounded-md bg-accent/10 truncate max-w-[250px]">
-                    {agentTasks[selectedAgent.id].title}
-                  </span>
-                )}
-                {!agentTasks[selectedAgent.id]?.active && agentTasks[selectedAgent.id]?.summary && (
-                  <span className="text-[13px] text-status-working font-medium px-2 py-0.5 rounded-md bg-status-working/10 truncate max-w-[250px]">
-                    {agentTasks[selectedAgent.id].summary}
-                  </span>
-                )}
-              </>
+            {selectedAgent && (agentTasks[selectedAgent.id]?.active ? agentTasks[selectedAgent.id]?.title : agentTasks[selectedAgent.id]?.summary) && (
+              <span className="hive-head-sub truncate">
+                {agentTasks[selectedAgent.id]?.active ? agentTasks[selectedAgent.id].title : agentTasks[selectedAgent.id].summary}
+              </span>
             )}
           </div>
           {selectedAgent && (
-            <div className="no-drag flex items-center gap-1">
+            <div className="no-drag flex items-center gap-1.5 flex-shrink-0">
+              <div className="inline-flex gap-0.5 p-[3px] rounded-[10px] bg-sidebar-bg">
               <button
                 onClick={() => setMainView('terminal')}
-                className={`px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors cursor-pointer ${
+                className={`px-3 py-[5px] rounded-lg text-[12px] font-semibold transition-colors cursor-pointer ${
                   mainView === 'terminal'
-                    ? 'bg-accent text-text-on-purple'
-                    : 'text-text-muted hover:bg-bg-hover'
+                    ? 'bg-bg-secondary text-text-primary shadow-sm'
+                    : 'text-text-muted hover:text-text-primary'
                 }`}
               >
                 Chat
               </button>
               <button
                 onClick={() => setMainView('editor')}
-                className={`px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors cursor-pointer ${
+                className={`px-3 py-[5px] rounded-lg text-[12px] font-semibold transition-colors cursor-pointer ${
                   mainView === 'editor'
-                    ? 'bg-accent text-text-on-purple'
-                    : 'text-text-muted hover:bg-bg-hover'
+                    ? 'bg-bg-secondary text-text-primary shadow-sm'
+                    : 'text-text-muted hover:text-text-primary'
                 }`}
               >
                 Editor
               </button>
               <button
                 onClick={() => setMainView('logs')}
-                className={`px-2.5 py-1 rounded-md text-[13px] font-medium transition-colors cursor-pointer ${
+                className={`px-3 py-[5px] rounded-lg text-[12px] font-semibold transition-colors cursor-pointer ${
                   mainView === 'logs'
-                    ? 'bg-accent text-text-on-purple'
-                    : 'text-text-muted hover:bg-bg-hover'
+                    ? 'bg-bg-secondary text-text-primary shadow-sm'
+                    : 'text-text-muted hover:text-text-primary'
                 }`}
               >
                 Logs
               </button>
+              </div>
               {mainView === 'terminal' && activeTerminals.has(selectedAgent!.id) && (
                 <button
                   onClick={async () => {
@@ -1490,7 +1511,7 @@ export default function App() {
                     // close-session, and silently no-op'd otherwise).
                     window.dispatchEvent(new CustomEvent('hive:reopen-chooser', { detail: { agentId } }))
                   }}
-                  className="px-1.5 py-1 rounded-md text-text-muted hover:bg-bg-hover transition-colors cursor-pointer"
+                  className="w-7 h-7 rounded-lg inline-flex items-center justify-center transition-colors cursor-pointer text-text-muted hover:bg-bg-hover hover:text-text-primary"
                   title="Restart terminal + reopen chat chooser"
                 >
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1499,68 +1520,9 @@ export default function App() {
                   </svg>
                 </button>
               )}
-              {mainView === 'terminal' && activeTerminals.has(selectedAgent!.id) && (
-                <button
-                  onClick={async () => {
-                    if (isListening) {
-                      await window.api.speech.stop()
-                      setIsListening(false)
-                      setSpeechPartial('')
-                    } else {
-                      const agentId = selectedAgent!.id
-                      const cleanup = window.api.speech.onTranscript((line) => {
-                        if (line.startsWith('final:')) {
-                          const text = line.slice(6)
-                          // Broadcast as CustomEvent so whichever surface is
-                          // currently visible (xterm Terminal or HiveChat)
-                          // can decide to consume it. App.tsx no longer
-                          // hard-writes to PTY — that broke voice input the
-                          // moment the user switched to chat mode (xterm
-                          // was hidden, transcripts vanished).
-                          window.dispatchEvent(new CustomEvent('hive:voice-final', { detail: { agentId, text } }))
-                          setSpeechPartial('')
-                        } else if (line.startsWith('partial:')) {
-                          setSpeechPartial(line.slice(8))
-                        }
-                      })
-                      const result = await window.api.speech.start(speechLang)
-                      if (!result.ok) {
-                        cleanup()
-                        return
-                      }
-                      setIsListening(true)
-                    }
-                  }}
-                  className={`px-1.5 py-1 rounded-md transition-colors cursor-pointer ${
-                    isListening ? 'bg-red-500/20 text-red-400' : 'text-text-muted hover:bg-bg-hover'
-                  }`}
-                  title={isListening ? 'Stop listening' : 'Voice input'}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                    <line x1="12" y1="19" x2="12" y2="23" />
-                    <line x1="8" y1="23" x2="16" y2="23" />
-                  </svg>
-                </button>
-              )}
-              {mainView === 'terminal' && activeTerminals.has(selectedAgent!.id) && (
-                <button
-                  onClick={toggleSpeechLang}
-                  className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-text-muted hover:bg-bg-hover cursor-pointer"
-                  title={`Voice language: ${speechLang} (click to switch, applies next time)`}
-                >
-                  {speechLangLabel(speechLang)}
-                </button>
-              )}
             </div>
           )}
         </div>
-        {isListening && speechPartial && (
-          <div className="px-4 py-1.5 bg-red-500/10 border-b border-red-500/20 text-[13px] text-red-300 font-mono truncate">
-            🎙 {speechPartial}
-          </div>
-        )}
         <div className="flex-1 relative">
           {!selectedAgent && !selectedProject && (
             <div className="flex flex-col items-center justify-center h-full text-text-muted gap-3">
@@ -2514,9 +2476,9 @@ export default function App() {
             return (
               <div
                 key={agentId}
-                className="absolute top-0 left-2 right-2 bottom-2 rounded-[18px] overflow-hidden"
+                className="absolute inset-0"
                 style={{
-                  background: '#201F26',
+                  background: CHAT.bg,
                   visibility: isVisible ? 'visible' : 'hidden',
                   pointerEvents: isVisible ? 'auto' : 'none',
                   zIndex: isVisible ? 1 : 0

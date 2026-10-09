@@ -39,7 +39,7 @@ export default function ResizeHandle({ onResize }: Props) {
   return (
     <div
       onMouseDown={onMouseDown}
-      className="w-1 cursor-col-resize hover:bg-accent/30 active:bg-accent/50 transition-colors flex-shrink-0"
+      className="w-2.5 cursor-col-resize flex-shrink-0"
     />
   )
 }

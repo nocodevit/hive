@@ -141,6 +141,18 @@ border-radius: 12px;
 
 ---
 
+## Layout (v2.21 · unified canvas)
+
+Source of truth: `ui-preview-unified.html` (scheme B, approved 2026-10-09).
+
+- One canvas color for the whole window (`--sidebar-bg`). The project list sits directly on it; agents, main panel and files are `.hive-card` (18px radius, soft shadow, no border) with a 10px gutter.
+- No divider lines between or inside columns — spacing does the separation.
+- Every column header is `.hive-head` (52px) with `.hive-head-title` + optional `.hive-head-sub` (muted, same baseline).
+- Chat follows the app theme. `CRUSH` / `CHAT` (hive-chat/crush-styles.ts) are CSS variables; light values = white card, dark values = original Crush hexes (assets/index.css).
+- Chat prose uses `FONT_PROSE` (Inter Tight); mono is only for code, commands and numbers. User turns are right-aligned bubbles; no speaker glyphs.
+- Composer = one rounded box: textarea on top, control row below (voice 中/EN, Streaming, context, Compact, ⋮, Send/Stop). Model + usage are a single muted status line under it.
+- One accent (purple). Status colors only on small dots.
+
 ## Border Radius
 
 | Size | Value | Usage |
