@@ -1148,7 +1148,7 @@ ipcMain.handle('agent:send', (_event, { agentId, type, payload }) => {
 // Speech recognition (macOS native SFSpeechRecognizer)
 let speechProcess: any = null
 
-ipcMain.handle('speech:start', () => {
+ipcMain.handle('speech:start', (_e, opts?: { lang?: string }) => {
   if (speechProcess) return { ok: false, error: 'already running' }
   const { spawn } = require('child_process')
   // Dev: scripts/hive-speech relative to project root. Packaged: extraResources/scripts/hive-speech
@@ -1156,7 +1156,8 @@ ipcMain.handle('speech:start', () => {
   const prodPath = join(process.resourcesPath, 'scripts', 'hive-speech')
   const resolvedPath = existsSync(devPath) ? devPath : prodPath
   if (!existsSync(resolvedPath)) return { ok: false, error: 'hive-speech binary not found' }
-  speechProcess = spawn(resolvedPath, [], { stdio: ['ignore', 'pipe', 'pipe'] })
+  const lang = opts?.lang === 'en-US' ? 'en-US' : 'zh-CN'
+  speechProcess = spawn(resolvedPath, [lang], { stdio: ['ignore', 'pipe', 'pipe'] })
   speechProcess.stdout?.on('data', (data: Buffer) => {
     const lines = data.toString().split('\n').filter(Boolean)
     for (const line of lines) {

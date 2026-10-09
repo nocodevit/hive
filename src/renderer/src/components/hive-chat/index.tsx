@@ -1710,7 +1710,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               style={{
                 background: 'transparent',
                 border: `1px solid ${CRUSH.Charcoal}`,
-                borderRadius: 6,
+                borderRadius: 8,
                 padding: '4px 12px',
                 color: CRUSH.Squid,
                 fontFamily: FONT_MONO, fontSize: 11,
@@ -1798,7 +1798,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             }}
             style={{
               background: CRUSH.Sriracha, border: 'none', color: CRUSH.Pepper,
-              padding: '6px 14px', borderRadius: 8,
+              padding: '6px 14px', borderRadius: 10,
               fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
               cursor: 'pointer'
             }}
@@ -1824,7 +1824,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }}>
           <div style={{
             border: `1px solid ${CRUSH.Sriracha}`,
-            borderRadius: 12,
+            borderRadius: 14,
             padding: 10,
             background: 'rgba(235,66,104,0.06)'
           }}>
@@ -1845,7 +1845,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   flex: 1,
                   background: 'transparent',
                   border: `1px solid ${CRUSH.Charcoal}`,
-                  borderRadius: 8,
+                  borderRadius: 10,
                   padding: '8px 16px',
                   color: CRUSH.Squid,
                   fontFamily: FONT_MONO, fontSize: baseFontSize, fontWeight: 500,
@@ -1860,7 +1860,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   flex: 1,
                   background: CRUSH.Sriracha,
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: 10,
                   padding: '8px 16px',
                   color: CRUSH.Butter,
                   fontFamily: FONT_MONO, fontSize: baseFontSize, fontWeight: 700,
@@ -1878,7 +1878,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }}>
           <div style={{
             border: `1px solid ${CRUSH.Charcoal}`,
-            borderRadius: 12,
+            borderRadius: 14,
             padding: 10,
             background: 'rgba(235,66,104,0.04)'
           }}>
@@ -1907,7 +1907,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   flex: 1,
                   background: CRUSH.Bok,
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: 10,
                   padding: '8px 8px',
                   color: CRUSH.Pepper,
                   fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
@@ -1922,7 +1922,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   flex: 1,
                   background: CRUSH.Charple,
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: 10,
                   padding: '8px 8px',
                   color: CRUSH.Butter,
                   fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
@@ -1937,7 +1937,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   flex: 1,
                   background: CRUSH.Julep,
                   border: 'none',
-                  borderRadius: 8,
+                  borderRadius: 10,
                   padding: '8px 8px',
                   color: CRUSH.Pepper,
                   fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
@@ -1955,7 +1955,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                     width: '100%',
                     background: 'transparent',
                     border: `1px solid ${CRUSH.Charcoal}`,
-                    borderRadius: 8,
+                    borderRadius: 10,
                     padding: '6px 8px',
                     color: CRUSH.Squid,
                     fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
@@ -1974,7 +1974,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }}>
           <div style={{
             border: `1px solid ${CRUSH.Dolly}`,
-            borderRadius: 12,
+            borderRadius: 14,
             padding: 10,
             background: 'rgba(255,96,255,0.06)'
           }}>
@@ -1994,7 +1994,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 background: CRUSH.Pepper,
                 color: CRUSH.Ash,
                 padding: '6px 10px',
-                borderRadius: 6,
+                borderRadius: 8,
                 fontFamily: FONT_MONO, fontSize: 11,
                 margin: '6px 0 10px',
                 maxHeight: 160, overflow: 'auto' as const,
@@ -2006,7 +2006,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               style={{
                 background: CRUSH.Dolly,
                 border: 'none',
-                borderRadius: 8,
+                borderRadius: 10,
                 padding: '8px 16px',
                 color: CRUSH.Butter,
                 fontFamily: FONT_MONO, fontSize: baseFontSize, fontWeight: 700,
@@ -2096,7 +2096,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             display: 'flex', alignItems: 'center', gap: 8,
             background: 'rgba(255,96,255,0.08)',
             border: `1px solid ${CRUSH.Dolly}`,
-            borderRadius: 12,
+            borderRadius: 14,
             padding: '8px 12px'
           }}>
             <span style={{ color: CRUSH.Julep, fontWeight: 700, fontSize: 16 }}>❯</span>
@@ -2177,7 +2177,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   border: `1px solid ${CRUSH.Sriracha}`,
                   color: CRUSH.Sriracha,
                   width: 22, height: 22,
-                  borderRadius: 6,
+                  borderRadius: 8,
                   fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
                   cursor: 'pointer',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
@@ -2209,7 +2209,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   border: `1px solid ${CRUSH.Squid}`,
                   color: CRUSH.Squid,
                   width: 22, height: 22,
-                  borderRadius: 6,
+                  borderRadius: 8,
                   fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
                   cursor: 'not-allowed',
                   display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
@@ -2230,7 +2230,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 padding: '4px 10px',
                 background: 'rgba(255,204,51,0.08)',
                 border: `1px solid ${CRUSH.Julep}`,
-                borderRadius: 8,
+                borderRadius: 10,
                 color: CRUSH.Julep,
                 fontFamily: FONT_MONO, fontSize: 11
               }}
@@ -2344,7 +2344,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
           <div style={{
             background: CRUSH.BBQ,
             border: `1px solid ${authState === 'failed' ? CRUSH.Sriracha : CRUSH.Bok}`,
-            borderRadius: 16, padding: '18px 22px 16px',
+            borderRadius: 18, padding: '18px 22px 16px',
             width: 520, maxWidth: '90%', boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
           }}>
             <div style={{
@@ -2366,7 +2366,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             {(authState === 'in-progress' || authState === 'failed') && (
               <div style={{
                 color: CRUSH.Ash, background: CRUSH.Pepper,
-                border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 6,
+                border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 8,
                 padding: '8px 12px', fontSize: 11, marginBottom: 12,
                 fontFamily: FONT_MONO, whiteSpace: 'pre-wrap',
                 maxHeight: 220, overflowY: 'auto', wordBreak: 'break-all'
@@ -2388,7 +2388,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   autoFocus
                   style={{
                     flex: 1, background: CRUSH.Pepper, color: CRUSH.Butter,
-                    border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 6,
+                    border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 8,
                     padding: '8px 12px', fontFamily: FONT_MONO, fontSize: 12
                   }}
                 />
@@ -2400,7 +2400,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   }}
                   style={{
                     background: CRUSH.Bok, border: 'none', color: CRUSH.Pepper,
-                    padding: '8px 14px', borderRadius: 8, fontFamily: FONT_MONO,
+                    padding: '8px 14px', borderRadius: 10, fontFamily: FONT_MONO,
                     fontSize: 12, fontWeight: 600, cursor: 'pointer'
                   }}
                 >Submit</button>
@@ -2420,12 +2420,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 <>
                   <button onClick={() => setAuthState('idle')} style={{
                     background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
-                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 8,
+                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 10,
                     fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer'
                   }}>Not now</button>
                   <button onClick={startAuthLogin} style={{
                     background: CRUSH.Bok, border: 'none',
-                    color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 8,
+                    color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 10,
                     fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer'
                   }}>Sign in →</button>
                 </>
@@ -2437,7 +2437,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                   </div>
                   <button onClick={dismissAuthModal} style={{
                     background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
-                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 8,
+                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 10,
                     fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer'
                   }}>Cancel</button>
                 </>
@@ -2446,12 +2446,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 <>
                   <button onClick={() => setAuthState('idle')} style={{
                     background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
-                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 8,
+                    color: CRUSH.Squid, padding: '8px 14px', borderRadius: 10,
                     fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer'
                   }}>Close</button>
                   <button onClick={startAuthLogin} style={{
                     background: CRUSH.Bok, border: 'none',
-                    color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 8,
+                    color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 10,
                     fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer'
                   }}>Retry</button>
                 </>
@@ -2459,7 +2459,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               {authState === 'success' && (
                 <button onClick={() => setAuthState('idle')} style={{
                   background: CRUSH.Bok, border: 'none',
-                  color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 8,
+                  color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 10,
                   fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer'
                 }}>Done</button>
               )}
@@ -2538,18 +2538,18 @@ class HiveChatErrorBoundary extends React.Component<
         </div>
         <pre style={{
           background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`,
-          padding: 10, borderRadius: 8, fontSize: 11, color: CRUSH.Ash,
+          padding: 10, borderRadius: 10, fontSize: 11, color: CRUSH.Ash,
           maxWidth: 720, maxHeight: 280, overflow: 'auto', whiteSpace: 'pre-wrap'
         }}>{stack}</pre>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => { try { navigator.clipboard.writeText(stack) } catch {} }} style={{
             background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
-            color: CRUSH.Ash, padding: '8px 14px', borderRadius: 8,
+            color: CRUSH.Ash, padding: '8px 14px', borderRadius: 10,
             fontFamily: FONT_MONO, fontSize: 12, cursor: 'pointer'
           }}>Copy stack</button>
           <button onClick={() => window.location.reload()} style={{
             background: CRUSH.Bok, border: 'none',
-            color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 8,
+            color: CRUSH.Pepper, padding: '8px 18px', borderRadius: 10,
             fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700, cursor: 'pointer'
           }}>Reload</button>
         </div>
@@ -2594,7 +2594,7 @@ function PermissionFallback({ req, onDecide }: {
       <div style={{
         background: CRUSH.BBQ,
         border: `1px solid ${CRUSH.Sriracha}`,
-        borderRadius: 12,
+        borderRadius: 14,
         padding: 16,
         width: 400, maxWidth: '80%'
       }}>
@@ -2610,12 +2610,12 @@ function PermissionFallback({ req, onDecide }: {
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
           <button onClick={() => onDecide('deny')} style={{
             background: 'transparent', color: CRUSH.Sriracha,
-            border: `1px solid ${CRUSH.Sriracha}`, borderRadius: 8,
+            border: `1px solid ${CRUSH.Sriracha}`, borderRadius: 10,
             padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
           }}>Deny</button>
           <button onClick={() => onDecide('allow')} style={{
             background: CRUSH.Julep, color: CRUSH.Pepper,
-            border: 'none', borderRadius: 8,
+            border: 'none', borderRadius: 10,
             padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, fontWeight: 700, cursor: 'pointer'
           }}>Allow once</button>
         </div>
@@ -2719,7 +2719,7 @@ export function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
       <div style={{
         background: CRUSH.BBQ,
         border: `1px solid ${CRUSH.Charple}`,
-        borderRadius: 16,
+        borderRadius: 18,
         padding: '18px 22px 16px',
         width: 460, maxWidth: '80%',
         boxShadow: '0 20px 40px rgba(0,0,0,0.5)'
@@ -2734,7 +2734,7 @@ export function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
           color: CRUSH.Ash,
           background: CRUSH.Pepper,
           border: `1px solid ${CRUSH.Charcoal}`,
-          borderRadius: 6,
+          borderRadius: 8,
           padding: '8px 12px',
           fontSize: 12,
           marginBottom: 16,
@@ -2746,17 +2746,17 @@ export function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
         <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
           <button onClick={() => onDecide('deny')} style={{
             background: 'transparent', color: CRUSH.Sriracha,
-            border: `1px solid ${CRUSH.Sriracha}`, borderRadius: 8,
+            border: `1px solid ${CRUSH.Sriracha}`, borderRadius: 10,
             padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
           }}>Deny</button>
           <button onClick={() => onDecide('allow')} style={{
             background: 'transparent', color: CRUSH.Julep,
-            border: `1px solid ${CRUSH.Julep}`, borderRadius: 8,
+            border: `1px solid ${CRUSH.Julep}`, borderRadius: 10,
             padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
           }}>Allow once</button>
           <button onClick={onAllowSession} style={{
             background: 'transparent', color: CRUSH.Malibu,
-            border: `1px solid ${CRUSH.Malibu}`, borderRadius: 8,
+            border: `1px solid ${CRUSH.Malibu}`, borderRadius: 10,
             padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO, cursor: 'pointer'
           }} title={`Auto-allow every future ${req.displayName || req.toolName} call for this chat session${peerCount > 0 ? ` (and the ${peerCount} more already queued)` : ''}`}>
             Allow this session{peerCount > 0 ? ` (+${peerCount})` : ''}
@@ -2764,7 +2764,7 @@ export function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
           {desc && suggestion && (
             <button onClick={() => onDecide('allow', suggestion)} style={{
               background: CRUSH.Julep, color: CRUSH.Pepper,
-              border: 'none', borderRadius: 8,
+              border: 'none', borderRadius: 10,
               padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO,
               fontWeight: 700, cursor: 'pointer'
             }} title={desc.hover}>
@@ -2783,7 +2783,7 @@ export function PermissionModal({ req, peerCount, onDecide, onAllowSession }: {
           {!suggestion && req.toolName.startsWith('mcp__') && (
             <button onClick={() => onDecide('allow', { rules: [{ toolName: req.toolName, ruleContent: '' }] })} style={{
               background: CRUSH.Zest, color: CRUSH.Pepper,
-              border: 'none', borderRadius: 8,
+              border: 'none', borderRadius: 10,
               padding: '6px 14px', fontSize: 12, fontFamily: FONT_MONO,
               fontWeight: 700, cursor: 'pointer'
             }} title={`Persist ${req.toolName} in ~/.claude/settings.json permissions.allow — never asked again across any session or agent`}>
@@ -2920,7 +2920,7 @@ export function ContextModal({ loading, error, data, claudeSid, onRefresh, onClo
         width: 820, maxWidth: '92%', maxHeight: '92%',
         background: CRUSH.BBQ,
         border: `1px solid ${CRUSH.Charple}`,
-        borderRadius: 12,
+        borderRadius: 14,
         boxShadow: `0 8px 40px rgba(107,80,255,0.25), 0 4px 12px rgba(0,0,0,0.5)`,
         display: 'flex', flexDirection: 'column' as const,
         overflow: 'hidden'
@@ -2946,7 +2946,7 @@ export function ContextModal({ loading, error, data, claudeSid, onRefresh, onClo
           <button onClick={onClose} style={{
             background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
             color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 11,
-            padding: '2px 8px', borderRadius: 6, cursor: 'pointer', lineHeight: 1
+            padding: '2px 8px', borderRadius: 8, cursor: 'pointer', lineHeight: 1
           }}>✕</button>
         </div>
 
@@ -3020,7 +3020,7 @@ export function ContextModal({ loading, error, data, claudeSid, onRefresh, onClo
             style={{
               background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
               color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 11,
-              padding: '4px 12px', borderRadius: 6, cursor: loading ? 'not-allowed' : 'pointer',
+              padding: '4px 12px', borderRadius: 8, cursor: loading ? 'not-allowed' : 'pointer',
               opacity: loading ? 0.5 : 1
             }}
           >Refresh now (~7s)</button>
@@ -3031,7 +3031,7 @@ export function ContextModal({ loading, error, data, claudeSid, onRefresh, onClo
               border: `1px solid ${CRUSH.Charple}`,
               color: CRUSH.Charple,
               fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
-              padding: '4px 12px', borderRadius: 6, cursor: 'pointer'
+              padding: '4px 12px', borderRadius: 8, cursor: 'pointer'
             }}
           >Close</button>
         </div>
@@ -3062,7 +3062,7 @@ function CtxTabBtn({ active, onClick, children, count }: {
           fontSize: 9, fontWeight: 400,
           background: active ? 'rgba(107,80,255,0.18)' : CRUSH.Charcoal,
           color: active ? CRUSH.Charple : CRUSH.Squid,
-          padding: '1px 5px', borderRadius: 12
+          padding: '1px 5px', borderRadius: 14
         }}>{count}</span>
       )}
     </span>
@@ -3086,7 +3086,7 @@ function CtxOverview({ data }: { data: CtxData }) {
       <div style={{
         background: CRUSH.Pepper,
         border: `1px solid ${CRUSH.Charcoal}`,
-        borderRadius: 12,
+        borderRadius: 14,
         padding: '12px 14px',
         marginBottom: 14
       }}>
@@ -3159,7 +3159,7 @@ function CtxDetail({
             border: `1px solid ${CRUSH.Charcoal}`,
             color: CRUSH.Butter,
             fontFamily: FONT_MONO, fontSize: 11,
-            padding: '5px 10px', borderRadius: 6, outline: 'none'
+            padding: '5px 10px', borderRadius: 8, outline: 'none'
           }}
           onFocus={e => { e.currentTarget.style.borderColor = CRUSH.Charple }}
           onBlur={e => { e.currentTarget.style.borderColor = CRUSH.Charcoal }}
@@ -3389,7 +3389,7 @@ export function StartChooser({
         width: '100%', maxWidth: 760,
         background: CRUSH.BBQ,
         border: `1px solid ${CRUSH.Charcoal}`,
-        borderRadius: 12,
+        borderRadius: 14,
         padding: '24px 24px 20px',
         boxShadow: '0 8px 24px rgba(0,0,0,0.35)'
       }}>
@@ -3413,7 +3413,7 @@ export function StartChooser({
             <span title={cwd} style={{
               fontFamily: FONT_MONO, fontSize: 10, color: CRUSH.Squid,
               background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`,
-              borderRadius: 6, padding: '3px 8px',
+              borderRadius: 8, padding: '3px 8px',
               maxWidth: 360, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap'
             }}>{cwdLabel}</span>
           )}
@@ -3422,14 +3422,14 @@ export function StartChooser({
         {/* Info row */}
         {!loaded ? (
           <div style={{
-            background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 12,
+            background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 14,
             padding: 18, textAlign: 'center', color: CRUSH.Squid, fontSize: 11, marginBottom: 18
           }}>scanning ~/.claude/projects…</div>
         ) : hasPrev ? (
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
             background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`,
-            borderRadius: 12, overflow: 'hidden', marginBottom: 18
+            borderRadius: 14, overflow: 'hidden', marginBottom: 18
           }}>
             <ChooserCell label="Last session" value={sidShort} valueColor={CRUSH.Bok} title={info!.sid} />
             <ChooserCell label="Context" value={pct > 0 ? `${pct}%` : `${(info!.peakInputTokens / 1000).toFixed(1)}K`} valueColor={ctxColor} />
@@ -3438,7 +3438,7 @@ export function StartChooser({
           </div>
         ) : (
           <div style={{
-            background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 12,
+            background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 14,
             padding: 18, textAlign: 'center', marginBottom: 18
           }}>
             <div style={{ fontSize: 9, color: CRUSH.Squid, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4 }}>
@@ -3560,7 +3560,7 @@ export function SessionPickerInline({
       marginTop: 12,
       background: CRUSH.Pepper,
       border: `1px solid ${actionMeta.color}`,
-      borderRadius: 12,
+      borderRadius: 14,
       padding: 10
     }}>
       {/* Picker header */}
@@ -3610,7 +3610,7 @@ export function SessionPickerInline({
                 gridTemplateColumns: '80px 1fr 110px',
                 gap: 10,
                 padding: '8px 10px',
-                borderRadius: 8,
+                borderRadius: 10,
                 cursor: 'pointer',
                 border: `1px solid ${isSelected ? actionMeta.color : 'transparent'}`,
                 background: isSelected ? `${actionMeta.color}15` : 'transparent',
@@ -3671,7 +3671,7 @@ export function SessionPickerInline({
           style={{
             background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
             color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 11,
-            padding: '5px 14px', borderRadius: 6, cursor: 'pointer'
+            padding: '5px 14px', borderRadius: 8, cursor: 'pointer'
           }}
         >Cancel</button>
         <button
@@ -3682,7 +3682,7 @@ export function SessionPickerInline({
             border: `1px solid ${actionMeta.color}`,
             color: actionMeta.color,
             fontFamily: FONT_MONO, fontSize: 11, fontWeight: 700,
-            padding: '5px 14px', borderRadius: 6,
+            padding: '5px 14px', borderRadius: 8,
             cursor: selectedSid ? 'pointer' : 'not-allowed',
             opacity: selectedSid ? 1 : 0.4
           }}
@@ -3738,7 +3738,7 @@ function ChooserBtn({ icon, label, desc, color, disabled, isDefault, onClick }: 
         color: disabled ? CRUSH.Squid : (isDefault ? color : CRUSH.Ash),
         fontFamily: FONT_MONO, fontSize: 12, fontWeight: 700,
         padding: isDefault && !disabled ? '15px 11px' : '16px 12px',
-        borderRadius: 12,
+        borderRadius: 14,
         cursor: disabled ? 'not-allowed' : 'pointer',
         opacity: disabled ? 0.35 : 1,
         textAlign: 'center',
@@ -3768,7 +3768,7 @@ function Kbd({ children }: { children: React.ReactNode }) {
   return (
     <kbd style={{
       background: CRUSH.Charcoal, color: CRUSH.Ash,
-      padding: '1px 6px', borderRadius: 5, margin: '0 2px',
+      padding: '1px 6px', borderRadius: 6, margin: '0 2px',
       fontFamily: FONT_MONO, fontSize: 9, border: `1px solid ${CRUSH.Oyster}`
     }}>{children}</kbd>
   )
@@ -3861,7 +3861,7 @@ export function CrushTooltip({ text, children, side = 'top', block = false }: {
           color: CRUSH.Ash,
           fontFamily: FONT_MONO, fontSize: 11, lineHeight: 1.4,
           padding: '6px 10px',
-          borderRadius: 8,
+          borderRadius: 10,
           whiteSpace: 'normal' as const,
           width: 'max-content',
           maxWidth: 280,
@@ -3983,7 +3983,7 @@ function ActionToolbar({
                 style={{
                   background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
                   color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 9,
-                  padding: '0 5px', borderRadius: 5, cursor: 'pointer'
+                  padding: '0 5px', borderRadius: 6, cursor: 'pointer'
                 }}
                 onMouseEnter={(e) => { e.currentTarget.style.borderColor = CRUSH.Charple; e.currentTarget.style.color = CRUSH.Charple }}
                 onMouseLeave={(e) => { e.currentTarget.style.borderColor = CRUSH.Charcoal; e.currentTarget.style.color = CRUSH.Squid }}
@@ -4023,7 +4023,7 @@ function ActionToolbar({
                   cursor: 'pointer',
                   fontSize: 'var(--chat-fs, 13px)', lineHeight: 1,
                   padding: '2px 4px',
-                  borderRadius: 5,
+                  borderRadius: 6,
                   transition: 'color 120ms'
                 }}
                 onMouseEnter={e => { e.currentTarget.style.color = CRUSH.Bok }}
@@ -4050,7 +4050,7 @@ function ActionToolbar({
               color: compactColor,
               fontFamily: FONT_MONO, fontSize: 10, fontWeight: 600,
               padding: '2px 8px',
-              borderRadius: 6,
+              borderRadius: 8,
               cursor: compacting ? 'not-allowed' : 'pointer',
               opacity: compacting ? 0.5 : 1,
               transition: 'all 120ms'
@@ -4071,7 +4071,7 @@ function ActionToolbar({
               color: menuOpen ? CRUSH.Charple : CRUSH.Squid,
               fontFamily: FONT_MONO, fontSize: 11,
               padding: '2px 8px',
-              borderRadius: 6,
+              borderRadius: 8,
               cursor: 'pointer',
               transition: 'all 120ms',
               lineHeight: 1
@@ -4084,7 +4084,7 @@ function ActionToolbar({
               right: 0, bottom: 'calc(100% + 4px)',
               background: CRUSH.BBQ,
               border: `1px solid ${CRUSH.Charple}`,
-              borderRadius: 8,
+              borderRadius: 10,
               padding: 4,
               minWidth: 220,
               boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
@@ -4183,7 +4183,7 @@ function MenuItem({ icon, label, desc, onClick, danger, disabled, hover }: {
       style={{
         display: 'flex', alignItems: 'center', gap: 10, width: '100%',
         padding: '7px 10px',
-        background: 'transparent', border: 'none', borderRadius: 5,
+        background: 'transparent', border: 'none', borderRadius: 6,
         color: disabled ? CRUSH.Oyster : CRUSH.Ash,
         fontFamily: FONT_MONO, fontSize: 12,
         cursor: disabled ? 'not-allowed' : 'pointer',
@@ -4245,7 +4245,7 @@ function CtxNagBanner({
           style={{
             background: color, border: 'none',
             color: CRUSH.Pepper, fontFamily: FONT_MONO, fontSize: 10, fontWeight: 700,
-            padding: '2px 10px', borderRadius: 5, cursor: 'pointer'
+            padding: '2px 10px', borderRadius: 6, cursor: 'pointer'
           }}
         >Compact now</button>
         <button
@@ -4254,7 +4254,7 @@ function CtxNagBanner({
           style={{
             background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
             color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 10,
-            padding: '1px 6px', borderRadius: 5, cursor: 'pointer'
+            padding: '1px 6px', borderRadius: 6, cursor: 'pointer'
           }}
           onMouseEnter={e => { e.currentTarget.style.borderColor = color; e.currentTarget.style.color = color }}
           onMouseLeave={e => { e.currentTarget.style.borderColor = CRUSH.Charcoal; e.currentTarget.style.color = CRUSH.Squid }}
@@ -4414,7 +4414,7 @@ function RateLimitBar({ info, autoContinueAt, onCancelAutoContinue }: {
               style={{
                 background: 'transparent', border: `1px solid ${CRUSH.Charcoal}`,
                 color: CRUSH.Squid, fontFamily: FONT_MONO, fontSize: 10,
-                padding: '1px 6px', borderRadius: 5, cursor: 'pointer'
+                padding: '1px 6px', borderRadius: 6, cursor: 'pointer'
               }}
               onMouseEnter={(e) => { e.currentTarget.style.borderColor = CRUSH.Charple; e.currentTarget.style.color = CRUSH.Charple }}
               onMouseLeave={(e) => { e.currentTarget.style.borderColor = CRUSH.Charcoal; e.currentTarget.style.color = CRUSH.Squid }}
@@ -4561,7 +4561,7 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
             border: `1px solid ${streamingMode ? CRUSH.Dolly : CRUSH.Charcoal}`,
             color: streamingMode ? CRUSH.Dolly : CRUSH.Squid,
             padding: '2px 8px',
-            borderRadius: 6,
+            borderRadius: 8,
             fontFamily: FONT_MONO, fontSize: 10,
             cursor: 'pointer'
           }}
@@ -4578,7 +4578,7 @@ function ModelUsageBar({ modelName, contextSize, usage, rateLimit, streamingMode
               border: `1px solid ${CRUSH.Charcoal}`,
               color: CRUSH.Squid,
               padding: '2px 6px',
-              borderRadius: 6,
+              borderRadius: 8,
               fontFamily: FONT_MONO, fontSize: 10,
               cursor: 'pointer',
               whiteSpace: 'nowrap'

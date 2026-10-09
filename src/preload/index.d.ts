@@ -51,7 +51,7 @@ declare global {
           Promise<{ ok: boolean; branch?: string; results?: any[]; error?: string }>
       }
       speech: {
-        start: () => Promise<{ ok: boolean; error?: string }>
+        start: (lang?: 'zh-CN' | 'en-US') => Promise<{ ok: boolean; error?: string }>
         stop: () => Promise<{ ok: boolean }>
         onTranscript: (cb: (line: string) => void) => () => void
       }

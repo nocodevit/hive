@@ -141,18 +141,18 @@ function PausedCard({ state, onNewGoal }: { state: HandoffLiveState; onNewGoal?:
       <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
         <button type="button" onClick={onResume} disabled={busy !== null} autoFocus style={{
           padding: '3px 10px', background: '#00FFB2', color: '#150e24',
-          border: 'none', borderRadius: 5, fontSize: 11, fontWeight: 600,
+          border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600,
           cursor: busy === null ? 'pointer' : 'wait', fontFamily: 'inherit'
         }}>▶ Resume</button>
         <button type="button" onClick={onExit} disabled={busy !== null} style={{
           padding: '3px 10px', background: '#EB4268', color: '#FFFAF1',
-          border: 'none', borderRadius: 5, fontSize: 11, fontWeight: 600,
+          border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600,
           cursor: busy === null ? 'pointer' : 'wait', fontFamily: 'inherit'
         }}>✕ Exit + report</button>
         {onNewGoal && (
           <button type="button" onClick={onNewGoal} disabled={busy !== null} style={{
             padding: '3px 10px', background: 'transparent', color: '#DFDBDD',
-            border: '1px solid #3A3943', borderRadius: 5, fontSize: 11,
+            border: '1px solid #3A3943', borderRadius: 6, fontSize: 11,
             cursor: busy === null ? 'pointer' : 'wait', fontFamily: 'inherit'
           }}>↻ New goal</button>
         )}
@@ -332,7 +332,7 @@ function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: (
           marginTop: 8,
           padding: '8px 10px',
           background: 'rgba(0,0,0,0.25)',
-          borderRadius: 6,
+          borderRadius: 8,
           fontSize: 11,
           fontFamily: 'monospace',
           color: '#DFDBDD',
@@ -372,7 +372,7 @@ function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: (
           <button
             type="button"
             onClick={copySummary}
-            style={{ marginTop: 6, padding: '2px 8px', background: 'transparent', color: '#DFDBDD', border: '1px solid #3A3943', borderRadius: 5, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}
+            style={{ marginTop: 6, padding: '2px 8px', background: 'transparent', color: '#DFDBDD', border: '1px solid #3A3943', borderRadius: 6, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}
           >Copy summary</button>
         </div>
       )}
@@ -401,7 +401,7 @@ const runningStripStyle: CSSProperties = {
   padding: '6px 56px 6px 12px',
   background: 'rgba(255,96,255,0.10)',
   border: '1px solid #FF60FF',
-  borderRadius: 6,
+  borderRadius: 8,
   fontSize: 12, color: '#FFFAF1', fontFamily: 'inherit',
   position: 'relative' as const,
   margin: '4px 8px',
@@ -417,7 +417,7 @@ const infoButtonStyle: CSSProperties = {
 const stopButtonStyle: CSSProperties = {
   padding: '3px 10px',
   background: '#EB4268', color: '#FFFAF1',
-  border: 'none', borderRadius: 5,
+  border: 'none', borderRadius: 6,
   fontSize: 11, fontWeight: 600,
   cursor: 'pointer', fontFamily: 'inherit'
 }
@@ -429,7 +429,7 @@ const metaBoxStyle: CSSProperties = {
   padding: 8,
   background: '#201F26',
   border: '1px solid #3A3943',
-  borderRadius: 6,
+  borderRadius: 8,
   fontFamily: 'monospace' as const,
   fontSize: 10,
   color: '#DFDBDD',

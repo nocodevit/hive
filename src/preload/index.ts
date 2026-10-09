@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+type SpeechLang = 'zh-CN' | 'en-US'
+
 const api = {
   pty: {
     create: (id: string, cwd?: string) => ipcRenderer.invoke('pty:create', { id, cwd }),
@@ -225,7 +227,7 @@ const api = {
     }
   },
   speech: {
-    start: () => ipcRenderer.invoke('speech:start') as Promise<{ ok: boolean; error?: string }>,
+    start: (lang?: SpeechLang) => ipcRenderer.invoke('speech:start', { lang }) as Promise<{ ok: boolean; error?: string }>,
     stop: () => ipcRenderer.invoke('speech:stop') as Promise<{ ok: boolean }>,
     onTranscript: (cb: (line: string) => void) => {
       const handler = (_: any, line: string) => cb(line)

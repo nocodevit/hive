@@ -12,7 +12,10 @@ guard #available(macOS 10.15, *) else {
     exit(1)
 }
 
-let locale = Locale(identifier: "en-US")
+// argv[1] = BCP-47 locale from Hive (zh-CN | en-US). zh-CN also picks up
+// common English terms, so it is the default.
+let localeId = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "zh-CN"
+let locale = Locale(identifier: localeId)
 guard let recognizer = SFSpeechRecognizer(locale: locale), recognizer.isAvailable else {
     fputs("error: speech recognizer not available\n", stderr)
     exit(1)
