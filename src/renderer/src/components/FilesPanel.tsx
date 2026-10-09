@@ -341,7 +341,7 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
       {/* Footer — cwd is redacted (username masked, deep paths elided) when
          streamingMode is on so the real /Users/<name>/… doesn't leak in
          screenshots or live streams. Hover to see the full path. */}
-      <div className="px-3 py-2 border-t border-border">
+      <div className="px-3 py-2">
         <CopyablePath
           path={agentCwd}
           display={`${files.length} files · ${displayCwd}`}

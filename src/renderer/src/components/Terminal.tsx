@@ -7,6 +7,7 @@ import RichTerminal from './RichTerminal'
 import { crushifyColors } from '../lib/crushify-colors'
 import HiveChat from './hive-chat'
 import { shouldCheckAgentSession, buildTerminalClaudeCmd } from '../terminalAutoRun'
+import { useSpeechLang, speechLangLabel } from '../lib/speech-lang'
 
 type ViewMode = 'raw' | 'pretty'
 
@@ -45,6 +46,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
   const visibleRef = useRef(visible)
   const [showScrollDown, setShowScrollDown] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
+  const [speechLang, toggleSpeechLang] = useSpeechLang()
   // Pretty-mode decoration path is suspended — runtime stays on Raw xterm.
   // See pretty-term/SUSPENDED.md for history. The decoration code below
   // remains compiled so it's trivial to re-enable, but the Pretty button
@@ -679,7 +681,7 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
               setIsRecording(false)
             } else {
               setIsRecording(true)
-              await window.api.speech.start()
+              await window.api.speech.start(speechLang)
             }
           }}
           className={`absolute bottom-4 left-4 w-9 h-9 rounded-full flex items-center justify-center shadow-lg cursor-pointer transition-all ${
@@ -700,6 +702,16 @@ export default function Terminal({ id, agentId, agentName, cwd, visible, autoRun
               <line x1="8" y1="23" x2="16" y2="23" />
             </svg>
           )}
+        </button>
+      )}
+      {visible && (
+        <button
+          onClick={toggleSpeechLang}
+          className="absolute bottom-6 left-14 h-6 px-2 rounded-full text-[11px] font-semibold shadow cursor-pointer bg-bg-secondary border border-border text-text-muted hover:text-text-primary hover:bg-bg-hover"
+          style={{ zIndex: 9999 }}
+          title={`Voice language: ${speechLang} (click to switch, applies next time)`}
+        >
+          {speechLangLabel(speechLang)}
         </button>
       )}
       {showScrollDown && visible && (
