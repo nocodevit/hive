@@ -24,6 +24,7 @@ import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
 import { pickLRUToEvict } from './lru-terminals'
 import { confirmDialog } from './components/ConfirmDialog'
+import { useSpeechLang, speechLangLabel } from './lib/speech-lang'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
   const colors = {
@@ -121,6 +122,7 @@ export default function App() {
   const [teamNameInput, setTeamNameInput] = useState('')
   const [teamSelectedAgents, setTeamSelectedAgents] = useState<Set<string>>(new Set())
   const [isListening, setIsListening] = useState(false)
+  const [speechLang, toggleSpeechLang] = useSpeechLang()
   const [speechPartial, setSpeechPartial] = useState('')
   const [projectTab, setProjectTab] = useState<'dashboard' | 'office' | 'taskgroup' | 'settings'>('dashboard')
   // v2.6.0: top-level app screen. 'projects' = the historic project-focused
@@ -1074,7 +1076,7 @@ export default function App() {
             </div>
           )}
         </div>
-        <div className="p-2 border-t border-border space-y-1">
+        <div className="p-2 space-y-1">
           {/* v2.6.0: Overview toggle. Highlighted (accent bg) when active
               so it reads as the currently-selected top-level view. */}
           <button
@@ -1370,7 +1372,7 @@ export default function App() {
                 </p>
               )}
             </div>
-            <div className="p-2 border-t border-border">
+            <div className="p-2">
               <button
                 onClick={() => setShowCreateAgent(true)}
                 className="w-full px-3 py-2 rounded-lg text-sm text-accent
@@ -1521,7 +1523,7 @@ export default function App() {
                           setSpeechPartial(line.slice(8))
                         }
                       })
-                      const result = await window.api.speech.start()
+                      const result = await window.api.speech.start(speechLang)
                       if (!result.ok) {
                         cleanup()
                         return
@@ -1540,6 +1542,15 @@ export default function App() {
                     <line x1="12" y1="19" x2="12" y2="23" />
                     <line x1="8" y1="23" x2="16" y2="23" />
                   </svg>
+                </button>
+              )}
+              {mainView === 'terminal' && activeTerminals.has(selectedAgent!.id) && (
+                <button
+                  onClick={toggleSpeechLang}
+                  className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold text-text-muted hover:bg-bg-hover cursor-pointer"
+                  title={`Voice language: ${speechLang} (click to switch, applies next time)`}
+                >
+                  {speechLangLabel(speechLang)}
                 </button>
               )}
             </div>
@@ -2503,7 +2514,7 @@ export default function App() {
             return (
               <div
                 key={agentId}
-                className="absolute top-0 left-2 right-2 bottom-2 rounded-xl overflow-hidden"
+                className="absolute top-0 left-2 right-2 bottom-2 rounded-[18px] overflow-hidden"
                 style={{
                   background: '#201F26',
                   visibility: isVisible ? 'visible' : 'hidden',
