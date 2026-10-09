@@ -4,27 +4,30 @@
  * original preview used alpha. Do not alter without user approval.
  */
 
+/* Values are CSS variables so the chat follows the app theme (light =
+   unified white card, dark = the original Crush hexes). Hexes live in
+   assets/index.css. */
 export const CRUSH = {
-  Pepper: '#201F26',
-  BBQ: '#2D2C35',
-  Charcoal: '#3A3943',
-  Oyster: '#605F6B',
-  Squid: '#858392',
-  Ash: '#DFDBDD',
-  Butter: '#FFFAF1',
-  Sriracha: '#EB4268',
-  Julep: '#00FFB2',
-  Zest: '#E8FE96',
-  Malibu: '#00A4FF',
-  Dolly: '#FF60FF',
-  Bok: '#68FFD6',
-  Charple: '#6B50FF',
-  Violet: '#C259FF',
-  Mochi: '#EB5DFF',
-  Blush: '#FF84FF',
-  Guac: '#12C78F',
-  Salmon: '#FF7F90',
-  Cumin: '#BF976F'
+  Pepper: 'var(--crush-pepper)',
+  BBQ: 'var(--crush-bbq)',
+  Charcoal: 'var(--crush-charcoal)',
+  Oyster: 'var(--crush-oyster)',
+  Squid: 'var(--crush-squid)',
+  Ash: 'var(--crush-ash)',
+  Butter: 'var(--crush-butter)',
+  Sriracha: 'var(--crush-sriracha)',
+  Julep: 'var(--crush-julep)',
+  Zest: 'var(--crush-zest)',
+  Malibu: 'var(--crush-malibu)',
+  Dolly: 'var(--crush-dolly)',
+  Bok: 'var(--crush-bok)',
+  Charple: 'var(--crush-charple)',
+  Violet: 'var(--crush-violet)',
+  Mochi: 'var(--crush-mochi)',
+  Blush: 'var(--crush-blush)',
+  Guac: 'var(--crush-guac)',
+  Salmon: 'var(--crush-salmon)',
+  Cumin: 'var(--crush-cumin)'
 } as const
 
 export const TOOL_COLORS: Record<string, string> = {
@@ -53,6 +56,22 @@ export const TOOL_COLORS: Record<string, string> = {
 
 export const FONT_MONO = '"JetBrains Mono", "Noto Mono for Powerline", Menlo, Monaco, monospace'
 export const FONT_UI = '"Space Grotesk", sans-serif'
+/** Chat prose face — mono is reserved for code, commands and numbers. */
+export const FONT_PROSE = '"Inter Tight", -apple-system, "PingFang SC", sans-serif'
+
+/** Chat card palette (theme-aware CSS variables, see assets/index.css).
+ *  Shared by App's main card, Terminal's chat layer and HiveChat itself so
+ *  the three can never drift apart. */
+export const CHAT = {
+  bg: 'var(--chat-bg)',
+  ink: 'var(--chat-ink)',
+  ink2: 'var(--chat-ink-2)',
+  muted: 'var(--chat-muted)',
+  surface: 'var(--chat-surface)',
+  surface2: 'var(--chat-surface-2)',
+  accent: 'var(--chat-accent)',
+  codeInk: 'var(--chat-code-ink)',
+}
 
 /** Screen-only PII redaction. Masks strings (configured at runtime from
  *  the OS username plus any other patterns) so they don't surface in

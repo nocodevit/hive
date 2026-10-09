@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive 统一风格方案</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --canvas: #F3F0F8;
+  --card: #FFFFFF;
+  --ink: #1E1B2E;
+  --ink-2: #4A4560;
+  --muted: #8C87A0;
+  --faint: #B9B4C9;
+  --hover: #ECE8F4;
+  --accent: #7C3AED;
+  --accent-soft: #EFE7FD;
+  --ok: #22C55E;
+  --warn: #F59E0B;
+  --radius: 18px;
+  --radius-sm: 10px;
+  --gap: 10px;
+  --shadow: 0 1px 2px rgba(30,27,46,.04), 0 6px 20px rgba(30,27,46,.05);
+
+  --chat-bg: #17131F;
+  --chat-ink: #E9E5F2;
+  --chat-ink-2: #B7B0C8;
+  --chat-muted: #7D7690;
+  --chat-surface: #221C2D;
+  --chat-surface-2: #2A2337;
+  --chat-accent: #C4A6FA;
+  --chat-code-ink: #D9D2EA;
+}
+body[data-chat="light"] {
+  --chat-bg: #FFFFFF;
+  --chat-ink: #1E1B2E;
+  --chat-ink-2: #4A4560;
+  --chat-muted: #8C87A0;
+  --chat-surface: #F6F3FB;
+  --chat-surface-2: #EFEBF7;
+  --chat-accent: #7C3AED;
+  --chat-code-ink: #3B3550;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #E6E2EE;
+  font-family: 'Inter Tight', -apple-system, 'PingFang SC', sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  padding: 16px;
+}
+.bar {
+  max-width: 1400px; margin: 0 auto 12px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  font-size: 13px; color: var(--ink-2);
+}
+.bar strong { color: var(--ink); font-size: 15px; }
+.seg { display: inline-flex; background: var(--card); border-radius: 999px; padding: 3px; box-shadow: var(--shadow); }
+.seg button {
+  border: 0; background: transparent; font: inherit; font-size: 12px; font-weight: 600;
+  color: var(--muted); padding: 6px 14px; border-radius: 999px; cursor: pointer;
+}
+.seg button.on { background: var(--accent); color: #fff; }
+.note { color: var(--muted); font-size: 12px; }
+
+.window {
+  max-width: 1400px; height: 820px; margin: 0 auto;
+  background: var(--canvas); border-radius: 14px; overflow: hidden;
+  box-shadow: 0 30px 80px rgba(30,27,46,.18);
+  display: grid; grid-template-columns: 200px 236px 1fr 236px;
+  gap: var(--gap); padding: 0 var(--gap) var(--gap) 0;
+}
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+/* --- shared header: same height + baseline in every column --- */
+.head {
+  height: 52px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; flex-shrink: 0;
+}
+.head h2 { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+.head .sub { font-size: 12px; color: var(--muted); font-weight: 500; margin-left: 8px; }
+.icon-btn {
+  width: 28px; height: 28px; border-radius: 8px; border: 0; background: transparent;
+  display: inline-flex; align-items: center; justify-content: center; color: var(--muted); cursor: pointer;
+}
+.icon-btn:hover { background: var(--hover); color: var(--ink); }
+
+/* --- sidebar sits on the canvas, no card --- */
+.side { display: flex; flex-direction: column; padding-left: 10px; min-height: 0; }
+.side .traffic { height: 52px; display: flex; align-items: center; gap: 8px; padding-left: 8px; }
+.side .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.brand { display: flex; align-items: center; justify-content: space-between; padding: 0 8px 10px; }
+.brand b { font-size: 14px; font-weight: 700; }
+.brand span { font-size: 11px; color: var(--muted); margin-left: 6px; font-weight: 500; }
+.nav { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.nav a {
+  display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px;
+  font-size: 13px; color: var(--ink-2); text-decoration: none; font-weight: 500;
+}
+.nav a:hover { background: var(--hover); }
+.nav a.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); font-weight: 600; }
+.nav a .n { margin-left: auto; font-size: 11px; color: var(--muted); }
+.nav a .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+.nav a .dot.ok { background: var(--ok); }
+.side .foot { padding: 8px 0 4px; display: flex; flex-direction: column; gap: 2px; }
+
+/* --- cards --- */
+.card {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden; margin-top: var(--gap);
+}
+.list { padding: 0 8px; overflow: auto; flex: 1; }
+.group-label {
+  font-size: 11px; font-weight: 600; color: var(--muted); padding: 10px 10px 6px;
+  display: flex; justify-content: space-between;
+}
+.group-label a { color: var(--accent); text-decoration: none; font-weight: 600; }
+.agent {
+  display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; cursor: pointer;
+}
+.agent:hover { background: var(--hover); }
+.agent.on { background: var(--accent-soft); }
+.avatar {
+  width: 32px; height: 32px; border-radius: 10px; background: var(--canvas);
+  display: flex; align-items: center; justify-content: center; font-size: 16px; position: relative; flex-shrink: 0;
+}
+.avatar::after {
+  content: ''; position: absolute; right: -2px; bottom: -2px; width: 9px; height: 9px; border-radius: 50%;
+  background: var(--s, var(--faint)); border: 2px solid var(--card);
+}
+.agent.on .avatar::after { border-color: var(--accent-soft); }
+.agent .meta { min-width: 0; flex: 1; }
+.agent .name { font-size: 13px; font-weight: 600; display: flex; gap: 6px; align-items: center; }
+.agent .role { font-size: 11px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent .t { font-size: 11px; color: var(--muted); }
+.tag { font-size: 10px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--hover); color: var(--ink-2); }
+.add {
+  margin: 6px 8px 10px; padding: 9px 10px; border-radius: 12px; font-size: 13px; color: var(--muted);
+  display: flex; gap: 8px; align-items: center; font-weight: 500; cursor: pointer; text-decoration: none;
+}
+.add:hover { background: var(--hover); color: var(--ink); }
+
+/* --- chat --- */
+.chat { background: var(--chat-bg); color: var(--chat-ink); }
+.chat .head { color: var(--chat-ink); }
+.chat .head .sub { color: var(--chat-muted); }
+.tabs { display: inline-flex; gap: 2px; background: var(--chat-surface); padding: 3px; border-radius: 10px; }
+.tabs b {
+  font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 8px; color: var(--chat-muted); cursor: pointer;
+}
+.tabs b.on { background: var(--chat-surface-2); color: var(--chat-ink); }
+.chat .icon-btn { color: var(--chat-muted); }
+.chat .icon-btn:hover { background: var(--chat-surface); color: var(--chat-ink); }
+.stream { flex: 1; overflow: auto; padding: 8px 28px 16px; display: flex; flex-direction: column; gap: 18px; }
+.msg-user {
+  align-self: flex-end; max-width: 78%; background: var(--chat-surface-2); color: var(--chat-ink);
+  padding: 10px 14px; border-radius: 16px 16px 6px 16px; font-size: 14px; line-height: 1.6;
+}
+.msg-ai { font-size: 14px; line-height: 1.75; color: var(--chat-ink-2); max-width: 760px; }
+.msg-ai p { margin-bottom: 10px; }
+.msg-ai b { color: var(--chat-ink); font-weight: 600; }
+.msg-ai code {
+  font-family: 'JetBrains Mono', monospace; font-size: 12.5px; background: var(--chat-surface);
+  color: var(--chat-code-ink); padding: 1px 6px; border-radius: 6px;
+}
+.code {
+  background: var(--chat-surface); border-radius: 12px; padding: 12px 14px; margin: 4px 0 12px;
+  font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.7; color: var(--chat-code-ink);
+  position: relative;
+}
+.code .lang { position: absolute; top: 8px; right: 12px; font-size: 10px; color: var(--chat-muted); font-family: 'Inter Tight', sans-serif; font-weight: 600; }
+.items { display: flex; flex-direction: column; gap: 8px; margin: 6px 0 4px; }
+.item { display: flex; gap: 12px; background: var(--chat-surface); border-radius: 14px; padding: 12px 14px; }
+.item .k {
+  width: 22px; height: 22px; border-radius: 7px; background: var(--chat-surface-2); color: var(--chat-accent);
+  font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+}
+.tool {
+  display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--chat-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+.tool i { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.turn {
+  display: flex; gap: 14px; align-items: center; font-size: 11.5px; color: var(--chat-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+.turn span b { color: var(--chat-ink-2); font-weight: 500; }
+.turn .ok { color: var(--ok); font-family: 'Inter Tight', sans-serif; font-weight: 600; letter-spacing: .02em; }
+
+.composer { padding: 0 20px 16px; }
+.box {
+  background: var(--chat-surface); border-radius: 16px; padding: 12px 14px 10px;
+  display: flex; flex-direction: column; gap: 10px;
+}
+.box .ph { font-size: 14px; color: var(--chat-muted); min-height: 22px; }
+.box .row { display: flex; align-items: center; gap: 8px; }
+.pill {
+  font-size: 11.5px; font-weight: 600; color: var(--chat-muted); background: var(--chat-surface-2);
+  padding: 4px 10px; border-radius: 999px; display: inline-flex; gap: 6px; align-items: center;
+}
+.pill.mic { padding: 4px 8px; }
+.ctx { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--chat-muted); font-family: 'JetBrains Mono', monospace; }
+.ctx .track { width: 54px; height: 4px; border-radius: 4px; background: var(--chat-surface-2); overflow: hidden; }
+.ctx .track i { display: block; height: 100%; width: 29%; background: var(--chat-accent); border-radius: 4px; }
+.send {
+  margin-left: auto; width: 30px; height: 30px; border-radius: 10px; background: var(--accent); color: #fff;
+  display: flex; align-items: center; justify-content: center;
+}
+.status-line {
+  display: flex; gap: 14px; padding: 8px 4px 0; font-size: 11px; color: var(--chat-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* --- files --- */
+.search {
+  margin: 0 12px 6px; background: var(--canvas); border-radius: 10px; padding: 8px 12px;
+  font-size: 12.5px; color: var(--muted);
+}
+.tree { flex: 1; overflow: auto; padding: 4px 8px; font-size: 12.5px; }
+.tree div { padding: 5px 8px; border-radius: 8px; display: flex; gap: 8px; align-items: center; color: var(--ink-2); }
+.tree div:hover { background: var(--hover); }
+.tree .d1 { padding-left: 26px; } .tree .d2 { padding-left: 44px; }
+.tree .chev { color: var(--faint); width: 10px; font-size: 10px; }
+.files-foot { padding: 10px 16px 12px; font-size: 11px; color: var(--muted); }
+
+.legend {
+  max-width: 1400px; margin: 16px auto 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.legend div { background: var(--card); border-radius: 14px; padding: 12px 14px; font-size: 12.5px; line-height: 1.6; color: var(--ink-2); box-shadow: var(--shadow); }
+.legend b { display: block; color: var(--ink); font-size: 13px; margin-bottom: 2px; }
+</style>
+</head>
+<body data-chat="dark">
+
+<div class="bar">
+  <strong>Hive 统一风格方案</strong>
+  <div class="seg" role="group" aria-label="Chat 底色">
+    <button class="on" data-v="dark">方案 A · chat 保留深色</button>
+    <button data-v="light">方案 B · 全部浅色</button>
+  </div>
+  <span class="note">静态效果图，内容是示意。</span>
+</div>
+
+<div class="window">
+  <!-- sidebar: on canvas -->
+  <aside class="side">
+    <div class="traffic"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+    <div class="brand"><div><b>Hive</b><span>v2.20.7</span></div>
+      <button class="icon-btn" aria-label="主题"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+    </div>
+    <nav class="nav">
+      <a href="#"><span class="dot ok"></span>PSLE Alex<span class="n">7</span></a>
+      <a href="#"><span class="dot"></span>EPC Agent<span class="n">2</span></a>
+      <a href="#" class="on"><span class="dot ok"></span>Cube v2<span class="n">4</span></a>
+      <a href="#"><span class="dot ok"></span>Cube Support<span class="n">1</span></a>
+      <a href="#"><span class="dot"></span>Cube<span class="n">1</span></a>
+      <a href="#"><span class="dot"></span>Jira issue widget<span class="n">1</span></a>
+      <a href="#"><span class="dot ok"></span>SIMply Connect<span class="n">3</span></a>
+      <a href="#"><span class="dot"></span>Hive<span class="n">2</span></a>
+      <a href="#"><span class="dot"></span>Sphere2 POC<span class="n">3</span></a>
+      <a href="#"><span class="dot"></span>Sphere 2<span class="n">1</span></a>
+      <a href="#"><span class="dot"></span>MNO<span class="n">1</span></a>
+      <a href="#"><span class="dot"></span>AI Interview</a>
+      <a href="#"><span class="dot"></span>Supplier MCP<span class="n">1</span></a>
+    </nav>
+    <div class="foot">
+      <a class="add" style="margin:0" href="#">▦&nbsp; Overview</a>
+      <a class="add" style="margin:0" href="#">＋&nbsp; Add Project</a>
+    </div>
+  </aside>
+
+  <!-- agents card -->
+  <section class="card">
+    <div class="head"><h2>Cube v2<span class="sub">4 agents</span></h2>
+      <button class="icon-btn" aria-label="更多">⋯</button></div>
+    <div class="list">
+      <div class="group-label"><span>R&amp;D</span><a href="#">+ Team</a></div>
+      <div class="agent on"><div class="avatar" style="--s:var(--ok)">🧑‍💻</div>
+        <div class="meta"><div class="name">Missy <span class="tag">250+heatmap</span></div><div class="role">Engineering</div></div><span class="t">1h</span></div>
+      <div class="agent"><div class="avatar" style="--s:var(--ok)">👩‍🔧</div>
+        <div class="meta"><div class="name">Wendy <span class="tag">sim/esim unity</span></div><div class="role">Engineering</div></div><span class="t">1h</span></div>
+      <div class="agent"><div class="avatar" style="--s:var(--warn)">🕵️</div>
+        <div class="meta"><div class="name">Nancy <span class="tag">Smoke test</span></div><div class="role">QA</div></div><span class="t">2h</span></div>
+      <div class="agent"><div class="avatar">🧪</div>
+        <div class="meta"><div class="name">Sunzi <span class="tag">Prod</span></div><div class="role">QA</div></div><span class="t">1h</span></div>
+    </div>
+    <div class="add">＋&nbsp; New Agent</div>
+  </section>
+
+  <!-- chat card -->
+  <section class="card chat">
+    <div class="head">
+      <h2>Missy<span class="sub">#252 merged (!829): LPA prefix…</span></h2>
+      <div style="display:flex;gap:6px;align-items:center">
+        <div class="tabs"><b class="on">Chat</b><b>Editor</b><b>Logs</b></div>
+        <button class="icon-btn" aria-label="刷新">↻</button>
+      </div>
+    </div>
+    <div class="stream">
+      <div class="msg-user">mock e2e 那块现在什么状态？还挂着哪些事？</div>
+      <div class="tool"><i></i>Bash · git log --oneline -5 · 0.4s</div>
+      <div class="msg-ai">
+        <p>merge → develop 会自动触发 Jenkins 部署 UAT，几分钟后可以这样确认是不是在跑这次的合并：</p>
+        <div class="code"><span class="lang">bash</span>curl -s https://cube-new.io/ | grep app-commit</div>
+        <p><b>这次交付的</b>：SIM 列表 transfer 里，手打 ICCID 超过 500 不再静默只发前 500，选「全部 SIM」时多一道带总数和目标组织的确认。22 条测试，评审 8 分、零 finding。</p>
+        <p><b>还挂着的两件</b>（都在等你一句话）：</p>
+        <div class="items">
+          <div class="item"><span class="k">1</span><div><b>mobile</b> — #183 已存在且比今天的审计更彻底，不用开新单。要答的问题是：<b>要迁过来的客户会用手机访问吗？</b></div></div>
+          <div class="item"><span class="k">2</span><div><b>!769 的绕过留痕</b> — develop 里搜 <code>769</code> 仍是 0，44/54 个 <code>probe-*.mjs</code> 缺 <code>finally</code>。</div></div>
+        </div>
+      </div>
+      <div class="turn"><span class="ok">✓ Done</span><span>cost <b>$30.39</b></span><span>40.2s</span><span>4 turns</span><span>cache <b>1173k</b></span></div>
+    </div>
+    <div class="composer">
+      <div class="box">
+        <div class="ph">给 Missy 发消息…</div>
+        <div class="row">
+          <span class="pill mic">🎙 中</span>
+          <span class="pill">Streaming</span>
+          <span class="ctx">context <span class="track"><i></i></span> 29%</span>
+          <span class="send">↑</span>
+        </div>
+      </div>
+      <div class="status-line"><span>opus-5 · 1M</span><span>5h 27%</span><span>7d 29%</span><span>resets 6:10pm</span></div>
+    </div>
+  </section>
+
+  <!-- files card -->
+  <section class="card">
+    <div class="head"><h2>Files<span class="sub">work</span></h2>
+      <button class="icon-btn" aria-label="刷新">↻</button></div>
+    <div class="search">Search files…</div>
+    <div class="tree">
+      <div><span class="chev">▾</span>📁 .claude</div>
+      <div class="d1"><span class="chev">▸</span>📁 agents</div>
+      <div class="d1"><span class="chev">▸</span>📁 hooks</div>
+      <div class="d1"><span class="chev">▸</span>📁 skills</div>
+      <div class="d1"><span class="chev"></span>📄 settings.json</div>
+      <div><span class="chev">▸</span>📁 .gitlab</div>
+      <div><span class="chev">▸</span>📁 .husky</div>
+      <div><span class="chev">▾</span>📁 coverage</div>
+      <div class="d1"><span class="chev">▸</span>📁 api</div>
+      <div class="d1"><span class="chev">▸</span>📁 app</div>
+      <div class="d1"><span class="chev">▸</span>📁 components</div>
+      <div class="d1"><span class="chev">▸</span>📁 features</div>
+      <div><span class="chev">▸</span>📁 src</div>
+    </div>
+    <div class="files-foot">2,833 files · ~/FrontEndProjects/cube</div>
+  </section>
+</div>
+
+<div class="legend">
+  <div><b>一块画布 + 浮起的卡片</b>整窗只用一种浅底；agent、chat、文件三张卡同样 18px 圆角、10px 间距，靠留白分区，没有分割线。</div>
+  <div><b>标题统一</b>每栏标题一样高（52px）、一样字号、同一条基线；副信息（人数、分支）用灰色小字跟在后面。</div>
+  <div><b>正文不用等宽字</b>chat 正文改无衬线，等宽只留给代码、命令、数字；用户消息是气泡，不再是紫色粗框。</div>
+  <div><b>颜色收敛</b>只留一个紫色做主色，其余灰阶；状态色只出现在头像角上的小圆点。</div>
+</div>
+
+<script>
+document.querySelectorAll('.seg button').forEach(function (b) {
+  b.addEventListener('click', function () {
+    document.querySelectorAll('.seg button').forEach(function (x) { x.classList.remove('on') });
+    b.classList.add('on');
+    document.body.setAttribute('data-chat', b.getAttribute('data-v'));
+  });
+});
+</script>
+</body>
+</html>

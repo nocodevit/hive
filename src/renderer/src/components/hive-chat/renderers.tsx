@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Highlight, themes } from 'prism-react-renderer'
 import { Check, Pencil } from 'lucide-react'
-import { CRUSH, FONT_MONO, TOOL_COLORS, redact } from './crush-styles'
+import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, TOOL_COLORS, redact } from './crush-styles'
 import { parseStructuredOutput } from './structured-format'
 import type { TimelineEntry } from './types'
 
@@ -173,7 +173,7 @@ const CRUSH_PRISM_THEME = {
 
 /** Crush-styled markdown renderer shared by user + assistant messages. */
 const MD_COMPONENTS: Record<string, any> = {
-  strong: ({ children }: any) => <strong style={{ color: CRUSH.Butter, fontWeight: 700 }}>{children}</strong>,
+  strong: ({ children }: any) => <strong style={{ color: CHAT.ink, fontWeight: 600 }}>{children}</strong>,
   em: ({ children }: any) => <em style={{ color: CRUSH.Ash, fontStyle: 'italic' }}>{children}</em>,
   code: ({ className, children }: any) => {
     const text = React.Children.toArray(children).map(String).join('')
@@ -183,29 +183,29 @@ const MD_COMPONENTS: Record<string, any> = {
       const code = text.replace(/\n$/, '')
       return <CodeBlockWithCopy code={code} language={lang} />
     }
-    return <code style={{ color: CRUSH.Bok, background: CRUSH.BBQ, padding: '0 4px', borderRadius: 4, fontFamily: FONT_MONO, fontSize: 12 }}>{children}</code>
+    return <code style={{ color: CHAT.codeInk, background: CHAT.surface, padding: '1px 6px', borderRadius: 6, fontFamily: FONT_MONO, fontSize: '0.9em' }}>{children}</code>
   },
   pre: ({ children }: any) => (
     <pre style={{
-      background: CRUSH.BBQ,
-      borderLeft: `3px solid ${CRUSH.Charple}`,
-      borderRadius: 8,
-      padding: '8px 12px',
-      fontSize: 12,
+      background: CHAT.surface,
+      borderRadius: 12,
+      padding: '12px 14px',
+      fontSize: 12.5,
+      lineHeight: 1.7,
       overflow: 'auto',
-      color: CRUSH.Ash,
-      margin: '4px 0',
+      color: CHAT.codeInk,
+      margin: '6px 0 12px',
       fontFamily: FONT_MONO
     }}>{children}</pre>
   ),
   ul: ({ children }: any) => <ul style={{ paddingLeft: 18, margin: '4px 0' }}>{children}</ul>,
   ol: ({ children }: any) => <ol style={{ paddingLeft: 18, margin: '4px 0' }}>{children}</ol>,
-  li: ({ children }: any) => <li style={{ color: CRUSH.Ash, marginBottom: 2 }}>{children}</li>,
-  p: ({ children }: any) => <p style={{ margin: '4px 0', color: CRUSH.Ash }}>{children}</p>,
+  li: ({ children }: any) => <li style={{ color: CHAT.ink2, marginBottom: 4, lineHeight: 1.75 }}>{children}</li>,
+  p: ({ children }: any) => <p style={{ margin: '0 0 10px', color: CHAT.ink2, lineHeight: 1.75 }}>{children}</p>,
   a: ({ href, children }: any) => <a href={href} target="_blank" rel="noopener noreferrer" style={{ color: CRUSH.Malibu, textDecoration: 'underline' }}>{children}</a>,
-  h1: ({ children }: any) => <h3 style={{ color: CRUSH.Butter, fontSize: 15, margin: '6px 0 4px' }}>{children}</h3>,
-  h2: ({ children }: any) => <h4 style={{ color: CRUSH.Butter, fontSize: 14, margin: '6px 0 4px' }}>{children}</h4>,
-  h3: ({ children }: any) => <h5 style={{ color: CRUSH.Butter, fontSize: 'var(--chat-fs, 13px)', margin: '6px 0 4px' }}>{children}</h5>,
+  h1: ({ children }: any) => <h3 style={{ color: CHAT.ink, fontSize: 16, fontWeight: 600, margin: '12px 0 6px' }}>{children}</h3>,
+  h2: ({ children }: any) => <h4 style={{ color: CHAT.ink, fontSize: 15, fontWeight: 600, margin: '12px 0 6px' }}>{children}</h4>,
+  h3: ({ children }: any) => <h5 style={{ color: CHAT.ink, fontSize: 'var(--chat-fs, 14px)', fontWeight: 600, margin: '10px 0 4px' }}>{children}</h5>,
   blockquote: ({ children }: any) => <blockquote style={{ borderLeft: `2px solid ${CRUSH.Charple}`, paddingLeft: 10, margin: '4px 0', color: CRUSH.Squid }}>{children}</blockquote>,
   hr: () => <hr style={{ border: 'none', borderTop: `1px solid ${CRUSH.Charcoal}`, margin: '6px 0' }} />,
   table: ({ children }: any) => (
@@ -264,9 +264,9 @@ function CodeBlockWithCopy({ code, language }: { code: string; language: string 
         style={{
           position: 'absolute' as const,
           top: 4, right: 6, zIndex: 1,
-          background: copied ? CRUSH.Julep : 'rgba(45,44,53,0.85)',
-          border: `1px solid ${copied ? CRUSH.Julep : CRUSH.Charcoal}`,
-          color: copied ? CRUSH.Pepper : CRUSH.Squid,
+          background: copied ? CRUSH.Julep : CHAT.surface2,
+          border: 'none',
+          color: copied ? CRUSH.Pepper : CHAT.muted,
           padding: '1px 8px',
           borderRadius: 6,
           fontFamily: FONT_MONO, fontSize: 10,
@@ -300,7 +300,7 @@ function CodeBlockWithCopy({ code, language }: { code: string; language: string 
 
 function CrushMarkdown({ text }: { text: string }) {
   return (
-    <div className="hive-chat-md" style={{ fontFamily: FONT_MONO, fontSize: 'var(--chat-fs, 13px)', lineHeight: 1.55 }}>
+    <div className="hive-chat-md" style={{ fontFamily: FONT_PROSE, fontSize: 'var(--chat-fs, 14px)', lineHeight: 1.75 }}>
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={MD_COMPONENTS}>{redact(text)}</ReactMarkdown>
     </div>
   )
@@ -383,22 +383,21 @@ export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRe
   }
   return (
     <div className="hive-user-msg" style={{
-      background: 'rgba(255, 96, 255, 0.14)',
-      border: `1px solid ${CRUSH.Dolly}`,
-      borderRadius: 14,
-      padding: '7px 11px',
-      margin: '6px 0',
+      background: CHAT.surface2,
+      borderRadius: '16px 16px 6px 16px',
+      padding: '10px 14px',
+      margin: '10px 0 14px auto',
+      width: 'fit-content',
+      maxWidth: '78%',
       display: 'flex',
       alignItems: 'center',
       gap: 8,
-      fontFamily: FONT_MONO,
+      fontFamily: FONT_PROSE,
+      fontSize: 'var(--chat-fs, 14px)',
+      lineHeight: 1.6,
       position: 'relative' as const
     }}>
-      {/* Julep ❯ per ui-preview-decorations.html — the design spec
-          (line 131-139) specifies the prompt glyph is mint green
-          regardless of the bubble's bg. Dolly was a regression. */}
-      <span style={{ color: CRUSH.Julep, fontWeight: 700, fontSize: 16 }}>❯</span>
-      <span style={{ color: CRUSH.Butter, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(parsed.text)}</span>
+      <span style={{ color: CHAT.ink, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(parsed.text)}</span>
       {onRecall && (
         <button
           onClick={() => onRecall(parsed.text)}
@@ -447,23 +446,26 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
   return (
     <>
       <PlainAssistantText text={parsed.body} />
-      <div style={{ margin: '4px 0 10px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ margin: '6px 0 12px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
         {parsed.choices.map(c => (
           <div
             key={c.num}
             className="hive-choice-row"
             style={{
-              display: 'flex', alignItems: 'flex-start', gap: 10,
-              padding: '6px 12px',
-              border: `1px solid ${CRUSH.Charcoal}`,
-              borderRadius: 10,
-              background: 'transparent',
-              fontFamily: FONT_MONO, fontSize: 'var(--chat-fs, 13px)',
-              color: CRUSH.Ash,
+              display: 'flex', alignItems: 'flex-start', gap: 12,
+              padding: '12px 14px',
+              borderRadius: 14,
+              background: CHAT.surface,
+              fontFamily: FONT_PROSE, fontSize: 'var(--chat-fs, 14px)',
+              color: CHAT.ink2,
               transition: 'background 120ms ease, border-color 120ms ease'
             }}
           >
-            <span style={{ color: CRUSH.Charple, fontWeight: 700, minWidth: 16, lineHeight: 1.55 }}>{c.num}.</span>
+            <span style={{
+              width: 22, height: 22, borderRadius: 7, background: CHAT.surface2, color: CHAT.accent,
+              fontSize: 12, fontWeight: 700, display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0, marginTop: 2
+            }}>{c.num}</span>
             <span style={{ flex: 1, minWidth: 0 }}><CrushMarkdown text={c.label} /></span>
             <span className="hive-choice-actions" style={{ display: 'inline-flex', gap: 4, opacity: 0, transition: 'opacity 120ms ease' }}>
               {onChoose && (
@@ -536,14 +538,11 @@ export function detectSummary(text: string): { title: string; body: string } | n
 
 function PlainAssistantText({ text }: { text: string }) {
   const summary = detectSummary(text)
-  // ● Julep dot prefixes every assistant text — same family as the
-  // Julep ❯ on user input, signaling "claude is speaking" symmetric
-  // to "user is speaking". Tool calls get their own colored ● in
-  // ToolBlock; this is for plain-text reply.
+  // Plain prose, no speaker marker: the user's turn is a right-aligned
+  // bubble, so anything left-aligned reads as Claude.
   return (
-    <div style={{ color: CRUSH.Ash, margin: '6px 0', padding: '2px 0' }}>
+    <div style={{ color: CHAT.ink2, margin: '6px 0', padding: '2px 0', maxWidth: 760 }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-        <span style={{ color: CRUSH.Julep, fontWeight: 700, fontSize: 14, lineHeight: 1.55, flexShrink: 0 }}>●</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           {summary ? (
             <>
@@ -1826,46 +1825,42 @@ export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, 
         : CRUSH.Squid
   return (
     <div style={{
-      margin: '8px 0',
-      borderLeft: `3px solid ${abnormal ? reasonColor : CRUSH.Charple}`,
-      background: CRUSH.BBQ,
-      borderRadius: 8,
-      padding: '6px 12px',
-      fontFamily: FONT_MONO, fontSize: 11,
-      color: CRUSH.Squid,
+      margin: '6px 0 16px',
+      fontFamily: FONT_MONO, fontSize: 11.5,
+      color: CHAT.muted,
       display: 'flex', flexWrap: 'wrap', gap: '4px 14px', alignItems: 'center'
     }}>
       <span style={{
-        color: abnormal ? reasonColor : CRUSH.Charple,
-        fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontSize: 10
-      }}>{abnormal ? `stopped: ${stopReason}` : 'turn complete'}</span>
+        color: abnormal ? reasonColor : CRUSH.Julep,
+        fontFamily: FONT_PROSE, fontWeight: 600, letterSpacing: '0.02em', fontSize: 12
+      }}>{abnormal ? `stopped: ${stopReason}` : '✓ Done'}</span>
       {costUSD != null && (
         <span>
-          <span style={{ color: CRUSH.Oyster }}>cost </span>
-          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>${costUSD.toFixed(4)}</span>
+          <span>cost </span>
+          <span style={{ color: CHAT.ink2, fontWeight: 500 }}>${costUSD.toFixed(4)}</span>
         </span>
       )}
       {durationMs != null && (
         <span>
-          <span style={{ color: CRUSH.Oyster }}>dur </span>
-          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>{fmtMs(durationMs)}</span>
+          <span>dur </span>
+          <span style={{ color: CHAT.ink2, fontWeight: 500 }}>{fmtMs(durationMs)}</span>
         </span>
       )}
       {numTurns != null && (
         <span>
-          <span style={{ color: CRUSH.Oyster }}>turns </span>
-          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>{numTurns}</span>
+          <span>turns </span>
+          <span style={{ color: CHAT.ink2, fontWeight: 500 }}>{numTurns}</span>
         </span>
       )}
       {(inputTokens != null || outputTokens != null) && (
         <span>
-          <span style={{ color: CRUSH.Oyster }}>tokens </span>
-          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>↓{fmtK(inputTokens)}</span>
-          <span style={{ color: CRUSH.Oyster }}> / </span>
-          <span style={{ color: CRUSH.Butter, fontWeight: 600 }}>↑{fmtK(outputTokens)}</span>
+          <span>tokens </span>
+          <span style={{ color: CHAT.ink2, fontWeight: 500 }}>↓{fmtK(inputTokens)}</span>
+          <span> / </span>
+          <span style={{ color: CHAT.ink2, fontWeight: 500 }}>↑{fmtK(outputTokens)}</span>
           {cacheReadTokens != null && cacheReadTokens > 0 && (
             <>
-              <span style={{ color: CRUSH.Oyster }}> · cache </span>
+              <span> · cache </span>
               <span style={{ color: CRUSH.Bok, fontWeight: 600 }}>{fmtK(cacheReadTokens)}</span>
             </>
           )}
@@ -1922,7 +1917,7 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
       }}>
         <div style={{
           position: 'absolute' as const, left: -8, top: 6,
-          background: '#150e24',
+          background: CHAT.bg,
           color: CRUSH.Mochi,
           fontSize: 9, fontWeight: 700, letterSpacing: '0.06em',
           padding: '0 4px', borderRadius: 4
