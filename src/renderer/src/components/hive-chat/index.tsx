@@ -4200,7 +4200,7 @@ function AutoSendPill({ on }: { on: boolean }) {
     <CrushTooltip text={on
       ? 'Auto-send ON · dictated text is sent after you pause'
       : 'Auto-send OFF · dictated text waits for Enter'}>
-      <button onClick={() => setAutoSendPrefs({ enabled: !on })} aria-pressed={on} style={pillStyle(on)}>自动发送</button>
+      <button onClick={() => setAutoSendPrefs({ enabled: !on })} aria-pressed={on} style={pillStyle(on)}>Auto send</button>
     </CrushTooltip>
   )
 }
