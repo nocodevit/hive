@@ -119,7 +119,7 @@ test('mic pill: start, preview, finals land in the input in order, stop', async 
 
   // Nothing was sent to the agent — dictation only fills the box (a send
   // would have emptied it), and Send is there for the user to press.
-  await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled()
+  await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled()
   // Auto-send is off by default: no countdown, however long the pause.
   await expect(page.getByRole('button', { name: 'Auto send' })).toHaveAttribute('aria-pressed', 'false')
   await expect(page.getByRole('button', { name: /秒后发送/ })).toHaveCount(0)
