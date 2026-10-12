@@ -6,6 +6,7 @@
 // unavailable.
 
 import { readFileSync, unlinkSync } from 'fs'
+import { spawn } from 'child_process'
 
 // Default is the cheapest model, which is accurate on full sentences. In
 // testing it misheard short, quiet phrases (a 2-second "说好了" came back
@@ -148,5 +149,60 @@ export function createSpeechLineHandler(deps: {
     },
     /** Resolves once every utterance handed over so far has been sent. */
     idle: () => queue
+  }
+}
+
+/**
+ * Run the hive-speech helper and feed its stdout to `onLine`, one complete
+ * line at a time. `stop()` asks it to finish (it hands over the sentence
+ * in progress first) and resolves once its output is fully read;
+ * `onExit(expected)` tells an exit the user asked for from a crash.
+ */
+export function startSpeechHelper(bin: string, args: string[], hooks: {
+  onLine: (line: string) => void
+  onExit: (expected: boolean, lastError: string) => void
+}) {
+  const child = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] })
+  let pending = ''
+  let lastError = ''
+  let stopping = false
+  let closed = false
+  const waiters: Array<() => void> = []
+  // Decode as streams: a chunk boundary can fall inside a Chinese character.
+  child.stdout.setEncoding('utf8')
+  child.stderr.setEncoding('utf8')
+  child.stdout.on('data', (data: string) => {
+    pending += data
+    const parts = pending.split('\n')
+    pending = parts.pop() || ''
+    for (const line of parts) if (line) hooks.onLine(line)
+  })
+  child.stderr.on('data', (data: string) => {
+    for (const line of data.split('\n')) if (line.startsWith('error:')) lastError = line.slice(6).trim()
+  })
+  const finish = () => {
+    if (closed) return
+    closed = true
+    if (pending) { hooks.onLine(pending); pending = '' }
+    hooks.onExit(stopping, lastError)
+    for (const w of waiters.splice(0)) w()
+  }
+  child.on('close', finish)
+  child.on('error', err => { lastError = err.message; finish() })
+  const closedPromise = () => new Promise<void>(resolve => (closed ? resolve() : waiters.push(resolve)))
+  return {
+    /** Graceful: SIGTERM, wait for the hand-over; SIGKILL if it hangs. */
+    async stop(graceMs = 3000) {
+      stopping = true
+      if (!closed) child.kill('SIGTERM')
+      const timer = setTimeout(() => { if (!closed) child.kill('SIGKILL') }, graceMs)
+      await closedPromise()
+      clearTimeout(timer)
+    },
+    /** Immediate, for app quit — never leave a process holding the mic. */
+    kill() {
+      stopping = true
+      if (!closed) child.kill('SIGKILL')
+    }
   }
 }

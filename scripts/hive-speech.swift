@@ -18,6 +18,9 @@ import AVFoundation
 // argv[1] = BCP-47 locale for the preview (zh-CN | en-US), default zh-CN.
 // `--file <16-bit mono wav>` replaces the microphone with a recording and
 // skips the preview; it exists so the segmentation can be tested.
+// `--no-preview` records from the microphone without asking macOS for
+// speech recognition (diagnostics: that request aborts any process whose
+// host app lacks NSSpeechRecognitionUsageDescription).
 
 guard #available(macOS 10.15, *) else {
     fputs("error: macOS 10.15+ required\n", stderr)
@@ -28,7 +31,8 @@ let argv = CommandLine.arguments
 let fileIndex = argv.firstIndex(of: "--file")
 let inputFile = fileIndex.flatMap { $0 + 1 < argv.count ? argv[$0 + 1] : nil }
 let localeId = argv.count > 1 && !argv[1].hasPrefix("--") ? argv[1] : "zh-CN"
-let recognizer = inputFile == nil ? SFSpeechRecognizer(locale: Locale(identifier: localeId)) : nil
+let wantPreview = inputFile == nil && !argv.contains("--no-preview")
+let recognizer = wantPreview ? SFSpeechRecognizer(locale: Locale(identifier: localeId)) : nil
 
 // Utterance segmentation (energy based).
 let startMs = 60.0            // this much speech in a row opens an utterance
@@ -206,13 +210,15 @@ if let inputFile = inputFile {
 
     // The preview is optional: without speech-recognition permission the
     // helper still records utterances for cloud transcription.
-    SFSpeechRecognizer.requestAuthorization { status in
-        state.async {
-            if status == .authorized {
-                previewAllowed = true
-                startPreview()
-            } else {
-                fputs("note: live preview unavailable (speech recognition status \(status.rawValue))\n", stderr)
+    if wantPreview {
+        SFSpeechRecognizer.requestAuthorization { status in
+            state.async {
+                if status == .authorized {
+                    previewAllowed = true
+                    startPreview()
+                } else {
+                    fputs("note: live preview unavailable (speech recognition status \(status.rawValue))\n", stderr)
+                }
             }
         }
     }

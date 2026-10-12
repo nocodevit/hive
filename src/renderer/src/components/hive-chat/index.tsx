@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, redact, configureRedact } from './crush-styles'
-import { useSpeechLang, speechLangLabel } from '../../lib/speech-lang'
+import { useSpeechLang, speechLangLabel, joinVoiceText } from '../../lib/speech-lang'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
 import { ctxPctFromPrev, restartResumeMode } from './bulkRestart'
 import { expectsPasteCode } from './authPrompt'
@@ -1215,17 +1215,21 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       if (!ev.detail || ev.detail.agentId !== myAgentId) return
       const text = ev.detail.text.trim()
       if (!text) return
-      setInput(prev => {
-        if (!prev) return text
-        // Insert a space before the new chunk unless prev already ends
-        // in whitespace or punctuation that flows naturally.
-        const needsSpace = !/[\s,.!?;:，。！？；：]$/.test(prev)
-        return prev + (needsSpace ? ' ' : '') + text
-      })
+      setInput(prev => joinVoiceText(prev, text))
     }
     window.addEventListener('hive:voice-final', handler)
     return () => window.removeEventListener('hive:voice-final', handler)
   }, [id])
+
+  // Text that arrives without typing (voice, recall) must grow the box too;
+  // onChange only covers keystrokes.
+  useEffect(() => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const oneLine = Math.ceil((baseFontSize + 1) * 1.4)
+    ta.style.height = 'auto'
+    ta.style.height = Math.max(oneLine, Math.min(ta.scrollHeight, oneLine * 5)) + 'px'
+  }, [input, baseFontSize])
 
   // A message typed into this chat from outside its own input box (butler
   // API). Main already wrote it to claude's stdin; mirror the local send
@@ -4119,9 +4123,9 @@ const pillStyle = (active = false): React.CSSProperties => ({
  *  answers `hive:voice-toggle` / reports `hive:voice-state`. */
 function VoicePill({ agentId }: { agentId: string }) {
   const [lang, toggleLang] = useSpeechLang()
-  const [state, setState] = useState<{ listening: boolean; partial: string }>({ listening: false, partial: '' })
+  const [state, setState] = useState<{ listening: boolean; partial: string; notice?: string }>({ listening: false, partial: '' })
   useEffect(() => {
-    const onState = (e: Event) => setState((e as CustomEvent<{ listening: boolean; partial: string }>).detail)
+    const onState = (e: Event) => setState((e as CustomEvent<{ listening: boolean; partial: string; notice?: string }>).detail)
     window.addEventListener('hive:voice-state', onState)
     return () => window.removeEventListener('hive:voice-state', onState)
   }, [])
@@ -4140,6 +4144,9 @@ function VoicePill({ agentId }: { agentId: string }) {
       >{speechLangLabel(lang)}</button>
       {state.listening && state.partial && (
         <span style={{ padding: '0 10px 0 2px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{state.partial}</span>
+      )}
+      {state.notice && (
+        <span role="status" title={state.notice} style={{ padding: '0 10px 0 2px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, color: CRUSH.Zest }}>⚠ {state.notice}</span>
       )}
     </span>
   )
