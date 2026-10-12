@@ -50,6 +50,9 @@ declare global {
         createIntegration: (repoPath: string, batchNum: number, workerBranches: string[]) =>
           Promise<{ ok: boolean; branch?: string; results?: any[]; error?: string }>
       }
+      butler: {
+        onStartAgent: (cb: (payload: { agentId: string; mode: 'resume' | 'new' }) => void) => () => void
+      }
       speech: {
         start: (lang?: 'zh-CN' | 'en-US') => Promise<{ ok: boolean; error?: string }>
         stop: () => Promise<{ ok: boolean }>
