@@ -9,8 +9,11 @@ import AVFoundation
 // Listens on the default microphone and writes to stdout, one line each:
 //   partial:<text>            live preview of the utterance in progress
 //                             (macOS SFSpeechRecognizer, single language)
-//   audio:<wav path>\t<text>  one finished utterance: its recording, plus
+//   speaking:                 an utterance just opened
+//   audio:<wav path>\t<text>  that utterance finished: its recording, plus
 //                             the macOS transcript as a fallback
+//   dropped:                  that utterance was only noise; nothing follows
+// Every `speaking:` is answered by exactly one `audio:` or `dropped:`.
 //
 // Hive's main process turns each `audio:` line into the final text (cloud
 // transcription when configured, else the fallback) and deletes the file.
@@ -118,7 +121,7 @@ func writeWav(_ samples: [Float]) -> String? {
 }
 
 func handOver() {
-    guard speechMs >= minSpeechMs, let path = writeWav(utterance) else { return }
+    guard speechMs >= minSpeechMs, let path = writeWav(utterance) else { emit("dropped:"); return }
     emit("audio:\(path)\t\(lastTranscript.replacingOccurrences(of: "\n", with: " "))")
 }
 
@@ -155,6 +158,7 @@ func process(_ samples: [Float]) {
         if preRoll.count > keep { preRoll.removeFirst(preRoll.count - keep) }
         pendingStartMs = loud ? pendingStartMs + ms : 0
         if pendingStartMs >= startMs {
+            emit("speaking:")
             inSpeech = true
             utterance = preRoll
             speechMs = pendingStartMs

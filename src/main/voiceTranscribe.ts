@@ -143,8 +143,9 @@ export function createSpeechLineHandler(deps: {
       queue = queue.then(async () => {
         const text = await deps.resolve(audio, previousText).catch(() => audio.fallback)
         if (text) previousText = text
-        // Empty text still clears the live preview of that utterance.
-        deps.send(text ? `final:${text}` : 'partial:')
+        // Always answer the utterance, even with nothing: the renderer
+        // counts finals to know when all spoken text has arrived.
+        deps.send(`final:${text}`)
       })
     },
     /** Resolves once every utterance handed over so far has been sent. */

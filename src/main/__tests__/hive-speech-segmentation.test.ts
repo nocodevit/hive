@@ -39,13 +39,15 @@ describe.skipIf(process.platform !== 'darwin' || !existsSync(HELPER))('hive-spee
   const made: string[] = []
   afterEach(() => { for (const p of made.splice(0)) rmSync(p, { recursive: true, force: true }) })
 
+  let lastKinds: string[] = []
   function run(spans: Array<[number, number]>): string[] {
     const dir = mkdtempSync(join(tmpdir(), 'hive-speech-test-'))
     made.push(dir)
     const input = join(dir, 'in.wav')
     writeFileSync(input, synth(spans))
-    const out = execFileSync(HELPER, ['--file', input], { encoding: 'utf-8' })
-    const paths = out.split('\n').filter(l => l.startsWith('audio:')).map(l => l.slice(6).split('\t')[0])
+    const lines = execFileSync(HELPER, ['--file', input], { encoding: 'utf-8' }).split('\n').filter(Boolean)
+    lastKinds = lines.map(l => l.slice(0, l.indexOf(':')))
+    const paths = lines.filter(l => l.startsWith('audio:')).map(l => l.slice(6).split('\t')[0])
     made.push(...paths)
     return paths
   }
@@ -58,6 +60,8 @@ describe.skipIf(process.platform !== 'darwin' || !existsSync(HELPER))('hive-spee
     expect(secondsOf(paths[0])).toBeLessThan(3.8)
     expect(secondsOf(paths[1])).toBeGreaterThan(2.0)
     expect(secondsOf(paths[1])).toBeLessThan(3.3)
+    // Each utterance is announced when it opens and answered when it ends.
+    expect(lastKinds).toEqual(['speaking', 'audio', 'speaking', 'audio'])
   })
 
   it('still finds the pause in a noisy room (regression: floor stuck, everything read as speech)', () => {
@@ -73,8 +77,10 @@ describe.skipIf(process.platform !== 'darwin' || !existsSync(HELPER))('hive-spee
     expect(run([[1, -45], [2, -25]])).toHaveLength(1)
   })
 
-  it('drops clicks and produces nothing for a quiet room', () => {
+  it('drops clicks — announced, then answered with dropped — and is silent in a quiet room', () => {
     expect(run([[1, -45], [0.1, -25], [2, -45]])).toHaveLength(0)
+    expect(lastKinds).toEqual(['speaking', 'dropped'])
     expect(run([[4, -45]])).toHaveLength(0)
+    expect(lastKinds).toEqual([])
   })
 })
