@@ -22,7 +22,7 @@ const HIVE_PORT = 17819
 let app: ElectronApplication
 let page: Page
 
-const calls = () => app.evaluate(() => (globalThis as any).__speechCalls as Array<{ op: string; lang?: string }>)
+const calls = () => app.evaluate(() => (globalThis as any).__speechCalls as Array<{ op: string }>)
 const line = (text: string) =>
   app.evaluate(({ BrowserWindow }, l) => BrowserWindow.getAllWindows()[0].webContents.send('speech:transcript', l), text)
 
@@ -64,7 +64,7 @@ test.beforeAll(async () => {
     const g = globalThis as any
     g.__speechCalls = []
     for (const ch of ['speech:start', 'speech:stop']) { try { ipcMain.removeHandler(ch) } catch {} }
-    ipcMain.handle('speech:start', (_e, opts) => { g.__speechCalls.push({ op: 'start', lang: opts?.lang }); return { ok: true } })
+    ipcMain.handle('speech:start', () => { g.__speechCalls.push({ op: 'start' }); return { ok: true } })
     ipcMain.handle('speech:stop', () => { g.__speechCalls.push({ op: 'stop' }); return { ok: true } })
   }, FIXTURE)
 
@@ -93,12 +93,12 @@ test.afterAll(async () => {
   } catch {}
 })
 
-test('mic pill: start in 中文, preview, finals land in the input in order, stop', async () => {
+test('mic pill: start, preview, finals land in the input in order, stop', async () => {
   const input = page.getByTestId('hive-chat-input')
 
   await page.getByRole('button', { name: 'Voice input' }).click()
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible()
-  expect(await calls()).toEqual([{ op: 'start', lang: 'zh-CN' }])
+  expect(await calls()).toEqual([{ op: 'start' }])
 
   // Live preview shows next to the mic, and does not touch the input.
   await line('partial:我现在想说')
@@ -131,17 +131,6 @@ test('mic pill: start in 中文, preview, finals land in the input in order, sto
   // Lines after stop are ignored.
   await line('final:should not appear')
   await expect(input).not.toHaveValue(/should not appear/)
-})
-
-test('language chip switches the next session to English', async () => {
-  await page.getByRole('button', { name: '中', exact: true }).click()
-  await expect(page.getByRole('button', { name: 'EN', exact: true })).toBeVisible()
-  await page.getByRole('button', { name: 'Voice input' }).click()
-  await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible()
-  expect((await calls()).at(-1)).toEqual({ op: 'start', lang: 'en-US' })
-  await page.getByRole('button', { name: 'Stop listening' }).click()
-  await expect(page.getByRole('button', { name: 'Voice input' })).toBeVisible()
-  await page.getByRole('button', { name: 'EN', exact: true }).click()
 })
 
 test('a cloud failure is shown; a helper that dies resets the button', async () => {

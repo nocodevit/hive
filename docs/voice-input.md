@@ -8,7 +8,7 @@ nothing is sent until the user presses Enter.
 1. `scripts/hive-speech` (Swift, compiled from `hive-speech.swift`) listens
    on the default microphone and prints, per line:
    - `partial:<text>` — live preview from macOS `SFSpeechRecognizer`
-     (one language at a time: zh-CN or en-US, the 中/EN toggle).
+     (Mandarin; it is only a preview).
    - `audio:<wav path>\t<macOS text>` — one finished utterance.
    Utterances are cut by loudness: speech is anything ≥ 5 dB above the
    room noise (10th percentile of the last 8 s), a 0.9 s pause ends one,
@@ -18,8 +18,9 @@ nothing is sent until the user presses Enter.
    - **OpenAI key set** (App Settings → Voice Input): the WAV is uploaded
      to `/v1/audio/transcriptions`. This is what makes mixed 中文/English
      in one sentence work. The prompt carries project/agent names (spelling
-     hint) and the previous utterance (context); the 中/EN toggle is sent
-     as the language hint.
+     hint) and the previous utterance (context). The language hint is
+     always `zh`: measured, it leaves English and mixed speech untouched
+     and fixes short Chinese phrases, so there is no language switch.
    - **No key, offline, or any API error**: the macOS text is used.
    The recording is deleted either way.
 3. `speech:stop` waits for the helper to hand over the sentence in

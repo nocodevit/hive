@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Highlight, themes } from 'prism-react-renderer'
 import { Check, Pencil } from 'lucide-react'
-import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, TOOL_COLORS, redact } from './crush-styles'
+import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, TOOL_COLORS, accentTint, redact } from './crush-styles'
 import { parseStructuredOutput } from './structured-format'
 import type { TimelineEntry } from './types'
 
@@ -307,7 +307,7 @@ function CrushMarkdown({ text }: { text: string }) {
 }
 
 /* ────────────────────────────────────────────────────────────
- *  USER MESSAGE — rgba(107,80,255,0.08) bg + Charple left border
+ *  USER MESSAGE — right-aligned bubble
  *  (per ui-preview-crush-elements.html .input-area, approved alpha)
  * ──────────────────────────────────────────────────────────── */
 /** Strip Claude Code's XML-tagged slash-command markup out of user
@@ -346,7 +346,7 @@ export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRe
   if (isSubagent) {
     return (
       <div style={{
-        background: 'rgba(107, 80, 255, 0.12)',
+        background: accentTint(12),
         border: `1px solid ${CRUSH.Charple}`,
         borderRadius: 14,
         padding: '7px 11px',
@@ -1616,7 +1616,7 @@ export function CompactBoundary({ previousTokens, newTokens, turnsSummarized }: 
         background: `linear-gradient(90deg, transparent, ${CRUSH.Charple}, transparent)`
       }} />
       <span style={{
-        background: 'rgba(107,80,255,0.14)',
+        background: accentTint(14),
         border: `1px solid ${CRUSH.Charple}`,
         borderRadius: 999,
         padding: '3px 12px',
@@ -1667,7 +1667,7 @@ export function CompactSummaryHint({ transcriptPath, summaryChars }: {
       display: 'flex', justifyContent: 'center'
     }}>
       <details style={{
-        background: 'rgba(107,80,255,0.06)',
+        background: accentTint(6),
         border: `1px solid ${CRUSH.Charcoal}`,
         borderRadius: 10,
         padding: '4px 10px',
