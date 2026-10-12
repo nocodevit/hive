@@ -8,7 +8,7 @@ import AVFoundation
 //
 // Listens on the default microphone and writes to stdout, one line each:
 //   partial:<text>            live preview of the utterance in progress
-//                             (macOS SFSpeechRecognizer, single language)
+//                             (macOS SFSpeechRecognizer, Mandarin)
 //   speaking:                 an utterance just opened
 //   audio:<wav path>\t<text>  that utterance finished: its recording, plus
 //                             the macOS transcript as a fallback
@@ -18,7 +18,6 @@ import AVFoundation
 // Hive's main process turns each `audio:` line into the final text (cloud
 // transcription when configured, else the fallback) and deletes the file.
 //
-// argv[1] = BCP-47 locale for the preview (zh-CN | en-US), default zh-CN.
 // `--file <16-bit mono wav>` replaces the microphone with a recording and
 // skips the preview; it exists so the segmentation can be tested.
 // `--no-preview` records from the microphone without asking macOS for
@@ -33,9 +32,8 @@ guard #available(macOS 10.15, *) else {
 let argv = CommandLine.arguments
 let fileIndex = argv.firstIndex(of: "--file")
 let inputFile = fileIndex.flatMap { $0 + 1 < argv.count ? argv[$0 + 1] : nil }
-let localeId = argv.count > 1 && !argv[1].hasPrefix("--") ? argv[1] : "zh-CN"
 let wantPreview = inputFile == nil && !argv.contains("--no-preview")
-let recognizer = wantPreview ? SFSpeechRecognizer(locale: Locale(identifier: localeId)) : nil
+let recognizer = wantPreview ? SFSpeechRecognizer(locale: Locale(identifier: "zh-CN")) : nil
 
 // Utterance segmentation (energy based).
 let startMs = 60.0            // this much speech in a row opens an utterance

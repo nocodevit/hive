@@ -175,7 +175,7 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
 import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage } from './chat'
-import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel, languageHint } from './voiceTranscribe'
+import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
 import { randomBytes } from 'crypto'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -1265,7 +1265,6 @@ ipcMain.handle('agent:send', (_event, { agentId, type, payload }) => {
 // Speech recognition (macOS native SFSpeechRecognizer)
 let speechProcess: ReturnType<typeof startSpeechHelper> | null = null
 
-let speechLocale = 'zh-CN'
 let speechLines: ReturnType<typeof createSpeechLineHandler> | null = null
 
 function sendSpeechLine(line: string) {
@@ -1283,7 +1282,6 @@ function newSpeechLineHandler() {
       const { text } = await resolveUtterance(audio, {
         apiKey: typeof prefs.openaiApiKey === 'string' ? prefs.openaiApiKey.trim() : '',
         model: pickModel(prefs.voiceModel),
-        language: languageHint(speechLocale),
         prompt: buildVocabPrompt(data, 80, previousText),
         onError: msg => {
           console.error(`[Hive] voice transcription failed, using macOS result: ${msg}`)
@@ -1297,17 +1295,16 @@ function newSpeechLineHandler() {
   })
 }
 
-ipcMain.handle('speech:start', (_e, opts?: { lang?: string }) => {
+ipcMain.handle('speech:start', () => {
   if (speechProcess) return { ok: false, error: 'already running' }
   // Dev: scripts/hive-speech relative to project root. Packaged: extraResources/scripts/hive-speech
   const devPath = join(__dirname, '..', '..', 'scripts', 'hive-speech')
   const prodPath = join(process.resourcesPath, 'scripts', 'hive-speech')
   const resolvedPath = existsSync(devPath) ? devPath : prodPath
   if (!existsSync(resolvedPath)) return { ok: false, error: 'hive-speech binary not found' }
-  speechLocale = opts?.lang === 'en-US' ? 'en-US' : 'zh-CN'
   const lines = newSpeechLineHandler()
   speechLines = lines
-  const helper = startSpeechHelper(resolvedPath, [speechLocale], {
+  const helper = startSpeechHelper(resolvedPath, [], {
     onLine: line => lines.handle(line),
     onExit: (expected, lastError) => {
       if (speechProcess === helper) speechProcess = null

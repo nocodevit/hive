@@ -248,22 +248,27 @@ body {
 
 
 /* Chat surface palette. Light = unified white card (scheme B); dark keeps
-   the original Crush hexes. */
+   the original Crush hexes — except Charple, the chat's primary accent,
+   which is the app palette's accent so Tech Blue / Future Pink recolor the
+   chat too. The other Crush hues stay fixed: they encode meaning (tool
+   families, success, warning), not theme. */
 :root {
-  --crush-pepper: #FFFFFF;
-  --crush-bbq: #F6F3FB;
-  --crush-charcoal: #E7E2F0;
-  --crush-oyster: #A39DB5;
-  --crush-squid: #8C87A0;
-  --crush-ash: #3B3550;
-  --crush-butter: #1E1B2E;
+  /* Neutrals come from the palette's own surface / text tokens, so no
+     violet tint leaks into Tech Blue or Future Pink. */
+  --crush-pepper: var(--bg-secondary);
+  --crush-bbq: var(--chat-surface);
+  --crush-charcoal: color-mix(in srgb, var(--accent) 14%, var(--bg-secondary));
+  --crush-oyster: color-mix(in srgb, var(--text-muted) 70%, var(--bg-secondary));
+  --crush-squid: var(--text-muted);
+  --crush-ash: color-mix(in srgb, var(--text-primary) 82%, var(--bg-secondary));
+  --crush-butter: var(--text-primary);
   --crush-sriracha: #E11D48;
   --crush-julep: #059669;
   --crush-zest: #A16207;
   --crush-malibu: #0284C7;
   --crush-dolly: #C026D3;
   --crush-bok: #0D9488;
-  --crush-charple: #7C3AED;
+  --crush-charple: var(--accent);
   --crush-violet: #9333EA;
   --crush-mochi: #C026D3;
   --crush-blush: #DB2777;
@@ -271,13 +276,13 @@ body {
   --crush-salmon: #E11D48;
   --crush-cumin: #A16207;
   --chat-bg: var(--bg-secondary);
-  --chat-ink: #1E1B2E;
-  --chat-ink-2: #4A4560;
-  --chat-muted: #8C87A0;
-  --chat-surface: #F6F3FB;
-  --chat-surface-2: #EFEBF7;
-  --chat-accent: #7C3AED;
-  --chat-code-ink: #3B3550;
+  --chat-ink: var(--text-primary);
+  --chat-ink-2: color-mix(in srgb, var(--text-primary) 78%, var(--bg-secondary));
+  --chat-muted: var(--text-muted);
+  --chat-surface: color-mix(in srgb, var(--accent) 5%, var(--bg-secondary));
+  --chat-surface-2: color-mix(in srgb, var(--accent) 11%, var(--bg-secondary));
+  --chat-accent: var(--accent);
+  --chat-code-ink: color-mix(in srgb, var(--text-primary) 86%, var(--bg-secondary));
 }
 :root[data-theme='dark'] {
   --crush-pepper: #201F26;
@@ -293,21 +298,15 @@ body {
   --crush-malibu: #00A4FF;
   --crush-dolly: #FF60FF;
   --crush-bok: #68FFD6;
-  --crush-charple: #6B50FF;
+  --crush-charple: var(--accent-muted);
   --crush-violet: #C259FF;
   --crush-mochi: #EB5DFF;
   --crush-blush: #FF84FF;
   --crush-guac: #12C78F;
   --crush-salmon: #FF7F90;
   --crush-cumin: #BF976F;
-  --chat-bg: var(--bg-secondary);
-  --chat-ink: #E9E5F2;
-  --chat-ink-2: #B7B0C8;
-  --chat-muted: #7D7690;
-  --chat-surface: #221C2D;
-  --chat-surface-2: #2A2337;
-  --chat-accent: #C4A6FA;
-  --chat-code-ink: #D9D2EA;
+  /* --chat-* are not repeated here: the :root formulas already resolve
+     against the dark palette tokens. */
 }
 
 .hive-card {
@@ -319,6 +318,33 @@ body {
 :root[data-theme='dark'] .hive-card {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 20px rgba(0, 0, 0, 0.25);
 }
+/* Chat composer: a neon outline in the palette accent — violet, sky or
+   fuchsia — brighter while the box has focus. */
+.hive-composer {
+  border: 1px solid var(--accent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent),
+    0 0 14px color-mix(in srgb, var(--accent) 38%, transparent),
+    inset 0 0 10px color-mix(in srgb, var(--accent) 8%, transparent);
+  transition: box-shadow var(--motion-fast) var(--motion-ease);
+}
+/* The box carries the outline; the field inside must not add its own
+   (Prime's input glow would otherwise double it). */
+.hive-composer textarea,
+.hive-composer textarea:focus,
+.hive-composer textarea:focus-visible {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+.hive-composer:focus-within {
+  box-shadow:
+    0 0 0 1px var(--accent),
+    0 0 22px color-mix(in srgb, var(--accent) 60%, transparent),
+    inset 0 0 12px color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
 .hive-head {
   height: 52px;
   display: flex;
@@ -740,7 +766,7 @@ pre .hive-code-copy:hover {
 }
 .hive-chat-md ul > li::before {
   content: '▸';
-  color: #6B50FF;
+  color: var(--crush-charple);
   font-weight: 700;
   position: absolute;
   left: 0.2em;
@@ -769,8 +795,8 @@ pre .hive-code-copy:hover {
    on the right. Default state: visible bordered row; hover lights the
    border + bg + reveals the actions. */
 .hive-choice-row:hover {
-  background: rgba(107,80,255,0.08);
-  border-color: #6B50FF !important;
+  background: color-mix(in srgb, var(--crush-charple) 8%, transparent);
+  border-color: var(--crush-charple) !important;
 }
 .hive-choice-row:hover .hive-choice-actions {
   opacity: 1 !important;

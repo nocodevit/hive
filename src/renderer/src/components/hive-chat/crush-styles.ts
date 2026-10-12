@@ -59,6 +59,9 @@ export const FONT_UI = '"Space Grotesk", sans-serif'
 /** Chat prose face — mono is reserved for code, commands and numbers. */
 export const FONT_PROSE = '"Inter Tight", -apple-system, "PingFang SC", sans-serif'
 
+/** A translucent wash of the chat's primary accent (follows the palette). */
+export const accentTint = (percent: number) => `color-mix(in srgb, var(--crush-charple) ${percent}%, transparent)`
+
 /** Chat card palette (theme-aware CSS variables, see assets/index.css).
  *  Shared by App's main card, Terminal's chat layer and HiveChat itself so
  *  the three can never drift apart. */
