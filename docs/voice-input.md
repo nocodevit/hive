@@ -33,11 +33,22 @@ on the owner's own recording (2026-10-12): both got a 10 s mixed sentence
 right; on a 2 s quiet "说好了" the mini model returned Korean / wrong
 words, `gpt-transcribe` with the `zh` hint was right twice.
 
+## Failure handling
+
+- Cloud call fails (bad key, offline, timeout): that utterance uses the
+  macOS text, and the mic pill shows one `⚠` notice for the session.
+- Helper exits by itself (no microphone permission, device removed): main
+  sends `exit:<reason>`; the pill returns to idle and shows the reason.
+- App quit: the helper is killed so nothing keeps the microphone open.
+
 ## Testing without a microphone
 
 `scripts/hive-speech --file <16-bit mono wav>` runs a recording through
 the same segmentation and prints the `audio:` lines
-(`hive-speech-segmentation.test.ts`). The live preview needs the app's
+(`hive-speech-segmentation.test.ts`). `--no-preview` records from the
+microphone without requesting speech recognition. The process plumbing is
+covered with a fake helper (`voiceTranscribe.test.ts`), the window side
+with stubbed IPC (`e2e/voice-input.spec.ts`). The live preview needs the app's
 `NSSpeechRecognitionUsageDescription`, so the helper only fully works
 when launched by the packaged app.
 
