@@ -44,6 +44,7 @@ beforeEach(() => {
       getPrevSessionInfo: vi.fn(async () => null),
       getRecentSessions: vi.fn(async () => []),
       onEvent: (_id: string, cb: any) => { onEventCb = cb; return noop() },
+      onExternalUser: (_id: string, _cb: any) => noop(),
       onStderr: (_id: string, cb: any) => { onStderrCb = cb; return noop() },
       onExit: (_id: string, _cb: any) => noop(),
       onError: (_id: string, _cb: any) => noop(),

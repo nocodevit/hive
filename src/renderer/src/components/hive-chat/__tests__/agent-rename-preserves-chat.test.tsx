@@ -51,6 +51,7 @@ beforeEach(() => {
       getRecentSessions: vi.fn(async () => []),
       allowToolForSession: vi.fn(noopAsync),
       onEvent: (_id: string, cb: any) => { onEventCb = cb; return noop() },
+      onExternalUser: (_id: string, _cb: any) => noop(),
       onStderr: (_id: string, _cb: any) => noop(),
       onExit: (_id: string, _cb: any) => noop(),
       onError: (_id: string, _cb: any) => noop(),
