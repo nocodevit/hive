@@ -1,5 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
-import { parseAudioLine, buildVocabPrompt, transcribeWav, resolveUtterance, createSpeechLineHandler, pickModel, languageHint, TRANSCRIBE_MODEL, TRANSCRIBE_URL } from '../voiceTranscribe'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { parseAudioLine, buildVocabPrompt, transcribeWav, resolveUtterance, createSpeechLineHandler, startSpeechHelper, pickModel, languageHint, TRANSCRIBE_MODEL, TRANSCRIBE_URL } from '../voiceTranscribe'
 
 describe('parseAudioLine', () => {
   it('splits path and the macOS fallback text', () => {
@@ -196,5 +199,80 @@ describe('createSpeechLineHandler', () => {
     h.handle('audio:/2.wav')
     await h.idle()
     expect(sent).toEqual(['final:x', 'final:x'])
+  })
+})
+
+describe.skipIf(process.platform === 'win32')('startSpeechHelper', () => {
+  const dirs: string[] = []
+  afterEach(() => { for (const d of dirs.splice(0)) rmSync(d, { recursive: true, force: true }) })
+
+  /** A stand-in helper: a shell script instead of the Swift binary. */
+  function fake(body: string): string {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-fake-speech-'))
+    dirs.push(dir)
+    const bin = join(dir, 'helper.sh')
+    writeFileSync(bin, `#!/bin/bash\n${body}\n`)
+    chmodSync(bin, 0o755)
+    return bin
+  }
+  const run = (body: string) => {
+    const lines: string[] = []
+    const state: { exit: { expected: boolean; lastError: string } | null } = { exit: null }
+    let finished!: () => void
+    const done = new Promise<void>(resolve => { finished = resolve })
+    const helper = startSpeechHelper(fake(body), ['zh-CN'], {
+      onLine: l => lines.push(l),
+      onExit: (expected, lastError) => { state.exit = { expected, lastError }; finished() }
+    })
+    return { lines, done, helper, get exit() { return state.exit } }
+  }
+
+  it('delivers whole lines even when the output arrives in pieces', async () => {
+    const r = run(`printf 'partial:我现'; sleep 0.05; printf '在\npartial:我现在想说\nau'; sleep 0.05; printf 'dio:/tmp/a.wav\t我现在想说\n'`)
+    await r.done
+    expect(r.lines).toEqual(['partial:我现在', 'partial:我现在想说', 'audio:/tmp/a.wav\t我现在想说'])
+  })
+
+  it('reports a helper that dies by itself as unexpected, with its last error', async () => {
+    const r = run(`echo 'error: audio engine failed to start: no input device' >&2; exit 1`)
+    await r.done
+    expect(r.exit).toEqual({ expected: false, lastError: 'audio engine failed to start: no input device' })
+  })
+
+  it('flushes an unterminated last line on exit', async () => {
+    const r = run(`printf 'audio:/tmp/last.wav\tx'`)
+    await r.done
+    expect(r.lines).toEqual(['audio:/tmp/last.wav\tx'])
+  })
+
+  it('stop() waits for the hand-over the helper prints on SIGTERM', async () => {
+    const r = run(`trap 'sleep 0.1; printf "audio:/tmp/tail.wav\\tlast words\\n"; exit 0' TERM; echo 'partial:hi'; while true; do sleep 0.05; done`)
+    await vi.waitFor(() => expect(r.lines).toEqual(['partial:hi']), { timeout: 3000 })
+    await r.helper.stop()
+    expect(r.lines).toEqual(['partial:hi', 'audio:/tmp/tail.wav\tlast words'])
+    expect(r.exit).toEqual({ expected: true, lastError: '' })
+  })
+
+  it('stop() force-kills a helper that ignores SIGTERM', async () => {
+    const r = run(`trap '' TERM; echo 'partial:hi'; while true; do sleep 0.05; done`)
+    await vi.waitFor(() => expect(r.lines).toEqual(['partial:hi']), { timeout: 3000 })
+    await r.helper.stop(150)
+    expect(r.exit?.expected).toBe(true)
+  })
+
+  it('kill() ends it immediately and counts as expected', async () => {
+    const r = run(`while true; do sleep 0.05; done`)
+    r.helper.kill()
+    await r.done
+    expect(r.exit?.expected).toBe(true)
+  })
+
+  it('a missing binary surfaces as an unexpected exit, not a throw', async () => {
+    const lines: string[] = []
+    const exit = await new Promise<{ expected: boolean; lastError: string }>(resolve => {
+      startSpeechHelper('/nonexistent/hive-speech', [], { onLine: l => lines.push(l), onExit: (expected, lastError) => resolve({ expected, lastError }) })
+    })
+    expect(exit.expected).toBe(false)
+    expect(exit.lastError).toMatch(/ENOENT/)
   })
 })

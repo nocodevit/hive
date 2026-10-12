@@ -175,7 +175,7 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
 import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage } from './chat'
-import { createSpeechLineHandler, resolveUtterance, buildVocabPrompt, pickModel, languageHint } from './voiceTranscribe'
+import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel, languageHint } from './voiceTranscribe'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
 import { randomBytes } from 'crypto'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -1263,17 +1263,20 @@ ipcMain.handle('agent:send', (_event, { agentId, type, payload }) => {
 })
 
 // Speech recognition (macOS native SFSpeechRecognizer)
-let speechProcess: any = null
+let speechProcess: ReturnType<typeof startSpeechHelper> | null = null
 
 let speechLocale = 'zh-CN'
 let speechLines: ReturnType<typeof createSpeechLineHandler> | null = null
 
+function sendSpeechLine(line: string) {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (win && !win.isDestroyed()) win.webContents.send('speech:transcript', line)
+}
+
 function newSpeechLineHandler() {
+  let warned = false
   return createSpeechLineHandler({
-    send: line => {
-      const win = BrowserWindow.getAllWindows()[0]
-      if (win && !win.isDestroyed()) win.webContents.send('speech:transcript', line)
-    },
+    send: sendSpeechLine,
     resolve: async (audio, previousText) => {
       const data = loadData()
       const prefs = (data.appPrefs || {}) as { openaiApiKey?: unknown; voiceModel?: unknown }
@@ -1282,7 +1285,12 @@ function newSpeechLineHandler() {
         model: pickModel(prefs.voiceModel),
         language: languageHint(speechLocale),
         prompt: buildVocabPrompt(data, 80, previousText),
-        onError: msg => console.error(`[Hive] voice transcription failed, using macOS result: ${msg}`)
+        onError: msg => {
+          console.error(`[Hive] voice transcription failed, using macOS result: ${msg}`)
+          // Say so once per listening session — a wrong key or no network
+          // otherwise looks like "mixed languages just don't work".
+          if (!warned) { warned = true; sendSpeechLine(`notice:cloud transcription failed (${msg}) — using macOS recognition`) }
+        }
       })
       return text
     }
@@ -1291,7 +1299,6 @@ function newSpeechLineHandler() {
 
 ipcMain.handle('speech:start', (_e, opts?: { lang?: string }) => {
   if (speechProcess) return { ok: false, error: 'already running' }
-  const { spawn } = require('child_process')
   // Dev: scripts/hive-speech relative to project root. Packaged: extraResources/scripts/hive-speech
   const devPath = join(__dirname, '..', '..', 'scripts', 'hive-speech')
   const prodPath = join(process.resourcesPath, 'scripts', 'hive-speech')
@@ -1300,35 +1307,28 @@ ipcMain.handle('speech:start', (_e, opts?: { lang?: string }) => {
   speechLocale = opts?.lang === 'en-US' ? 'en-US' : 'zh-CN'
   const lines = newSpeechLineHandler()
   speechLines = lines
-  const child = spawn(resolvedPath, [speechLocale], { stdio: ['ignore', 'pipe', 'pipe'] })
-  speechProcess = child
-  let pending = ''
-  // Decode as a stream: a chunk boundary can fall inside a Chinese character.
-  child.stdout?.setEncoding('utf8')
-  child.stdout?.on('data', (data: string) => {
-    pending += data
-    const parts = pending.split('\n')
-    pending = parts.pop() || ''
-    for (const line of parts) if (line) lines.handle(line)
+  const helper = startSpeechHelper(resolvedPath, [speechLocale], {
+    onLine: line => lines.handle(line),
+    onExit: (expected, lastError) => {
+      if (speechProcess === helper) speechProcess = null
+      // The helper died on its own (no mic permission, device gone): tell
+      // the renderer, or its mic button stays on "listening" forever.
+      if (!expected) void lines.idle().then(() => sendSpeechLine(`exit:${lastError || 'voice input stopped unexpectedly'}`))
+    }
   })
-  child.on('close', () => {
-    if (pending) { lines.handle(pending); pending = '' }
-    if (speechProcess === child) speechProcess = null
-  })
+  speechProcess = helper
   return { ok: true }
 })
 ipcMain.handle('speech:stop', async () => {
-  const child = speechProcess
-  if (child) {
+  const helper = speechProcess
+  if (helper) {
     speechProcess = null
     // The helper hands over the sentence in progress before it exits;
     // wait for that and for its transcription, so the renderer (which
     // stops listening once this returns) still receives the last words.
-    const exited = new Promise<void>(resolve => child.once('close', () => resolve()))
-    child.kill('SIGTERM')
-    const cap = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
-    await Promise.race([exited, cap(3000)])
-    if (speechLines) await Promise.race([speechLines.idle(), cap(25000)])
+    await helper.stop()
+    const cap = new Promise<void>(resolve => setTimeout(resolve, 25000))
+    if (speechLines) await Promise.race([speechLines.idle(), cap])
   }
   return { ok: true }
 })
@@ -2345,10 +2345,13 @@ app.on('window-all-closed', () => {
 // reapOrphanedClaudeChildren().
 app.on('before-quit', () => {
   try { killAllChatChildren() } catch { /* best-effort */ }
+  // Never leave the voice helper behind holding the microphone.
+  try { speechProcess?.kill() } catch { /* best-effort */ }
 })
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     try { killAllChatChildren() } catch { /* best-effort */ }
+    try { speechProcess?.kill() } catch { /* best-effort */ }
     for (const [, term] of terminals) {
       try { killProcessTree(term) } catch { /* best-effort */ }
     }

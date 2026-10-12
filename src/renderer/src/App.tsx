@@ -126,6 +126,7 @@ export default function App() {
   const [teamSelectedAgents, setTeamSelectedAgents] = useState<Set<string>>(new Set())
   const [isListening, setIsListening] = useState(false)
   const [speechPartial, setSpeechPartial] = useState('')
+  const [speechNotice, setSpeechNotice] = useState('')
   const voiceCleanupRef = useRef<(() => void) | null>(null)
   const toggleVoice = async (agentId: string, lang: SpeechLang) => {
     if (isListening) {
@@ -136,6 +137,7 @@ export default function App() {
       setSpeechPartial('')
       return
     }
+    setSpeechNotice('')
     const cleanup = window.api.speech.onTranscript((line) => {
       if (line.startsWith('final:')) {
         // Broadcast so whichever surface is visible (xterm or HiveChat) consumes it.
@@ -143,11 +145,21 @@ export default function App() {
         setSpeechPartial('')
       } else if (line.startsWith('partial:')) {
         setSpeechPartial(line.slice(8))
+      } else if (line.startsWith('notice:')) {
+        setSpeechNotice(line.slice(7))
+      } else if (line.startsWith('exit:')) {
+        // The helper stopped by itself — don't leave the button on "listening".
+        cleanup()
+        voiceCleanupRef.current = null
+        setIsListening(false)
+        setSpeechPartial('')
+        setSpeechNotice(line.slice(5))
       }
     })
     const result = await window.api.speech.start(lang)
     if (!result.ok) {
       cleanup()
+      setSpeechNotice(result.error || 'voice input could not start')
       return
     }
     voiceCleanupRef.current = cleanup
@@ -164,8 +176,8 @@ export default function App() {
     return () => window.removeEventListener('hive:voice-toggle', onToggle)
   }, [])
   useEffect(() => {
-    window.dispatchEvent(new CustomEvent('hive:voice-state', { detail: { listening: isListening, partial: speechPartial } }))
-  }, [isListening, speechPartial])
+    window.dispatchEvent(new CustomEvent('hive:voice-state', { detail: { listening: isListening, partial: speechPartial, notice: speechNotice } }))
+  }, [isListening, speechPartial, speechNotice])
   const [projectTab, setProjectTab] = useState<'dashboard' | 'office' | 'taskgroup' | 'settings'>('dashboard')
   // v2.6.0: top-level app screen. 'projects' = the historic project-focused
   // view (sidebar + agents + chat). 'overview' = the new cross-project
