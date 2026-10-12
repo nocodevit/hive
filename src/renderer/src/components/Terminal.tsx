@@ -25,7 +25,8 @@ interface TerminalProps {
   /// v2.7.1: per-project chat font-size, forwarded to HiveChat.
   chatFontSize?: number
   /// Bulk restart / whip: auto-launch the session (ctx-based) without the chooser.
-  autoResume?: boolean
+  /// 'new' starts a fresh session instead (butler API).
+  autoResume?: boolean | 'new'
   onAutoResumed?: () => void
 }
 

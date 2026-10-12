@@ -83,6 +83,8 @@ export default function App() {
   // project "Restart all" / "Whip lazy bones" bulk actions. Cleared per agent once
   // its HiveChat fires (onAutoResumed).
   const [restartPending, setRestartPending] = useState<Set<string>>(new Set())
+  // Butler API "start a fresh session": same auto-launch plumbing, mode 'new'.
+  const [startNewPending, setStartNewPending] = useState<Set<string>>(new Set())
   // v2.15.7: last-touched timestamp per agent (Map in a ref instead of
   // useState so bumping doesn't churn re-renders). Read by pickLRUToEvict
   // when the set hits MAX_ACTIVE_TERMINALS to choose which sticky
@@ -770,6 +772,21 @@ export default function App() {
     }
     bulkResume(projAgents)
   }
+
+  // Butler API (main → renderer): start one agent's chat the way "Whip
+  // lazy bones" does — mount the pane and auto-launch it. Deliberately NOT
+  // startAgent(): a remote start must not steal the selection or LRU-evict
+  // (i.e. stop) some other agent's chat.
+  const butlerStart = ({ agentId, mode }: { agentId: string; mode: 'resume' | 'new' }) => {
+    if (!agents.some(a => a.id === agentId)) return
+    const add = (prev: Set<string>) => { if (prev.has(agentId)) return prev; const next = new Set(prev); next.add(agentId); return next }
+    setActiveTerminals(add)
+    if (mode === 'new') setStartNewPending(add)
+    else setRestartPending(add)
+  }
+  const butlerStartRef = useRef(butlerStart)
+  butlerStartRef.current = butlerStart
+  useEffect(() => window.api.butler.onStartAgent(p => butlerStartRef.current(p)), [])
 
   const resizePanel = useCallback((panel: 'projects' | 'agents' | 'files', delta: number) => {
     setPanelWidths((prev) => ({
@@ -2496,8 +2513,12 @@ export default function App() {
                   rebaseOnStart={appPrefs.rebaseOnRestart !== false && agent.type === 'coding' && !!agent.worktreePath && !newAgentIds.has(agent.id)}
                   onCloseTerminal={() => setActiveTerminals(prev => { const next = new Set(prev); next.delete(agentId); return next })}
                   chatFontSize={appPrefs.chatFontSize}
-                  autoResume={restartPending.has(agentId)}
-                  onAutoResumed={() => setRestartPending(prev => { if (!prev.has(agentId)) return prev; const next = new Set(prev); next.delete(agentId); return next })}
+                  autoResume={startNewPending.has(agentId) ? 'new' : restartPending.has(agentId)}
+                  onAutoResumed={() => {
+                    const drop = (prev: Set<string>) => { if (!prev.has(agentId)) return prev; const next = new Set(prev); next.delete(agentId); return next }
+                    setRestartPending(drop)
+                    setStartNewPending(drop)
+                  }}
                 />
               </div>
             )

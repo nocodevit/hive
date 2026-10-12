@@ -58,7 +58,9 @@ interface Props {
   /// When set, skip the StartChooser and auto-launch: a prior session
   /// resumes (compact+resume when ctx ≥ 30%, else resume), no prior → new.
   /// Drives the project "Restart all" / "Whip lazy bones" bulk actions.
-  autoResume?: boolean
+  /// 'new' (butler API "start a fresh session") launches a new session
+  /// instead, ignoring any prior one.
+  autoResume?: boolean | 'new'
   /// Called once after an autoResume fires, so the parent can clear its
   /// pending flag (the fire is also one-shot-guarded internally).
   onAutoResumed?: () => void
@@ -513,10 +515,13 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // a re-render can't re-launch; parent is told so it can clear its flag.
   const autoResumeFiredRef = useRef(false)
   useEffect(() => {
-    if (!autoResume || !chooserMode || !prevInfoLoaded || autoResumeFiredRef.current) return
+    // Re-arm once the parent clears its flag, so a later request for the
+    // same (still mounted) pane can fire again.
+    if (!autoResume) { autoResumeFiredRef.current = false; return }
+    if (!chooserMode || !prevInfoLoaded || autoResumeFiredRef.current) return
     autoResumeFiredRef.current = true
     const pct = ctxPctFromPrev(prevInfo, parseContextSize)
-    launchSession(restartResumeMode(!!prevInfo?.sid, pct))
+    launchSession(autoResume === 'new' ? 'new' : restartResumeMode(!!prevInfo?.sid, pct))
     onAutoResumed?.()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoResume, chooserMode, prevInfoLoaded])
@@ -1220,6 +1225,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
     window.addEventListener('hive:voice-final', handler)
     return () => window.removeEventListener('hive:voice-final', handler)
+  }, [id])
+
+  // A message typed into this chat from outside its own input box (butler
+  // API). Main already wrote it to claude's stdin; mirror the local send
+  // path's bubble so the timeline reads the same either way.
+  useEffect(() => {
+    return window.api.chat.onExternalUser(id, ({ text }) => {
+      if (text) addEntry({ kind: 'user', text })
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   // Listen for App.tsx's refresh button — `hive:reopen-chooser` event

@@ -174,7 +174,10 @@ import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './
 import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
-import { registerChatIpc, killAllChatChildren } from './chat'
+import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage } from './chat'
+import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
+import { randomBytes } from 'crypto'
+import type { IncomingMessage, ServerResponse } from 'http'
 import { parsePsForReap, orphanedHiveClaudePids } from './orphanReaper'
 import { buildMemSample, MEM_LOG_FILENAME, MEM_LOG_INTERVAL_MS } from './memLog'
 import { registerStorageIpc } from './storage'
@@ -518,7 +521,120 @@ function findAgentWorktree(agentId: string): string | null {
 }
 
 // Status + report webhook server — receives hook calls from Claude Code
+// ── Butler API ───────────────────────────────────────────────────────
+// Lets a controller on THIS machine (hive-butler) list agents, read a
+// chat's tail, type into a chat and start one. See butlerApi.ts for the
+// pure parts and the auth rationale.
+const BUTLER_TOKEN_FILE = join(DATA_DIR, 'api-token')
+const BUTLER_TAIL_BYTES = 2 * 1024 * 1024
+const BUTLER_START_TIMEOUT_MS = 180_000
+
+function butlerToken(): string {
+  ensureDataDir()
+  if (existsSync(BUTLER_TOKEN_FILE)) {
+    const t = readFileSync(BUTLER_TOKEN_FILE, 'utf-8').trim()
+    if (t) return t
+  }
+  const t = randomBytes(24).toString('hex')
+  writeFileSync(BUTLER_TOKEN_FILE, t + '\n', { mode: 0o600 })
+  return t
+}
+
+function butlerRows() {
+  return listAgents(loadData(), listLiveChatAgentIds(), id => getChatSessionInfo(`chat-${id}`)?.activity)
+}
+
+/** Last ~2MB of a log, dropping the (probably cut) first line. */
+function readLogTailLines(path: string): string[] {
+  const size = statSync(path).size
+  const start = Math.max(0, size - BUTLER_TAIL_BYTES)
+  const buf = readFileSync(path).subarray(start)
+  const lines = buf.toString('utf-8').split('\n')
+  return start > 0 ? lines.slice(1) : lines
+}
+
+function readJsonBody(req: IncomingMessage): Promise<any> {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.on('data', chunk => { body += chunk; if (body.length > 1_000_000) reject(new Error('body_too_large')) })
+    req.on('end', () => { try { resolve(body ? JSON.parse(body) : {}) } catch { reject(new Error('bad_json')) } })
+    req.on('error', reject)
+  })
+}
+
+async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
+  const reply = (status: number, payload: unknown) => {
+    res.writeHead(status, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(payload))
+  }
+  try {
+    const auth = checkButlerAuth(req.headers, butlerToken())
+    if (!auth.ok) return reply(auth.status, { ok: false, error: auth.error })
+
+    const url = new URL(req.url || '/', `http://127.0.0.1:${HIVE_PORT}`)
+    const rows = butlerRows()
+
+    if (req.method === 'GET' && url.pathname === '/agents') {
+      return reply(200, { ok: true, agents: rows })
+    }
+
+    if (req.method === 'GET' && url.pathname === '/chat/tail') {
+      const found = resolveAgent(rows, {
+        agentId: url.searchParams.get('agentId') || undefined,
+        project: url.searchParams.get('project') || undefined,
+        agent: url.searchParams.get('agent') || undefined
+      })
+      if (!found.ok) return reply(404, found)
+      const n = Math.min(50, Math.max(1, parseInt(url.searchParams.get('n') || '10', 10) || 10))
+      const logPath = getChatSessionInfo(`chat-${found.row.agentId}`)?.logPath
+        || latestChatLogPath(join(DATA_DIR, 'chat-logs'), found.row.agentId)
+      const items = logPath && existsSync(logPath) ? parseChatTail(readLogTailLines(logPath), n) : []
+      return reply(200, { ok: true, agent: found.row, items })
+    }
+
+    if (req.method === 'POST' && (url.pathname === '/chat/send' || url.pathname === '/chat/start')) {
+      const body = await readJsonBody(req)
+      const found = resolveAgent(rows, { agentId: body.agentId, project: body.project, agent: body.agent })
+      if (!found.ok) return reply(404, found)
+      const chatId = `chat-${found.row.agentId}`
+
+      if (url.pathname === '/chat/send') {
+        const text = typeof body.text === 'string' ? body.text.trim() : ''
+        if (!text) return reply(400, { ok: false, error: 'empty_text' })
+        // Never auto-start: a chat that is not running is the caller's
+        // decision (POST /chat/start), not a side effect of sending.
+        if (!found.row.chatLive) return reply(409, { ok: false, error: 'no_session', agent: found.row })
+        const sent = sendExternalUserMessage(chatId, text)
+        return reply(sent.ok ? 200 : 409, { ...sent, agent: found.row, queuedBehindRunningTurn: sent.ok && found.row.activity === 'working' })
+      }
+
+      const mode = parseStartMode(body.mode)
+      if (!mode) return reply(400, { ok: false, error: 'bad_mode' })
+      if (found.row.chatLive) return reply(200, { ok: true, alreadyRunning: true, agent: found.row })
+      const win = BrowserWindow.getAllWindows()[0]
+      if (!win || win.isDestroyed()) return reply(503, { ok: false, error: 'no_window' })
+      // The renderer owns chat startup (cwd, agent definition, resume vs
+      // compact choice), so ask it to do exactly what a click would do.
+      win.webContents.send('butler:startAgent', { agentId: found.row.agentId, mode })
+      const deadline = Date.now() + BUTLER_START_TIMEOUT_MS
+      while (Date.now() < deadline) {
+        if (getChatSessionInfo(chatId)?.live) return reply(200, { ok: true, started: true, agent: { ...found.row, chatLive: true, activity: 'waiting' } })
+        await new Promise(r => setTimeout(r, 500))
+      }
+      return reply(504, { ok: false, error: 'start_timeout', agent: found.row })
+    }
+
+    return reply(405, { ok: false, error: 'method_not_allowed' })
+  } catch (e) {
+    reply(400, { ok: false, error: e instanceof Error ? e.message : String(e) })
+  }
+}
+
 const statusServer = createServer((req, res) => {
+  if (req.url && isButlerRoute(req.url)) {
+    void handleButlerRequest(req, res)
+    return
+  }
   if (req.method === 'GET' && req.url?.startsWith('/task-status')) {
     // GET /task-status?projectId=xxx
     const url = new URL(req.url, `http://127.0.0.1:${HIVE_PORT}`)
@@ -2054,6 +2170,8 @@ app.whenReady().then(() => {
   writeFileSync(portLockFile, `${HIVE_PORT}\n${process.pid}`)
 
   statusServer.listen(HIVE_PORT, '127.0.0.1', () => {
+    // Create the butler token now so a client's very first call can read it.
+    try { butlerToken() } catch {}
     console.log(`[Hive] Status server on http://127.0.0.1:${HIVE_PORT}`)
   })
 

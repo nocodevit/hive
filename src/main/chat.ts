@@ -1610,6 +1610,24 @@ export function listLiveChatAgentIds(): string[] {
   return liveAgentIdsFromSessions(sessions.entries())
 }
 
+/** Read-only view of one chat session for the butler API. */
+export function getChatSessionInfo(id: string): { live: boolean; activity?: string; logPath: string } | null {
+  const session = sessions.get(id)
+  if (!session) return null
+  return { live: !!session.child && session.mode === 'print', activity: session.lastActivity, logPath: session.logPath }
+}
+
+/**
+ * Send a user message that did NOT come from this chat's own input box
+ * (butler API). Same path as the UI's send; additionally tells the
+ * renderer so the message shows up as a user bubble there too.
+ */
+export function sendExternalUserMessage(id: string, text: string) {
+  const res = sendUserMessage(id, text)
+  if (res.ok) broadcast(`chat:externalUser:${id}`, { text })
+  return res
+}
+
 export function registerChatIpc() {
   ipcMain.handle('chat:liveAgents', () => listLiveChatAgentIds())
   ipcMain.handle('chat:start', async (_e, { id, cwd, agent, name, continueSession, rebaseOnStart, resumeSid, forkSession, forceCompact }) => {

@@ -170,6 +170,11 @@ const api = {
       ipcRenderer.on(`chat:event:${id}`, handler)
       return () => ipcRenderer.removeListener(`chat:event:${id}`, handler)
     },
+    onExternalUser: (id: string, cb: (payload: { text: string }) => void) => {
+      const handler = (_e: any, data: { text: string }) => cb(data)
+      ipcRenderer.on(`chat:externalUser:${id}`, handler)
+      return () => ipcRenderer.removeListener(`chat:externalUser:${id}`, handler)
+    },
     onPrepend: (id: string, cb: (payload: { events: any[]; hasOlder: boolean }) => void) => {
       const handler = (_e: any, data: any) => cb(data)
       ipcRenderer.on(`chat:prepend:${id}`, handler)
@@ -224,6 +229,13 @@ const api = {
       const handler = (_: any, data: { kind: 'stdout' | 'stderr'; text: string }) => cb(data)
       ipcRenderer.on('claude:install:output', handler)
       return () => ipcRenderer.removeListener('claude:install:output', handler)
+    }
+  },
+  butler: {
+    onStartAgent: (cb: (payload: { agentId: string; mode: 'resume' | 'new' }) => void) => {
+      const handler = (_e: any, data: { agentId: string; mode: 'resume' | 'new' }) => cb(data)
+      ipcRenderer.on('butler:startAgent', handler)
+      return () => ipcRenderer.removeListener('butler:startAgent', handler)
     }
   },
   speech: {
