@@ -1,6 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, redact, configureRedact } from './crush-styles'
-import { useSpeechLang, speechLangLabel, joinVoiceText } from '../../lib/speech-lang'
+import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, accentTint, redact, configureRedact } from './crush-styles'
+import { joinVoiceText } from '../../lib/voice-text'
 import { autoSendStep, AUTO_SEND_IDLE, useAutoSendPrefs, setAutoSendPrefs, type VoiceEvent } from '../../lib/voice-autosend'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
 import { ctxPctFromPrev, restartResumeMode } from './bulkRestart'
@@ -2201,7 +2201,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               onMouseLeave={e => { e.currentTarget.style.background = isAtBottom ? CRUSH.Charcoal : CRUSH.Charple }}
             >↓</button>
           )}
-          <div style={{
+          <div className="hive-composer" style={{
             display: 'flex', flexDirection: 'column', gap: 10,
             background: CHAT.surface,
             borderRadius: 16,
@@ -2925,7 +2925,7 @@ const CTX_CAT_COLOR: Record<string, string> = {
   'Custom agents': '#C259FF',
   'Memory files': '#EB4268',
   'Skills': '#E8FE96',
-  'Messages': '#6B50FF',
+  'Messages': CRUSH.Charple,
   'Autocompact buffer': '#EB5DFF',
   'Free space': '#2A2935'
 }
@@ -3018,7 +3018,7 @@ export function ContextModal({ loading, error, data, claudeSid, onRefresh, onClo
         background: CRUSH.BBQ,
         border: `1px solid ${CRUSH.Charple}`,
         borderRadius: 14,
-        boxShadow: `0 8px 40px rgba(107,80,255,0.25), 0 4px 12px rgba(0,0,0,0.5)`,
+        boxShadow: `0 8px 40px ${accentTint(25)}, 0 4px 12px rgba(0,0,0,0.5)`,
         display: 'flex', flexDirection: 'column' as const,
         overflow: 'hidden'
       }}>
@@ -3124,7 +3124,7 @@ export function ContextModal({ loading, error, data, claudeSid, onRefresh, onClo
           <button
             onClick={onClose}
             style={{
-              background: 'rgba(107,80,255,0.12)',
+              background: accentTint(12),
               border: `1px solid ${CRUSH.Charple}`,
               color: CRUSH.Charple,
               fontFamily: FONT_MONO, fontSize: 11, fontWeight: 600,
@@ -3157,7 +3157,7 @@ function CtxTabBtn({ active, onClick, children, count }: {
       {typeof count === 'number' && (
         <span style={{
           fontSize: 9, fontWeight: 400,
-          background: active ? 'rgba(107,80,255,0.18)' : CRUSH.Charcoal,
+          background: active ? accentTint(18) : CRUSH.Charcoal,
           color: active ? CRUSH.Charple : CRUSH.Squid,
           padding: '1px 5px', borderRadius: 14
         }}>{count}</span>
@@ -3290,7 +3290,7 @@ function CtxDetail({
             const top = highlightTopN && r.tokens >= topThreshold && i < highlightTopN
             const displayName = pathify ? r.name.replace(/^\/Users\/[^/]+/, '~') : r.name.replace(/^mcp__[^_]+__/, '')
             return (
-              <tr key={i} style={{ background: top ? 'rgba(107,80,255,0.06)' : 'transparent' }}>
+              <tr key={i} style={{ background: top ? accentTint(6) : 'transparent' }}>
                 <td style={{ padding: '5px 10px', borderBottom: `1px solid rgba(58,57,67,0.4)`, color: CRUSH.Ash }}>
                   <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: colorDot, marginRight: 6, verticalAlign: 'middle' as const }} />
                   {displayName}
@@ -4158,7 +4158,7 @@ function ActionToolbar({
 
 const pillStyle = (active = false): React.CSSProperties => ({
   display: 'inline-flex', alignItems: 'center', gap: 6,
-  background: active ? 'rgba(124,58,237,0.12)' : CHAT.surface2,
+  background: active ? accentTint(12) : CHAT.surface2,
   color: active ? CHAT.accent : CHAT.muted,
   border: 'none',
   borderRadius: 999,
@@ -4168,11 +4168,9 @@ const pillStyle = (active = false): React.CSSProperties => ({
   whiteSpace: 'nowrap'
 })
 
-/** Mic + language in one pill: click the mic to start/stop, click the
- *  中/EN label to switch language. App.tsx owns the speech process and
- *  answers `hive:voice-toggle` / reports `hive:voice-state`. */
+/** Mic pill. App.tsx owns the speech process: it answers
+ *  `hive:voice-toggle` and reports `hive:voice-state`. */
 function VoicePill({ agentId }: { agentId: string }) {
-  const [lang, toggleLang] = useSpeechLang()
   const [state, setState] = useState<{ listening: boolean; partial: string; notice?: string }>({ listening: false, partial: '' })
   useEffect(() => {
     const onState = (e: Event) => setState((e as CustomEvent<{ listening: boolean; partial: string; notice?: string }>).detail)
@@ -4182,16 +4180,11 @@ function VoicePill({ agentId }: { agentId: string }) {
   return (
     <span style={{ ...pillStyle(state.listening), padding: 0, gap: 0, overflow: 'hidden' }}>
       <button
-        onClick={() => window.dispatchEvent(new CustomEvent('hive:voice-toggle', { detail: { agentId, lang } }))}
+        onClick={() => window.dispatchEvent(new CustomEvent('hive:voice-toggle', { detail: { agentId } }))}
         title={state.listening ? 'Stop listening' : 'Voice input'}
         aria-label={state.listening ? 'Stop listening' : 'Voice input'}
-        style={{ ...pillStyle(state.listening), background: 'transparent', padding: '4px 4px 4px 10px', color: state.listening ? CRUSH.Sriracha : 'inherit' }}
+        style={{ ...pillStyle(state.listening), background: 'transparent', color: state.listening ? CRUSH.Sriracha : 'inherit' }}
       >{state.listening ? '■' : '🎙'}</button>
-      <button
-        onClick={toggleLang}
-        title={`Voice language: ${lang} (click to switch, applies next time)`}
-        style={{ ...pillStyle(state.listening), background: 'transparent', padding: '4px 10px 4px 4px', color: 'inherit' }}
-      >{speechLangLabel(lang)}</button>
       {state.listening && state.partial && (
         <span style={{ padding: '0 10px 0 2px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{state.partial}</span>
       )}
@@ -4363,7 +4356,7 @@ function MenuItem({ icon, label, desc, onClick, danger, disabled, hover }: {
   hover?: string
 }) {
   const accent = danger ? CRUSH.Sriracha : CRUSH.Charple
-  const bg = danger ? 'rgba(235,66,104,0.14)' : 'rgba(107,80,255,0.14)'
+  const bg = danger ? 'rgba(235,66,104,0.14)' : accentTint(14)
   return (
     <button
       onClick={onClick}
@@ -4491,7 +4484,7 @@ function SubagentBanner({ subs }: { subs: Record<string, {
       padding: '4px 10px',
       borderTop: `1px solid ${CRUSH.Charcoal}`,
       borderBottom: `1px solid ${CRUSH.Charcoal}`,
-      background: 'rgba(107,80,255,0.08)',  // Charple tint (Crush purple)
+      background: accentTint(8),  // Charple tint (Crush purple)
       fontFamily: FONT_MONO, fontSize: 11,
       color: CRUSH.Ash,
       display: 'flex', flexDirection: 'column', gap: 2

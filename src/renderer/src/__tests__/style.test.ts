@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 //
-// v2.9.0 Style module — Style is orthogonal to Palette, but Prime's
-// vocabulary rejects warm accents (pink). loadStyle/applyStyle need to
-// enforce that, coerce automatically, and survive round-trip.
+// v2.9.0 Style module — Style is orthogonal to Palette. A style may
+// restrict which palettes it supports (applyStyle then coerces); since
+// v2.25.0 none does: Prime accepts Future Pink too.
 
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
@@ -33,9 +33,8 @@ describe('Style module', () => {
     }
   })
 
-  it('Prime deliberately excludes future-pink (warm hue ≠ HUD)', () => {
-    expect(STYLE_META.prime.compatiblePalettes).not.toContain('future-pink')
-    expect(STYLE_META.accent.compatiblePalettes).toContain('future-pink')
+  it('every style supports every palette, Prime + Future Pink included', () => {
+    for (const id of STYLES) expect([...STYLE_META[id].compatiblePalettes]).toEqual([...PALETTES])
   })
 
   it('loadStyle defaults to accent when nothing saved', () => {
@@ -65,15 +64,13 @@ describe('Style module', () => {
     expect(localStorage.getItem('hive:style')).toBe('accent')
   })
 
-  it('applyStyle coerces future-pink → neon-purple (removes data-palette since np is default)', () => {
-    // Cleaner version of the coercion test — asserts the actual
-    // attribute state, not a specific written value.
+  it('applyStyle keeps Future Pink when switching to Prime', () => {
     localStorage.setItem('hive:palette', 'future-pink')
     document.documentElement.setAttribute('data-palette', 'future-pink')
     const returned = applyStyle('prime', 'future-pink')
-    expect(returned).toBe('neon-purple')
-    // neon-purple is the default palette → attribute removed
-    expect(document.documentElement.hasAttribute('data-palette')).toBe(false)
+    expect(returned).toBe('future-pink')
+    expect(document.documentElement.getAttribute('data-palette')).toBe('future-pink')
+    expect(document.documentElement.getAttribute('data-style')).toBe('prime')
   })
 
   it('applyStyle leaves compatible palette alone', () => {

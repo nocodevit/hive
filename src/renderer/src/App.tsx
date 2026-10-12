@@ -24,7 +24,6 @@ import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
 import { pickLRUToEvict } from './lru-terminals'
 import { confirmDialog } from './components/ConfirmDialog'
-import type { SpeechLang } from './lib/speech-lang'
 import { type VoiceEvent, useAutoSendPrefs, setAutoSendPrefs, AUTO_SEND_DELAY_MIN_MS, AUTO_SEND_DELAY_MAX_MS } from './lib/voice-autosend'
 import { CHAT } from './components/hive-chat/crush-styles'
 
@@ -134,7 +133,7 @@ export default function App() {
   // Utterance lifecycle for the composer's auto-send (see lib/voice-autosend).
   const voiceEvent = (agentId: string, ev: VoiceEvent) =>
     window.dispatchEvent(new CustomEvent('hive:voice-event', { detail: { agentId, ev } }))
-  const toggleVoice = async (agentId: string, lang: SpeechLang) => {
+  const toggleVoice = async (agentId: string) => {
     if (isListening) {
       await window.api.speech.stop()
       voiceCleanupRef.current?.()
@@ -174,7 +173,7 @@ export default function App() {
         setSpeechNotice(line.slice(5))
       }
     })
-    const result = await window.api.speech.start(lang)
+    const result = await window.api.speech.start()
     if (!result.ok) {
       cleanup()
       voiceAgentRef.current = null
@@ -188,8 +187,7 @@ export default function App() {
   toggleVoiceRef.current = toggleVoice
   useEffect(() => {
     const onToggle = (e: Event) => {
-      const { agentId, lang } = (e as CustomEvent<{ agentId: string; lang: SpeechLang }>).detail
-      toggleVoiceRef.current(agentId, lang)
+      toggleVoiceRef.current((e as CustomEvent<{ agentId: string }>).detail.agentId)
     }
     window.addEventListener('hive:voice-toggle', onToggle)
     return () => window.removeEventListener('hive:voice-toggle', onToggle)

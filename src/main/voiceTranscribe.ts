@@ -20,10 +20,11 @@ export function pickModel(v: unknown): TranscribeModel {
   return (TRANSCRIBE_MODELS as readonly unknown[]).includes(v) ? (v as TranscribeModel) : TRANSCRIBE_MODEL
 }
 
-/** Hive's voice locale (zh-CN | en-US) → the API's ISO-639-1 hint. */
-export function languageHint(locale: unknown): 'zh' | 'en' {
-  return locale === 'en-US' ? 'en' : 'zh'
-}
+// Always hint Chinese. Measured: the hint does not disturb English or
+// mixed speech (pure English sentences come back unchanged), while short
+// Chinese phrases without it were returned in the wrong language. That
+// made a manual 中/EN switch pointless, so there isn't one.
+export const TRANSCRIBE_LANGUAGE = 'zh'
 export const TRANSCRIBE_URL = 'https://api.openai.com/v1/audio/transcriptions'
 const TRANSCRIBE_TIMEOUT_MS = 20_000
 
@@ -65,12 +66,12 @@ type FetchLike = (url: string, init: { method: string; headers: Record<string, s
 
 export async function transcribeWav(
   wav: Uint8Array,
-  opts: { apiKey: string; prompt?: string; model?: TranscribeModel; language?: 'zh' | 'en'; fetchImpl?: FetchLike; timeoutMs?: number }
+  opts: { apiKey: string; prompt?: string; model?: TranscribeModel; fetchImpl?: FetchLike; timeoutMs?: number }
 ): Promise<string> {
   const form = new FormData()
   form.append('model', opts.model ?? TRANSCRIBE_MODEL)
   form.append('response_format', 'json')
-  if (opts.language) form.append('language', opts.language)
+  form.append('language', TRANSCRIBE_LANGUAGE)
   if (opts.prompt) form.append('prompt', opts.prompt)
   form.append('file', new Blob([wav as BlobPart], { type: 'audio/wav' }), 'utterance.wav')
   const ctrl = new AbortController()
@@ -94,7 +95,6 @@ export interface UtteranceDeps {
   apiKey: string
   prompt: string
   model?: TranscribeModel
-  language?: 'zh' | 'en'
   readFile?: (path: string) => Uint8Array
   removeFile?: (path: string) => void
   transcribe?: typeof transcribeWav
@@ -112,7 +112,7 @@ export async function resolveUtterance(line: AudioLine, deps: UtteranceDeps): Pr
   try {
     if (!deps.apiKey) return { text: line.fallback, source: 'local' }
     const text = await (deps.transcribe ?? transcribeWav)(read(line.path), {
-      apiKey: deps.apiKey, prompt: deps.prompt || undefined, model: deps.model, language: deps.language
+      apiKey: deps.apiKey, prompt: deps.prompt || undefined, model: deps.model
     })
     // An empty cloud result on audio macOS heard words in is more likely a
     // dropped segment than silence — keep what we have.

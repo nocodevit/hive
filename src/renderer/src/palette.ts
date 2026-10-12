@@ -38,7 +38,7 @@ export const STYLE_META: Record<Style, StyleMeta> = {
     id: 'prime',
     name: 'Prime',
     tagline: 'HUD / CRT · JetBrains Mono · glow · hex avatars',
-    compatiblePalettes: ['neon-purple', 'tech-blue'],  // pink dropped — warm ≠ HUD
+    compatiblePalettes: PALETTES,   // all 3 — pink was excluded until v2.25.0
   },
 }
 

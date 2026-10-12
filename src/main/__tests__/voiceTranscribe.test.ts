@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest'
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { parseAudioLine, buildVocabPrompt, transcribeWav, resolveUtterance, createSpeechLineHandler, startSpeechHelper, pickModel, languageHint, TRANSCRIBE_MODEL, TRANSCRIBE_URL } from '../voiceTranscribe'
+import { parseAudioLine, buildVocabPrompt, transcribeWav, resolveUtterance, createSpeechLineHandler, startSpeechHelper, pickModel, TRANSCRIBE_MODEL, TRANSCRIBE_URL } from '../voiceTranscribe'
 
 describe('parseAudioLine', () => {
   it('splits path and the macOS fallback text', () => {
@@ -41,17 +41,12 @@ describe('buildVocabPrompt', () => {
   })
 })
 
-describe('pickModel / languageHint', () => {
+describe('pickModel', () => {
   it('accepts the two supported models and defaults anything else', () => {
     expect(pickModel('gpt-transcribe')).toBe('gpt-transcribe')
     expect(pickModel('gpt-4o-mini-transcribe')).toBe('gpt-4o-mini-transcribe')
     expect(pickModel('whisper-1')).toBe(TRANSCRIBE_MODEL)
     expect(pickModel(undefined)).toBe(TRANSCRIBE_MODEL)
-  })
-  it('maps the voice locale to a language hint, defaulting to Chinese', () => {
-    expect(languageHint('en-US')).toBe('en')
-    expect(languageHint('zh-CN')).toBe('zh')
-    expect(languageHint(undefined)).toBe('zh')
   })
 })
 
@@ -72,19 +67,17 @@ describe('transcribeWav', () => {
     expect(file.type).toBe('audio/wav')
     expect(file.size).toBe(3)
   })
-  it('omits the prompt and language when there are none', async () => {
+  it('omits the prompt when there is none, and always sends the Chinese hint', async () => {
     const f = okFetch('hi')
     await transcribeWav(new Uint8Array([1]), { apiKey: 'k', fetchImpl: f as any })
     const body = (f.mock.calls[0] as any)[1].body
     expect(body.has('prompt')).toBe(false)
-    expect(body.has('language')).toBe(false)
-  })
-  it('sends the chosen model and language hint', async () => {
-    const f = okFetch('hi')
-    await transcribeWav(new Uint8Array([1]), { apiKey: 'k', model: 'gpt-transcribe', language: 'zh', fetchImpl: f as any })
-    const body = (f.mock.calls[0] as any)[1].body
-    expect(body.get('model')).toBe('gpt-transcribe')
     expect(body.get('language')).toBe('zh')
+  })
+  it('sends the chosen model', async () => {
+    const f = okFetch('hi')
+    await transcribeWav(new Uint8Array([1]), { apiKey: 'k', model: 'gpt-transcribe', fetchImpl: f as any })
+    expect((f.mock.calls[0] as any)[1].body.get('model')).toBe('gpt-transcribe')
   })
   it('throws on an HTTP error and returns empty for a missing text field', async () => {
     const bad = vi.fn(async () => ({ ok: false, status: 401, json: async () => ({}), text: async () => 'no' }))
@@ -106,7 +99,7 @@ describe('resolveUtterance', () => {
   it('uses the cloud text when a key is set, then deletes the recording', async () => {
     const d = { ...base(), apiKey: 'k', transcribe: vi.fn(async () => '云端识别的结果') }
     expect(await resolveUtterance(line, d)).toEqual({ text: '云端识别的结果', source: 'cloud' })
-    expect(d.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), { apiKey: 'k', prompt: 'Missy', model: undefined, language: undefined })
+    expect(d.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), { apiKey: 'k', prompt: 'Missy', model: undefined })
     expect(d.removeFile).toHaveBeenCalledWith('/tmp/u1.wav')
   })
   it('without a key: local text, nothing uploaded, recording still deleted', async () => {
@@ -139,9 +132,9 @@ describe('resolveUtterance', () => {
     expect(d.onError).toHaveBeenCalledWith('ENOENT')
   })
   it('sends no prompt field when the vocabulary is empty', async () => {
-    const d = { ...base(), prompt: '', apiKey: 'k', model: 'gpt-transcribe' as const, language: 'zh' as const, transcribe: vi.fn(async () => 'x') }
+    const d = { ...base(), prompt: '', apiKey: 'k', model: 'gpt-transcribe' as const, transcribe: vi.fn(async () => 'x') }
     await resolveUtterance(line, d)
-    expect(d.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), { apiKey: 'k', prompt: undefined, model: 'gpt-transcribe', language: 'zh' })
+    expect(d.transcribe).toHaveBeenCalledWith(expect.any(Uint8Array), { apiKey: 'k', prompt: undefined, model: 'gpt-transcribe' })
   })
 })
 
