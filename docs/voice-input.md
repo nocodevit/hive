@@ -36,7 +36,7 @@ words, `gpt-transcribe` with the `zh` hint was right twice.
 
 ## Auto-send
 
-Off by default (composer pill 自动发送, or App Settings → Voice Input).
+Off by default (composer pill Auto send, or App Settings → Voice Input).
 When on, dictated text is sent once the speaker is done:
 
 - The helper brackets every utterance: `speaking:` when it opens, then

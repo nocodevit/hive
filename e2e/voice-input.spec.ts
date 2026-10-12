@@ -121,7 +121,7 @@ test('mic pill: start, preview, finals land in the input in order, stop', async 
   // would have emptied it), and Send is there for the user to press.
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled()
   // Auto-send is off by default: no countdown, however long the pause.
-  await expect(page.getByRole('button', { name: '自动发送' })).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('button', { name: 'Auto send' })).toHaveAttribute('aria-pressed', 'false')
   await expect(page.getByRole('button', { name: /秒后发送/ })).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Stop listening' }).click()
@@ -159,8 +159,8 @@ test('auto-send: counts down after the last sentence, cancels on speech or typin
   const MARKER = 'v9x-autosend-marker'
   await input.fill('')
 
-  await page.getByRole('button', { name: '自动发送' }).click()
-  await expect(page.getByRole('button', { name: '自动发送' })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: 'Auto send' }).click()
+  await expect(page.getByRole('button', { name: 'Auto send' })).toHaveAttribute('aria-pressed', 'true')
   await page.getByRole('button', { name: 'Voice input' }).click()
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible()
 
@@ -208,7 +208,7 @@ test('auto-send: counts down after the last sentence, cancels on speech or typin
   await line('speaking:')
   await line('final:one more')
   await expect(countdown).toBeVisible()
-  await page.getByRole('button', { name: '自动发送' }).click()
+  await page.getByRole('button', { name: 'Auto send' }).click()
   await expect(countdown).toHaveCount(0)
   expect(await stillUnsentAfter(3500, input)).toBe('one more')
 
