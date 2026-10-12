@@ -77,7 +77,7 @@ describe('resolveAgent — exact match only', () => {
   it('is ambiguous when the same name exists in two projects', () => {
     const r = resolveAgent(rows(), { agent: 'Missy' })
     expect(r).toMatchObject({ ok: false, error: 'ambiguous' })
-    expect(!r.ok && r.candidates.map(c => c.agentId)).toEqual(['agent-1', 'agent-3'])
+    expect('candidates' in r && r.candidates.map(c => c.agentId)).toEqual(['agent-1', 'agent-3'])
   })
   it('does not fuzzy-match case, prefixes or near-misses', () => {
     expect(resolveAgent(rows(), { agent: 'missy' })).toMatchObject({ ok: false, error: 'not_found' })
@@ -86,7 +86,7 @@ describe('resolveAgent — exact match only', () => {
   })
   it('offers same-name agents when only the project was wrong', () => {
     const r = resolveAgent(rows(), { project: 'Cube', agent: 'Missy' })
-    expect(!r.ok && r.candidates.map(c => c.agentId)).toEqual(['agent-1', 'agent-3'])
+    expect('candidates' in r && r.candidates.map(c => c.agentId)).toEqual(['agent-1', 'agent-3'])
   })
   it('reports unknown ids and missing targets', () => {
     expect(resolveAgent(rows(), { agentId: 'nope' })).toMatchObject({ ok: false, error: 'not_found' })
