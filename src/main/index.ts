@@ -175,6 +175,7 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
 import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage } from './chat'
+import { createSpeechLineHandler, resolveUtterance, buildVocabPrompt, pickModel, languageHint } from './voiceTranscribe'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
 import { randomBytes } from 'crypto'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -1264,6 +1265,30 @@ ipcMain.handle('agent:send', (_event, { agentId, type, payload }) => {
 // Speech recognition (macOS native SFSpeechRecognizer)
 let speechProcess: any = null
 
+let speechLocale = 'zh-CN'
+let speechLines: ReturnType<typeof createSpeechLineHandler> | null = null
+
+function newSpeechLineHandler() {
+  return createSpeechLineHandler({
+    send: line => {
+      const win = BrowserWindow.getAllWindows()[0]
+      if (win && !win.isDestroyed()) win.webContents.send('speech:transcript', line)
+    },
+    resolve: async (audio, previousText) => {
+      const data = loadData()
+      const prefs = (data.appPrefs || {}) as { openaiApiKey?: unknown; voiceModel?: unknown }
+      const { text } = await resolveUtterance(audio, {
+        apiKey: typeof prefs.openaiApiKey === 'string' ? prefs.openaiApiKey.trim() : '',
+        model: pickModel(prefs.voiceModel),
+        language: languageHint(speechLocale),
+        prompt: buildVocabPrompt(data, 80, previousText),
+        onError: msg => console.error(`[Hive] voice transcription failed, using macOS result: ${msg}`)
+      })
+      return text
+    }
+  })
+}
+
 ipcMain.handle('speech:start', (_e, opts?: { lang?: string }) => {
   if (speechProcess) return { ok: false, error: 'already running' }
   const { spawn } = require('child_process')
@@ -1272,25 +1297,38 @@ ipcMain.handle('speech:start', (_e, opts?: { lang?: string }) => {
   const prodPath = join(process.resourcesPath, 'scripts', 'hive-speech')
   const resolvedPath = existsSync(devPath) ? devPath : prodPath
   if (!existsSync(resolvedPath)) return { ok: false, error: 'hive-speech binary not found' }
-  const lang = opts?.lang === 'en-US' ? 'en-US' : 'zh-CN'
-  speechProcess = spawn(resolvedPath, [lang], { stdio: ['ignore', 'pipe', 'pipe'] })
-  speechProcess.stdout?.on('data', (data: Buffer) => {
-    const lines = data.toString().split('\n').filter(Boolean)
-    for (const line of lines) {
-      const win = BrowserWindow.getAllWindows()[0]
-      if (win && !win.isDestroyed()) {
-        win.webContents.send('speech:transcript', line)
-      }
-    }
+  speechLocale = opts?.lang === 'en-US' ? 'en-US' : 'zh-CN'
+  const lines = newSpeechLineHandler()
+  speechLines = lines
+  const child = spawn(resolvedPath, [speechLocale], { stdio: ['ignore', 'pipe', 'pipe'] })
+  speechProcess = child
+  let pending = ''
+  // Decode as a stream: a chunk boundary can fall inside a Chinese character.
+  child.stdout?.setEncoding('utf8')
+  child.stdout?.on('data', (data: string) => {
+    pending += data
+    const parts = pending.split('\n')
+    pending = parts.pop() || ''
+    for (const line of parts) if (line) lines.handle(line)
   })
-  speechProcess.on('exit', () => { speechProcess = null })
+  child.on('close', () => {
+    if (pending) { lines.handle(pending); pending = '' }
+    if (speechProcess === child) speechProcess = null
+  })
   return { ok: true }
 })
-
-ipcMain.handle('speech:stop', () => {
-  if (speechProcess) {
-    speechProcess.kill('SIGTERM')
+ipcMain.handle('speech:stop', async () => {
+  const child = speechProcess
+  if (child) {
     speechProcess = null
+    // The helper hands over the sentence in progress before it exits;
+    // wait for that and for its transcription, so the renderer (which
+    // stops listening once this returns) still receives the last words.
+    const exited = new Promise<void>(resolve => child.once('close', () => resolve()))
+    child.kill('SIGTERM')
+    const cap = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms))
+    await Promise.race([exited, cap(3000)])
+    if (speechLines) await Promise.race([speechLines.idle(), cap(25000)])
   }
   return { ok: true }
 })

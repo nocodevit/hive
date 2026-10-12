@@ -188,6 +188,10 @@ export default function App() {
     // every project. v2.7.1 mistakenly put it on Project; that's now
     // the deprecated field and the app-level value wins.
     chatFontSize: 13 as number,
+    // Voice input: cloud transcription (mixed 中文/English). Empty key =
+    // macOS's built-in single-language recognition only.
+    openaiApiKey: '' as string,
+    voiceModel: 'gpt-4o-mini-transcribe' as string,
   })
   const [panelWidths, setPanelWidths] = useState({ projects: 200, agents: 240, files: 220 })
   const [showFiles, setShowFiles] = useState(true)
@@ -3285,6 +3289,42 @@ export default function App() {
                     placeholder="glpat-..."
                     className="w-full px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] font-mono placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
                   />
+                </div>
+              </div>
+            </div>
+
+            {/* Voice input */}
+            <div>
+              <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Voice Input</label>
+              <div className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
+                <div className="px-4 py-2.5 border-b border-border">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm text-text-primary">OpenAI API key</span>
+                    <span className="text-[13px] text-text-muted">{appPrefs.openaiApiKey ? 'configured' : 'not set — macOS recognition only'}</span>
+                  </div>
+                  <input
+                    type="password"
+                    aria-label="OpenAI API key for voice input"
+                    value={appPrefs.openaiApiKey || ''}
+                    onChange={(e) => setAppPrefs((p) => ({ ...p, openaiApiKey: e.target.value }))}
+                    placeholder="sk-..."
+                    className="w-full px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] font-mono placeholder:text-text-muted/40 focus:outline-none focus:border-accent transition-colors"
+                  />
+                  <p className="mt-1.5 text-[12px] text-text-muted">
+                    With a key, each sentence you speak is uploaded to OpenAI and transcribed there, so 中文 and English can be mixed in one sentence. Without one, voice input stays on this Mac (one language at a time).
+                  </p>
+                </div>
+                <div className="px-4 py-2.5 flex items-center justify-between gap-3">
+                  <span className="text-sm text-text-primary">Model</span>
+                  <select
+                    aria-label="Voice transcription model"
+                    value={appPrefs.voiceModel || 'gpt-4o-mini-transcribe'}
+                    onChange={(e) => setAppPrefs((p) => ({ ...p, voiceModel: e.target.value }))}
+                    className="px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] focus:outline-none focus:border-accent"
+                  >
+                    <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe — cheapest (~$0.003/min)</option>
+                    <option value="gpt-transcribe">gpt-transcribe — better on short phrases (~$0.0045/min)</option>
+                  </select>
                 </div>
               </div>
             </div>
