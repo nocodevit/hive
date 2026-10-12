@@ -25,6 +25,7 @@ import { formatTimeSince } from './timeSince'
 import { pickLRUToEvict } from './lru-terminals'
 import { confirmDialog } from './components/ConfirmDialog'
 import type { SpeechLang } from './lib/speech-lang'
+import { type VoiceEvent, useAutoSendPrefs, setAutoSendPrefs, AUTO_SEND_DELAY_MIN_MS, AUTO_SEND_DELAY_MAX_MS } from './lib/voice-autosend'
 import { CHAT } from './components/hive-chat/crush-styles'
 
 function StatusDot({ status }: { status: Agent['status'] }) {
@@ -127,30 +128,47 @@ export default function App() {
   const [isListening, setIsListening] = useState(false)
   const [speechPartial, setSpeechPartial] = useState('')
   const [speechNotice, setSpeechNotice] = useState('')
+  const autoSendPrefs = useAutoSendPrefs()
   const voiceCleanupRef = useRef<(() => void) | null>(null)
+  const voiceAgentRef = useRef<string | null>(null)
+  // Utterance lifecycle for the composer's auto-send (see lib/voice-autosend).
+  const voiceEvent = (agentId: string, ev: VoiceEvent) =>
+    window.dispatchEvent(new CustomEvent('hive:voice-event', { detail: { agentId, ev } }))
   const toggleVoice = async (agentId: string, lang: SpeechLang) => {
     if (isListening) {
       await window.api.speech.stop()
       voiceCleanupRef.current?.()
       voiceCleanupRef.current = null
+      if (voiceAgentRef.current) voiceEvent(voiceAgentRef.current, { kind: 'stopped' })
+      voiceAgentRef.current = null
       setIsListening(false)
       setSpeechPartial('')
       return
     }
     setSpeechNotice('')
+    voiceAgentRef.current = agentId
     const cleanup = window.api.speech.onTranscript((line) => {
       if (line.startsWith('final:')) {
+        const text = line.slice(6)
         // Broadcast so whichever surface is visible (xterm or HiveChat) consumes it.
-        window.dispatchEvent(new CustomEvent('hive:voice-final', { detail: { agentId, text: line.slice(6) } }))
+        if (text) window.dispatchEvent(new CustomEvent('hive:voice-final', { detail: { agentId, text } }))
+        voiceEvent(agentId, { kind: 'final', text })
         setSpeechPartial('')
       } else if (line.startsWith('partial:')) {
         setSpeechPartial(line.slice(8))
+      } else if (line.startsWith('speaking:')) {
+        voiceEvent(agentId, { kind: 'speaking' })
+      } else if (line.startsWith('dropped:')) {
+        voiceEvent(agentId, { kind: 'dropped' })
+        setSpeechPartial('')
       } else if (line.startsWith('notice:')) {
         setSpeechNotice(line.slice(7))
       } else if (line.startsWith('exit:')) {
         // The helper stopped by itself — don't leave the button on "listening".
         cleanup()
         voiceCleanupRef.current = null
+        voiceEvent(agentId, { kind: 'stopped' })
+        voiceAgentRef.current = null
         setIsListening(false)
         setSpeechPartial('')
         setSpeechNotice(line.slice(5))
@@ -159,6 +177,7 @@ export default function App() {
     const result = await window.api.speech.start(lang)
     if (!result.ok) {
       cleanup()
+      voiceAgentRef.current = null
       setSpeechNotice(result.error || 'voice input could not start')
       return
     }
@@ -3337,6 +3356,34 @@ export default function App() {
                     <option value="gpt-4o-mini-transcribe">gpt-4o-mini-transcribe — cheapest (~$0.003/min)</option>
                     <option value="gpt-transcribe">gpt-transcribe — better on short phrases (~$0.0045/min)</option>
                   </select>
+                </div>
+                <div className="px-4 py-2.5 border-t border-border">
+                  <div className="flex items-center justify-between gap-3">
+                    <label htmlFor="voice-autosend" className="text-sm text-text-primary">Send automatically when I stop talking</label>
+                    <input
+                      id="voice-autosend"
+                      type="checkbox"
+                      checked={autoSendPrefs.enabled}
+                      onChange={(e) => setAutoSendPrefs({ enabled: e.target.checked })}
+                      className="w-4 h-4 accent-[var(--accent)] cursor-pointer"
+                    />
+                  </div>
+                  <div className="flex items-center justify-between gap-3 mt-2">
+                    <label htmlFor="voice-autosend-delay" className="text-[13px] text-text-muted">Pause before sending (seconds)</label>
+                    <input
+                      id="voice-autosend-delay"
+                      type="number"
+                      min={AUTO_SEND_DELAY_MIN_MS / 1000}
+                      max={AUTO_SEND_DELAY_MAX_MS / 1000}
+                      step={0.5}
+                      value={autoSendPrefs.delayMs / 1000}
+                      onChange={(e) => setAutoSendPrefs({ delayMs: Number(e.target.value) * 1000 })}
+                      className="w-20 px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] focus:outline-none focus:border-accent"
+                    />
+                  </div>
+                  <p className="mt-1.5 text-[12px] text-text-muted">
+                    Off by default. When on, dictated text is sent after this pause; a countdown shows next to the mic, and speaking again, typing or clicking it cancels. The mic keeps listening afterwards.
+                  </p>
                 </div>
               </div>
             </div>
