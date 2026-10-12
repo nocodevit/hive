@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, redact, configureRedact } from './crush-styles'
 import { useSpeechLang, speechLangLabel, joinVoiceText } from '../../lib/speech-lang'
+import { autoSendStep, AUTO_SEND_IDLE, useAutoSendPrefs, setAutoSendPrefs, type VoiceEvent } from '../../lib/voice-autosend'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
 import { ctxPctFromPrev, restartResumeMode } from './bulkRestart'
 import { expectsPasteCode } from './authPrompt'
@@ -1284,9 +1285,54 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     // v2.8.6: snap to one line — height derived from current baseFontSize.
     if (textareaRef.current) textareaRef.current.style.height = Math.ceil((baseFontSize + 1) * 1.4) + 'px'
   }
+  // Voice auto-send. App reports each utterance's lifecycle; autoSendStep
+  // decides when the speaker is done; the countdown below does the send.
+  const autoSend = useAutoSendPrefs()
+  const autoSendPrefsRef = useRef(autoSend)
+  autoSendPrefsRef.current = autoSend
+  const autoSendStateRef = useRef(AUTO_SEND_IDLE)
+  const autoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [autoSendAt, setAutoSendAt] = useState<number | null>(null)
+  const sendRef = useRef<() => void>(() => {})
+  const cancelAutoSend = () => {
+    if (autoSendTimerRef.current) { clearTimeout(autoSendTimerRef.current); autoSendTimerRef.current = null }
+    setAutoSendAt(null)
+  }
+  const voiceStep = (ev: VoiceEvent) => {
+    const r = autoSendStep(autoSendStateRef.current, ev)
+    autoSendStateRef.current = r.state
+    if (r.action === null) return
+    cancelAutoSend()
+    if (r.action !== 'arm' || !autoSendPrefsRef.current.enabled) return
+    const delay = autoSendPrefsRef.current.delayMs
+    setAutoSendAt(Date.now() + delay)
+    autoSendTimerRef.current = setTimeout(() => {
+      autoSendTimerRef.current = null
+      setAutoSendAt(null)
+      sendRef.current()
+    }, delay)
+  }
+  const voiceStepRef = useRef(voiceStep)
+  voiceStepRef.current = voiceStep
+  useEffect(() => {
+    const myAgentId = id.startsWith('chat-') ? id.slice(5) : id
+    const handler = (e: Event) => {
+      const d = (e as CustomEvent<{ agentId: string; ev: VoiceEvent }>).detail
+      if (d && d.agentId === myAgentId) voiceStepRef.current(d.ev)
+    }
+    window.addEventListener('hive:voice-event', handler)
+    return () => {
+      window.removeEventListener('hive:voice-event', handler)
+      if (autoSendTimerRef.current) clearTimeout(autoSendTimerRef.current)
+    }
+  }, [id])
+  // Turning the switch off mid-countdown must not still send.
+  useEffect(() => { if (!autoSend.enabled) cancelAutoSend() }, [autoSend.enabled])
+
   const send = async () => {
     const text = input.trim()
     if (!text || sending) return
+    voiceStep({ kind: 'sent' })
     // Compact is mid-flight — claude --print is dead and the next child
     // hasn't spawned yet. Sending now would silently drop the message
     // (or worse, fire it at a stale stdin and the user sees nothing
@@ -1334,6 +1380,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
     setSending(false)
   }
+  sendRef.current = () => { void send() }
 
   // v2.15.2 fix — queue-flush bug introduced by v2.13.0.
   //
@@ -2165,6 +2212,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               value={input}
               onChange={e => {
                 setInput(e.target.value)
+                voiceStep({ kind: 'typed' })
                 // v2.8.6: auto-grow up to 5 lines, then scroll. Line height
                 // = fontSize × lineHeight (1.4), so one line ≈ baseFontSize
                 // × 1.4. Cap = 5 × that. Reset to 'auto' first so shrinking
@@ -2220,6 +2268,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               <ActionToolbar
                 leading={<>
                   <VoicePill agentId={id.startsWith('chat-') ? id.slice(5) : id} />
+                  <AutoSendPill on={autoSend.enabled} />
+                  {autoSendAt !== null && <AutoSendCountdown at={autoSendAt} onCancel={() => voiceStep({ kind: 'typed' })} />}
                   <StreamingPill on={streamingMode} onToggle={toggleStreamingMode} />
                 </>}
                 trailing={composerTrailing}
@@ -4149,6 +4199,31 @@ function VoicePill({ agentId }: { agentId: string }) {
         <span role="status" title={state.notice} style={{ padding: '0 10px 0 2px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, color: CRUSH.Zest }}>⚠ {state.notice}</span>
       )}
     </span>
+  )
+}
+
+function AutoSendPill({ on }: { on: boolean }) {
+  return (
+    <CrushTooltip text={on
+      ? 'Auto-send ON · dictated text is sent after you pause'
+      : 'Auto-send OFF · dictated text waits for Enter'}>
+      <button onClick={() => setAutoSendPrefs({ enabled: !on })} aria-pressed={on} style={pillStyle(on)}>自动发送</button>
+    </CrushTooltip>
+  )
+}
+
+/** "Sending in N s" — clicking it (or typing, or speaking) cancels. */
+function AutoSendCountdown({ at, onCancel }: { at: number; onCancel: () => void }) {
+  const [, tick] = useState(0)
+  useEffect(() => {
+    const iv = setInterval(() => tick(n => n + 1), 200)
+    return () => clearInterval(iv)
+  }, [])
+  const secs = Math.max(1, Math.ceil((at - Date.now()) / 1000))
+  return (
+    <button onClick={onCancel} aria-live="polite" title="Click to cancel" style={{ ...pillStyle(true), color: CRUSH.Julep }}>
+      {secs} 秒后发送 · 取消
+    </button>
   )
 }
 

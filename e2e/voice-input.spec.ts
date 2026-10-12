@@ -26,6 +26,20 @@ const calls = () => app.evaluate(() => (globalThis as any).__speechCalls as Arra
 const line = (text: string) =>
   app.evaluate(({ BrowserWindow }, l) => BrowserWindow.getAllWindows()[0].webContents.send('speech:transcript', l), text)
 
+/**
+ * The input's value once `ms` (longer than the auto-send pause) has really
+ * elapsed. Throws if it changed in the meantime, i.e. something was sent.
+ */
+async function stillUnsentAfter(ms: number, input: ReturnType<Page['getByTestId']>): Promise<string> {
+  const before = await input.inputValue()
+  const until = Date.now() + ms
+  await expect.poll(async () => {
+    expect(await input.inputValue()).toBe(before)
+    return Date.now() >= until
+  }, { timeout: ms + 3000, intervals: [250] }).toBe(true)
+  return before
+}
+
 test.beforeAll(async () => {
   try {
     execSync('claude --version', { stdio: 'pipe', timeout: 5000 })
@@ -106,6 +120,9 @@ test('mic pill: start in 中文, preview, finals land in the input in order, sto
   // Nothing was sent to the agent — dictation only fills the box (a send
   // would have emptied it), and Send is there for the user to press.
   await expect(page.getByRole('button', { name: 'Send' })).toBeEnabled()
+  // Auto-send is off by default: no countdown, however long the pause.
+  await expect(page.getByRole('button', { name: '自动发送' })).toHaveAttribute('aria-pressed', 'false')
+  await expect(page.getByRole('button', { name: /秒后发送/ })).toHaveCount(0)
 
   await page.getByRole('button', { name: 'Stop listening' }).click()
   await expect(page.getByRole('button', { name: 'Voice input' })).toBeVisible()
@@ -145,4 +162,67 @@ test('a cloud failure is shown; a helper that dies resets the button', async () 
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible()
   await expect(page.getByRole('status')).toHaveCount(0)
   await page.getByRole('button', { name: 'Stop listening' }).click()
+})
+
+test('auto-send: counts down after the last sentence, cancels on speech or typing, then sends and keeps listening', async () => {
+  const input = page.getByTestId('hive-chat-input')
+  const countdown = page.getByRole('button', { name: /秒后发送/ })
+  const MARKER = 'v9x-autosend-marker'
+  await input.fill('')
+
+  await page.getByRole('button', { name: '自动发送' }).click()
+  await expect(page.getByRole('button', { name: '自动发送' })).toHaveAttribute('aria-pressed', 'true')
+  await page.getByRole('button', { name: 'Voice input' }).click()
+  await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible()
+
+  // Two sentences back to back: no countdown while the second is on its way.
+  await line('speaking:')
+  await line('speaking:')
+  await line('final:Do not use any tools.')
+  await expect(input).toHaveValue('Do not use any tools.')
+  await expect(countdown).toHaveCount(0)
+  await line(`final:Reply with exactly: ${MARKER}`)
+  await expect(countdown).toBeVisible()
+
+  // Speaking again cancels; noise that gets dropped re-arms.
+  await line('speaking:')
+  await expect(countdown).toHaveCount(0)
+  await line('dropped:')
+  await expect(countdown).toBeVisible()
+
+  // Typing takes over: cancelled, and it stays unsent well past the pause.
+  await input.press('End')
+  await input.pressSequentially(' ')
+  await expect(countdown).toHaveCount(0)
+  await line('speaking:')
+  await line('dropped:')
+  await expect(countdown).toHaveCount(0)
+  expect(await stillUnsentAfter(3500, input)).toContain(MARKER)
+
+  // Clicking the countdown cancels too.
+  await line('speaking:')
+  await line('final:please')
+  await expect(countdown).toBeVisible()
+  await countdown.click()
+  await expect(countdown).toHaveCount(0)
+  await expect(input).toHaveValue(/please$/)
+
+  // A fresh sentence, then silence: it sends by itself.
+  await line('speaking:')
+  await line('final:thanks')
+  await expect(countdown).toBeVisible()
+  await expect(input).toHaveValue('', { timeout: 6000 })
+  await expect(page.getByText(new RegExp(`Reply with exactly: ${MARKER}`))).toBeVisible()
+
+  // Still listening for the next message; turning the switch off mid-countdown cancels.
+  await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible()
+  await line('speaking:')
+  await line('final:one more')
+  await expect(countdown).toBeVisible()
+  await page.getByRole('button', { name: '自动发送' }).click()
+  await expect(countdown).toHaveCount(0)
+  expect(await stillUnsentAfter(3500, input)).toBe('one more')
+
+  await page.getByRole('button', { name: 'Stop listening' }).click()
+  await expect(page.getByRole('button', { name: 'Voice input' })).toBeVisible()
 })

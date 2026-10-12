@@ -33,6 +33,21 @@ on the owner's own recording (2026-10-12): both got a 10 s mixed sentence
 right; on a 2 s quiet "说好了" the mini model returned Korean / wrong
 words, `gpt-transcribe` with the `zh` hint was right twice.
 
+## Auto-send
+
+Off by default (composer pill 自动发送, or App Settings → Voice Input).
+When on, dictated text is sent once the speaker is done:
+
+- The helper brackets every utterance: `speaking:` when it opens, then
+  exactly one `audio:` (→ `final:`) or `dropped:` (it was only noise).
+- `lib/voice-autosend.ts` (`autoSendStep`) arms a countdown when every
+  opened utterance has been answered AND fresh dictation is sitting in the
+  input. Default pause 2.5 s (1–10 s, in settings).
+- Cancelled by: speaking again, typing, clicking the countdown, stopping
+  the mic, switching auto-send off. Text the user typed or edited by hand
+  is never auto-sent on its own — only after new speech.
+- After a send the mic keeps listening, so messages can follow each other.
+
 ## Failure handling
 
 - Cloud call fails (bad key, offline, timeout): that utterance uses the

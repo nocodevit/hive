@@ -148,11 +148,13 @@ describe('resolveUtterance', () => {
 describe('createSpeechLineHandler', () => {
   const later = <T,>(ms: number, v: T) => new Promise<T>(r => setTimeout(() => r(v), ms))
 
-  it('passes previews through untouched and immediately', () => {
+  it('passes previews and utterance markers through untouched and immediately', () => {
     const send = vi.fn()
     const h = createSpeechLineHandler({ send, resolve: vi.fn() })
+    h.handle('speaking:')
     h.handle('partial:我现在')
-    expect(send).toHaveBeenCalledWith('partial:我现在')
+    h.handle('dropped:')
+    expect(send.mock.calls.map(c => c[0])).toEqual(['speaking:', 'partial:我现在', 'dropped:'])
   })
   it('emits finals in spoken order even when the first call is the slow one', async () => {
     const sent: string[] = []
@@ -173,12 +175,12 @@ describe('createSpeechLineHandler', () => {
     await h.idle()
     expect(resolve.mock.calls.map(c => c[1])).toEqual(['', '第一句'])
   })
-  it('clears the preview when an utterance resolves to nothing', async () => {
+  it('still answers an utterance that resolves to nothing', async () => {
     const sent: string[] = []
     const h = createSpeechLineHandler({ send: l => sent.push(l), resolve: async () => '' })
     h.handle('audio:/1.wav')
     await h.idle()
-    expect(sent).toEqual(['partial:'])
+    expect(sent).toEqual(['final:'])
   })
   it('a failing resolve falls back to the macOS text and does not block later utterances', async () => {
     const sent: string[] = []
