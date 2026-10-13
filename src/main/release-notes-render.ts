@@ -205,6 +205,8 @@ export function renderReleaseNotesHTML(inputs: RenderInputs): string {
     if (action === 'view-github') { api.openExternal?.(RELEASE_URL); return; }
     if (action === 'later')       { api.close?.(); return; }
     if (action === 'download')    { startDownload(); return; }
+    if (action === 'install')     { t.disabled = true; t.textContent = 'Restarting…'; api.install?.(); return; }
+    if (action === 'quit')        { api.quit?.(); return; }
   });
   function startDownload() {
     document.querySelectorAll('button[data-action="download"]').forEach(b => { b.disabled = true; b.textContent = 'Downloading…'; });
@@ -221,10 +223,21 @@ export function renderReleaseNotesHTML(inputs: RenderInputs): string {
   api.onDone?.((info) => {
     document.getElementById('fill').style.width = '100%';
     document.getElementById('pct').textContent = '100%';
-    document.getElementById('statusText').textContent = info?.error ? ('Failed: ' + info.error) : 'Installer opened. Drag Hive → Applications, then quit this window.';
-    if (!info?.error) {
-      document.querySelectorAll('button[data-action="later"]').forEach(b => { b.textContent = 'Close'; });
+    const status = document.getElementById('statusText');
+    const primary = document.querySelector('button[data-action="download"]');
+    const later = document.querySelector('button[data-action="later"]');
+    if (info?.error) { status.textContent = 'Failed: ' + info.error; return; }
+    if (info?.ready) {
+      // Verified and staged next to the installed app: one click left.
+      status.textContent = 'v' + info.ready.version + ' is ready. Hive will close, update and reopen; running chats stop and are offered again when it reopens.';
+      if (primary) { primary.dataset.action = 'install'; primary.disabled = false; primary.textContent = 'Install & Restart'; }
+      return;
     }
+    // Automatic install was not possible — the disk image is open instead.
+    // Replacing a running app fails, so offer to quit from here.
+    status.textContent = 'Could not install automatically (' + (info?.manual || 'unknown reason') + '). The installer is open: quit Hive, then drag Hive into Applications.';
+    if (primary) { primary.dataset.action = 'quit'; primary.disabled = false; primary.textContent = 'Quit Hive'; }
+    if (later) later.textContent = 'Close';
   });
 </script>
 </body>
