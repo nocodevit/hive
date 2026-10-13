@@ -341,10 +341,12 @@ export function stopHandoff(runId: string): boolean {
   if (h.state.status === 'running' || h.state.status === 'paused' || h.state.status === 'compacting') {
     h.state.status = 'stopped'
     h.state.stopReason = 'stopped by user'
-    // Stage 1: politely ask claude to clear its /goal.
-    try { sendUserMessage(h.config.chatId, '/goal clear') } catch { /* ignore */ }
-    // Stage 2: cancel current turn.
-    try { interruptSession(h.config.chatId) } catch { /* already dead */ }
+    // Stage 1: ask claude to clear its /goal. sendUserMessage interrupts
+    // the running turn itself for this command (see shared/goal-loop).
+    let preempted = false
+    try { preempted = sendUserMessage(h.config.chatId, '/goal clear').preempted === true } catch { /* ignore */ }
+    // Stage 2: cancel the current turn if stage 1 did not already.
+    if (!preempted) { try { interruptSession(h.config.chatId) } catch { /* already dead */ } }
     // Stage 3: fallback — if /goal keeps producing result events after
     // stop, hard-kill the subprocess after 5s.
     armGoalKillFallback(runId)

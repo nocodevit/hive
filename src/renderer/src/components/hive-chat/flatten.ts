@@ -1,5 +1,6 @@
 import type { TimelineEntry } from './types'
 import { isCompactSummaryEvent, extractCompactSummaryHint } from './compact-summary'
+import { stopHookFeedback, goalCheckLine } from '../../../../shared/goal-loop'
 
 /**
  * Flatten a batch of Claude-Code-local-persistence events
@@ -27,7 +28,25 @@ export function flattenHistoricalEvents(events: any[], nextId: () => string): Ti
     out.push(e)
   }
 
+  // Consecutive /goal hook rounds collapse into one system line.
+  let hookRun: { entry: { kind: 'system'; id: string; text: string }; n: number } | null = null
+
   for (const ev of events) {
+    if (stopHookFeedback(ev) !== null) {
+      if (hookRun) {
+        hookRun.n += 1
+        hookRun.entry.text = goalCheckLine(hookRun.n)
+      } else {
+        const entry = { kind: 'system' as const, id: nextId(), text: goalCheckLine(1) }
+        hookRun = { entry, n: 1 }
+        push(entry as TimelineEntry)
+      }
+      continue
+    }
+    // Claude's one-line replies between rounds don't break the run; real
+    // work or a new user turn does.
+    if (ev?.type === 'result' || (ev?.type === 'user' && !ev?.message?.content?.some?.((b: any) => b?.type === 'tool_result'))
+      || (ev?.type === 'assistant' && ev?.message?.content?.some?.((b: any) => b?.type === 'tool_use'))) hookRun = null
     if (ev?.type === 'assistant') {
       const msg = ev.message
       const content = msg?.content
