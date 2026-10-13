@@ -20,8 +20,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { showReleaseNotes } from './release-notes-window.js'
+import { compareVersions, releasesApiUrl } from './version'
 
-const RELEASES_API = 'https://api.github.com/repos/nocodevit/hive/releases/latest'
+export { compareVersions }
+
+const RELEASES_API = releasesApiUrl(process.env.HIVE_RELEASES_API)
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000  // 24h
 const STATE_PATH = () => join(homedir(), '.hive', 'updater-state.json')
 
@@ -40,20 +43,6 @@ interface GitHubRelease {
   assets: Array<{ name: string; browser_download_url: string; size?: number }>
 }
 
-/**
- * Compare two semver-style strings. Returns >0 if a > b, <0 if a < b, 0 if equal.
- * Accepts "vX.Y.Z" or "X.Y.Z". Pre-release suffixes are stripped.
- */
-export function compareVersions(a: string, b: string): number {
-  const parse = (s: string) => s.replace(/^v/, '').split('-')[0].split('.').map(n => parseInt(n, 10) || 0)
-  const pa = parse(a)
-  const pb = parse(b)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] || 0) - (pb[i] || 0)
-    if (d !== 0) return d
-  }
-  return 0
-}
 
 /** Read updater state or return empty. */
 export function loadState(): UpdaterState {
