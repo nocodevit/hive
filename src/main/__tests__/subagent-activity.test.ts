@@ -9,6 +9,7 @@
 // We test the pure mtime predicate (no FS), plus the FS-walking
 // helper against a temp claude-projects layout with a known cwd slug.
 
+import { claudeProjectSlug } from '../../shared/claude-project-slug'
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, utimesSync } from 'node:fs'
 import { join } from 'node:path'
@@ -82,7 +83,7 @@ describe('collectSubagentJsonlMtimes (FS)', () => {
   const realProjectsDir = join(process.env.HOME || tmpdir(), '.claude', 'projects')
   const stamp = `${Date.now()}-${process.pid}`
   const fakeCwd = `/tmp/subagent-activity-test/${stamp}`
-  const slug = fakeCwd.replace(/\//g, '-')
+  const slug = claudeProjectSlug(fakeCwd)
   const projectDir = join(realProjectsDir, slug)
 
   beforeEach(() => {
@@ -129,7 +130,7 @@ describe('isSubagentActiveForCwd (FS + window)', () => {
   const realProjectsDir = join(process.env.HOME || tmpdir(), '.claude', 'projects')
   const stamp = `${Date.now()}-${process.pid}-active`
   const fakeCwd = `/tmp/subagent-activity-test/${stamp}`
-  const slug = fakeCwd.replace(/\//g, '-')
+  const slug = claudeProjectSlug(fakeCwd)
   const projectDir = join(realProjectsDir, slug)
   const subDir = join(projectDir, 'sess-1', 'subagents')
 

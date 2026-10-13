@@ -113,6 +113,11 @@ declare global {
         onRcOutput: (id: string, cb: (data: string) => void) => () => void
         onRcExit: (id: string, cb: () => void) => () => void
         onEvent: (id: string, cb: (ev: any) => void) => () => void
+        listUnclosed: () => Promise<Array<{
+          agentId: string; agent: string; project: string; lastTask: string; lastActiveMs: number
+          contextSize: string; peakInputTokens: number; hasSession: boolean
+        }>>
+        resolveUnclosed: () => Promise<{ ok: boolean }>
         onPrepend: (id: string, cb: (payload: { events: any[]; hasOlder: boolean }) => void) => () => void
         onStderr: (id: string, cb: (line: string) => void) => () => void
         onExit: (id: string, cb: (code: number) => void) => () => void
