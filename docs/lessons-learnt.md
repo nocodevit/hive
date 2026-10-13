@@ -388,3 +388,29 @@ vs `queryUsagePctViaPty`) but feed different bars.
 
 **How:** trace UI → state field → setter → IPC channel → broadcaster →
 producer. Don't infer from function names — read the data flow end to end.
+
+## /goal loops swallow user input (v2.25.2)
+
+A native `/goal` keeps Claude going with a Stop hook: every attempt to end
+the turn is answered "not done" and Claude goes again — all inside ONE
+turn. Consequences found the hard way:
+
+- Anything written to stdin meanwhile is only **queued** until that turn
+  ends. `/goal clear` typed during a stuck loop therefore did nothing; the
+  user ended up killing the session, and the goal (stored in the session)
+  came back on resume and after /compact.
+- Send-then-interrupt runs the queued message immediately (verified:
+  "Goal cleared", no further rounds). `sendUserMessage` does this for
+  `/goal clear` during any running turn, and for any message once the loop
+  is spinning (≥2 hook rounds with no tool call between them). While the
+  goal is still doing real work an ordinary message waits, so a tool call
+  is not cancelled half-way. Logic: `src/shared/goal-loop.ts`.
+- Claude Code gives up by itself after 9 consecutive blocked rounds, then
+  the loop restarts on the next message.
+- Whether a real `/goal` keeps looping is decided by a model ("is this
+  still achievable?"), so it ends after a random number of rounds — do not
+  build tests on it. `e2e/goal-loop.spec.ts` uses a Stop hook that always
+  blocks instead.
+- Replies Claude Code writes itself (`model: "<synthetic>"`, e.g. "Goal
+  set" / "Goal cleared") are never streamed; the live view must render
+  them from the `assistant` event or the user sees no confirmation.

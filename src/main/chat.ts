@@ -11,6 +11,7 @@ import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
 import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
 import { shouldAutoAllow } from './session-permissions'
 import { perRequestContextTokens, contextTokensFromResultUsage } from '../shared/context-size'
+import { hookLoopStep, HOOK_LOOP_IDLE, shouldPreemptOnSend, type HookLoopState } from '../shared/goal-loop'
 import { claudeBin } from './claude-env'
 import { activityForEvent, agentIdFromChatId, liveAgentIdsFromSessions } from './chatActivity'
 import { buildRebaseOnStartCommand, REBASE_ON_START_TIMEOUT_MS, isFetchTimeout } from './rebaseOnStart'
@@ -90,6 +91,8 @@ interface ChatSession {
   // so we only broadcast agent:status on an actual transition (the stream emits
   // many working-events per turn). Undefined until the first event.
   lastActivity?: 'working' | 'waiting'
+  // Where the running turn stands in a /goal Stop-hook loop, if any.
+  hookLoop?: HookLoopState
 }
 
 const sessions = new Map<string, ChatSession>()
@@ -883,6 +886,7 @@ export function startChat(id: string, opts: StartOpts = {}) {
       // Drive the agent status dot from the live stream (turn-based), replacing
       // reliance on the out-of-band PreToolUse/Stop curl hooks that miss the
       // thinking/streaming-before-a-tool window. Only broadcast on a transition.
+      session.hookLoop = hookLoopStep(session.hookLoop || HOOK_LOOP_IDLE, ev)
       const activity = activityForEvent(ev)
       if (activity && session.lastActivity !== activity) {
         session.lastActivity = activity
@@ -1063,7 +1067,7 @@ export function interruptSession(id: string) {
   }
 }
 
-export function sendUserMessage(id: string, text: string) {
+export function sendUserMessage(id: string, text: string): { ok: boolean; error?: string; preempted?: boolean } {
   const session = sessions.get(id)
   if (!session) return { ok: false, error: 'no_session' }
   if (!session.child || session.mode !== 'print') return { ok: false, error: 'not_in_print_mode' }
@@ -1080,7 +1084,13 @@ export function sendUserMessage(id: string, text: string) {
     session.child.stdin.write(line)
     // Log outbound too so replay has complete context.
     try { appendFileSync(session.logPath, JSON.stringify({ _direction: 'stdin', ...frame }) + '\n') } catch {}
-    return { ok: true }
+    // A message sent into a /goal loop only queues behind it — `/goal
+    // clear` included — so the user could not stop or redirect a stuck
+    // goal at all. Interrupting the turn makes the queued message run now.
+    const preempted = shouldPreemptOnSend({
+      text, working: session.lastActivity === 'working', idleRounds: session.hookLoop?.idleRounds || 0
+    }) && interruptSession(id).ok
+    return { ok: true, preempted }
   } catch (e) {
     return { ok: false, error: String(e) }
   }

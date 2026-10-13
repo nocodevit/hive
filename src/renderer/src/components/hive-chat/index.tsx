@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, accentTint, redact, configureRedact } from './crush-styles'
 import { joinVoiceText } from '../../lib/voice-text'
+import { hookLoopStep, HOOK_LOOP_IDLE, stopHookFeedback, goalCheckLine, GOAL_LOOP_STUCK_AFTER } from '../../../../shared/goal-loop'
 import { autoSendStep, AUTO_SEND_IDLE, useAutoSendPrefs, setAutoSendPrefs, type VoiceEvent } from '../../lib/voice-autosend'
 import { computeGrainBar, parseContextSize, selectCtxNagTier, selectCompactBtnTier } from './progress-bar'
 import { ctxPctFromPrev, restartResumeMode } from './bulkRestart'
@@ -95,6 +96,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   // PermissionRequest is answered `allow` immediately without opening
   // the modal, matching the "walk away, agent decides" contract.
   const [isHandoffActive, setIsHandoffActive] = useState(false)
+  // A /goal Stop-hook loop in the running turn: how many rounds in a row
+  // Claude was sent back without doing anything (see shared/goal-loop).
+  const hookLoopRef = useRef(HOOK_LOOP_IDLE)
+  const hookRunRef = useRef({ seq: 0, rounds: 0 })
+  const [goalIdleRounds, setGoalIdleRounds] = useState(0)
   useEffect(() => {
     const api = (window as any).api?.handoff
     if (!api) return
@@ -587,6 +593,17 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     }
 
     const offEv = window.api.chat.onEvent(id, (ev: StreamEvent) => {
+      // ── /goal loop tracking (live events only) ─────────────────
+      if (!(ev as any)._historical) {
+        const next = hookLoopStep(hookLoopRef.current, ev)
+        if (next !== hookLoopRef.current) {
+          hookLoopRef.current = next
+          setGoalIdleRounds(next.idleRounds)
+        }
+        if (ev.type === 'result' && (ev as any).parent_tool_use_id == null) {
+          hookRunRef.current = { seq: hookRunRef.current.seq + 1, rounds: 0 }
+        }
+      }
       // ── Active subagent tracking ───────────────────────────────
       // Run before any early-return branch so we never miss a
       // signal. Three categories of update:
@@ -814,8 +831,12 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         // cumulative snapshot entirely — UNLESS the event is coming from
         // replaySessionHistory (jsonl replay has no stream_event
         // counterpart, so that path still needs to process assistant).
+        // Exception: replies Claude Code writes itself (model "<synthetic>")
+        // — a slash command's answer such as "Goal set" / "Goal cleared" /
+        // "No goal set". They are never streamed, so skipping them here
+        // meant the user got no confirmation at all.
         const isHistorical = (ev as any)._historical === true
-        if (!isHistorical) return
+        if (!isHistorical && msg?.model !== '<synthetic>') return
 
         content.forEach((block: any, idx: number) => {
           if (block.type === 'thinking' || block.type === 'redacted_thinking') return
@@ -829,6 +850,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             replaceEntry(entryId, { kind: 'tool_call', name: block.name, input: block.input, id: entryId, toolUseId: block.id, isSubagent } as any)
           }
         })
+      } else if (stopHookFeedback(ev) !== null) {
+        // A /goal hook round is the harness talking, not the user: one
+        // collapsed line per run of rounds instead of N right-aligned
+        // "user" bubbles repeating the goal text.
+        const run = hookRunRef.current
+        run.rounds += 1
+        const entryId = `goalcheck:${run.seq}`
+        replaceEntry(entryId, { kind: 'system', id: entryId, text: goalCheckLine(run.rounds) } as any)
       } else if (ev.type === 'user' && 'message' in ev) {
         // Compact / Compact+Fork summary user event — collapse to a
         // small hint chip carrying just the transcript jsonl path
@@ -1903,6 +1932,19 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         onDismissUrgent={() => setCtxNagDismissed(prev => ({ ...prev, urgent: true }))}
         onCompact={runCompact}
       />
+      {/* Stuck /goal: Claude has nothing left to do but the goal's check
+         keeps sending it back. Offer the one action that ends it. Hive's
+         own handoff banner already has Stop, so this covers goals Hive is
+         not tracking (set by hand, or surviving an app restart). */}
+      {goalIdleRounds >= GOAL_LOOP_STUCK_AFTER && !isHandoffActive && (
+        <GoalLoopBanner
+          rounds={goalIdleRounds}
+          onClear={async () => {
+            const res = await window.api.chat.send(id, '/goal clear')
+            addEntry({ kind: 'system', text: res?.ok ? 'Sent /goal clear' : `Could not send /goal clear (${res?.error ?? 'unknown error'})` })
+          }}
+        />
+      )}
       {/* Handoff banner — sticky above subagent + rate-limit strips; only
          renders while this agent has an active handoff run. */}
       {handoffAgentId && <HandoffBanner agentId={handoffAgentId} onRequestNewGoal={() => setHandoffModalOpen(true)} />}
@@ -4192,6 +4234,34 @@ function VoicePill({ agentId }: { agentId: string }) {
         <span role="status" title={state.notice} style={{ padding: '0 10px 0 2px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, color: CRUSH.Zest }}>⚠ {state.notice}</span>
       )}
     </span>
+  )
+}
+
+/** Shown while a /goal loop is spinning with nothing left to do. */
+function GoalLoopBanner({ rounds, onClear }: { rounds: number; onClear: () => Promise<void> }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <div role="alert" style={{
+      margin: '0 20px 10px', padding: '10px 14px', borderRadius: 14,
+      background: accentTint(8), color: CHAT.ink2,
+      display: 'flex', alignItems: 'center', gap: 12,
+      fontFamily: FONT_PROSE, fontSize: 13, lineHeight: 1.5
+    }}>
+      <span style={{ flex: 1 }}>
+        <strong style={{ color: CHAT.ink, fontWeight: 600 }}>A goal is still active.</strong>{' '}
+        Claude has nothing left it can do, but the goal keeps sending it back ({rounds} rounds so far). Your messages will interrupt it; clearing the goal ends the loop.
+      </span>
+      <button
+        onClick={() => { setBusy(true); void onClear().finally(() => setBusy(false)) }}
+        disabled={busy}
+        style={{
+          flexShrink: 0, border: 'none', borderRadius: 10, padding: '7px 14px',
+          background: CRUSH.Charple, color: '#FFFFFF',
+          fontFamily: FONT_PROSE, fontSize: 12.5, fontWeight: 600,
+          cursor: busy ? 'default' : 'pointer', opacity: busy ? 0.6 : 1
+        }}
+      >{busy ? 'Clearing…' : 'Clear goal'}</button>
+    </div>
   )
 }
 
