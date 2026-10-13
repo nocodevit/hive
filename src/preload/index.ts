@@ -168,6 +168,11 @@ const api = {
       ipcRenderer.on(`chat:event:${id}`, handler)
       return () => ipcRenderer.removeListener(`chat:event:${id}`, handler)
     },
+    listUnclosed: () => ipcRenderer.invoke('chat:listUnclosed') as Promise<Array<{
+      agentId: string; agent: string; project: string; lastTask: string; lastActiveMs: number
+      contextSize: string; peakInputTokens: number; hasSession: boolean
+    }>>,
+    resolveUnclosed: () => ipcRenderer.invoke('chat:resolveUnclosed') as Promise<{ ok: boolean }>,
     onExternalUser: (id: string, cb: (payload: { text: string }) => void) => {
       const handler = (_e: any, data: { text: string }) => cb(data)
       ipcRenderer.on(`chat:externalUser:${id}`, handler)

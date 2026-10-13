@@ -8,6 +8,7 @@ import ProjectSettingsModal from './components/ProjectSettingsModal'
 import ResizeHandle from './components/ResizeHandle'
 import EditTemplateModal from './components/EditTemplateModal'
 import FilesPanel from './components/FilesPanel'
+import ResumeAgentsModal, { type UnclosedAgent } from './components/ResumeAgentsModal'
 import MarkdownPreviewModal from './components/MarkdownPreviewModal'
 import OfficeView from './components/OfficeView'
 import CreateTaskGroupModal from './components/CreateTaskGroupModal'
@@ -85,6 +86,8 @@ export default function App() {
   const [restartPending, setRestartPending] = useState<Set<string>>(new Set())
   // Butler API "start a fresh session": same auto-launch plumbing, mode 'new'.
   const [startNewPending, setStartNewPending] = useState<Set<string>>(new Set())
+  // Chats that were still open when Hive last closed — offered once at startup.
+  const [unclosedAgents, setUnclosedAgents] = useState<UnclosedAgent[]>([])
   // v2.15.7: last-touched timestamp per agent (Map in a ref instead of
   // useState so bumping doesn't churn re-renders). Read by pickLRUToEvict
   // when the set hits MAX_ACTIVE_TERMINALS to choose which sticky
@@ -436,6 +439,16 @@ export default function App() {
       if (tgs.length) setTaskGroups(tgs)
     }).finally(() => setProjectsLoaded(true))
   }, [])
+
+  // Once the saved data is in: were any chats left open last time?
+  useEffect(() => {
+    if (!projectsLoaded) return
+    let cancelled = false
+    window.api.chat.listUnclosed()
+      .then(rows => { if (!cancelled && rows.length) setUnclosedAgents(rows) })
+      .catch(() => { /* main not ready — nothing to offer */ })
+    return () => { cancelled = true }
+  }, [projectsLoaded])
 
   // Save data on change
   useEffect(() => {
@@ -2994,6 +3007,22 @@ export default function App() {
           </>
         )
       })()}
+
+      {unclosedAgents.length > 0 && (
+        <ResumeAgentsModal
+          rows={unclosedAgents}
+          onResume={(ids) => {
+            const chosen = new Set(ids)
+            bulkResume(agents.filter(a => chosen.has(a.id)))
+            setUnclosedAgents([])
+            void window.api.chat.resolveUnclosed()
+          }}
+          onSkip={() => {
+            setUnclosedAgents([])
+            void window.api.chat.resolveUnclosed()
+          }}
+        />
+      )}
 
       {/* Modals */}
       <CreateProjectModal

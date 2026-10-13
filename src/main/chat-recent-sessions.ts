@@ -1,3 +1,4 @@
+import { claudeProjectSlug } from '../shared/claude-project-slug'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -46,7 +47,7 @@ export interface PrevSessionInfo {
 export function getRecentSessions(cwd: string, limit = 5): RecentSession[] {
   if (!cwd) return []
   try {
-    const slug = cwd.replace(/\//g, '-')
+    const slug = claudeProjectSlug(cwd)
     const dir = join(homedir(), '.claude', 'projects', slug)
     if (!existsSync(dir)) return []
     const files = readdirSync(dir)
@@ -192,7 +193,7 @@ export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInf
     let effectiveCwd = cwd
     let lastActiveMs = 0
 
-    const slug = cwd.replace(/\//g, '-')
+    const slug = claudeProjectSlug(cwd)
     const dir = join(homedir(), '.claude', 'projects', slug)
     if (existsSync(dir)) {
       const files = readdirSync(dir)

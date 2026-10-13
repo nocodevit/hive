@@ -175,7 +175,9 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
 import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage } from './chat'
+import { getPrevSessionInfo } from './chat-recent-sessions'
 import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
+import { readOpenChats, writeOpenChats, buildUnclosedRows, lastUserText } from './openChats'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
 import { randomBytes } from 'crypto'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -522,6 +524,41 @@ function findAgentWorktree(agentId: string): string | null {
 }
 
 // Status + report webhook server — receives hook calls from Claude Code
+// ── Chats left open at the last quit ─────────────────────────────────
+// See openChats.ts. The renderer asks once at startup and shows the list.
+ipcMain.handle('chat:listUnclosed', async () => {
+  const data = loadData()
+  const open = readOpenChats(DATA_DIR)
+  if (!open.length) return []
+  const details = new Map<string, Awaited<ReturnType<typeof unclosedDetail>>>()
+  for (const rec of open) details.set(rec.agentId, await unclosedDetail(rec))
+  return buildUnclosedRows(data, open, listLiveChatAgentIds(), rec => details.get(rec.agentId)!)
+})
+// The user has answered the prompt (resumed some, skipped the rest): keep
+// only what is running now, so the same list is not offered again.
+ipcMain.handle('chat:resolveUnclosed', () => {
+  const live = new Set(listLiveChatAgentIds())
+  writeOpenChats(DATA_DIR, readOpenChats(DATA_DIR).filter(r => live.has(r.agentId)))
+  return { ok: true }
+})
+
+async function unclosedDetail(rec: { agentId: string; cwd: string; since: number }) {
+  let lastTask = ''
+  try {
+    const log = latestChatLogPath(join(DATA_DIR, 'chat-logs'), rec.agentId)
+    if (log) lastTask = lastUserText(readLogTailLines(log))
+  } catch { /* log unreadable: show the row without a task */ }
+  let prev: Awaited<ReturnType<typeof getPrevSessionInfo>> | null = null
+  try { prev = rec.cwd ? await getPrevSessionInfo(rec.cwd, `chat-${rec.agentId}`) : null } catch { /* no session on disk */ }
+  return {
+    lastTask,
+    lastActiveMs: prev?.lastActiveMs || rec.since,
+    contextSize: prev?.contextSize || '',
+    peakInputTokens: prev?.peakInputTokens || 0,
+    hasSession: !!prev?.sid
+  }
+}
+
 // ── Butler API ───────────────────────────────────────────────────────
 // Lets a controller on THIS machine (hive-butler) list agents, read a
 // chat's tail, type into a chat and start one. See butlerApi.ts for the
