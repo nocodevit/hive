@@ -20,6 +20,7 @@
 // A watcher would be more code, more state, and would have to be torn
 // down on every selected-agent change.
 
+import { claudeProjectSlug } from '../shared/claude-project-slug'
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
@@ -58,7 +59,7 @@ export function isAnyRecentlyTouched(
  * replaySessionHistory() / runCompactViaPrint() in main/chat.ts.
  */
 export function cwdToSlug(cwd: string): string {
-  return cwd.replace(/\//g, '-')
+  return claudeProjectSlug(cwd)
 }
 
 /**

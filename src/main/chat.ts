@@ -1,3 +1,4 @@
+import { claudeProjectSlug } from '../shared/claude-project-slug'
 import { spawn, ChildProcessWithoutNullStreams, execSync } from 'node:child_process'
 import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -11,6 +12,7 @@ import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
 import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
 import { shouldAutoAllow } from './session-permissions'
 import { perRequestContextTokens, contextTokensFromResultUsage } from '../shared/context-size'
+import { addOpenChat, removeOpenChat } from './openChats'
 import { hookLoopStep, HOOK_LOOP_IDLE, shouldPreemptOnSend, type HookLoopState } from '../shared/goal-loop'
 import { claudeBin } from './claude-env'
 import { activityForEvent, agentIdFromChatId, liveAgentIdsFromSessions } from './chatActivity'
@@ -120,8 +122,21 @@ function getAllowedTools(id: string): Set<string> {
  * corpus of captured events for iterating on renderers without asking
  * the user to manually run `claude --print` every time.
  */
+function dataDir(): string {
+  return process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
+}
+
+// Set once Hive starts shutting down: chats that die from here on were
+// open at quit, so their open-chats record must survive for the next launch.
+let appQuitting = false
+
+function forgetOpenChat(chatId: string) {
+  if (appQuitting) return
+  try { removeOpenChat(dataDir(), agentIdFromChatId(chatId)) } catch { /* best-effort */ }
+}
+
 function logDir(): string {
-  const base = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
+  const base = dataDir()
   const dir = join(base, 'chat-logs')
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   return dir
@@ -371,7 +386,7 @@ async function getSharedUsage(scrapeCwd?: string) {
 
 function replaySessionHistory(sessionId: string, cwd: string | undefined, limit = DEFAULT_REPLAY_LIMIT) {
   try {
-    const slug = (cwd || '').replace(/\//g, '-')
+    const slug = claudeProjectSlug(cwd || '')
     const dir = join(homedir(), '.claude', 'projects', slug)
     if (!existsSync(dir)) return
     const files = readdirSync(dir)
@@ -449,7 +464,7 @@ export async function smartStartChat(id: string, opts: StartOpts = {}) {
   if (sessions.has(id) && sessions.get(id)?.child !== null) return { ok: false, error: 'already_started' }
   if (opts.continueSession && opts.cwd && !opts.resumeSid) {
     try {
-      const slug = opts.cwd.replace(/\//g, '-')
+      const slug = claudeProjectSlug(opts.cwd)
       const dir = join(homedir(), '.claude', 'projects', slug)
       if (existsSync(dir)) {
         const files = readdirSync(dir)
@@ -801,6 +816,7 @@ export function startChat(id: string, opts: StartOpts = {}) {
     mode: 'print', startOpts: opts, claudeSid: opts.resumeSid
   }
   sessions.set(id, session)
+  try { addOpenChat(dataDir(), { agentId: agentIdFromChatId(id), cwd: opts.cwd || '', since: Date.now() }) } catch { /* best-effort */ }
 
   // Forensic spawn record. Written IMMEDIATELY (before any stdout) so that
   // even an instant-fail — e.g. claude exits with "Not logged in · Please
@@ -959,6 +975,7 @@ export function startChat(id: string, opts: StartOpts = {}) {
       return
     }
     broadcast(`chat:exit:${id}`, code ?? 0)
+    forgetOpenChat(id)
     // Real exit (not a stale child, not an internal compact/resume respawn):
     // the session is truly gone, so the status dot goes gray. Placed after both
     // guards above so a respawn never flashes 'done'.
@@ -1118,6 +1135,7 @@ export function stopChat(id: string) {
   // NB: don't wipe the persisted entry — user may close+reopen the chat
   // and want the timer to resume. Hydration on next startChat handles it.
   sessions.delete(id)
+  forgetOpenChat(id)
 }
 
 // Kill EVERY live chat `claude --print` child. Called on app quit so these
@@ -1129,6 +1147,7 @@ export function stopChat(id: string) {
 // UNTESTABLE: sends real OS signals to live child pids. The selection logic it
 // mirrors — which claude processes are Hive's — is the unit-tested orphanReaper.
 export function killAllChatChildren(): number[] {
+  appQuitting = true
   const pids: number[] = []
   for (const [, s] of sessions) {
     const pid = s.child?.pid
@@ -1249,7 +1268,7 @@ export function startRemoteControl(id: string) {
 function readContextPctFromJsonl(cwd: string | undefined, sid: string): number | null {
   if (!cwd || !sid) return null
   try {
-    const slug = cwd.replace(/\//g, '-')
+    const slug = claudeProjectSlug(cwd)
     const file = join(homedir(), '.claude', 'projects', slug, `${sid}.jsonl`)
     if (!existsSync(file)) return null
     const lines = readFileSync(file, 'utf8').split('\n').filter(Boolean)

@@ -180,6 +180,12 @@ test.describe('Chat reopen → Resume → send', () => {
     // ── 3. REOPEN against the same HIVE_DATA_DIR (再打开 hive) ──────────
     ;({ app, page } = await launchApp())
 
+    // The chat was open when the app closed, so the restart offers to
+    // resume it (v2.26.0). This test is about the manual Resume path:
+    // decline the offer.
+    await expect(page.getByRole('dialog', { name: 'Resume where you left off?' })).toBeVisible({ timeout: 15000 })
+    await page.getByRole('button', { name: 'Not now' }).click()
+
     // Select project (sidebar lists only agents of the selected project).
     await page.locator('text=Reopen E2E').first().click()
     await page.waitForTimeout(500)
