@@ -178,3 +178,20 @@ describe('renderReleaseNotesHTML — XSS safety', () => {
     expect(html).toContain('&amp;&lt;&gt;&quot;&#39;')
   })
 })
+
+describe('renderReleaseNotesHTML — install flow', () => {
+  const html = renderReleaseNotesHTML(BASE)
+  it('turns the primary button into "Install & Restart" once the update is staged', () => {
+    expect(html).toContain("primary.dataset.action = 'install'")
+    expect(html).toContain('Install & Restart')
+    expect(html).toContain('api.install?.()')
+  })
+  it('offers to quit Hive when it has to fall back to the manual installer', () => {
+    expect(html).toContain("primary.dataset.action = 'quit'")
+    expect(html).toContain('Quit Hive')
+    expect(html).toContain('api.quit?.()')
+  })
+  it('no longer tells the user to drag the app while Hive is still running', () => {
+    expect(html).not.toContain('Drag Hive → Applications, then quit this window')
+  })
+})

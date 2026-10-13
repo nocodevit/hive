@@ -13,12 +13,13 @@
 // is a pure function and IS unit-tested. Manual-test steps live in
 // docs/manual-test-plan.md.
 
-import { BrowserWindow, ipcMain, shell, net, Notification } from 'electron'
+import { app, BrowserWindow, ipcMain, shell, net, Notification } from 'electron'
 import { createWriteStream } from 'node:fs'
 import { join } from 'node:path'
 import { homedir, tmpdir } from 'node:os'
 import { writeFileSync } from 'node:fs'
 import { renderReleaseNotesHTML } from './release-notes-render.js'
+import { bundlePathFromExe, selfInstallBlocker, prepareUpdate, startInstaller } from './selfUpdate'
 
 export interface ShowReleaseNotesOptions {
   currentVersion: string
@@ -82,7 +83,9 @@ export function showReleaseNotes(opts: ShowReleaseNotesOptions): BrowserWindow {
     close:        `release:${win.id}:close`,
     download:     `release:${win.id}:download`,
     progress:     `release:${win.id}:progress`,
-    done:         `release:${win.id}:done`
+    done:         `release:${win.id}:done`,
+    install:      `release:${win.id}:install`,
+    quit:         `release:${win.id}:quit`
   }
 
   const openExternalHandler = (_e: unknown, url: string) => {
@@ -94,18 +97,36 @@ export function showReleaseNotes(opts: ShowReleaseNotesOptions): BrowserWindow {
     if (!win.isDestroyed()) win.close()
   }
   let downloadStarted = false
+  // Set once the update is verified and staged beside the installed app.
+  let staged: { stagedApp: string; bundlePath: string } | null = null
   const downloadHandler = () => {
     if (downloadStarted || !opts.dmg) return
     downloadStarted = true
     downloadDmgWithProgress(opts.dmg.url, opts.dmg.name, (evt) => {
+      if (evt.type === 'done' && evt.payload.staged) staged = evt.payload.staged
       if (win.isDestroyed()) return
       if (evt.type === 'progress') win.webContents.send(CH.progress, evt.payload)
-      else if (evt.type === 'done') win.webContents.send(CH.done, evt.payload)
+      else if (evt.type === 'done') {
+        const { staged: _internal, ...forPage } = evt.payload
+        win.webContents.send(CH.done, forPage)
+      }
     })
   }
+  // "Install & Restart": hand the swap to a script that waits for this
+  // process to exit, then quit. before-quit shuts the chats down; their
+  // open-chat records survive, so the relaunch offers to resume them.
+  const installHandler = () => {
+    if (!staged) return
+    // HIVE_UPDATE_NO_RELAUNCH=1: rehearsals swap the bundle without reopening it.
+    startInstaller(process.pid, staged.stagedApp, staged.bundlePath, process.env.HIVE_UPDATE_NO_RELAUNCH !== '1')
+    app.quit()
+  }
+  const quitHandler = () => app.quit()
   ipcMain.on(CH.openExternal, openExternalHandler)
   ipcMain.on(CH.close, closeHandler)
   ipcMain.on(CH.download, downloadHandler)
+  ipcMain.on(CH.install, installHandler)
+  ipcMain.on(CH.quit, quitHandler)
 
   // Expose channel names to the preload so it can wire window.hiveRelease.*
   ;(win as any)._releaseChannels = CH
@@ -114,6 +135,8 @@ export function showReleaseNotes(opts: ShowReleaseNotesOptions): BrowserWindow {
     ipcMain.removeListener(CH.openExternal, openExternalHandler)
     ipcMain.removeListener(CH.close, closeHandler)
     ipcMain.removeListener(CH.download, downloadHandler)
+    ipcMain.removeListener(CH.install, installHandler)
+    ipcMain.removeListener(CH.quit, quitHandler)
     currentWindow = null
     if (!downloadStarted && opts.onLater) opts.onLater()
   })
@@ -143,6 +166,8 @@ contextBridge.exposeInMainWorld('hiveRelease', {
   openExternal: (url) => ipcRenderer.send(CH.openExternal, url),
   close:        () => ipcRenderer.send(CH.close),
   download:     () => ipcRenderer.send(CH.download),
+  install:      () => ipcRenderer.send(CH.install),
+  quit:         () => ipcRenderer.send(CH.quit),
   onProgress:   (cb) => ipcRenderer.on(CH.progress, (_e, p) => cb(p)),
   onDone:       (cb) => ipcRenderer.on(CH.done, (_e, p) => cb(p))
 })
@@ -171,7 +196,16 @@ function ensureHelloHandshakeRegistered(): void {
 // ---- Downloader with per-chunk progress ----
 type DownloadEvent =
   | { type: 'progress'; payload: { percent: number; downloaded: number; total: number; label: string } }
-  | { type: 'done';     payload: { path?: string; error?: string } }
+  | { type: 'done';     payload: {
+      path?: string
+      error?: string
+      /** Verified and staged: the page offers "Install & Restart". */
+      ready?: { version: string }
+      /** Automatic install is not possible; the installer was opened instead. */
+      manual?: string
+      /** Main-process only (never sent to the page). */
+      staged?: { stagedApp: string; bundlePath: string }
+    } }
 
 function downloadDmgWithProgress(url: string, filename: string, emit: (e: DownloadEvent) => void): void {
   const downloadsDir = join(homedir(), 'Downloads')
@@ -213,7 +247,21 @@ function downloadDmgWithProgress(url: string, filename: string, emit: (e: Downlo
       })
       res.on('end', () => {
         out.end(async () => {
-          emit({ type: 'progress', payload: { percent: 100, downloaded, total: total || downloaded, label: 'Opening installer…' } })
+          const size = total || downloaded
+          const bundlePath = bundlePathFromExe(app.getPath('exe'))
+          let manual = selfInstallBlocker({ platform: process.platform, packaged: app.isPackaged, bundlePath })
+          if (!manual && bundlePath) {
+            emit({ type: 'progress', payload: { percent: 100, downloaded, total: size, label: 'Verifying the update…' } })
+            const prepared = await prepareUpdate(target, bundlePath)
+            if (prepared.ok && prepared.stagedApp && prepared.version) {
+              notify('Hive update ready', `v${prepared.version} — click Install & Restart`)
+              emit({ type: 'done', payload: { path: target, ready: { version: prepared.version }, staged: { stagedApp: prepared.stagedApp, bundlePath } } })
+              return
+            }
+            manual = prepared.error || 'the update could not be prepared'
+          }
+          // Could not install by itself: fall back to the disk image.
+          emit({ type: 'progress', payload: { percent: 100, downloaded, total: size, label: 'Opening installer…' } })
           notify('Hive update downloaded', 'Opening installer…')
           try {
             const errMsg = await shell.openPath(target)
@@ -221,7 +269,7 @@ function downloadDmgWithProgress(url: string, filename: string, emit: (e: Downlo
           } catch {
             shell.showItemInFolder(target)
           }
-          emit({ type: 'done', payload: { path: target } })
+          emit({ type: 'done', payload: { path: target, manual: manual || 'unknown reason' } })
         })
       })
     })
