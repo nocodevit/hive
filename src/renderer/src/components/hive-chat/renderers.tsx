@@ -4,6 +4,7 @@ import remarkGfm from 'remark-gfm'
 import { Highlight, themes } from 'prism-react-renderer'
 import { Check, Pencil } from 'lucide-react'
 import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, TOOL_COLORS, accentTint, redact } from './crush-styles'
+import { parseGoalNotice, splitGoalCondition, goalCommandArgs, type GoalNotice } from './goal-notice'
 import { parseStructuredOutput } from './structured-format'
 import type { TimelineEntry } from './types'
 
@@ -335,7 +336,12 @@ export function parseUserCommand(raw: string): { kind: 'command'; command: strin
 }
 
 export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRecall?: (text: string) => void; isSubagent?: boolean }) {
-  const parsed = parseUserCommand(text)
+  // A /goal typed in the input box is shown like any slash command: the
+  // full condition is laid out by the GoalCard that answers it.
+  const typedGoal = goalCommandArgs(text)
+  const parsed = typedGoal !== null
+    ? { kind: 'command' as const, command: 'goal', args: typedGoal }
+    : parseUserCommand(text)
   // Subagent prompts (parent agent → Task tool input) reuse the
   // user-bubble SHAPE but recolor everything to Charple — same shape
   // tells the eye "this is a directive", different color tells it
@@ -364,20 +370,23 @@ export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRe
     )
   }
   if (parsed.kind === 'command') {
+    // One line, right-aligned like any user turn; long arguments (a whole
+    // /goal condition) are cut with an ellipsis — hover shows them all.
     return (
-      <div style={{
-        display: 'inline-flex', alignItems: 'center', gap: 6,
-        background: CRUSH.Dolly,
+      <div title={redact(`/${parsed.command}${parsed.args ? ' ' + parsed.args : ''}`)} style={{
+        display: 'flex', alignItems: 'center', gap: 6,
+        width: 'fit-content', maxWidth: '78%',
+        margin: '10px 0 14px auto',
+        background: accentTint(14),
         borderRadius: 999,
-        padding: '3px 12px',
-        margin: '6px 0',
+        padding: '4px 12px',
         fontFamily: FONT_MONO,
         fontSize: 12,
-        color: CRUSH.Butter
+        color: CHAT.accent,
+        overflow: 'hidden'
       }}>
-        <span style={{ color: CRUSH.Butter, fontWeight: 700 }}>⚡</span>
-        <span style={{ color: CRUSH.Butter, fontWeight: 700 }}>/{redact(parsed.command)}</span>
-        {parsed.args && <span style={{ color: CRUSH.Butter, opacity: 0.85 }}>{redact(parsed.args)}</span>}
+        <span style={{ fontWeight: 700, flexShrink: 0 }}>/{redact(parsed.command)}</span>
+        {parsed.args && <span style={{ color: CHAT.ink2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{redact(parsed.args)}</span>}
       </div>
     )
   }
@@ -425,6 +434,88 @@ export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRe
 }
 
 /* ────────────────────────────────────────────────────────────
+ *  GOAL CARD — Claude Code's answer to /goal ("Goal set: …",
+ *  "Goal cleared: …", "No goal set"), laid out instead of shown as one
+ *  paragraph: a label, the aim, and any inline "1. … 2. …" rules as a
+ *  numbered list. Long goals start folded.
+ * ──────────────────────────────────────────────────────────── */
+const goalLabel = (active: boolean): React.CSSProperties => ({
+  fontFamily: FONT_PROSE, fontSize: 10, fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase',
+  padding: '2px 8px', borderRadius: 6, flexShrink: 0,
+  background: active ? accentTint(15) : CHAT.surface2,
+  color: active ? CHAT.accent : CHAT.muted
+})
+
+const GOAL_FOLD_CHARS = 220
+
+export function GoalCard({ notice }: { notice: GoalNotice }) {
+  const parts = notice.kind === 'set' ? splitGoalCondition(notice.condition) : null
+  const long = !!parts && (parts.rules.length > 0 || parts.intro.length > GOAL_FOLD_CHARS)
+  const [open, setOpen] = useState(false)
+
+  if (notice.kind !== 'set' || !parts) {
+    // Cleared / none: a quiet one-liner, not a card.
+    const label = notice.kind === 'cleared' ? 'Goal cleared' : 'No goal set'
+    const condition = notice.kind === 'cleared' ? notice.condition : ''
+    return (
+      <div role="status" style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '6px 0 12px', minWidth: 0 }}>
+        <span style={goalLabel(false)}>{label}</span>
+        {condition && (
+          <span title={redact(condition)} style={{ fontFamily: FONT_PROSE, fontSize: 12.5, color: CHAT.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>
+            {redact(condition)}
+          </span>
+        )}
+      </div>
+    )
+  }
+
+  const folded = long && !open
+  return (
+    <section aria-label="Goal" style={{
+      margin: '6px 0 14px', padding: '12px 14px', borderRadius: 14,
+      background: CHAT.surface, fontFamily: FONT_PROSE, maxWidth: 760
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+        <span style={goalLabel(true)}>Goal set</span>
+        {parts.rules.length > 0 && (
+          <span style={{ fontSize: 12, color: CHAT.muted }}>{parts.rules.length} rules</span>
+        )}
+        {long && (
+          <button
+            onClick={() => setOpen(o => !o)}
+            aria-expanded={open}
+            style={{
+              marginLeft: 'auto', border: 'none', background: 'transparent', cursor: 'pointer',
+              fontFamily: FONT_PROSE, fontSize: 12, fontWeight: 600, color: CHAT.accent, padding: '2px 4px'
+            }}
+          >{open ? 'Show less' : 'Show full goal'}</button>
+        )}
+      </div>
+      {parts.intro && (
+        <p style={{
+          margin: 0, color: CHAT.ink, fontSize: 'var(--chat-fs, 14px)', lineHeight: 1.65,
+          ...(folded ? { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' as const, overflow: 'hidden' } : {})
+        }}>{redact(parts.intro)}</p>
+      )}
+      {parts.rules.length > 0 && !folded && (
+        <ol style={{ listStyle: 'none', margin: parts.intro ? '10px 0 0' : 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {parts.rules.map((rule, i) => (
+            <li key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, color: CHAT.ink2, fontSize: 13.5, lineHeight: 1.6 }}>
+              <span aria-hidden="true" style={{
+                width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
+                background: CHAT.surface2, color: CHAT.accent, fontSize: 11, fontWeight: 700,
+                display: 'inline-flex', alignItems: 'center', justifyContent: 'center'
+              }}>{i + 1}</span>
+              <span style={{ minWidth: 0 }}>{redact(rule)}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
+  )
+}
+
+/* ────────────────────────────────────────────────────────────
  *  ASSISTANT MESSAGE — Ash text. If the message ends with a
  *  numbered list (`1. … 2. … 3. …`), the list is split out and
  *  rendered as clickable options below the body. Clicks pipe the
@@ -435,6 +526,8 @@ export function AssistantMessage({ text, onChoose, onRespond }: {
   onChoose?: (pick: string) => void
   onRespond?: (item: string) => void
 }) {
+  const goal = parseGoalNotice(text)
+  if (goal) return <GoalCard notice={goal} />
   const parsed = extractTrailingChoices(text)
   if (!parsed) return <PlainAssistantText text={text} />
   // The trailing numbered/lettered list might be a real "pick one"
