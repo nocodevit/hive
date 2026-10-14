@@ -7,6 +7,13 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [2.28.0](https://github.com/nocodevit/hive/compare/v2.27.0...v2.28.0) (2026-10-14)
+
+
+### Features
+
+* v2.27.1 — /goal replies render as a card instead of a wall of text ([21d4f06](https://github.com/nocodevit/hive/commit/21d4f0647e2f4651be409ae2828bfaa697722893))
+
 ## [Unreleased]
 
 - *nothing yet*
