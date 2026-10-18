@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync } from 'fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, realpathSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
-  butlerArgs, readButlerOutput, outputTail, installButlerFiles, createButler,
+  butlerArgs, bridgeSessionId, readButlerOutput, outputTail, installButlerFiles, createButler,
   readButlerEnabled, RESTART_DELAYS_MS, STABLE_AFTER_MS, type ButlerState, type PtyLike
 } from '../butler'
+
+const TRUST_PROMPT = 'Quick safety check: is this a project you created or one you trust? Sessions started here can read, edit, and execute files.\r\nTrust /Users/me/.hive/butler? [y/N] '
 
 const RESOURCES = join(__dirname, '..', '..', '..', 'resources', 'butler')
 
@@ -32,7 +34,9 @@ function setup(opts: { enabled?: boolean } = {}) {
   const states: ButlerState[] = []
   const timers: Array<{ fn: () => void; ms: number; cleared: boolean }> = []
   let clock = 1_000_000
+  let recorded: string | null = null
   const butler = createButler({
+    recordedSessionId: () => recorded,
     dataDir,
     resourcesDir: RESOURCES,
     spawn: (args, cwd) => { const p = new FakePty(args, cwd); ptys.push(p); return p },
@@ -46,16 +50,35 @@ function setup(opts: { enabled?: boolean } = {}) {
   return {
     dataDir, butler, ptys, killed, stale, states, timers,
     last: () => ptys[ptys.length - 1],
-    advance: (ms: number) => { clock += ms }
+    advance: (ms: number) => { clock += ms },
+    record: (id: string | null) => { recorded = id }
   }
 }
 
 describe('butlerArgs', () => {
-  it('names the session and refuses unlisted tools', () => {
-    expect(butlerArgs({ resume: false })).toEqual(['remote-control', '--name', 'Hive Butler', '--permission-mode', 'dontAsk'])
+  it('a new session is named and refuses unlisted tools', () => {
+    expect(butlerArgs('fresh')).toEqual(['remote-control', '--name', 'Hive Butler', '--permission-mode', 'dontAsk'])
   })
-  it('reattaches with --continue when resuming', () => {
-    expect(butlerArgs({ resume: true })).toContain('--continue')
+  it('--continue reattaches the last one recorded here', () => {
+    expect(butlerArgs('continue')).toEqual(['remote-control', '--name', 'Hive Butler', '--permission-mode', 'dontAsk', '--continue'])
+  })
+  it('a saved session is reattached by id, without spawn flags', () => {
+    expect(butlerArgs({ sessionId: 'session_01ABC' })).toEqual(['remote-control', '--session-id', 'session_01ABC'])
+  })
+})
+
+describe('bridgeSessionId', () => {
+  it('reads the session remote-control recorded for the folder', () => {
+    const home = mkdtempSync(join(tmpdir(), 'hive-claude-home-'))
+    const cwd = mkdtempSync(join(tmpdir(), 'hive butler.dir-'))
+    const slug = realpathSync(cwd).replace(/[^a-zA-Z0-9]/g, '-')
+    mkdirSync(join(home, 'projects', slug), { recursive: true })
+    writeFileSync(join(home, 'projects', slug, 'bridge-pointer.json'),
+      JSON.stringify({ sessionId: 'session_01TyEz', environmentId: 'env_01HE', source: 'standalone', pid: 1 }))
+    expect(bridgeSessionId(home, cwd)).toBe('session_01TyEz')
+  })
+  it('none when nothing was recorded', () => {
+    expect(bridgeSessionId(mkdtempSync(join(tmpdir(), 'hive-claude-home-')), tmpdir())).toBeNull()
   })
 })
 
@@ -65,11 +88,14 @@ describe('readButlerOutput', () => {
       .toEqual({ kind: 'connected', url: 'https://claude.ai/code/session_01ABC?x=1' })
   })
   it('recognises the folder trust prompt', () => {
-    expect(readButlerOutput('Quick safety check: Is this a project you created or one you trust?')).toEqual({ kind: 'trust' })
-    expect(readButlerOutput('Do you trust the files in this folder?')).toEqual({ kind: 'trust' })
+    expect(readButlerOutput(TRUST_PROMPT)).toEqual({ kind: 'trust' })
+  })
+  it('recognises the enable question that follows it', () => {
+    expect(readButlerOutput(TRUST_PROMPT + ' y\r\nTake this session with you…\r\nEnable Remote Control? (y/n) ')).toEqual({ kind: 'enable' })
   })
   it('the URL wins once it is there', () => {
-    expect(readButlerOutput('Do you trust the files in this folder?\nhttps://claude.ai/code/abc')?.kind).toBe('connected')
+    expect(readButlerOutput(TRUST_PROMPT + '\n·✔︎· Connected · butler\nContinue coding in the Claude mobile app or https://claude.ai/code?environment=env_01HE4u\n'))
+      .toEqual({ kind: 'connected', url: 'https://claude.ai/code?environment=env_01HE4u' })
   })
   it('nothing yet', () => {
     expect(readButlerOutput('Starting remote control…')).toBeNull()
@@ -146,6 +172,38 @@ describe('createButler', () => {
     expect(t.last().args).not.toContain('--continue')
   })
 
+  it('remembers the connected session and reattaches it by id next time', () => {
+    t.butler.setEnabled(true)
+    t.record('session_01KEEP')
+    t.last().emit('Ready: https://claude.ai/code?environment=env_1\r\n')
+    expect(readFileSync(join(t.dataDir, 'butler', '.session-id'), 'utf8')).toBe('session_01KEEP')
+    t.butler.shutdown()
+    t.butler.restore()
+    expect(t.last().args).toEqual(['remote-control', '--session-id', 'session_01KEEP'])
+  })
+
+  it('a saved session that cannot be reattached is forgotten: --continue, then new', () => {
+    mkdirSync(join(t.dataDir, 'butler'), { recursive: true })
+    writeFileSync(join(t.dataDir, 'butler', '.session-id'), 'session_GONE')
+    t.butler.setEnabled(true)
+    expect(t.last().args).toContain('--session-id')
+    t.last().exit(1)
+    expect(existsSync(join(t.dataDir, 'butler', '.session-id'))).toBe(false)
+    expect(t.last().args).toContain('--continue')
+    t.last().exit(1)
+    expect(t.last().args).toEqual(['remote-control', '--name', 'Hive Butler', '--permission-mode', 'dontAsk'])
+    expect(t.ptys).toHaveLength(3)
+  })
+
+  it('a restart after a crash reattaches the same session by id', () => {
+    t.butler.setEnabled(true)
+    t.record('session_01SAME')
+    t.last().emit('https://claude.ai/code?environment=env_1')
+    t.last().exit(1)
+    t.timers[0].fn()
+    expect(t.last().args).toEqual(['remote-control', '--session-id', 'session_01SAME'])
+  })
+
   it('a fresh session that dies before connecting is an error with its output, no restart loop', () => {
     t.butler.setEnabled(true)
     t.last().exit(1)
@@ -158,15 +216,24 @@ describe('createButler', () => {
 
   it('asks before answering the trust prompt, then answers it once', () => {
     t.butler.setEnabled(true)
-    t.last().emit('Is this a project you created or one you trust?\r\n❯ 1. Yes, I trust this folder')
+    t.last().emit(TRUST_PROMPT)
     expect(t.butler.getState().status).toBe('needs_trust')
     expect(t.last().written).toEqual([])
     expect(t.butler.confirmTrust()).toBe(true)
-    expect(t.last().written).toEqual(['\r'])
+    expect(t.last().written).toEqual(['y\r'])
     expect(t.butler.getState().status).toBe('starting')
     t.last().emit('…redraw…')
     expect(t.butler.getState().status).toBe('starting')
     expect(t.butler.confirmTrust()).toBe(false)
+  })
+
+  it('answers "Enable Remote Control?" itself, once', () => {
+    t.butler.setEnabled(true)
+    t.last().emit('Enable Remote Control? (y/n) ')
+    expect(t.last().written).toEqual(['y\r'])
+    t.last().emit('\r\n')
+    expect(t.last().written).toEqual(['y\r'])
+    expect(t.butler.getState().status).toBe('starting')
   })
 
   it('switching off kills the session and keeps the folder', () => {
