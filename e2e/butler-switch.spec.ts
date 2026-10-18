@@ -114,7 +114,9 @@ test('a restart brings the session back; quitting stops the old one', async () =
   expect(spawns()[1].split('|')[1]).toBe('remote-control --session-id session_fake123')
   await openSettings()
   await expect(page.getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByText('Waiting for your OK')).toBeVisible()
+  // remote-control asks to trust the folder on every start; after the
+  // first OK Hive answers it, so the restored session connects unattended.
+  await expect(page.getByText('Connected', { exact: true })).toBeVisible()
 })
 
 test('switching off stops the session and keeps the folder', async () => {
@@ -124,5 +126,5 @@ test('switching off stops the session and keeps the folder', async () => {
   await expect(page.getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'false')
   await expect.poll(() => alive(pid), { timeout: 10000 }).toBe(false)
   expect(existsSync(join(BUTLER_DIR, 'CLAUDE.md'))).toBe(true)
-  expect(JSON.parse(readFileSync(join(HIVE_DATA_DIR, 'butler.json'), 'utf8'))).toEqual({ enabled: false })
+  expect(JSON.parse(readFileSync(join(HIVE_DATA_DIR, 'butler.json'), 'utf8'))).toEqual({ enabled: false, trusted: true })
 })

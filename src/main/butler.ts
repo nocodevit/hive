@@ -151,17 +151,25 @@ export const RESTART_DELAYS_MS = [2_000, 10_000, 30_000, 120_000]
 /** A session that stayed up this long resets the restart count. */
 export const STABLE_AFTER_MS = 10 * 60_000
 
-export function readButlerEnabled(dataDir: string): boolean {
+/**
+ * `enabled` is the switch. `trusted` records that the owner once answered
+ * remote-control's folder-trust question, which it asks on every start;
+ * after that Hive answers it (the folder holds only what Hive writes).
+ */
+export interface ButlerSettings { enabled: boolean; trusted: boolean }
+
+export function readButlerSettings(dataDir: string): ButlerSettings {
   try {
-    return JSON.parse(readFileSync(join(dataDir, SETTINGS_FILE), 'utf8'))?.enabled === true
+    const j = JSON.parse(readFileSync(join(dataDir, SETTINGS_FILE), 'utf8'))
+    return { enabled: j?.enabled === true, trusted: j?.trusted === true }
   } catch {
-    return false
+    return { enabled: false, trusted: false }
   }
 }
 
-export function writeButlerEnabled(dataDir: string, enabled: boolean): void {
+export function writeButlerSettings(dataDir: string, s: ButlerSettings): void {
   mkdirSync(dataDir, { recursive: true })
-  writeFileSync(join(dataDir, SETTINGS_FILE), JSON.stringify({ enabled }) + '\n')
+  writeFileSync(join(dataDir, SETTINGS_FILE), JSON.stringify(s) + '\n')
 }
 
 export function createButler(deps: ButlerDeps) {
@@ -170,7 +178,10 @@ export function createButler(deps: ButlerDeps) {
   const clearTimer = deps.clearTimer ?? (t => clearTimeout(t as ReturnType<typeof setTimeout>))
   const dir = butlerDir(deps.dataDir)
 
-  let state: ButlerState = { enabled: readButlerEnabled(deps.dataDir), status: 'off' }
+  const saved = readButlerSettings(deps.dataDir)
+  let trusted = saved.trusted
+  let state: ButlerState = { enabled: saved.enabled, status: 'off' }
+  const persist = () => writeButlerSettings(deps.dataDir, { enabled: state.enabled, trusted })
   let term: PtyLike | null = null
   let output = ''
   let connectedAt = 0
@@ -233,6 +244,9 @@ export function createButler(deps: ButlerDeps) {
         const id = deps.recordedSessionId()
         if (id && id !== savedSession()) { try { writeFileSync(sessionPath, id) } catch { /* best-effort */ } }
         set({ status: 'connected', url: sig.url })
+      } else if (sig?.kind === 'trust' && trusted) {
+        output = ''
+        t.write('y\r')
       } else if (sig?.kind === 'trust' && state.status !== 'needs_trust') {
         set({ status: 'needs_trust' })
       } else if (sig?.kind === 'enable') {
@@ -287,8 +301,8 @@ export function createButler(deps: ButlerDeps) {
       launch(resumeMode())
     },
     setEnabled(enabled: boolean) {
-      writeButlerEnabled(deps.dataDir, enabled)
       state.enabled = enabled
+      persist()
       restarts = 0
       if (enabled) {
         if (term) return
@@ -302,6 +316,8 @@ export function createButler(deps: ButlerDeps) {
     /** The owner agreed to let Claude Code run in the butler folder. */
     confirmTrust() {
       if (state.status !== 'needs_trust' || !term) return false
+      trusted = true
+      persist()
       // Forget the prompt text, or the next chunk would read as it again.
       output = ''
       term.write('y\r')

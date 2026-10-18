@@ -53,11 +53,12 @@ off by default. Code: `src/main/butler.ts`, bundled files in
 - **Permissions:** `dontAsk` refuses anything not allow-listed; the
   settings allow only `./hive agents|tail|send|start` and deny
   Edit/Write/NotebookEdit.
-- **Prompts:** `remote-control` asks "Trust <folder>? [y/N]" on the first
-  run in a folder (default No) and then "Enable Remote Control? (y/n)".
-  Hive shows "Trust and continue" in Settings for the first and types `y`
-  only after that click; the second it answers itself (the switch is the
-  yes).
+- **Prompts:** `remote-control` asks "Trust <folder>? [y/N]" (default No)
+  and then "Enable Remote Control? (y/n)" on every start, even in a folder
+  already trusted. The first time, Hive shows "Trust and continue" in
+  Settings and types `y` only after that click; the OK is kept
+  (`butler.json` `trusted`) and later starts answer it unattended. The
+  second question Hive always answers (the switch is the yes).
 - **Status:** connected once the `https://claude.ai/code?environment=…`
   link is printed. A session that dies before connecting is shown as an
   error with its last output (e.g. not logged in) and is not retried in a

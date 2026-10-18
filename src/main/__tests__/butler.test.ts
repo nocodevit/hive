@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   butlerArgs, bridgeSessionId, readButlerOutput, outputTail, installButlerFiles, createButler,
-  readButlerEnabled, RESTART_DELAYS_MS, STABLE_AFTER_MS, type ButlerState, type PtyLike
+  readButlerSettings, RESTART_DELAYS_MS, STABLE_AFTER_MS, type ButlerState, type PtyLike
 } from '../butler'
 
 const TRUST_PROMPT = 'Quick safety check: is this a project you created or one you trust? Sessions started here can read, edit, and execute files.\r\nTrust /Users/me/.hive/butler? [y/N] '
@@ -154,7 +154,7 @@ describe('createButler', () => {
 
   it('switching on installs the files, starts in the butler folder and reports connected', () => {
     t.butler.setEnabled(true)
-    expect(readButlerEnabled(t.dataDir)).toBe(true)
+    expect(readButlerSettings(t.dataDir).enabled).toBe(true)
     expect(existsSync(join(t.dataDir, 'butler', 'CLAUDE.md'))).toBe(true)
     expect(t.last().cwd).toBe(join(t.dataDir, 'butler'))
     expect(t.butler.getState().status).toBe('starting')
@@ -227,6 +227,28 @@ describe('createButler', () => {
     expect(t.butler.confirmTrust()).toBe(false)
   })
 
+  it('after one OK, later trust prompts are answered without asking', () => {
+    t.butler.setEnabled(true)
+    t.last().emit(TRUST_PROMPT)
+    t.butler.confirmTrust()
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: true, trusted: true })
+    t.butler.shutdown()
+    t.butler.restore()
+    t.last().emit(TRUST_PROMPT)
+    expect(t.last().written).toEqual(['y\r'])
+    expect(t.butler.getState().status).toBe('starting')
+  })
+
+  it('the OK survives switching off and on', () => {
+    t.butler.setEnabled(true)
+    t.last().emit(TRUST_PROMPT)
+    t.butler.confirmTrust()
+    t.butler.setEnabled(false)
+    t.butler.setEnabled(true)
+    t.last().emit(TRUST_PROMPT)
+    expect(t.last().written).toEqual(['y\r'])
+  })
+
   it('answers "Enable Remote Control?" itself, once', () => {
     t.butler.setEnabled(true)
     t.last().emit('Enable Remote Control? (y/n) ')
@@ -242,7 +264,7 @@ describe('createButler', () => {
     t.butler.setEnabled(false)
     expect(t.killed).toEqual([p])
     expect(t.butler.getState()).toEqual({ enabled: false, status: 'off' })
-    expect(readButlerEnabled(t.dataDir)).toBe(false)
+    expect(readButlerSettings(t.dataDir).enabled).toBe(false)
     expect(existsSync(join(t.dataDir, 'butler', 'CLAUDE.md'))).toBe(true)
     p.exit(0)
     expect(t.ptys).toHaveLength(1)
@@ -288,7 +310,7 @@ describe('createButler', () => {
     t.butler.setEnabled(true)
     t.butler.shutdown()
     expect(t.killed).toHaveLength(1)
-    expect(readButlerEnabled(t.dataDir)).toBe(true)
+    expect(readButlerSettings(t.dataDir).enabled).toBe(true)
   })
 })
 
