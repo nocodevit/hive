@@ -1,3 +1,10 @@
+type ButlerState = {
+  enabled: boolean
+  status: 'off' | 'starting' | 'needs_trust' | 'connected' | 'error'
+  url?: string
+  error?: string
+}
+
 declare global {
   interface Window {
     api: {
@@ -51,6 +58,11 @@ declare global {
           Promise<{ ok: boolean; branch?: string; results?: any[]; error?: string }>
       }
       butler: {
+        state: () => Promise<ButlerState>
+        setEnabled: (enabled: boolean) => Promise<ButlerState>
+        confirmTrust: () => Promise<{ ok: boolean }>
+        retry: () => Promise<ButlerState>
+        onState: (cb: (s: ButlerState) => void) => () => void
         onStartAgent: (cb: (payload: { agentId: string; mode: 'resume' | 'new' }) => void) => () => void
       }
       speech: {

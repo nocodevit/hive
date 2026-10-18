@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+export type ButlerState = {
+  enabled: boolean
+  status: 'off' | 'starting' | 'needs_trust' | 'connected' | 'error'
+  url?: string
+  error?: string
+}
+
 const api = {
   pty: {
     create: (id: string, cwd?: string) => ipcRenderer.invoke('pty:create', { id, cwd }),
@@ -239,6 +246,15 @@ const api = {
       const handler = (_e: any, data: { agentId: string; mode: 'resume' | 'new' }) => cb(data)
       ipcRenderer.on('butler:startAgent', handler)
       return () => ipcRenderer.removeListener('butler:startAgent', handler)
+    },
+    state: () => ipcRenderer.invoke('butler:state') as Promise<ButlerState>,
+    setEnabled: (enabled: boolean) => ipcRenderer.invoke('butler:setEnabled', enabled) as Promise<ButlerState>,
+    confirmTrust: () => ipcRenderer.invoke('butler:confirmTrust') as Promise<{ ok: boolean }>,
+    retry: () => ipcRenderer.invoke('butler:retry') as Promise<ButlerState>,
+    onState: (cb: (s: ButlerState) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, s: ButlerState) => cb(s)
+      ipcRenderer.on('butler:state', handler)
+      return () => ipcRenderer.removeListener('butler:state', handler)
     }
   },
   speech: {
