@@ -180,12 +180,12 @@ describe('knownClaudeBinPaths', () => {
   it('lists the native-installer target (~/.local/bin) FIRST', () => {
     // The install.sh binary is node-independent and always lands here, so it is
     // the most reliable hit and must be probed before homebrew/system paths.
-    const [first] = knownClaudeBinPaths('/Users/me')
+    const [first] = knownClaudeBinPaths('/Users/testuser')
     expect(first).toBe('/Users/testuser/.local/bin/claude')
   })
 
   it('covers homebrew (arm + intel) and system bins, all absolute', () => {
-    const paths = knownClaudeBinPaths('/Users/me')
+    const paths = knownClaudeBinPaths('/Users/testuser')
     expect(paths).toEqual([
       '/Users/testuser/.local/bin/claude',
       '/opt/homebrew/bin/claude',
@@ -199,7 +199,7 @@ describe('knownClaudeBinPaths', () => {
 describe('nvmClaudeCandidates', () => {
   it('orders nvm node bins NEWEST-first so a stale claude never shadows a current one', () => {
     const dirs = ['v16.20.2', 'v22.9.0', 'v20.11.1']
-    expect(nvmClaudeCandidates('/Users/me', dirs)).toEqual([
+    expect(nvmClaudeCandidates('/Users/testuser', dirs)).toEqual([
       '/Users/testuser/.nvm/versions/node/v22.9.0/bin/claude',
       '/Users/testuser/.nvm/versions/node/v20.11.1/bin/claude',
       '/Users/testuser/.nvm/versions/node/v16.20.2/bin/claude'
@@ -208,7 +208,7 @@ describe('nvmClaudeCandidates', () => {
 
   it('sorts by minor and patch, not just major', () => {
     const dirs = ['v20.9.0', 'v20.11.1', 'v20.11.0']
-    expect(nvmClaudeCandidates('/Users/me', dirs)).toEqual([
+    expect(nvmClaudeCandidates('/Users/testuser', dirs)).toEqual([
       '/Users/testuser/.nvm/versions/node/v20.11.1/bin/claude',
       '/Users/testuser/.nvm/versions/node/v20.11.0/bin/claude',
       '/Users/testuser/.nvm/versions/node/v20.9.0/bin/claude'
@@ -217,22 +217,22 @@ describe('nvmClaudeCandidates', () => {
 
   it('pushes unparseable version names last rather than crashing', () => {
     const dirs = ['garbage', 'v18.0.0']
-    expect(nvmClaudeCandidates('/Users/me', dirs)).toEqual([
+    expect(nvmClaudeCandidates('/Users/testuser', dirs)).toEqual([
       '/Users/testuser/.nvm/versions/node/v18.0.0/bin/claude',
       '/Users/testuser/.nvm/versions/node/garbage/bin/claude'
     ])
   })
 
   it('returns an empty list when no node versions exist', () => {
-    expect(nvmClaudeCandidates('/Users/me', [])).toEqual([])
+    expect(nvmClaudeCandidates('/Users/testuser', [])).toEqual([])
   })
 })
 
 describe('claudeBinCandidates', () => {
   it('probes fixed install locations BEFORE nvm per-version bins', () => {
-    const all = claudeBinCandidates('/Users/me', ['v20.0.0'])
+    const all = claudeBinCandidates('/Users/testuser', ['v20.0.0'])
     expect(all).toEqual([
-      ...knownClaudeBinPaths('/Users/me'),
+      ...knownClaudeBinPaths('/Users/testuser'),
       '/Users/testuser/.nvm/versions/node/v20.0.0/bin/claude'
     ])
   })
