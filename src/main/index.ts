@@ -187,7 +187,7 @@ import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSess
 import { getPrevSessionInfo } from './chat-recent-sessions'
 import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
 import { readOpenChats, writeOpenChats, buildUnclosedRows, lastUserText } from './openChats'
-import { createButler, BUTLER_SESSION_NAME } from './butler'
+import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir } from './butler'
 import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
 import { randomBytes } from 'crypto'
@@ -560,6 +560,7 @@ const butler = createButler({
   dataDir: DATA_DIR,
   // Dev: resources/butler in the repo. Packaged: extraResources/butler.
   resourcesDir: app.isPackaged ? join(process.resourcesPath, 'butler') : join(__dirname, '..', '..', 'resources', 'butler'),
+  recordedSessionId: () => bridgeSessionId(process.env.CLAUDE_CONFIG_DIR || join(app.getPath('home'), '.claude'), butlerDir(DATA_DIR)),
   spawn: (args, cwd) => spawnPty('butler', claudeBin(), args, {
     name: 'xterm-color',
     cols: 120, rows: 30,

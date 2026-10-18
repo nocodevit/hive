@@ -22,12 +22,23 @@ const FAKE_LOG = join(ROOT, 'fake-claude.log')
 const BUTLER_DIR = join(HIVE_DATA_DIR, 'butler')
 const SWITCH = 'Allow remote control from my phone (Butler)'
 
+const CLAUDE_HOME = join(ROOT, 'claude-home')
+
+// Mirrors the real `claude remote-control` (2.1.x) dialogue: trust [y/N],
+// then "Enable Remote Control? (y/n)", then Connected + link; records the
+// session in bridge-pointer.json like the real one does.
 const FAKE_SCRIPT = `#!/bin/bash
 echo "$PWD|$*" >> "$FAKE_LOG"
-echo "Quick safety check: Is this a project you created or one you trust?"
-echo "❯ 1. Yes, I trust this folder"
-read -r _
-echo "Remote Control ready: https://claude.ai/code/session_fake123"
+echo "Quick safety check: is this a project you created or one you trust?"
+printf "Trust $PWD? [y/N] "
+read -r a; [ "$a" = "y" ] || exit 1
+printf "Enable Remote Control? (y/n) "
+read -r a; [ "$a" = "y" ] || exit 1
+SLUG=$(pwd -P | sed 's/[^a-zA-Z0-9]/-/g')
+mkdir -p "$CLAUDE_CONFIG_DIR/projects/$SLUG"
+echo '{"sessionId":"session_fake123","environmentId":"env_fake","source":"standalone"}' > "$CLAUDE_CONFIG_DIR/projects/$SLUG/bridge-pointer.json"
+echo "Connected · butler"
+echo "Continue coding in the Claude mobile app or https://claude.ai/code?environment=env_fake"
 while true; do sleep 1; done
 `
 
@@ -37,7 +48,7 @@ let page: Page
 async function launch() {
   app = await electron.launch({
     args: [join(PROJECT_ROOT, 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HEADLESS: '1', HIVE_PORT: '17823', HIVE_DATA_DIR, HIVE_CLAUDE_BIN: FAKE, FAKE_LOG }
+    env: { ...process.env, NODE_ENV: 'test', HEADLESS: '1', HIVE_PORT: '17823', HIVE_DATA_DIR, HIVE_CLAUDE_BIN: FAKE, FAKE_LOG, CLAUDE_CONFIG_DIR: CLAUDE_HOME }
   })
   page = await app.firstWindow({ timeout: 60000 })
   await page.waitForLoadState('domcontentloaded')
@@ -84,11 +95,12 @@ test('switching on installs the files, asks before trusting, then connects', asy
   const [first] = spawns()
   const [cwd, args] = first.split('|')
   expect(cwd).toBe(BUTLER_DIR)
-  expect(args).toContain('remote-control --name Hive Butler --permission-mode dontAsk')
+  expect(args).toBe('remote-control --name Hive Butler --permission-mode dontAsk --continue')
 
   await page.getByRole('button', { name: 'Trust and continue' }).click()
   await expect(page.getByText('Connected', { exact: true })).toBeVisible()
   await expect(page.getByText('open the Claude app → Code and tap “Hive Butler”')).toBeVisible()
+  expect(readFileSync(join(BUTLER_DIR, '.session-id'), 'utf8')).toBe('session_fake123')
 })
 
 test('a restart brings the session back; quitting stops the old one', async () => {
@@ -99,7 +111,7 @@ test('a restart brings the session back; quitting stops the old one', async () =
 
   await launch()
   await expect.poll(() => spawns().length, { timeout: 20000 }).toBe(2)
-  expect(spawns()[1]).toContain('--continue')
+  expect(spawns()[1].split('|')[1]).toBe('remote-control --session-id session_fake123')
   await openSettings()
   await expect(page.getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByText('Waiting for your OK')).toBeVisible()

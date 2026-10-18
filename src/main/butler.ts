@@ -10,8 +10,9 @@
 // last. Everything here takes its side effects as deps so it can be tested
 // without a real pty or a real `claude`.
 
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
+import { claudeProjectSlug } from '../shared/claude-project-slug'
 
 export const BUTLER_SESSION_NAME = 'Hive Butler'
 
@@ -37,16 +38,42 @@ export function installButlerFiles(srcDir: string, destDir: string): void {
 }
 
 /**
- * Only allow-listed `./hive` commands run; anything else is refused
- * without a prompt nobody on the phone could answer.
+ * How to bring the session up, tried in this order: the session Hive
+ * connected last time (by id, so the phone keeps one "Hive Butler" with its
+ * history however long Hive was closed), the last one recorded here
+ * (`--continue`, only within about 4 hours), a new one.
  */
-export function butlerArgs(opts: { resume: boolean }): string[] {
+export type LaunchMode = { sessionId: string } | 'continue' | 'fresh'
+
+/**
+ * New sessions refuse anything not allow-listed (`dontAsk`) rather than
+ * ask on a phone. `--session-id` takes no spawn flags: a reattached
+ * session keeps the name and mode it was created with.
+ */
+export function butlerArgs(mode: LaunchMode): string[] {
+  if (typeof mode === 'object') return ['remote-control', '--session-id', mode.sessionId]
   return [
     'remote-control',
     '--name', BUTLER_SESSION_NAME,
     '--permission-mode', 'dontAsk',
-    ...(opts.resume ? ['--continue'] : [])
+    ...(mode === 'continue' ? ['--continue'] : [])
   ]
+}
+
+/**
+ * `claude remote-control` records the session it runs for a folder in
+ * ~/.claude/projects/<slug>/bridge-pointer.json (what `--continue` reads).
+ * Hive only reads it, once connected, and keeps its own copy of the id.
+ */
+export function bridgeSessionId(claudeHome: string, cwd: string): string | null {
+  try {
+    // claude keys the folder by its real path (macOS temp dirs are symlinks).
+    const real = realpathSync(cwd)
+    const p = JSON.parse(readFileSync(join(claudeHome, 'projects', claudeProjectSlug(real), 'bridge-pointer.json'), 'utf8'))
+    return typeof p?.sessionId === 'string' && p.sessionId ? p.sessionId : null
+  } catch {
+    return null
+  }
 }
 
 // eslint-disable-next-line no-control-regex
@@ -56,14 +83,22 @@ export function stripAnsi(s: string): string {
   return s.replace(ANSI, '')
 }
 
-export type ButlerSignal = { kind: 'connected'; url: string } | { kind: 'trust' } | null
+export type ButlerSignal = { kind: 'connected'; url: string } | { kind: 'trust' } | { kind: 'enable' } | null
 
-/** What the remote-control output so far says about the session. */
+/**
+ * What the remote-control output so far says. Its two questions, in order:
+ * "Trust <folder>? [y/N]" (first run in a folder; the owner answers in
+ * Settings) and "Enable Remote Control? (y/n)" (turning the switch on was
+ * the yes). Then "Connected" and the claude.ai/code link.
+ */
 export function readButlerOutput(text: string): ButlerSignal {
   const plain = stripAnsi(text)
   const url = plain.match(/https:\/\/claude\.ai\/code[^\s'"<>]*/)
   if (url) return { kind: 'connected', url: url[0] }
-  if (/trust (this|the files in this) folder|one you trust/i.test(plain)) return { kind: 'trust' }
+  const enable = plain.search(/Enable Remote Control\?/i)
+  const trust = plain.search(/one you trust|Trust \S.*\? \[y\/N\]/i)
+  if (enable >= 0 && enable > trust) return { kind: 'enable' }
+  if (trust >= 0) return { kind: 'trust' }
   return null
 }
 
@@ -96,6 +131,8 @@ export interface PtyLike {
 export interface ButlerDeps {
   dataDir: string
   resourcesDir: string
+  /** The session id remote-control recorded for the butler folder (see bridgeSessionId). */
+  recordedSessionId: () => string | null
   spawn: (args: string[], cwd: string) => PtyLike
   kill: (term: PtyLike) => void
   /** Kill a butler left running by a Hive that crashed (pid from the last run). */
@@ -108,6 +145,7 @@ export interface ButlerDeps {
 
 const SETTINGS_FILE = 'butler.json'
 const PID_FILE = '.pid'
+const SESSION_FILE = '.session-id'
 /** Restart delays after a connected session exits on its own. */
 export const RESTART_DELAYS_MS = [2_000, 10_000, 30_000, 120_000]
 /** A session that stayed up this long resets the restart count. */
@@ -147,6 +185,16 @@ export function createButler(deps: ButlerDeps) {
   }
 
   const pidPath = join(dir, PID_FILE)
+  const sessionPath = join(dir, SESSION_FILE)
+
+  const savedSession = (): string | null => {
+    try { return readFileSync(sessionPath, 'utf8').trim() || null } catch { return null }
+  }
+  /** The best way back to the session, falling through to a new one. */
+  const resumeMode = (): LaunchMode => {
+    const id = savedSession()
+    return id ? { sessionId: id } : 'continue'
+  }
 
   function sweepStale() {
     try {
@@ -155,7 +203,7 @@ export function createButler(deps: ButlerDeps) {
     } catch { /* no previous run */ }
   }
 
-  function launch(resume: boolean) {
+  function launch(mode: LaunchMode) {
     restartTimer = null
     try {
       installButlerFiles(deps.resourcesDir, dir)
@@ -168,7 +216,7 @@ export function createButler(deps: ButlerDeps) {
     set({ status: 'starting' })
     let t: PtyLike
     try {
-      t = deps.spawn(butlerArgs({ resume }), dir)
+      t = deps.spawn(butlerArgs(mode), dir)
     } catch (e) {
       set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
       return
@@ -182,9 +230,14 @@ export function createButler(deps: ButlerDeps) {
       const sig = readButlerOutput(output)
       if (sig?.kind === 'connected') {
         connectedAt = now()
+        const id = deps.recordedSessionId()
+        if (id && id !== savedSession()) { try { writeFileSync(sessionPath, id) } catch { /* best-effort */ } }
         set({ status: 'connected', url: sig.url })
       } else if (sig?.kind === 'trust' && state.status !== 'needs_trust') {
         set({ status: 'needs_trust' })
+      } else if (sig?.kind === 'enable') {
+        output = ''
+        t.write('y\r')
       }
     })
     t.onExit(({ exitCode }) => {
@@ -192,10 +245,15 @@ export function createButler(deps: ButlerDeps) {
       term = null
       if (!state.enabled) return
       const wasConnected = connectedAt > 0
-      if (!wasConnected && resume) {
-        // `--continue` fails when nothing was recorded here recently:
-        // start a fresh session instead.
-        launch(false)
+      if (!wasConnected && typeof mode === 'object') {
+        // That session is gone: forget it and try the next way back.
+        try { unlinkSync(sessionPath) } catch { /* already gone */ }
+        launch('continue')
+        return
+      }
+      if (!wasConnected && mode === 'continue') {
+        // Nothing recorded here recently: start a new session.
+        launch('fresh')
         return
       }
       if (!wasConnected) {
@@ -209,7 +267,7 @@ export function createButler(deps: ButlerDeps) {
       }
       const delay = RESTART_DELAYS_MS[restarts++]
       set({ status: 'starting' })
-      restartTimer = setTimer(() => { if (state.enabled && !term) launch(true) }, delay)
+      restartTimer = setTimer(() => { if (state.enabled && !term) launch(resumeMode()) }, delay)
     })
   }
 
@@ -226,7 +284,7 @@ export function createButler(deps: ButlerDeps) {
     restore() {
       if (!state.enabled || term) return
       sweepStale()
-      launch(true)
+      launch(resumeMode())
     },
     setEnabled(enabled: boolean) {
       writeButlerEnabled(deps.dataDir, enabled)
@@ -235,7 +293,7 @@ export function createButler(deps: ButlerDeps) {
       if (enabled) {
         if (term) return
         sweepStale()
-        launch(true)
+        launch(resumeMode())
       } else {
         stop()
         set({ status: 'off' })
@@ -246,7 +304,7 @@ export function createButler(deps: ButlerDeps) {
       if (state.status !== 'needs_trust' || !term) return false
       // Forget the prompt text, or the next chunk would read as it again.
       output = ''
-      term.write('\r')
+      term.write('y\r')
       set({ status: 'starting' })
       return true
     },
@@ -254,7 +312,7 @@ export function createButler(deps: ButlerDeps) {
     retry() {
       if (!state.enabled || term) return
       restarts = 0
-      launch(true)
+      launch(resumeMode())
     },
     /** App quit: stop the session but keep the switch as it is. */
     shutdown: stop,

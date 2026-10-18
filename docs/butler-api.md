@@ -53,18 +53,26 @@ off by default. Code: `src/main/butler.ts`, bundled files in
 - **Permissions:** `dontAsk` refuses anything not allow-listed; the
   settings allow only `./hive agents|tail|send|start` and deny
   Edit/Write/NotebookEdit.
-- **Folder trust:** the first run in a new folder asks whether to trust
-  it. Hive detects the prompt, shows "Trust and continue" in Settings and
-  answers only after that click.
-- **Status:** connected once the `https://claude.ai/code…` URL is printed.
-  A session that dies before connecting is shown as an error with its last
-  output (e.g. not logged in) and is not retried in a loop. A connected
-  session that exits is restarted with backoff (2 s, 10 s, 30 s, 2 min;
-  the budget resets after 10 min up).
+- **Prompts:** `remote-control` asks "Trust <folder>? [y/N]" on the first
+  run in a folder (default No) and then "Enable Remote Control? (y/n)".
+  Hive shows "Trust and continue" in Settings for the first and types `y`
+  only after that click; the second it answers itself (the switch is the
+  yes).
+- **Status:** connected once the `https://claude.ai/code?environment=…`
+  link is printed. A session that dies before connecting is shown as an
+  error with its last output (e.g. not logged in) and is not retried in a
+  loop. A connected session that exits is restarted with backoff (2 s,
+  10 s, 30 s, 2 min; the budget resets after 10 min up).
+- **Same session every time:** once connected, Hive reads the session id
+  remote-control recorded in
+  `~/.claude/projects/<slug>/bridge-pointer.json` (read only) and keeps it
+  in `butler/.session-id`. Later starts use `--session-id <id>`, so the
+  phone keeps one "Hive Butler" with its history however long Hive was
+  closed. If that fails: `--continue` (works within ~4 h), then a new
+  session. A butler left behind by a crash (pid in `butler/.pid`, command
+  checked) is killed first.
 - **Restart of Hive:** with the switch on (`~/.hive/butler.json`), the
-  session comes back at launch with `--continue`, falling back to a new one.
-  A butler left behind by a crash (pid in `butler/.pid`, command checked)
-  is killed first.
+  session comes back at launch the same way.
 - **Off:** stops the session (Remote Control ends with it) and keeps the
   folder.
 - **Requirements:** Claude Code logged in with a claude.ai subscription
