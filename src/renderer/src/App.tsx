@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Terminal from './components/Terminal'
+import { ButlerSettings } from './components/ButlerSettings'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import Modal from './components/Modal'
 import CreateProjectModal from './components/CreateProjectModal'
@@ -3350,6 +3351,8 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            <ButlerSettings />
 
             {/* Voice input */}
             <div>
