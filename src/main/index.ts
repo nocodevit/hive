@@ -114,7 +114,16 @@ for (const k of strippedHostEnv) delete process.env[k]
   } catch {
     // No nvm on this machine — fine, the fixed locations still cover it.
   }
-  for (const p of claudeBinCandidates(home, nvmDirs)) {
+  // An explicit HIVE_CLAUDE_BIN (e2e fakes, or a deliberate override from a
+  // terminal launch) wins when it points at an executable.
+  const preset = process.env[CLAUDE_BIN_ENV]
+  if (preset) {
+    try {
+      const st = statSync(preset)
+      if (st.isFile() && (st.mode & 0o111) !== 0) { resolved = preset; via = 'env' }
+    } catch { /* not a file: resolve as usual */ }
+  }
+  if (!resolved) for (const p of claudeBinCandidates(home, nvmDirs)) {
     try {
       const st = statSync(p)
       if (st.isFile() && (st.mode & 0o111) !== 0) {
@@ -178,6 +187,8 @@ import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSess
 import { getPrevSessionInfo } from './chat-recent-sessions'
 import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
 import { readOpenChats, writeOpenChats, buildUnclosedRows, lastUserText } from './openChats'
+import { createButler, BUTLER_SESSION_NAME } from './butler'
+import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
 import { randomBytes } from 'crypto'
 import type { IncomingMessage, ServerResponse } from 'http'
@@ -541,6 +552,40 @@ ipcMain.handle('chat:resolveUnclosed', () => {
   writeOpenChats(DATA_DIR, readOpenChats(DATA_DIR).filter(r => live.has(r.agentId)))
   return { ok: true }
 })
+
+// ── Built-in Butler (phone remote control) ───────────────────────────
+// See butler.ts. Main owns the switch (~/.hive/butler.json), so a session
+// comes back at launch before any window has loaded.
+const butler = createButler({
+  dataDir: DATA_DIR,
+  // Dev: resources/butler in the repo. Packaged: extraResources/butler.
+  resourcesDir: app.isPackaged ? join(process.resourcesPath, 'butler') : join(__dirname, '..', '..', 'resources', 'butler'),
+  spawn: (args, cwd) => spawnPty('butler', claudeBin(), args, {
+    name: 'xterm-color',
+    cols: 120, rows: 30,
+    cwd,
+    env: { ...process.env, LC_ALL: 'en_US.UTF-8', LANG: 'en_US.UTF-8' } as Record<string, string>
+  }),
+  kill: term => killProcessSubtree(term.pid, () => releasePty(term as pty.IPty)),
+  killStale: pid => {
+    // Only a butler of ours: the pid may have been reused since.
+    let cmd = ''
+    try { cmd = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf-8', timeout: 3000 }) } catch { return }
+    if (cmd.includes('remote-control') && cmd.includes(BUTLER_SESSION_NAME)) {
+      killProcessSubtree(pid, () => process.kill(pid, 'SIGTERM'))
+    }
+  },
+  onState: s => {
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('butler:state', s)
+  }
+})
+ipcMain.handle('butler:state', () => butler.getState())
+ipcMain.handle('butler:setEnabled', (_e, enabled: unknown) => {
+  butler.setEnabled(enabled === true)
+  return butler.getState()
+})
+ipcMain.handle('butler:confirmTrust', () => ({ ok: butler.confirmTrust() }))
+ipcMain.handle('butler:retry', () => { butler.retry(); return butler.getState() })
 
 async function unclosedDetail(rec: { agentId: string; cwd: string; since: number }) {
   let lastTask = ''
@@ -2353,6 +2398,7 @@ app.whenReady().then(() => {
   startPtyHealthMonitor()
 
   createWindow()
+  butler.restore()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
@@ -2379,12 +2425,14 @@ app.on('window-all-closed', () => {
 // reapOrphanedClaudeChildren().
 app.on('before-quit', () => {
   try { killAllChatChildren() } catch { /* best-effort */ }
+  try { butler.shutdown() } catch { /* best-effort */ }
   // Never leave the voice helper behind holding the microphone.
   try { speechProcess?.kill() } catch { /* best-effort */ }
 })
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
     try { killAllChatChildren() } catch { /* best-effort */ }
+    try { butler.shutdown() } catch { /* best-effort */ }
     try { speechProcess?.kill() } catch { /* best-effort */ }
     for (const [, term] of terminals) {
       try { killProcessTree(term) } catch { /* best-effort */ }

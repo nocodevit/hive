@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./hive agents:*)",
+      "Bash(./hive tail:*)",
+      "Bash(./hive send:*)",
+      "Bash(./hive start:*)"
+    ],
+    "deny": [
+      "Edit",
+      "Write",
+      "NotebookEdit"
+    ]
+  }
+}
