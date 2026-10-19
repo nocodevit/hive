@@ -24,14 +24,15 @@ const SWITCH = 'Allow remote control from my phone (Butler)'
 
 const CLAUDE_HOME = join(ROOT, 'claude-home')
 
-// Mirrors the real `claude remote-control` (2.1.x) dialogue: trust [y/N],
-// then "Enable Remote Control? (y/n)", then Connected + link; records the
-// session in bridge-pointer.json like the real one does.
+// Mirrors the real `claude remote-control` (2.1.x) dialogue: trust [y/N]
+// (recorded in .claude.json), then "Enable Remote Control? (y/n)", then
+// Connected + link; records the session in bridge-pointer.json.
 const FAKE_SCRIPT = `#!/bin/bash
 echo "$PWD|$*" >> "$FAKE_LOG"
 echo "Quick safety check: is this a project you created or one you trust?"
 printf "Trust $PWD? [y/N] "
 read -r a; [ "$a" = "y" ] || exit 1
+echo "{\\"projects\\":{\\"$(pwd -P)\\":{\\"hasTrustDialogAccepted\\":true}}}" > "$CLAUDE_CONFIG_DIR/.claude.json"
 printf "Enable Remote Control? (y/n) "
 read -r a; [ "$a" = "y" ] || exit 1
 SLUG=$(pwd -P | sed 's/[^a-zA-Z0-9]/-/g')
@@ -66,6 +67,7 @@ const butlerPid = () => Number(readFileSync(join(BUTLER_DIR, '.pid'), 'utf8'))
 test.beforeAll(async () => {
   if (existsSync(ROOT)) rmSync(ROOT, { recursive: true })
   mkdirSync(HIVE_DATA_DIR, { recursive: true })
+  mkdirSync(CLAUDE_HOME, { recursive: true })
   writeFileSync(FAKE, FAKE_SCRIPT)
   chmodSync(FAKE, 0o755)
   execSync('npx electron-vite build', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 60000 })
@@ -126,5 +128,13 @@ test('switching off stops the session and keeps the folder', async () => {
   await expect(page.getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'false')
   await expect.poll(() => alive(pid), { timeout: 10000 }).toBe(false)
   expect(existsSync(join(BUTLER_DIR, 'CLAUDE.md'))).toBe(true)
-  expect(JSON.parse(readFileSync(join(HIVE_DATA_DIR, 'butler.json'), 'utf8'))).toEqual({ enabled: false, trusted: true })
+  expect(JSON.parse(readFileSync(join(HIVE_DATA_DIR, 'butler.json'), 'utf8'))).toEqual({ enabled: false, trusted: false })
+})
+
+test('switching on again asks for the OK again', async () => {
+  await page.getByRole('switch', { name: SWITCH }).click()
+  await expect(page.getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByText('Waiting for your OK')).toBeVisible()
+  await page.getByRole('button', { name: 'Trust and continue' }).click()
+  await expect(page.getByText('Connected', { exact: true })).toBeVisible()
 })

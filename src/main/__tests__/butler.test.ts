@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSy
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
-  butlerArgs, bridgeSessionId, readButlerOutput, outputTail, installButlerFiles, createButler,
+  butlerArgs, bridgeSessionId, claudeTrustsFolder, readButlerOutput, outputTail, installButlerFiles, createButler,
   readButlerSettings, RESTART_DELAYS_MS, STABLE_AFTER_MS, type ButlerState, type PtyLike
 } from '../butler'
 
@@ -35,7 +35,9 @@ function setup(opts: { enabled?: boolean } = {}) {
   const timers: Array<{ fn: () => void; ms: number; cleared: boolean }> = []
   let clock = 1_000_000
   let recorded: string | null = null
+  let claudeOk = true
   const butler = createButler({
+    claudeTrusts: () => claudeOk,
     recordedSessionId: () => recorded,
     dataDir,
     resourcesDir: RESOURCES,
@@ -51,7 +53,8 @@ function setup(opts: { enabled?: boolean } = {}) {
     dataDir, butler, ptys, killed, stale, states, timers,
     last: () => ptys[ptys.length - 1],
     advance: (ms: number) => { clock += ms },
-    record: (id: string | null) => { recorded = id }
+    record: (id: string | null) => { recorded = id },
+    claudeTrust: (ok: boolean) => { claudeOk = ok }
   }
 }
 
@@ -64,6 +67,25 @@ describe('butlerArgs', () => {
   })
   it('a saved session is reattached by id, without spawn flags', () => {
     expect(butlerArgs({ sessionId: 'session_01ABC' })).toEqual(['remote-control', '--session-id', 'session_01ABC'])
+  })
+})
+
+describe('claudeTrustsFolder', () => {
+  const cfg = (projects: unknown) => {
+    const f = join(mkdtempSync(join(tmpdir(), 'hive-claude-json-')), '.claude.json')
+    writeFileSync(f, JSON.stringify({ projects }))
+    return f
+  }
+  it('true only when Claude Code accepted trust for that exact real path', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'hive-trust-'))
+    const real = realpathSync(cwd)
+    expect(claudeTrustsFolder(cfg({ [real]: { hasTrustDialogAccepted: true } }), cwd)).toBe(true)
+    expect(claudeTrustsFolder(cfg({ [real]: { hasTrustDialogAccepted: false } }), cwd)).toBe(false)
+    expect(claudeTrustsFolder(cfg({ [real + '-other']: { hasTrustDialogAccepted: true } }), cwd)).toBe(false)
+    expect(claudeTrustsFolder(cfg({}), cwd)).toBe(false)
+  })
+  it('false when the config is missing or unreadable', () => {
+    expect(claudeTrustsFolder(join(tmpdir(), 'no-such-dir', '.claude.json'), tmpdir())).toBe(false)
   })
 })
 
@@ -239,14 +261,28 @@ describe('createButler', () => {
     expect(t.butler.getState().status).toBe('starting')
   })
 
-  it('the OK survives switching off and on', () => {
+  it('switching off withdraws the OK: switching on asks again', () => {
     t.butler.setEnabled(true)
     t.last().emit(TRUST_PROMPT)
     t.butler.confirmTrust()
     t.butler.setEnabled(false)
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false })
     t.butler.setEnabled(true)
     t.last().emit(TRUST_PROMPT)
-    expect(t.last().written).toEqual(['y\r'])
+    expect(t.last().written).toEqual([])
+    expect(t.butler.getState().status).toBe('needs_trust')
+  })
+
+  it('asks again when Claude Code no longer trusts the folder, read at that start', () => {
+    t.butler.setEnabled(true)
+    t.last().emit(TRUST_PROMPT)
+    t.butler.confirmTrust()
+    t.butler.shutdown()
+    t.claudeTrust(false)
+    t.butler.restore()
+    t.last().emit(TRUST_PROMPT)
+    expect(t.last().written).toEqual([])
+    expect(t.butler.getState().status).toBe('needs_trust')
   })
 
   it('answers "Enable Remote Control?" itself, once', () => {

@@ -102,6 +102,21 @@ export function readButlerOutput(text: string): ButlerSignal {
   return null
 }
 
+/**
+ * Claude Code's own trust record for a folder: `hasTrustDialogAccepted` in
+ * .claude.json (in CLAUDE_CONFIG_DIR when set, else the home folder). Read
+ * fresh on every prompt so a revoked trust is seen; never written by Hive.
+ */
+export function claudeTrustsFolder(configFile: string, cwd: string): boolean {
+  try {
+    const real = realpathSync(cwd)
+    const projects = JSON.parse(readFileSync(configFile, 'utf8'))?.projects
+    return projects?.[real]?.hasTrustDialogAccepted === true
+  } catch {
+    return false
+  }
+}
+
 /** Last few readable lines, for an error the owner can act on (e.g. "not logged in"). */
 export function outputTail(text: string, lines = 6): string {
   return stripAnsi(text)
@@ -131,6 +146,8 @@ export interface PtyLike {
 export interface ButlerDeps {
   dataDir: string
   resourcesDir: string
+  /** Claude Code still trusts the butler folder (see claudeTrustsFolder), read now. */
+  claudeTrusts: () => boolean
   /** The session id remote-control recorded for the butler folder (see bridgeSessionId). */
   recordedSessionId: () => string | null
   spawn: (args: string[], cwd: string) => PtyLike
@@ -152,9 +169,11 @@ export const RESTART_DELAYS_MS = [2_000, 10_000, 30_000, 120_000]
 export const STABLE_AFTER_MS = 10 * 60_000
 
 /**
- * `enabled` is the switch. `trusted` records that the owner once answered
- * remote-control's folder-trust question, which it asks on every start;
- * after that Hive answers it (the folder holds only what Hive writes).
+ * `enabled` is the switch. `trusted` records that the owner answered
+ * remote-control's folder-trust question (which it asks on every start)
+ * since the switch was last turned on; turning the switch off clears it.
+ * Hive answers the question itself only while this is set AND Claude
+ * Code's own record still trusts the folder (claudeTrustsFolder).
  */
 export interface ButlerSettings { enabled: boolean; trusted: boolean }
 
@@ -244,7 +263,7 @@ export function createButler(deps: ButlerDeps) {
         const id = deps.recordedSessionId()
         if (id && id !== savedSession()) { try { writeFileSync(sessionPath, id) } catch { /* best-effort */ } }
         set({ status: 'connected', url: sig.url })
-      } else if (sig?.kind === 'trust' && trusted) {
+      } else if (sig?.kind === 'trust' && trusted && deps.claudeTrusts()) {
         output = ''
         t.write('y\r')
       } else if (sig?.kind === 'trust' && state.status !== 'needs_trust') {
@@ -302,6 +321,8 @@ export function createButler(deps: ButlerDeps) {
     },
     setEnabled(enabled: boolean) {
       state.enabled = enabled
+      // Turning it off withdraws the OK: the next "on" asks again.
+      if (!enabled) trusted = false
       persist()
       restarts = 0
       if (enabled) {
