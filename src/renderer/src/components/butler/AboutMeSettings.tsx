@@ -51,6 +51,7 @@ export function AboutMeSettings() {
         </button>
       </div>
       <div className="rounded-xl bg-bg-secondary border border-border px-4 py-3 flex flex-col gap-3">
+        <Field label="Assistant name · reply prefix & intro" value={p.assistantName} placeholder="Mimi" onChange={v => set('assistantName', v)} />
         <div className="grid grid-cols-2 gap-2.5">
           {PROFILE_FRONT.slice(0, 2).map(([k, label, ph]) => <Field key={k} label={label} value={p[k]} placeholder={ph} onChange={v => set(k, v)} />)}
         </div>

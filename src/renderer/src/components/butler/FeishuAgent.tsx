@@ -205,10 +205,6 @@ export function FeishuAgentSettings() {
               <span className="flex-1 text-text-primary">Real-time messages</span>
               <Pill tone={v.capabilities.realtime ? 'ok' : 'warn'}>{v.capabilities.realtime ? 'on' : 'to verify'}</Pill>
             </div>
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-bg-primary text-[12px]">
-              <span className="flex-1 text-text-primary">Status “🤖 AI 代理中”</span>
-              <Pill tone={v.capabilities.status ? 'ok' : 'warn'}>{v.capabilities.status ? 'on' : 'to verify'}</Pill>
-            </div>
             <div className="flex flex-col gap-1.5 px-2.5 py-2 rounded-lg bg-bg-primary text-[12px]" aria-label="Preview">
               <div className="self-start max-w-[80%] px-2.5 py-1.5 rounded-[4px_12px_12px_12px] bg-bg-secondary text-text-primary">checkout 什么时候好？</div>
               <div className="self-end max-w-[80%] px-2.5 py-1.5 rounded-[12px_4px_12px_12px] bg-accent-subtle text-text-primary"><b>{v.prefix}</b>{v.holding}</div>

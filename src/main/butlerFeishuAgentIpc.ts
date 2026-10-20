@@ -5,7 +5,7 @@ import { execFile } from 'child_process'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { Notification, type IpcMain } from 'electron'
-import { createFeishuAgent, LOCKED_TOPICS, STATUS_CAPABILITY, defaultPrefix, holdingReply, type FeishuAgentSettings } from './feishuAgent'
+import { createFeishuAgent, LOCKED_TOPICS, defaultPrefix, holdingReply, type FeishuAgentSettings } from './feishuAgent'
 import { createCalendar, type Exec } from './calendar'
 import type { ButlerProfile } from './butlerProfile'
 import type { Approvals } from './approvals'
@@ -85,7 +85,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
       locked: LOCKED_TOPICS.map(t => t.id),
       senders: agent.senders(),
       lastError: agent.lastError(),
-      capabilities: { realtime: false, status: STATUS_CAPABILITY.supported }
+      capabilities: { realtime: false }
     }
   }
 

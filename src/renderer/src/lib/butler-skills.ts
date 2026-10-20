@@ -86,7 +86,7 @@ export function foldDiff(diff: DiffLine[], context = 1): Array<DiffLine | { op: 
 
 // ── About me ──────────────────────────────────────────────────────────
 
-export const PROFILE_KEYS = ['name', 'role', 'team', 'responsibleFor', 'worksWith', 'style', 'oftenSays', 'neverSays', 'language', 'answerLike', 'whenUnsure', 'prefix', 'intro'] as const
+export const PROFILE_KEYS = ['assistantName', 'name', 'role', 'team', 'responsibleFor', 'worksWith', 'style', 'oftenSays', 'neverSays', 'language', 'answerLike', 'whenUnsure', 'prefix', 'intro'] as const
 export type ProfileKey = (typeof PROFILE_KEYS)[number]
 export type Profile = Record<ProfileKey, string>
 
