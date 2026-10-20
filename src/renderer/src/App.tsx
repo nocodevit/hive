@@ -7,6 +7,8 @@ import { ButlerPanel, type ButlerMode } from './components/butler/ButlerPanel'
 import { ButlerWizard } from './components/butler/ButlerWizard'
 import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { FeishuConnection } from './components/FeishuConnection'
+import { FeishuAgentSettings } from './components/butler/FeishuAgent' // [butler:feishu-agent-calendar]
+import { CalendarSettings } from './components/butler/CalendarSettings' // [butler:feishu-agent-calendar]
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import Modal from './components/Modal'
 import CreateProjectModal from './components/CreateProjectModal'
@@ -3314,6 +3316,8 @@ export default function App() {
             {/* [butler:mail-routines] Email accounts + Daily routine sections */}
 
             {/* [butler:feishu-agent-calendar] Answer-for-me + Calendar sections */}
+            <FeishuAgentSettings />
+            <CalendarSettings />
 
             {/* [butler:wake] Wake word section */}
 
