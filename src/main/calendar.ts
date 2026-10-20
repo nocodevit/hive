@@ -165,6 +165,13 @@ export interface CalendarDeps {
 
 export interface DayAgenda { date: string; events: AgendaEvent[]; errors: { feishu?: string; mac?: string } }
 
+const hm = (ms: number) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+
+/** One line per event for a prompt (morning plan); '' when there is nothing. */
+export function agendaText(a: DayAgenda): string {
+  return a.events.map(e => `- ${e.allDay ? 'all day' : `${hm(e.start)}–${hm(e.end)}`} ${e.title}${e.location ? ` @ ${e.location}` : ''}`).join('\n')
+}
+
 export function createCalendar(deps: CalendarDeps) {
   const file = join(deps.dir, 'calendar.json')
   const load = () => { try { return normalizeCalendarSettings(JSON.parse(readFileSync(file, 'utf8'))) } catch { return { ...DEFAULT_CALENDAR_SETTINGS } } }

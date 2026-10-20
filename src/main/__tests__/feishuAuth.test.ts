@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { createHash } from 'crypto'
 import {
   relayUrl, FEISHU_RELAY, redirectUri, newPkce, startUrl, parseRelayResponse, createFeishuAuth,
-  REFRESH_MARGIN_MS, type FeishuTokens, type FeishuStatus, type TokenStore
+  REFRESH_MARGIN_MS, KEEPALIVE_LEFT_MS, type FeishuTokens, type FeishuStatus, type TokenStore
 } from '../feishuAuth'
 import { probeFeishu } from '../feishuProbe'
 
@@ -270,5 +270,29 @@ describe('probeFeishu', () => {
     expect(text).not.toContain('private words')
     expect(text).not.toContain('Secret')
     expect(text).not.toContain('Mei')
+  })
+})
+
+describe('keepAlive', () => {
+  it('leaves a fresh session alone', async () => {
+    const h = harness({ store: memStore(tokens({ refreshExpiresAt: 1_000_000 + KEEPALIVE_LEFT_MS + 60_000 })) })
+    expect(await h.auth.keepAlive()).toBe(true)
+    expect(h.posts).toHaveLength(0)
+  })
+  it('refreshes once the refresh token is a day old', async () => {
+    const h = harness({ store: memStore(tokens({ refreshExpiresAt: 1_000_000 + KEEPALIVE_LEFT_MS - 1 })) })
+    expect(await h.auth.keepAlive()).toBe(true)
+    expect(h.posts[0].url).toContain('/oauth/refresh')
+    expect(h.store.value?.refreshToken).toBe('ur-refresh')
+  })
+  it('an already dead session is cleared and reported expired', async () => {
+    const h = harness({ store: memStore(tokens({ refreshExpiresAt: 999_000 })) })
+    expect(await h.auth.keepAlive()).toBe(false)
+    expect(h.auth.getStatus()).toEqual({ state: 'expired' })
+    expect(h.posts).toHaveLength(0)
+  })
+  it('signed out → nothing to do', async () => {
+    const h = harness()
+    expect(await h.auth.keepAlive()).toBe(false)
   })
 })

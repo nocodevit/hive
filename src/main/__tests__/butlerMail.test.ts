@@ -185,11 +185,16 @@ describe('classification → approval', () => {
     const p = t.approvals.pending()
     expect(p).toHaveLength(2)
     expect(p[0]).toMatchObject({
-      kind: 'email.reply', title: 'Lin · UAT down?', subtitle: 'email reply · from mei@corp.com', draft: 'Thanks, on it.', action: 'Send',
+      kind: 'email.reply', title: 'Lin · UAT down?', subtitle: 'email reply · ⚠ to support@c.com (not the sender) · from mei@corp.com', draft: 'Thanks, on it.', action: 'Send',
       payload: { accountId: t.id, to: 'support@c.com', subject: 'Re: UAT down?', inReplyTo: '<m1@x.com>', references: ['<a@x>', '<m1@x.com>'] }
     })
     expect(t.sent).toEqual([])
     expect(t.prompts.filter(x => x.startsWith('Use the reply-email skill.'))).toHaveLength(2)
+  })
+  it('names the recipient plainly when it is the sender', async () => {
+    const t = setup({ inbox: [mail(1, { from: { name: 'Lin', address: 'lin@c.com' } })], classify: () => '[{"uid":1,"category":"needs-reply"}]' })
+    await t.m.sortInbox()
+    expect(t.approvals.pending()[0].subtitle).toBe('email reply · to lin@c.com · from mei@corp.com')
   })
   it('keeps an existing Re: / 回复: subject', () => {
     expect(replySubject('Re: hi')).toBe('Re: hi')

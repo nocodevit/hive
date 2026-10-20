@@ -3,7 +3,7 @@ import { _electron as electron } from 'playwright'
 import { join } from 'path'
 import { execSync } from 'child_process'
 import { createServer, type Server } from 'http'
-import { mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
+import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 
 /**
@@ -66,7 +66,7 @@ test.afterAll(async () => {
 })
 
 test('starts signed out', async () => {
-  await expect(page.getByText('Not connected')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Feishu sign-in' })).toHaveText('Not connected')
 })
 
 test('sign in: browser opens the relay, callback is exchanged, name shows', async () => {
@@ -86,7 +86,7 @@ test('sign in: browser opens the relay, callback is exchanged, name shows', asyn
   const ok = await fetch(`http://127.0.0.1:${port}/callback?code=C0DE&state=${encodeURIComponent(state)}`)
   expect(await ok.text()).toContain('Signed in to Feishu')
 
-  await expect(page.getByText('Signed in · Mei Test')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Feishu sign-in' })).toHaveText('Signed in · Mei Test')
   const exchange = relayCalls.find(c => c.path === '/api/hive/oauth/token')!
   expect(exchange.body).toMatchObject({ code: 'C0DE', redirect_uri: `${RELAY}/api/hive/oauth/callback` })
   expect(exchange.headers['x-hive-client']).toBe('1')
@@ -97,11 +97,28 @@ test('sign in: browser opens the relay, callback is exchanged, name shows', asyn
 test('the session survives a restart', async () => {
   await app.close()
   await launch()
-  await expect(page.getByText('Signed in · Mei Test')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Feishu sign-in' })).toHaveText('Signed in · Mei Test')
 })
 
 test('sign out clears it', async () => {
   await page.getByRole('button', { name: 'Sign out' }).click()
-  await expect(page.getByText('Not connected')).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Feishu sign-in' })).toHaveText('Not connected')
   expect(existsSync(join(HIVE_DATA_DIR, 'feishu-token.bin'))).toBe(false)
+})
+
+test('a session that could not be renewed shows a banner; signing in again clears it', async () => {
+  await app.close()
+  writeFileSync(join(HIVE_DATA_DIR, 'feishu-token.bin'), JSON.stringify({
+    accessToken: 'u-old', refreshToken: 'ur-old', accessExpiresAt: 1, refreshExpiresAt: 2, scope: '', openId: 'ou_fake', name: 'Mei Test'
+  }))
+  await launch()
+  const banner = page.getByRole('alert', { name: 'Feishu sign-in expired' })
+  await expect(banner).toBeVisible()
+  const before = (await opened()).length
+  await banner.getByRole('button', { name: 'Sign in again' }).click()
+  await expect.poll(async () => (await opened()).length).toBe(before + 1)
+  const start = new URL((await opened())[before])
+  await fetch(`http://127.0.0.1:${start.searchParams.get('port')}/callback?code=C2&state=${encodeURIComponent(start.searchParams.get('state')!)}`)
+  await expect(banner).toBeHidden()
+  await expect(page.getByRole('status', { name: 'Feishu sign-in' })).toHaveText('Signed in · Mei Test')
 })

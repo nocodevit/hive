@@ -12,6 +12,7 @@ import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } fro
 import { execSync, execFileSync, execFile, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
 import { setupButlerMailRoutines } from './butlerMailRoutines' // [butler:mail-routines]
+import { agendaText } from './calendar'
 
 // GUI apps launched from Finder/Dock inherit launchd's minimal PATH
 // (/usr/bin:/bin:/usr/sbin:/sbin), so spawn('claude') ENOENTs even though
@@ -655,7 +656,9 @@ const butlerRoutineMode = setupButlerMailRoutines({
   openExternal: u => { shell.openExternal(u).catch(() => {}) },
   folder: () => butler.ensureFolder(),
   agents: () => butlerRows(),
-  agentCwd: id => findAgentWorktree(id)
+  agentCwd: id => findAgentWorktree(id),
+  // butlerCalendar is created below; this only runs when a routine does.
+  calendar: async date => agendaText(await butlerCalendar.getDayAgenda(new Date(`${date}T12:00:00`)))
 })
 // [butler:feishu-agent-calendar]
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc } from './butlerFeishuAgentIpc'
@@ -2221,7 +2224,12 @@ ipcMain.handle('skills:scan', () => {
 })
 
 app.whenReady().then(() => {
-  if (butlerRoutineMode.headless) return // [butler:mail-routines] --butler-routine run: no window
+  if (butlerRoutineMode.headless) {
+    // A scheduled run also keeps the Feishu session alive while Hive is closed.
+    feishu.init()
+    void feishu.keepAlive()
+    return // [butler:mail-routines] --butler-routine run: no window
+  }
   app.setName('Hive')
   electronApp.setAppUserModelId('com.hive.app')
 
@@ -2551,6 +2559,8 @@ app.whenReady().then(() => {
   createWindow()
   butler.restore()
   feishu.init()
+  void feishu.keepAlive()
+  setInterval(() => { void feishu.keepAlive() }, 6 * 3600_000).unref?.()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
