@@ -106,6 +106,19 @@ declare global {
       // [butler:mail-routines]
 
       // [butler:feishu-agent-calendar]
+      feishuAgent: {
+        get: () => Promise<import('./feishuAgentTypes').FeishuAgentView>
+        set: (patch: Partial<import('./feishuAgentTypes').FeishuAgentSettings>) => Promise<import('./feishuAgentTypes').FeishuAgentView>
+        log: () => Promise<import('./feishuAgentTypes').FeishuLogEntry[]>
+        recall: (id: string) => Promise<{ ok: boolean; error?: string }>
+        onChange: (cb: () => void) => () => void
+      }
+      calendar: {
+        get: () => Promise<import('./feishuAgentTypes').CalendarSettings>
+        set: (patch: Partial<import('./feishuAgentTypes').CalendarSettings>) => Promise<import('./feishuAgentTypes').CalendarSettings>
+        allowMac: () => Promise<{ ok: boolean; granted: boolean; error?: string }>
+        agenda: (date?: string) => Promise<import('./feishuAgentTypes').DayAgenda>
+      }
 
       // [butler:wake]
 
