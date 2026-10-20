@@ -10,6 +10,8 @@ type ButlerAgentRow = {
   role: string; note: string; chatLive: boolean; activity: 'working' | 'waiting' | 'off'
 }
 
+type ButlerSetup = { marks: Record<string, 'done' | 'skipped'>; cardHidden: boolean }
+
 type ButlerState = {
   enabled: boolean
   status: 'off' | 'starting' | 'needs_trust' | 'connected' | 'error'
@@ -76,6 +78,11 @@ declare global {
         retry: () => Promise<ButlerState>
         shouldOffer: () => Promise<boolean>
         folder: () => Promise<string>
+        setup: () => Promise<ButlerSetup>
+        markSetup: (step: string, mark: 'done' | 'skipped' | null) => Promise<ButlerSetup>
+        hideSetupCard: (hidden: boolean) => Promise<ButlerSetup>
+        profile: () => Promise<Record<string, string>>
+        saveProfile: (p: Record<string, string>) => Promise<Record<string, string>>
         pinned: () => Promise<boolean>
         setPinned: (v: boolean) => Promise<boolean>
         agents: () => Promise<ButlerAgentRow[]>
@@ -95,6 +102,7 @@ declare global {
         onTranscript: (cb: (line: string) => void) => () => void
       }
       claude: {
+        auth: () => Promise<{ ok: boolean; loggedIn: boolean; authMethod: string; error?: string }>
         status: () => Promise<{ installed: boolean; installCommand: string }>
         install: () => Promise<{ ok: boolean }>
         onInstallOutput: (cb: (data: { kind: 'stdout' | 'stderr'; text: string }) => void) => () => void

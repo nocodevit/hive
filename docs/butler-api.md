@@ -51,7 +51,27 @@ name when the agent name repeats). No fuzzy matching: `not_found` /
   the project list; 📌 keeps the entry (`butler.json` `pinned`); ✕ on an
   unpinned entry closes it.
 - **First-run card**: "Set up Hive with Butler?" under the button (Start →
-  App Settings; replaced by the wizard in v2.31).
+  setup wizard).
+
+## Setup wizard (v2.31.0)
+
+`components/butler/ButlerWizard.tsx`, steps in `lib/butler-setup.ts`.
+
+- Groups Basics / Connect / Automate; only steps for features Hive has
+  are listed (email, calendar and the daily routine join when built).
+- Steps reuse the real settings: palette/style setters, the Butler switch
+  (`ButlerSettings`), Feishu sign-in (`FeishuConnection`), the OpenAI key.
+  "Claude Code" runs `claude auth status` (IPC `claude:auth`) and warns
+  when the account is not claude.ai (phone control needs one).
+- "About you" is saved to `~/.hive/butler/profile.json` and rendered to
+  `profile.md` (`main/butlerProfile.ts`); the built-in CLAUDE.md tells the
+  session to follow it.
+- Progress per step (`done` / `skipped`) is in `butler.json` `setup`. The
+  Butler panel shows "Setup n/m" with "Set up" for the first open steps;
+  Hide sets `setupCardHidden`.
+- e2e isolation: with `HIVE_DATA_DIR` set, Electron `userData` (and so
+  localStorage) moves to `$HIVE_DATA_DIR/electron-user-data` — before
+  v2.31 every e2e run shared the real app's storage.
 
 ## Built-in Butler (v2.28.0)
 

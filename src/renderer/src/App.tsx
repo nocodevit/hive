@@ -4,6 +4,8 @@ import { ButlerSettings } from './components/ButlerSettings'
 import { ButlerOfferCard } from './components/butler/ButlerOfferCard'
 import { ButlerButton } from './components/butler/ButlerButton'
 import { ButlerPanel, type ButlerMode } from './components/butler/ButlerPanel'
+import { ButlerWizard } from './components/butler/ButlerWizard'
+import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { FeishuConnection } from './components/FeishuConnection'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import Modal from './components/Modal'
@@ -104,6 +106,9 @@ export default function App() {
     void window.api.butler.setPinned(v)
   }
   const [butlerPhone, setButlerPhone] = useState(false)
+  const [butlerSetup, setButlerSetup] = useState<{ marks: Record<string, SetupMark>; cardHidden: boolean }>({ marks: {}, cardHidden: false })
+  const [wizardAt, setWizardAt] = useState<number | null>(null)
+  useEffect(() => { window.api.butler.setup().then(setButlerSetup).catch(() => {}) }, [])
   const [butlerWaiting, setButlerWaiting] = useState(0)
   useEffect(() => {
     const apply = (s: { status: string }) => setButlerPhone(s.status === 'connected')
@@ -3096,7 +3101,7 @@ export default function App() {
           onStart={() => {
             setButlerOffer(false)
             void window.api.butler.offerAnswered()
-            setShowAppSettings(true)
+            setWizardAt(firstOpenStep(butlerSetup.marks))
           }}
           onNotNow={() => {
             setButlerOffer(false)
@@ -3125,7 +3130,29 @@ export default function App() {
           const a = agents.find(x => x.id === r.agentId)
           if (a) bulkResume([a])
         }}
+        setupMarks={butlerSetup.marks}
+        setupCardHidden={butlerSetup.cardHidden}
+        onContinueSetup={(id) => setWizardAt(Math.max(0, SETUP_STEPS.findIndex(s => s.id === id)))}
+        onHideSetup={() => { void window.api.butler.hideSetupCard(true).then(setButlerSetup) }}
       />
+
+      {wizardAt !== null && (
+        <ButlerWizard
+          startAt={wizardAt}
+          marks={butlerSetup.marks}
+          palette={palette}
+          style={style}
+          projectCount={projects.length}
+          openaiKey={appPrefs.openaiApiKey || ''}
+          onPalette={setPalette}
+          onStyle={setStyle}
+          onOpenaiKey={(k) => setAppPrefs((prev) => ({ ...prev, openaiApiKey: k }))}
+          onAddProject={() => setShowCreateProject(true)}
+          onMark={(id, m) => { void window.api.butler.markSetup(id, m).then(setButlerSetup) }}
+          onAskButler={() => { setWizardAt(null); setButlerMode('drawer'); setButlerOpen(true) }}
+          onClose={() => setWizardAt(null)}
+        />
+      )}
 
       {/* Modals */}
       <CreateProjectModal

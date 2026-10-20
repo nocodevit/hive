@@ -253,7 +253,7 @@ describe('createButler', () => {
     t.butler.setEnabled(true)
     t.last().emit(TRUST_PROMPT)
     t.butler.confirmTrust()
-    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: true, trusted: true, offered: true, pinned: false })
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: true, trusted: true, offered: true, pinned: false, setup: {}, setupCardHidden: false })
     t.butler.shutdown()
     t.butler.restore()
     t.last().emit(TRUST_PROMPT)
@@ -266,7 +266,7 @@ describe('createButler', () => {
     t.last().emit(TRUST_PROMPT)
     t.butler.confirmTrust()
     t.butler.setEnabled(false)
-    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offered: true, pinned: false })
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offered: true, pinned: false, setup: {}, setupCardHidden: false })
     t.butler.setEnabled(true)
     t.last().emit(TRUST_PROMPT)
     expect(t.last().written).toEqual([])
@@ -359,7 +359,7 @@ describe('one-time offer', () => {
     const t = setup()
     t.butler.offerAnswered()
     expect(t.butler.shouldOffer).toBe(false)
-    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offered: true, pinned: false })
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offered: true, pinned: false, setup: {}, setupCardHidden: false })
     const again = createButler({
       dataDir: t.dataDir, resourcesDir: RESOURCES, claudeTrusts: () => true, recordedSessionId: () => null,
       spawn: () => new FakePty([], ''), kill: () => {}, killStale: () => {}, onState: () => {}
@@ -371,6 +371,16 @@ describe('one-time offer', () => {
     t.butler.setEnabled(true)
     t.butler.setEnabled(false)
     expect(t.butler.shouldOffer).toBe(false)
+  })
+  it('setup marks: valid ids only, clearable, remembered', () => {
+    const t = setup()
+    t.butler.markSetup('theme', 'done')
+    t.butler.markSetup('voice', 'skipped')
+    t.butler.markSetup('../evil', 'done')
+    t.butler.markSetup('voice', null)
+    t.butler.hideSetupCard(true)
+    expect(readButlerSettings(t.dataDir)).toMatchObject({ setup: { theme: 'done' }, setupCardHidden: true })
+    expect(t.butler.getSetup()).toEqual({ marks: { theme: 'done' }, cardHidden: true })
   })
   it('pinned is remembered across a restart', () => {
     const t = setup()

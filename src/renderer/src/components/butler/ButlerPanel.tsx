@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import HiveChat from '../hive-chat'
 import { orderSessions, sessionCounts, type SessionRow } from '../../lib/butler-sessions'
+import { setupProgress, type SetupMark } from '../../lib/butler-setup'
 
 export type ButlerMode = 'drawer' | 'page'
 
@@ -17,6 +18,10 @@ interface Props {
   onPin: (pinned: boolean) => void
   onOpenAgent: (row: SessionRow) => void
   onResumeAgent: (row: SessionRow) => void
+  setupMarks: Record<string, SetupMark>
+  setupCardHidden: boolean
+  onContinueSetup: (stepId: string) => void
+  onHideSetup: () => void
 }
 
 const DOT = { working: 'bg-status-working', waiting: 'bg-status-waiting', off: 'bg-status-done' } as const
@@ -48,6 +53,7 @@ export function ButlerPanel(p: Props) {
   }, [p.visible])
 
   if (!mounted) return null
+  const setup = setupProgress(p.setupMarks)
   const n = sessionCounts(rows)
   const waiting = rows.filter(r => r.activity === 'waiting')
   const box = p.mode === 'drawer'
@@ -96,6 +102,21 @@ export function ButlerPanel(p: Props) {
       </div>
 
       <div className="flex-1 min-h-0 relative" style={{ display: tab === 'chat' ? 'flex' : 'none', flexDirection: 'column' }}>
+        {!p.setupCardHidden && setup.open.length > 0 && (
+          <div className="mx-3 mt-1 mb-1 px-3 py-2.5 rounded-xl bg-accent-subtle flex flex-col gap-1.5" aria-label="Setup progress">
+            <div className="flex items-center justify-between text-[12px] font-bold text-text-primary">
+              <span>Setup {setup.done}/{setup.total}</span>
+              <button onClick={p.onHideSetup} className="text-[12px] font-semibold text-accent cursor-pointer">Hide</button>
+            </div>
+            <div className="h-1 rounded-full bg-bg-secondary overflow-hidden"><i className="block h-full bg-accent" style={{ width: `${(setup.done / Math.max(1, setup.total)) * 100}%` }} /></div>
+            {setup.open.slice(0, 2).map(s => (
+              <div key={s.id} className="flex items-center gap-2 text-[12px] text-text-primary">
+                <span className="flex-1">{s.name}</span>
+                <button onClick={() => p.onContinueSetup(s.id)} aria-label={`Set up ${s.name}`} className="px-2.5 py-0.5 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold cursor-pointer">Set up</button>
+              </div>
+            ))}
+          </div>
+        )}
         {waiting.length > 0 && (
           <div className="mx-3 mt-1 mb-1 flex flex-col gap-1">
             {waiting.slice(0, 2).map(r => (

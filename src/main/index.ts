@@ -9,7 +9,7 @@ import { startHandoff, stopHandoff, resumeHandoff, listRunningHandoffs, getActiv
 import { checkForUpdates, autoCheckIfDue } from './updater'
 import type { HandoffBreakers } from './handoff-supervisor'
 import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } from './ptyHealth'
-import { execSync, execFileSync, spawn } from 'child_process'
+import { execSync, execFileSync, execFile, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
 
 // GUI apps launched from Finder/Dock inherit launchd's minimal PATH
@@ -189,6 +189,7 @@ import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVoca
 import { readOpenChats, writeOpenChats, buildUnclosedRows, lastUserText } from './openChats'
 import { createFeishuAuth, relayUrl, RELAY_TIMEOUT_MS } from './feishuAuth'
 import { probeFeishu } from './feishuProbe'
+import { readProfile, writeProfile } from './butlerProfile'
 import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder } from './butler'
 import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
@@ -221,6 +222,10 @@ import {
 
 // Data persistence — HIVE_DATA_DIR env allows E2E tests to use isolated directory
 const DATA_DIR = process.env.HIVE_DATA_DIR || join(app.getPath('home'), '.hive')
+// An isolated data dir isolates Electron's own storage too (localStorage:
+// palette, style, pins…). Without this every e2e run shared the real
+// app's ~/Library/Application Support/Hive and could change its theme.
+if (process.env.HIVE_DATA_DIR) app.setPath('userData', join(process.env.HIVE_DATA_DIR, 'electron-user-data'))
 const DATA_FILE = join(DATA_DIR, 'data.json')
 
 // Crash log — append-only JSONL at ~/.hive/crash-log.jsonl. Captures:
@@ -636,6 +641,26 @@ ipcMain.handle('butler:shouldOffer', () =>
   butler.shouldOffer && (!process.env.HIVE_DATA_DIR || process.env.HIVE_BUTLER_OFFER === '1'))
 ipcMain.handle('butler:offerAnswered', () => { butler.offerAnswered(); return { ok: true } })
 ipcMain.handle('butler:folder', () => butler.ensureFolder())
+ipcMain.handle('butler:setup', () => butler.getSetup())
+ipcMain.handle('butler:markSetup', (_e, step: unknown, mark: unknown) => {
+  if (typeof step === 'string') butler.markSetup(step, mark === 'done' || mark === 'skipped' ? mark : null)
+  return butler.getSetup()
+})
+ipcMain.handle('butler:hideSetupCard', (_e, hidden: unknown) => { butler.hideSetupCard(hidden === true); return butler.getSetup() })
+ipcMain.handle('butler:profile', () => readProfile(butlerDir(DATA_DIR)))
+ipcMain.handle('butler:saveProfile', (_e, p: unknown) => writeProfile(butler.ensureFolder(), p))
+// Signed-in state of the claude CLI (Remote Control needs a claude.ai account).
+ipcMain.handle('claude:auth', async () => {
+  try {
+    const out = await new Promise<string>((resolve, reject) => {
+      execFile(claudeBin(), ['auth', 'status'], { timeout: 15_000, env: process.env }, (err, stdout) => err && !stdout ? reject(err) : resolve(stdout))
+    })
+    const j = JSON.parse(out)
+    return { ok: true, loggedIn: j?.loggedIn === true, authMethod: typeof j?.authMethod === 'string' ? j.authMethod : '' }
+  } catch (e) {
+    return { ok: false, loggedIn: false, authMethod: '', error: e instanceof Error ? e.message.slice(0, 200) : String(e) }
+  }
+})
 ipcMain.handle('butler:pinned', () => butler.pinned)
 ipcMain.handle('butler:setPinned', (_e, v: unknown) => { butler.setPinned(v === true); return butler.pinned })
 ipcMain.handle('butler:agents', () => butlerRows())

@@ -12,6 +12,8 @@ export type ButlerAgentRow = {
   role: string; note: string; chatLive: boolean; activity: 'working' | 'waiting' | 'off'
 }
 
+export type ButlerSetup = { marks: Record<string, 'done' | 'skipped'>; cardHidden: boolean }
+
 export type ButlerState = {
   enabled: boolean
   status: 'off' | 'starting' | 'needs_trust' | 'connected' | 'error'
@@ -244,6 +246,7 @@ const api = {
       }>
   },
   claude: {
+    auth: () => ipcRenderer.invoke('claude:auth') as Promise<{ ok: boolean; loggedIn: boolean; authMethod: string; error?: string }>,
     status: () =>
       ipcRenderer.invoke('claude:status') as Promise<{ installed: boolean; installCommand: string }>,
     install: () => ipcRenderer.invoke('claude:install') as Promise<{ ok: boolean }>,
@@ -265,6 +268,11 @@ const api = {
     retry: () => ipcRenderer.invoke('butler:retry') as Promise<ButlerState>,
     shouldOffer: () => ipcRenderer.invoke('butler:shouldOffer') as Promise<boolean>,
     folder: () => ipcRenderer.invoke('butler:folder') as Promise<string>,
+    setup: () => ipcRenderer.invoke('butler:setup') as Promise<ButlerSetup>,
+    markSetup: (step: string, mark: 'done' | 'skipped' | null) => ipcRenderer.invoke('butler:markSetup', step, mark) as Promise<ButlerSetup>,
+    hideSetupCard: (hidden: boolean) => ipcRenderer.invoke('butler:hideSetupCard', hidden) as Promise<ButlerSetup>,
+    profile: () => ipcRenderer.invoke('butler:profile') as Promise<Record<string, string>>,
+    saveProfile: (p: Record<string, string>) => ipcRenderer.invoke('butler:saveProfile', p) as Promise<Record<string, string>>,
     pinned: () => ipcRenderer.invoke('butler:pinned') as Promise<boolean>,
     setPinned: (v: boolean) => ipcRenderer.invoke('butler:setPinned', v) as Promise<boolean>,
     agents: () => ipcRenderer.invoke('butler:agents') as Promise<ButlerAgentRow[]>,
