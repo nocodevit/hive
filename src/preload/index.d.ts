@@ -1,3 +1,10 @@
+type FeishuStatus =
+  | { state: 'signed_out' }
+  | { state: 'signing_in' }
+  | { state: 'signed_in'; name: string; openId: string; scope: string; refreshExpiresAt: number }
+  | { state: 'expired' }
+  | { state: 'error'; error: string }
+
 type ButlerState = {
   enabled: boolean
   status: 'off' | 'starting' | 'needs_trust' | 'connected' | 'error'
@@ -66,6 +73,12 @@ declare global {
         offerAnswered: () => Promise<{ ok: boolean }>
         onState: (cb: (s: ButlerState) => void) => () => void
         onStartAgent: (cb: (payload: { agentId: string; mode: 'resume' | 'new' }) => void) => () => void
+      }
+      feishu: {
+        status: () => Promise<FeishuStatus>
+        login: () => Promise<FeishuStatus>
+        logout: () => Promise<FeishuStatus>
+        onStatus: (cb: (s: FeishuStatus) => void) => () => void
       }
       speech: {
         start: () => Promise<{ ok: boolean; error?: string }>
