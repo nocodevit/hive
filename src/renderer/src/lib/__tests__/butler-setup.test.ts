@@ -32,6 +32,6 @@ describe('firstOpenStep', () => {
 describe('groupStarts', () => {
   it('marks the first step of each group', () => {
     const starts = [...groupStarts()].map(i => SETUP_STEPS[i].id)
-    expect(starts).toEqual(['welcome', 'about', 'done'])
+    expect(starts).toEqual(['welcome', 'about', 'routine'])
   })
 })
