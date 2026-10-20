@@ -102,6 +102,19 @@ declare global {
         onChange: (cb: (pending: ApprovalItem[]) => void) => () => void
       }
       // [butler:skills]
+      butlerSkills: {
+        profilePreview: (p: Record<string, string>) => Promise<string>
+        list: () => Promise<import('../renderer/src/lib/butler-skills').SkillInfo[] | import('../renderer/src/lib/butler-skills').IpcError>
+        get: (id: string) => Promise<import('../renderer/src/lib/butler-skills').SkillDetail | import('../renderer/src/lib/butler-skills').IpcError>
+        saveOverlay: (id: string, overlay: import('../renderer/src/lib/butler-skills').SkillOverlay) => Promise<import('../renderer/src/lib/butler-skills').SkillDetail | import('../renderer/src/lib/butler-skills').IpcError>
+        saveOverride: (id: string, md: string) => Promise<{ ok: boolean; problems?: import('../renderer/src/lib/butler-skills').LintProblem[]; error?: string }>
+        reset: (id: string) => Promise<import('../renderer/src/lib/butler-skills').SkillDetail | import('../renderer/src/lib/butler-skills').IpcError>
+        ackDefault: (id: string) => Promise<import('../renderer/src/lib/butler-skills').SkillDetail | import('../renderer/src/lib/butler-skills').IpcError>
+        compare: (id: string) => Promise<{ defaultMd: string; mine: string; diff: import('../renderer/src/lib/butler-skills').DiffLine[] } | import('../renderer/src/lib/butler-skills').IpcError>
+        tryIt: (id: string, sample: string, md?: string) => Promise<{ ok: boolean; output?: string; error?: string }>
+        propose: (id: string, request: string) => Promise<import('../renderer/src/lib/butler-skills').EditProposal>
+        reveal: (id: string) => Promise<{ ok: boolean; error?: string }>
+      }
 
       // [butler:mail-routines]
 

@@ -13,6 +13,7 @@
 import { chmodSync, copyFileSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { claudeProjectSlug } from '../shared/claude-project-slug'
+import { composeSkills } from './butlerSkills'
 
 export const BUTLER_SESSION_NAME = 'Hive Butler'
 
@@ -35,6 +36,7 @@ export function installButlerFiles(srcDir: string, destDir: string): void {
     copyFileSync(join(srcDir, f.from), dest)
     if (f.mode) chmodSync(dest, f.mode)
   }
+  composeSkills({ defaultsDir: join(srcDir, 'skills'), butlerDir: destDir })
 }
 
 /**

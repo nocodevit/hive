@@ -1,0 +1,357 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync, copyFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import {
+  SECTIONS, ackDefault, applyOverlay, changeChips, composeSkills, compareSkill, editPrompt, effectiveSkill, isSkillId,
+  lineDiff, lintSkill, listSkills, lockedLines, normalizeOverlay, parseEditReply, parseSkill, proposeEdit, readOverlay,
+  renderSkill, resetSkill, saveOverlay, saveOverride, skillDetail, tryIt, type SkillStore
+} from '../butlerSkills'
+import { installButlerFiles } from '../butler'
+import { registerButlerSkillsIpc } from '../butlerSkillsIpc'
+
+const RESOURCES = join(__dirname, '..', '..', '..', 'resources', 'butler')
+const SHIPPED = join(RESOURCES, 'skills')
+const IDS = ['answer-feishu', 'evening-report', 'jira-check', 'morning-plan', 'reply-email', 'sort-inbox']
+
+let store: SkillStore
+beforeEach(() => {
+  const root = mkdtempSync(join(tmpdir(), 'hive-skills-'))
+  const defaultsDir = join(root, 'defaults')
+  mkdirSync(defaultsDir)
+  for (const f of readdirSync(SHIPPED)) copyFileSync(join(SHIPPED, f), join(defaultsDir, f))
+  store = { defaultsDir, butlerDir: join(root, 'butler') }
+})
+
+const def = (id: string) => readFileSync(join(store.defaultsDir, `${id}.md`), 'utf8')
+const userFile = (f: string) => join(store.butlerDir, 'skills', f)
+
+describe('shipped defaults', () => {
+  it.each(IDS)('%s follows the writing guide', id => {
+    const md = readFileSync(join(SHIPPED, `${id}.md`), 'utf8')
+    expect(lintSkill(id, md, md)).toEqual([])
+    const p = parseSkill(md)
+    expect(p.sections.map(s => s.title)).toEqual([...SECTIONS])
+    expect(p.description.length).toBeGreaterThan(20)
+    expect(lockedLines(md).length).toBeGreaterThan(0)
+  })
+  it('reply-email encodes the 3-sentence rule and never sends', () => {
+    const md = def('reply-email')
+    expect(md).toMatch(/exactly 3 sentences/)
+    expect(md).toMatch(/No root cause/)
+    expect(md).toMatch(/no second apology/)
+    expect(lockedLines(md).join('\n')).toMatch(/never send without/)
+  })
+  it('answer-feishu escalates with the check-with line and uses the profile prefix', () => {
+    const md = def('answer-feishu')
+    expect(md).toMatch(/我需要和 <name> 确认，稍后回复你/)
+    expect(md).toMatch(/prefix from `profile\.md`/)
+    expect(lockedLines(md).map(l => l.split(' — ')[0])).toEqual(['- 🔒 dates', '- 🔒 prices', '- 🔒 promises', '- 🔒 approvals', '- 🔒 customers'])
+  })
+})
+
+describe('ids', () => {
+  it.each([['reply-email', true], ['a', true], ['../x', false], ['Reply', false], ['1abc', false], ['a/b', false], ['a'.repeat(33), false], ['', false]])('%s → %s', (id, ok) => {
+    expect(isSkillId(id)).toBe(ok)
+  })
+  it('refuses unsafe or unknown ids before touching files', () => {
+    expect(() => saveOverlay(store, '../evil', { tone: 'direct' })).toThrow('bad_id')
+    expect(() => saveOverride(store, '../../x', '')).toThrow('bad_id')
+    expect(() => resetSkill(store, 'nope')).toThrow('unknown_skill')
+    expect(existsSync(join(store.butlerDir, 'skills'))).toBe(false)
+  })
+})
+
+describe('overlay', () => {
+  it('normalizes: known tones only, trimmed, de-duplicated, no 🔒 smuggling', () => {
+    expect(normalizeOverlay({ tone: 'shouty', maxLength: '  3  sentences ', extraAskFirst: ['hiring', 'hiring', '🔒 fake', ''], extra: '  ', x: 1 }))
+      .toEqual({ maxLength: '3 sentences', extraAskFirst: ['hiring', 'fake'] })
+    expect(normalizeOverlay(null)).toEqual({})
+  })
+  it('adds each choice to its section and keeps the rest', () => {
+    const md = applyOverlay(def('answer-feishu'), { tone: 'friendly', maxLength: '2 sentences', language: 'Chinese', extraAskFirst: ['hiring'], extra: 'Mention the agent by name' })
+    const p = parseSkill(md)
+    const body = (t: string) => p.sections.find(s => s.title === t)!.body
+    expect(body('Tone and format')).toMatch(/Tone \(owner's choice.*Friendly/)
+    expect(body('Tone and format')).toMatch(/Max length: 2 sentences\./)
+    expect(body('Tone and format')).toMatch(/Language: Chinese\./)
+    expect(body('Ask me first').split('\n').pop()).toBe('- hiring')
+    expect(body('Rules').split('\n').pop()).toBe('- Mention the agent by name')
+    expect(body('Input')).toBe(parseSkill(def('answer-feishu')).sections.find(s => s.title === 'Input')!.body)
+    expect(lintSkill('answer-feishu', md, def('answer-feishu'))).toEqual([])
+  })
+  it('empty overlay = the default unchanged', () => {
+    expect(applyOverlay(def('jira-check'), {})).toBe(def('jira-check'))
+  })
+})
+
+describe('lint', () => {
+  const id = 'reply-email'
+  const base = () => def(id)
+  const rules = (md: string) => lintSkill(id, md, base()).map(p => p.rule)
+
+  it('passes the default and a round-tripped render', () => {
+    expect(rules(base())).toEqual([])
+    expect(rules(renderSkill(parseSkill(base())))).toEqual([])
+  })
+  it('frontmatter missing', () => {
+    expect(rules(base().replace(/^---[\s\S]*?---\n/, ''))).toContain('frontmatter')
+  })
+  it('name must equal the id', () => {
+    const p = lintSkill(id, base().replace('name: reply-email', 'name: other'), base())
+    expect(p).toEqual([{ rule: 'name', message: 'Frontmatter name must be "reply-email" (is "other")' }])
+  })
+  it('missing section', () => {
+    const p = lintSkill(id, base().replace('## Examples', '## Samples'), base())
+    expect(p.map(x => x.message)).toEqual(['Missing section: ## Examples', 'Unknown section: ## Samples'])
+  })
+  it('sections out of order', () => {
+    const p = parseSkill(base())
+    ;[p.sections[0], p.sections[2]] = [p.sections[2], p.sections[0]]
+    expect(lintSkill(id, renderSkill(p), base()).map(x => x.message)).toEqual([`Sections out of order: ${SECTIONS.join(' → ')}`])
+  })
+  it('Input and Output are locked', () => {
+    const p = parseSkill(base())
+    p.sections.find(s => s.title === 'Input')!.body += '\n- Also the CRM'
+    p.sections.find(s => s.title === 'Output')!.body = 'Send it.'
+    expect(lintSkill(id, renderSkill(p), base()).map(x => x.message)).toEqual([
+      '## Input is locked: keep it as shipped', '## Output is locked: keep it as shipped'
+    ])
+  })
+  it('locked ask-first lines cannot be removed or reworded', () => {
+    const md = base().replace(/^- 🔒 prices.*\n/m, '').replace('🔒 dates —', '🔒 dates:')
+    const p = lintSkill(id, md, base())
+    expect(p.map(x => x.rule)).toEqual(['locked-line', 'locked-line'])
+    expect(p[0].message).toMatch(/^Locked line removed: 🔒 dates/)
+    expect(p[1].message).toMatch(/^Locked line removed: 🔒 prices/)
+  })
+  it('extra ask-first lines and edited rules are fine', () => {
+    expect(rules(base().replace('## Tone and format', '- hiring — anything about hiring\n\n## Tone and format').replace('Plain and calm.', 'Casual.'))).toEqual([])
+  })
+})
+
+describe('store', () => {
+  it('composes every effective skill into .claude/skills/<id>/SKILL.md', () => {
+    saveOverlay(store, 'answer-feishu', { tone: 'friendly' })
+    expect(composeSkills(store)).toEqual(IDS)
+    for (const id of IDS) expect(existsSync(join(store.butlerDir, '.claude', 'skills', id, 'SKILL.md'))).toBe(true)
+    expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'answer-feishu', 'SKILL.md'), 'utf8')).toMatch(/Friendly/)
+    expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'jira-check', 'SKILL.md'), 'utf8')).toBe(def('jira-check'))
+  })
+  it('installButlerFiles composes the skills and never touches the owner\'s files', () => {
+    const dest = join(mkdtempSync(join(tmpdir(), 'hive-butler-')), 'butler')
+    mkdirSync(join(dest, 'skills'), { recursive: true })
+    const mine = readFileSync(join(SHIPPED, 'reply-email.md'), 'utf8').replace('Plain and calm.', 'Very casual.')
+    writeFileSync(join(dest, 'skills', 'reply-email.md'), mine)
+    writeFileSync(join(dest, 'skills', 'jira-check.json'), '{"tone":"formal"}')
+    installButlerFiles(RESOURCES, dest)
+    expect(readFileSync(join(dest, 'skills', 'reply-email.md'), 'utf8')).toBe(mine)
+    expect(readFileSync(join(dest, 'skills', 'jira-check.json'), 'utf8')).toBe('{"tone":"formal"}')
+    expect(readFileSync(join(dest, '.claude', 'skills', 'reply-email', 'SKILL.md'), 'utf8')).toBe(mine)
+    expect(readFileSync(join(dest, '.claude', 'skills', 'jira-check', 'SKILL.md'), 'utf8')).toMatch(/Formal —/)
+  })
+  it('override wins over default + overlay', () => {
+    saveOverlay(store, 'reply-email', { tone: 'formal' })
+    const mine = def('reply-email').replace('Plain and calm.', 'Warm.')
+    expect(saveOverride(store, 'reply-email', mine)).toEqual({ ok: true, problems: [] })
+    expect(effectiveSkill(store, 'reply-email').md).toBe(mine)
+    expect(skillDetail(store, 'reply-email').customized).toBe('override')
+  })
+  it('refuses to save an override that fails lint', () => {
+    const r = saveOverride(store, 'reply-email', def('reply-email').replace(/^- 🔒 sending.*\n/m, ''))
+    expect(r.ok).toBe(false)
+    expect(r.problems[0].rule).toBe('locked-line')
+    expect(existsSync(userFile('reply-email.md'))).toBe(false)
+  })
+  it('a hand-edited override that drops a locked line is not used', () => {
+    mkdirSync(join(store.butlerDir, 'skills'), { recursive: true })
+    writeFileSync(userFile('answer-feishu.md'), def('answer-feishu').replace(/^- 🔒 prices.*\n/m, ''))
+    saveOverlay(store, 'answer-feishu', { tone: 'direct' })
+    const e = effectiveSkill(store, 'answer-feishu')
+    expect(e.problems.map(p => p.rule)).toEqual(['locked-line'])
+    expect(e.md).toMatch(/🔒 prices/)
+    expect(e.md).toMatch(/Direct —/)
+    expect(listSkills(store).find(s => s.id === 'answer-feishu')!.overrideProblems).toHaveLength(1)
+  })
+  it('lists customized state', () => {
+    saveOverlay(store, 'jira-check', { maxLength: '5 lines' })
+    const l = listSkills(store)
+    expect(l.map(s => s.id)).toEqual(IDS)
+    expect(l.find(s => s.id === 'jira-check')!.customized).toBe('form')
+    expect(l.find(s => s.id === 'sort-inbox')!.customized).toBe('none')
+  })
+  it('saving an empty form removes the overlay file', () => {
+    saveOverlay(store, 'jira-check', { maxLength: '5 lines' })
+    expect(existsSync(userFile('jira-check.json'))).toBe(true)
+    saveOverlay(store, 'jira-check', {})
+    expect(existsSync(userFile('jira-check.json'))).toBe(false)
+    expect(readOverlay(store, 'jira-check')).toEqual({})
+  })
+  it('reset deletes only that skill\'s files', () => {
+    saveOverlay(store, 'reply-email', { tone: 'formal' })
+    saveOverride(store, 'reply-email', def('reply-email').replace('Plain and calm.', 'Warm.'))
+    saveOverlay(store, 'jira-check', { tone: 'formal' })
+    resetSkill(store, 'reply-email')
+    expect(existsSync(userFile('reply-email.md'))).toBe(false)
+    expect(existsSync(userFile('reply-email.json'))).toBe(false)
+    expect(existsSync(userFile('jira-check.json'))).toBe(true)
+    expect(effectiveSkill(store, 'reply-email').md).toBe(def('reply-email'))
+    const meta = JSON.parse(readFileSync(userFile('.meta.json'), 'utf8'))
+    expect(Object.keys(meta)).toEqual(['jira-check'])
+  })
+})
+
+describe('default updated', () => {
+  it('flags an override whose default changed since, until "Keep mine"', () => {
+    const mine = def('reply-email').replace('Plain and calm.', 'Warm.')
+    saveOverride(store, 'reply-email', mine)
+    expect(skillDetail(store, 'reply-email').defaultUpdated).toBe(false)
+    writeFileSync(join(store.defaultsDir, 'reply-email.md'), def('reply-email').replace('Short sentences.', 'Very short sentences.'))
+    expect(listSkills(store).find(s => s.id === 'reply-email')!.defaultUpdated).toBe(true)
+    const c = compareSkill(store, 'reply-email')
+    expect(c.mine).toBe(mine)
+    expect(c.diff.filter(l => l.op !== ' ')).toEqual([
+      { op: '-', text: '- Warm. Short sentences.' }, { op: '+', text: '- Plain and calm. Very short sentences.' }
+    ])
+    ackDefault(store, 'reply-email')
+    expect(skillDetail(store, 'reply-email').defaultUpdated).toBe(false)
+  })
+  it('a form-only customization never reports it (the overlay follows the new default)', () => {
+    saveOverlay(store, 'reply-email', { tone: 'formal' })
+    writeFileSync(join(store.defaultsDir, 'reply-email.md'), def('reply-email').replace('Short sentences.', 'Very short.'))
+    expect(skillDetail(store, 'reply-email').defaultUpdated).toBe(false)
+    expect(effectiveSkill(store, 'reply-email').md).toMatch(/Very short\./)
+  })
+})
+
+describe('diff + chips', () => {
+  it('line diff', () => {
+    expect(lineDiff('a\nb\nc', 'a\nx\nc')).toEqual([{ op: ' ', text: 'a' }, { op: '-', text: 'b' }, { op: '+', text: 'x' }, { op: ' ', text: 'c' }])
+    expect(lineDiff('', 'a').filter(l => l.op === '+')).toEqual([{ op: '+', text: 'a' }])
+  })
+  it('chips name the section and the change', () => {
+    const before = def('answer-feishu')
+    const after = before.replace('- Plain text; no headings, no tables.', '- Casual, no 您好.').replace('## Tone and format', '- hiring — anything about hiring\n\n## Tone and format')
+    expect(changeChips(before, after)).toEqual(['Ask first ＋ hiring — anything about hiring', 'Tone ＋ Casual, no 您好.'])
+  })
+  it('caps the number of chips', () => {
+    const p = parseSkill(def('jira-check'))
+    for (const s of p.sections) s.body += '\n- new line'
+    expect(changeChips(def('jira-check'), renderSkill(p), 3)).toEqual(['Purpose ＋ new line', 'Input ＋ new line', '+5 more'])
+  })
+})
+
+describe('talk-to-edit', () => {
+  const reply = (md: string, example = 'ex') => `<<<SKILL\n${md}\nSKILL>>>\n<<<EXAMPLE\n${example}\nEXAMPLE>>>`
+
+  it('parses the two blocks, tolerating a code fence', () => {
+    expect(parseEditReply(reply('---\nname: x\n---', 'hi'))).toEqual({ md: '---\nname: x\n---\n', example: 'hi' })
+    expect(parseEditReply('```markdown\n---\nname: x\n---\n```')).toEqual({ md: '---\nname: x\n---\n', example: '' })
+  })
+  it('returns the proposal with chips, diff and example, without saving', async () => {
+    const before = def('answer-feishu')
+    const after = before.replace('- Plain text; no headings, no tables.', '- Casual, no 您好.')
+    const prompts: string[] = []
+    const r = await proposeEdit(store, 'answer-feishu', '别太正式', async p => { prompts.push(p); return reply(after, '【Mei 的 AI 代理】PR 提了。') })
+    expect(r.ok).toBe(true)
+    expect(r.problems).toEqual([])
+    expect(r.md).toBe(after)
+    expect(r.example).toBe('【Mei 的 AI 代理】PR 提了。')
+    expect(r.chips).toEqual(['Tone ＋ Casual, no 您好.'])
+    expect(r.diff!.some(l => l.op === '+' && l.text === '- Casual, no 您好.')).toBe(true)
+    expect(prompts).toHaveLength(1)
+    expect(prompts[0]).toMatch(/Owner's request: 别太正式/)
+    expect(prompts[0]).toMatch(/## Input and ## Output are locked/)
+    expect(existsSync(userFile('answer-feishu.md'))).toBe(false)
+    expect(saveOverride(store, 'answer-feishu', r.md!).ok).toBe(true)
+    expect(effectiveSkill(store, 'answer-feishu').md).toBe(after)
+  })
+  it('retries once with the lint problems, then reports them', async () => {
+    const bad = def('answer-feishu').replace(/^- 🔒 prices.*\n/m, '')
+    const prompts: string[] = []
+    const r = await proposeEdit(store, 'answer-feishu', 'drop prices', async p => { prompts.push(p); return reply(bad) })
+    expect(prompts).toHaveLength(2)
+    expect(prompts[1]).toMatch(/failed these checks[\s\S]*Locked line removed: 🔒 prices/)
+    expect(r.ok).toBe(true)
+    expect(r.problems!.map(p => p.rule)).toEqual(['locked-line'])
+  })
+  it('a fixed second attempt is clean', async () => {
+    const good = def('answer-feishu').replace('Short: 1–3 sentences.', 'Short: 1–2 sentences.')
+    let n = 0
+    const r = await proposeEdit(store, 'answer-feishu', 'shorter', async () => reply(n++ ? good : 'garbage'))
+    expect(r.problems).toEqual([])
+    expect(r.md).toBe(good)
+  })
+  it('runner failure and empty request', async () => {
+    expect(await proposeEdit(store, 'answer-feishu', 'x', async () => { throw new Error('not logged in') })).toEqual({ ok: false, error: 'not logged in' })
+    expect(await proposeEdit(store, 'answer-feishu', '  ', async () => '')).toEqual({ ok: false, error: 'empty_request' })
+  })
+  it('edits the effective skill (form choices included)', async () => {
+    saveOverlay(store, 'answer-feishu', { extraAskFirst: ['hiring'] })
+    const prompts: string[] = []
+    await proposeEdit(store, 'answer-feishu', 'x', async p => { prompts.push(p); return '' })
+    expect(prompts[0]).toMatch(/- hiring/)
+    expect(editPrompt('S', 'R')).toMatch(/<<<SKILL/)
+  })
+})
+
+describe('try it', () => {
+  it('runs the effective skill on the sample with the profile, nothing saved', async () => {
+    mkdirSync(store.butlerDir, { recursive: true })
+    saveOverlay(store, 'reply-email', { tone: 'friendly' })
+    const prompts: string[] = []
+    const r = await tryIt(store, 'reply-email', 'Lin: export broken', async p => { prompts.push(p); return '  Hi Lin…  ' }, { profileMd: '# About the owner\nMei' })
+    expect(r).toEqual({ ok: true, output: 'Hi Lin…' })
+    expect(prompts[0]).toMatch(/dry run/)
+    expect(prompts[0]).toMatch(/<profile>\n# About the owner\nMei\n<\/profile>/)
+    expect(prompts[0]).toMatch(/Friendly —/)
+    expect(prompts[0]).toMatch(/<input>\nLin: export broken\n<\/input>/)
+  })
+  it('can try a pending (unsaved) version', async () => {
+    const prompts: string[] = []
+    await tryIt(store, 'reply-email', 'x', async p => { prompts.push(p); return 'ok' }, { md: 'PENDING SKILL' })
+    expect(prompts[0]).toMatch(/<skill>\nPENDING SKILL\n<\/skill>/)
+  })
+  it('errors', async () => {
+    expect(await tryIt(store, 'reply-email', '', async () => 'x')).toEqual({ ok: false, error: 'empty_input' })
+    expect(await tryIt(store, 'reply-email', 'x', async () => '   ')).toEqual({ ok: false, error: 'empty_output' })
+    expect(await tryIt(store, 'reply-email', 'x', async () => { throw new Error('timeout') })).toEqual({ ok: false, error: 'timeout' })
+    await expect(tryIt(store, '../x', 'x', async () => 'x')).rejects.toThrow('bad_id')
+  })
+})
+
+describe('ipc', () => {
+  it('reading never creates the Butler folder', async () => {
+    const handlers = new Map<string, (e: unknown, ...a: any[]) => any>()
+    registerButlerSkillsIpc({ ipcMain: { handle: (c, fn) => { handlers.set(c, fn) } }, butlerDir: () => store.butlerDir, defaultsDir: store.defaultsDir })
+    expect((await handlers.get('butlerSkills:list')!(null)).map((s: any) => s.id)).toEqual(IDS)
+    expect((await handlers.get('butlerSkills:get')!(null, 'reply-email')).effective).toBe(def('reply-email'))
+    expect(existsSync(store.butlerDir)).toBe(false)
+  })
+  function setup() {
+    const handlers = new Map<string, (e: unknown, ...a: any[]) => any>()
+    const revealed: string[] = []
+    registerButlerSkillsIpc({
+      ipcMain: { handle: (c, fn) => { handlers.set(c, fn) } },
+      butlerDir: () => { mkdirSync(store.butlerDir, { recursive: true }); return store.butlerDir },
+      defaultsDir: store.defaultsDir,
+      run: async () => 'out',
+      reveal: p => revealed.push(p)
+    })
+    const call = (c: string, ...a: unknown[]) => handlers.get(c)!(null, ...a)
+    return { call, revealed }
+  }
+  it('saves recompose .claude/skills; bad ids come back as errors', async () => {
+    const { call, revealed } = setup()
+    await call('butlerSkills:saveOverlay', 'answer-feishu', { tone: 'friendly' })
+    expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'answer-feishu', 'SKILL.md'), 'utf8')).toMatch(/Friendly/)
+    await call('butlerSkills:reset', 'answer-feishu')
+    expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'answer-feishu', 'SKILL.md'), 'utf8')).toBe(def('answer-feishu'))
+    expect(await call('butlerSkills:get', '../../etc')).toEqual({ ok: false, error: 'bad_id' })
+    expect(await call('butlerSkills:try', '../x', 'y')).toEqual({ ok: false, error: 'bad_id' })
+    expect(await call('butlerSkills:try', 'reply-email', 'y')).toEqual({ ok: true, output: 'out' })
+    await call('butlerSkills:reveal', 'reply-email')
+    expect(revealed).toEqual([join(store.butlerDir, 'skills')])
+    expect(await call('butler:profilePreview', { name: 'Mei', prefix: '【Mei 的 AI 代理】' })).toMatch(/Start every message you send for them with: 【Mei 的 AI 代理】/)
+  })
+})
