@@ -10,6 +10,11 @@ type ButlerAgentRow = {
   role: string; note: string; chatLive: boolean; activity: 'working' | 'waiting' | 'off'
 }
 
+type ApprovalItem = {
+  id: string; kind: string; title: string; subtitle: string; draft: string
+  payload: Record<string, unknown>; action: string; status: string; createdAt: number; error?: string
+}
+
 type ButlerSetup = { marks: Record<string, 'done' | 'skipped'>; cardHidden: boolean }
 
 type ButlerState = {
@@ -90,6 +95,20 @@ declare global {
         onState: (cb: (s: ButlerState) => void) => () => void
         onStartAgent: (cb: (payload: { agentId: string; mode: 'resume' | 'new' }) => void) => () => void
       }
+      approvals: {
+        list: () => Promise<ApprovalItem[]>
+        approve: (id: string, draft?: string) => Promise<{ ok: boolean; error?: string }>
+        reject: (id: string) => Promise<boolean>
+        onChange: (cb: (pending: ApprovalItem[]) => void) => () => void
+      }
+      // [butler:skills]
+
+      // [butler:mail-routines]
+
+      // [butler:feishu-agent-calendar]
+
+      // [butler:wake]
+
       feishu: {
         status: () => Promise<FeishuStatus>
         login: () => Promise<FeishuStatus>

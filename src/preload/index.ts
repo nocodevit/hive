@@ -12,6 +12,11 @@ export type ButlerAgentRow = {
   role: string; note: string; chatLive: boolean; activity: 'working' | 'waiting' | 'off'
 }
 
+export type ApprovalItem = {
+  id: string; kind: string; title: string; subtitle: string; draft: string
+  payload: Record<string, unknown>; action: string; status: string; createdAt: number; error?: string
+}
+
 export type ButlerSetup = { marks: Record<string, 'done' | 'skipped'>; cardHidden: boolean }
 
 export type ButlerState = {
@@ -283,6 +288,24 @@ const api = {
       return () => ipcRenderer.removeListener('butler:state', handler)
     }
   },
+  approvals: {
+    list: () => ipcRenderer.invoke('approvals:list') as Promise<ApprovalItem[]>,
+    approve: (id: string, draft?: string) => ipcRenderer.invoke('approvals:approve', id, draft) as Promise<{ ok: boolean; error?: string }>,
+    reject: (id: string) => ipcRenderer.invoke('approvals:reject', id) as Promise<boolean>,
+    onChange: (cb: (pending: ApprovalItem[]) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, p: ApprovalItem[]) => cb(p)
+      ipcRenderer.on('approvals:changed', handler)
+      return () => ipcRenderer.removeListener('approvals:changed', handler)
+    }
+  },
+  // [butler:skills]
+
+  // [butler:mail-routines]
+
+  // [butler:feishu-agent-calendar]
+
+  // [butler:wake]
+
   feishu: {
     status: () => ipcRenderer.invoke('feishu:status') as Promise<FeishuStatus>,
     login: () => ipcRenderer.invoke('feishu:login') as Promise<FeishuStatus>,

@@ -3309,6 +3309,14 @@ export default function App() {
           <div className="space-y-5 max-h-[70vh] overflow-y-auto">
             <ButlerSettings />
             <FeishuConnection />
+            {/* [butler:skills] About me + Skills sections */}
+
+            {/* [butler:mail-routines] Email accounts + Daily routine sections */}
+
+            {/* [butler:feishu-agent-calendar] Answer-for-me + Calendar sections */}
+
+            {/* [butler:wake] Wake word section */}
+
 
             {/* v2.9.0: STYLE picker (Accent | Prime). Prime is a full
                 visual-language swap (mono font, glow, scanlines, hex
