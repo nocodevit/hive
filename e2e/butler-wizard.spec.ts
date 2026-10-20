@@ -86,6 +86,16 @@ test('About you writes profile.md; Skip leaves Voice open', async () => {
   await expect(wizard().getByLabel('Your name')).toBeVisible()
   await expect(wizard().getByLabel('Assistant name · prefix & intro')).toBeVisible()
   await expect(wizard().getByLabel('Never says')).toBeVisible()
+  // Nothing is cut off: the last field scrolls into view inside the dialog,
+  // and the footer buttons stay on screen.
+  const box = (await wizard().boundingBox())!
+  const extra = wizard().getByLabel('Extra')
+  await extra.scrollIntoViewIfNeeded()
+  const eb = (await extra.boundingBox())!
+  expect(eb.y + eb.height).toBeLessThanOrEqual(box.y + box.height)
+  const next = (await wizard().getByRole('button', { name: 'Next' }).boundingBox())!
+  expect(next.y + next.height).toBeLessThanOrEqual(box.y + box.height)
+  await page.screenshot({ path: test.info().outputPath('about-more.png') })
   await wizard().getByLabel('Answer like a').fill('资深 IoT 产品经理')
   await wizard().getByRole('radio', { name: 'Warm' }).click()
   await wizard().getByRole('button', { name: 'Next' }).click()
