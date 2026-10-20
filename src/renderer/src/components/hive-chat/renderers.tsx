@@ -1,3 +1,4 @@
+import { DELIVERABLE_LANG, parseDeliverable } from '../../../../shared/deliverable'
 import React, { useContext, useEffect, useRef, useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -182,11 +183,13 @@ const MD_COMPONENTS: Record<string, any> = {
     if (isBlock) {
       const lang = className?.match(/language-(\S+)/)?.[1] || 'markup'
       const code = text.replace(/\n$/, '')
+      if (lang === DELIVERABLE_LANG) return <DeliverableCard raw={code} />
       return <CodeBlockWithCopy code={code} language={lang} />
     }
     return <code style={{ color: CHAT.codeInk, background: CHAT.surface, padding: '1px 6px', borderRadius: 6, fontFamily: FONT_MONO, fontSize: '0.9em' }}>{children}</code>
   },
-  pre: ({ children }: any) => (
+  // A ```deliverable block renders as its own card, not inside <pre>.
+  pre: ({ children }: any) => isDeliverableChild(children) ? <>{children}</> : (
     <pre style={{
       background: CHAT.surface,
       borderRadius: 12,
@@ -249,6 +252,39 @@ const MD_COMPONENTS: Record<string, any> = {
  * inline code variant). Click → navigator.clipboard.writeText, brief
  * "copied!" badge swap, auto-revert after 1.5s.
  */
+function isDeliverableChild(children: any): boolean {
+  const kids = React.Children.toArray(children) as any[]
+  return kids.length === 1 && typeof kids[0]?.props?.className === 'string' && kids[0].props.className.includes(`language-${DELIVERABLE_LANG}`)
+}
+
+/** Ready-to-send text: a card with its title and one Copy for exactly that text. */
+export function DeliverableCard({ raw }: { raw: string }) {
+  const { title, body } = parseDeliverable(raw)
+  const [copied, setCopied] = useState(false)
+  const onCopy = () => {
+    navigator.clipboard.writeText(body).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    }).catch(() => {})
+  }
+  return (
+    <div role="group" aria-label={title || 'Ready to send'} style={{
+      border: `1.5px solid ${CRUSH.Charple}`, borderRadius: 14, background: CHAT.surface, margin: '6px 0 12px', overflow: 'hidden'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 10px 7px 12px', borderBottom: `1px solid ${CHAT.surface2}` }}>
+        <span style={{ flex: 1, minWidth: 0, fontSize: 12, fontWeight: 600, color: CHAT.ink, fontFamily: FONT_PROSE, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {title || 'Ready to send'}
+        </span>
+        <button onClick={onCopy} aria-label={copied ? 'Copied' : `Copy ${title || 'text'}`} style={{
+          border: 'none', borderRadius: 8, padding: '3px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT_PROSE,
+          background: copied ? CRUSH.Julep : CRUSH.Charple, color: copied ? CRUSH.Pepper : '#fff'
+        }}>{copied ? '✓ Copied' : 'Copy'}</button>
+      </div>
+      <div style={{ padding: '10px 12px', fontFamily: FONT_PROSE, fontSize: 'var(--chat-fs, 14px)', lineHeight: 1.7, color: CHAT.ink, whiteSpace: 'pre-wrap' }}>{body}</div>
+    </div>
+  )
+}
+
 function CodeBlockWithCopy({ code, language }: { code: string; language: string }) {
   const [copied, setCopied] = useState(false)
   const onCopy = () => {
