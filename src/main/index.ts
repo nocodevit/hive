@@ -191,6 +191,7 @@ import { createFeishuAuth, relayUrl, RELAY_TIMEOUT_MS } from './feishuAuth'
 import { probeFeishu } from './feishuProbe'
 import { readProfile, writeProfile } from './butlerProfile'
 import { createApprovals } from './approvals'
+import { registerButlerWakeIpc } from './butlerWakeIpc'
 import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder } from './butler'
 import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
@@ -647,6 +648,14 @@ ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' &
 // [butler:mail-routines]
 // [butler:feishu-agent-calendar]
 // [butler:wake]
+registerButlerWakeIpc({
+  butlerDir: butlerDir(DATA_DIR),
+  loadData,
+  rows: () => butlerRows(),
+  isLive: chatId => !!getChatSessionInfo(chatId)?.live,
+  sendMessage: (chatId, text) => sendExternalUserMessage(chatId, text),
+  isDictating: () => speechProcess !== null
+})
 
 ipcMain.handle('butler:state', () => butler.getState())
 ipcMain.handle('butler:setEnabled', (_e, enabled: unknown) => {

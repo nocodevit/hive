@@ -69,3 +69,36 @@ with stubbed IPC (`e2e/voice-input.spec.ts`). The live preview needs the app's
 when launched by the packaged app.
 
 After editing the Swift source: `swiftc -O scripts/hive-speech.swift -o scripts/hive-speech`.
+
+## Wake word "Hola Butler" (Butler phase 6)
+
+App Settings → Wake word → "Listen for “Hola Butler”" (off by default,
+`~/.hive/butler/wake.json`). Code: `scripts/hive-speech.swift --wake`,
+`main/wakeWord.ts` (phrases, command parser, routing — pure),
+`main/wakeController.ts`, `main/butlerWakeIpc.ts`,
+`components/butler/WakeToast.tsx`, `lib/wake-toast.ts`.
+
+- **Privacy:** an en-US recognizer with `requiresOnDeviceRecognition`
+  spots the phrase; no on-device model → the helper refuses to start.
+  Speech without the phrase is never written to disk or printed. Only the
+  command after it is recorded and (with a key) sent for transcription.
+- **Phrases** (case/accents/punctuation folded, whole words): hola / ola /
+  holla / oh la / hello + butler, hola / ola + butter. One list in Swift
+  and `wakeWord.ts`; a test checks both agree.
+- **Command:** the rest of the same breath (cut at the phrase when the
+  recognizer gives timings; if other words came before the phrase and
+  there are no timings, that recording is dropped and the next utterance
+  is the command) or the next utterance within 8 s (`timeout:` otherwise).
+  Fallback text = Mandarin recognition of the command recording.
+- **Routing:** `告诉 X …`, `跟 P 的 X 说 …`, `让/叫/给/通知/问 X …`,
+  `tell/ask X (to|that) …`, `tell X in P …`, `tell P's X …`. Names are
+  Hive's own, compared whole and case-insensitively; resolved with
+  `resolveAgent` (exact). No verb → Butler chat (`chat-butler`).
+- **Toast:** single running target → 3 s countdown, Cancel / Send.
+  Ambiguous / unknown → candidate chips. Chat not running → Cancel only
+  (never auto-started). Esc, "cancel" / "取消" / "算了" within 8 s, or
+  "Hola Butler" again cancels. Ignored while dictating.
+- **Tests:** `hive-speech --wake --match` (phrase table),
+  `hive-speech --wake --file <wav> --hear "<sec>=<text>|…"` (state
+  machine with a scripted transcript; `hive-speech-wake.test.ts`). The
+  real recognizer, on-device model and mic need a manual check.
