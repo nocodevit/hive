@@ -1,10 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { ButlerSettings } from '../ButlerSettings'
 import { FeishuConnection } from '../FeishuConnection'
 import { FeishuAgentQuick } from './FeishuAgent'
 import { CalendarConnect } from './CalendarSettings'
 import { PALETTES, PALETTE_META, STYLES, STYLE_META, type Palette, type Style } from '../../palette'
 import { SETUP_STEPS, groupStarts, type SetupMark } from '../../lib/butler-setup'
+import { WizardEmail } from './WizardEmail'
+import { DailyRoutine } from './DailyRoutine'
 
 interface Props {
   startAt: number
@@ -31,6 +33,9 @@ const TITLE: Record<string, string> = {
   welcome: 'Welcome to Hive', claude: 'Claude Code', project: 'First project', theme: 'Theme', voice: 'Voice',
   about: 'About you', phone: 'Phone', feishu: 'Feishu', calendar: 'Calendar', done: 'Ready'
 }
+// [butler:mail-routines]
+Object.assign(SAY, { email: 'Sort & draft', routine: 'Every day, even with Hive closed' })
+Object.assign(TITLE, { email: 'Email', routine: 'Daily routine' })
 const STYLE_OPTS = [['direct', 'Direct'], ['warm', 'Warm'], ['formal', 'Formal']] as const
 
 function Row({ children }: { children: React.ReactNode }) {
@@ -51,6 +56,7 @@ export function ButlerWizard(p: Props) {
   const [cur, setCur] = useState(p.startAt)
   const [auth, setAuth] = useState<{ loggedIn: boolean; authMethod: string } | null>(null)
   const [profile, setProfile] = useState<Record<string, string>>({})
+  const routineCommit = useRef<(() => Promise<void>) | null>(null)
   const step = SETUP_STEPS[cur]
   const starts = groupStarts()
   const last = cur === SETUP_STEPS.length - 1
@@ -71,6 +77,7 @@ export function ButlerWizard(p: Props) {
   const go = (i: number) => setCur(Math.max(0, Math.min(SETUP_STEPS.length - 1, i)))
   const next = async () => {
     if (step.id === 'about') await window.api.butler.saveProfile(profile)
+    if (step.id === 'routine') await routineCommit.current?.()
     if (!step.framing) p.onMark(step.id, 'done')
     if (last) p.onClose(); else go(cur + 1)
   }
@@ -153,6 +160,8 @@ export function ButlerWizard(p: Props) {
   else if (step.id === 'phone') body = <ButlerSettings />
   else if (step.id === 'feishu') body = <><FeishuConnection /><FeishuAgentQuick /></>
   else if (step.id === 'calendar') body = <CalendarConnect />
+  else if (step.id === 'email') body = <WizardEmail />
+  else if (step.id === 'routine') body = <DailyRoutine framed={false} commitRef={routineCommit} />
   else if (step.id === 'done') body = (
     <>
       {SETUP_STEPS.filter(s => !s.framing).map(s => (

@@ -132,6 +132,24 @@ declare global {
       }
 
       // [butler:mail-routines]
+      mail: {
+        list: () => Promise<import('../shared/butler-mail').MailAccountView[]>
+        test: (input: import('../shared/butler-mail').MailAccountInput) => Promise<import('../shared/butler-mail').MailTestResult>
+        save: (input: import('../shared/butler-mail').MailAccountInput) => Promise<{ ok: true; account: import('../shared/butler-mail').MailAccountView } | { ok: false; error: string }>
+        remove: (id: string) => Promise<boolean>
+        sortNow: () => Promise<Array<{ accountId: string; fetched: number; sorted: number; drafted: number; error?: string }>>
+        openHelp: (presetId: string) => Promise<boolean>
+      }
+      routines: {
+        get: () => Promise<import('../shared/butler-routines').RoutinesView & { saved: boolean }>
+        save: (settings: import('../shared/butler-routines').RoutineSettings) => Promise<import('../shared/butler-routines').RoutinesView & { saved: boolean; errors: Record<string, string> }>
+        run: (id: string) => Promise<import('../shared/butler-routines').RoutineRunRecord>
+      }
+      journal: {
+        day: (date?: string) => Promise<import('../shared/butler-routines').JournalDay>
+        dates: () => Promise<string[]>
+        toggle: (date: string, index: number, text: string, done: boolean) => Promise<{ ok: boolean; error?: string }>
+      }
 
       // [butler:feishu-agent-calendar]
       feishuAgent: {
