@@ -299,6 +299,19 @@ const api = {
     }
   },
   // [butler:skills]
+  butlerSkills: {
+    profilePreview: (p: Record<string, string>) => ipcRenderer.invoke('butler:profilePreview', p),
+    list: () => ipcRenderer.invoke('butlerSkills:list'),
+    get: (id: string) => ipcRenderer.invoke('butlerSkills:get', id),
+    saveOverlay: (id: string, overlay: unknown) => ipcRenderer.invoke('butlerSkills:saveOverlay', id, overlay),
+    saveOverride: (id: string, md: string) => ipcRenderer.invoke('butlerSkills:saveOverride', id, md),
+    reset: (id: string) => ipcRenderer.invoke('butlerSkills:reset', id),
+    ackDefault: (id: string) => ipcRenderer.invoke('butlerSkills:ackDefault', id),
+    compare: (id: string) => ipcRenderer.invoke('butlerSkills:compare', id),
+    tryIt: (id: string, sample: string, md?: string) => ipcRenderer.invoke('butlerSkills:try', id, sample, md),
+    propose: (id: string, request: string) => ipcRenderer.invoke('butlerSkills:propose', id, request),
+    reveal: (id: string) => ipcRenderer.invoke('butlerSkills:reveal', id)
+  },
 
   // [butler:mail-routines]
 
