@@ -362,3 +362,12 @@ describe('feishu agent', () => {
     expect(existsSync(join(t.dir, 'feishu-log.jsonl'))).toBe(false)
   })
 })
+
+describe('defaultPrefix with an assistant name', () => {
+  it('adds the name; an explicit prefix still wins', async () => {
+    const { defaultPrefix } = await import('../feishuAgent')
+    expect(defaultPrefix({ name: 'Mei', prefix: '', assistantName: 'Mimi' })).toBe('【Mei 的 AI 代理 · Mimi】')
+    expect(defaultPrefix({ name: 'Mei', prefix: '', assistantName: '' })).toBe('【Mei 的 AI 代理】')
+    expect(defaultPrefix({ name: 'Mei', prefix: '[Mei’s AI agent]', assistantName: 'Mimi' })).toBe('[Mei’s AI agent]')
+  })
+})

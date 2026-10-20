@@ -93,8 +93,9 @@ export function normalizeAgentSettings(raw: unknown): FeishuAgentSettings {
   }
 }
 
-export function defaultPrefix(profile: Pick<ButlerProfile, 'name' | 'prefix'>): string {
-  return profile.prefix.trim() || `【${profile.name.trim() || '我'} 的 AI 代理】`
+export function defaultPrefix(profile: Pick<ButlerProfile, 'name' | 'prefix'> & { assistantName?: string }): string {
+  const named = profile.assistantName?.trim()
+  return profile.prefix.trim() || `【${profile.name.trim() || '我'} 的 AI 代理${named ? ` · ${named}` : ''}】`
 }
 
 export function effectivePrefix(settings: FeishuAgentSettings, profile: Pick<ButlerProfile, 'name' | 'prefix'>): string {
@@ -537,14 +538,3 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
 }
 
 export type FeishuAgent = ReturnType<typeof createFeishuAgent>
-
-/**
- * Personal status ("🤖 AI 代理中"). Feishu's open platform has no API for
- * a user to set their own custom status with a user token: the
- * personal_settings system-status APIs are tenant-level (tenant token,
- * admin-created statuses). So this is a no-op until one exists.
- */
-export const STATUS_CAPABILITY = { supported: false, reason: 'no_user_status_api' } as const
-export async function setAgentStatus(_on: boolean): Promise<{ ok: boolean; error?: string }> {
-  return { ok: false, error: STATUS_CAPABILITY.reason }
-}

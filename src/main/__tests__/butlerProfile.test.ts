@@ -48,3 +48,17 @@ describe('writeProfile / readProfile', () => {
     expect(readProfile(join(tmpdir(), 'no-such-butler'))).toEqual(EMPTY_PROFILE)
   })
 })
+
+describe('assistant name', () => {
+  it('is kept and named in profile.md', () => {
+    const p = normalizeProfile({ assistantName: '  Mimi ', name: 'Mei' })
+    expect(p.assistantName).toBe('Mimi')
+    expect(renderProfileMd(p)).toContain("You are Mei's personal AI agent, called Mimi.")
+  })
+  it('without a custom intro, introductions use the name', () => {
+    expect(renderProfileMd(normalizeProfile({ assistantName: 'Mimi', name: 'Mei' }))).toContain("say you are Mimi, Mei's AI agent")
+  })
+  it('left out when empty', () => {
+    expect(renderProfileMd({ ...EMPTY_PROFILE, name: 'Mei' })).toContain("You are Mei's personal AI agent.")
+  })
+})

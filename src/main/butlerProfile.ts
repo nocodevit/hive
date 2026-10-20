@@ -10,6 +10,8 @@ export const PROFILE_STYLES = ['direct', 'warm', 'formal'] as const
 export type ProfileStyle = (typeof PROFILE_STYLES)[number]
 
 export interface ButlerProfile {
+  /** What the owner calls their assistant (shown in Hive; default "Butler"). */
+  assistantName: string
   name: string
   role: string
   team: string
@@ -26,7 +28,7 @@ export interface ButlerProfile {
 }
 
 export const EMPTY_PROFILE: ButlerProfile = {
-  name: '', role: '', team: '', responsibleFor: '', worksWith: '', style: 'direct',
+  assistantName: '', name: '', role: '', team: '', responsibleFor: '', worksWith: '', style: 'direct',
   oftenSays: '', neverSays: '', language: '', answerLike: '', whenUnsure: '', prefix: '', intro: ''
 }
 
@@ -59,7 +61,7 @@ export function renderProfileMd(p: ButlerProfile): string {
   const lines = [
     '# About the owner',
     '',
-    `You are ${who}'s personal AI agent. When you write anything on ${p.name || 'their'}${p.name ? "'s" : ''} behalf, sound like them and keep their level of expertise.`,
+    `You are ${who}'s personal AI agent${p.assistantName ? `, called ${p.assistantName}` : ''}. When you write anything on ${p.name || 'their'}${p.name ? "'s" : ''} behalf, sound like them and keep their level of expertise.`,
     ''
   ]
   const facts: Array<[string, string]> = [
@@ -79,10 +81,11 @@ export function renderProfileMd(p: ButlerProfile): string {
     if (p.whenUnsure) lines.push(`- When unsure: ${p.whenUnsure}`)
     lines.push('')
   }
-  if (p.prefix || p.intro) {
+  if (p.prefix || p.intro || p.assistantName) {
     lines.push('## As their agent', '')
     if (p.prefix) lines.push(`- Start every message you send for them with: ${p.prefix}`)
     if (p.intro) lines.push(`- Introduce yourself as: ${p.intro}`)
+    else if (p.assistantName) lines.push(`- When you introduce yourself to others, say you are ${p.assistantName}, ${p.name || 'the owner'}'s AI agent.`)
     lines.push('')
   }
   return lines.join('\n')
