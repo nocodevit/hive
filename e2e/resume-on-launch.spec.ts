@@ -147,6 +147,9 @@ test('restart offers the chats left open, ticked by default; Resume brings them 
   await dialog().getByRole('button', { name: 'Resume (1)' }).click()
   await expect(dialog()).toHaveCount(0)
   await expect.poll(liveAgents, { timeout: 120000 }).toMatchObject({ Ava: true, Ben: false, Cy: false })
+  // The resumed (idle) chat shows as live: its project's dot is not "offline".
+  await expect(page.getByRole('img', { name: /Agents (idle|working)/ }).first()).toBeVisible({ timeout: 30000 })
+  await expect(page.getByRole('img', { name: 'Agents offline' })).toHaveCount(0)
 
   // The resumed chat carries its history.
   await page.getByText('Relaunch E2E').first().click()

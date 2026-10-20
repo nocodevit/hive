@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   butlerArgs, bridgeSessionId, claudeTrustsFolder, readButlerOutput, outputTail, installButlerFiles, createButler,
-  readButlerSettings, RESTART_DELAYS_MS, STABLE_AFTER_MS, type ButlerState, type PtyLike
+  readButlerSettings, SETUP_VERSION, RESTART_DELAYS_MS, STABLE_AFTER_MS, type ButlerState, type PtyLike
 } from '../butler'
 
 const TRUST_PROMPT = 'Quick safety check: is this a project you created or one you trust? Sessions started here can read, edit, and execute files.\r\nTrust /Users/me/.hive/butler? [y/N] '
@@ -253,7 +253,7 @@ describe('createButler', () => {
     t.butler.setEnabled(true)
     t.last().emit(TRUST_PROMPT)
     t.butler.confirmTrust()
-    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: true, trusted: true, offered: true, pinned: false, setup: {}, setupCardHidden: false })
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: true, trusted: true, offeredVersion: 0, pinned: false, setupVersion: SETUP_VERSION, setup: {}, setupCardHidden: false })
     t.butler.shutdown()
     t.butler.restore()
     t.last().emit(TRUST_PROMPT)
@@ -266,7 +266,7 @@ describe('createButler', () => {
     t.last().emit(TRUST_PROMPT)
     t.butler.confirmTrust()
     t.butler.setEnabled(false)
-    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offered: true, pinned: false, setup: {}, setupCardHidden: false })
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offeredVersion: 0, pinned: false, setupVersion: SETUP_VERSION, setup: {}, setupCardHidden: false })
     t.butler.setEnabled(true)
     t.last().emit(TRUST_PROMPT)
     expect(t.last().written).toEqual([])
@@ -359,18 +359,35 @@ describe('one-time offer', () => {
     const t = setup()
     t.butler.offerAnswered()
     expect(t.butler.shouldOffer).toBe(false)
-    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offered: true, pinned: false, setup: {}, setupCardHidden: false })
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offeredVersion: SETUP_VERSION, pinned: false, setupVersion: SETUP_VERSION, setup: {}, setupCardHidden: false })
     const again = createButler({
       dataDir: t.dataDir, resourcesDir: RESOURCES, claudeTrusts: () => true, recordedSessionId: () => null,
       spawn: () => new FakePty([], ''), kill: () => {}, killStale: () => {}, onState: () => {}
     })
     expect(again.shouldOffer).toBe(false)
   })
-  it('turning it on counts as the answer, also after turning it off', () => {
+  it('an upgraded user is asked again even with Butler on; old progress is dropped, settings kept', () => {
+    const t = setup()
+    writeFileSync(join(t.dataDir, 'butler.json'), JSON.stringify({
+      enabled: true, trusted: true, offered: true, pinned: true, setup: { theme: 'done' }, setupCardHidden: true
+    }))
+    const up = createButler({
+      dataDir: t.dataDir, resourcesDir: RESOURCES, claudeTrusts: () => true, recordedSessionId: () => null,
+      spawn: () => new FakePty([], ''), kill: () => {}, killStale: () => {}, onState: () => {}
+    })
+    expect(up.shouldOffer).toBe(true)
+    expect(up.getSetup()).toEqual({ marks: {}, cardHidden: false })
+    expect(up.getState().enabled).toBe(true)
+    expect(up.pinned).toBe(true)
+    up.offerAnswered()
+    const saved = JSON.parse(readFileSync(join(t.dataDir, 'butler.json'), 'utf8'))
+    expect(saved).toMatchObject({ enabled: true, trusted: true, pinned: true, offeredVersion: SETUP_VERSION, setupVersion: SETUP_VERSION })
+    expect('offered' in saved).toBe(false)
+  })
+  it('turning Butler on is not an answer to the setup card', () => {
     const t = setup()
     t.butler.setEnabled(true)
-    t.butler.setEnabled(false)
-    expect(t.butler.shouldOffer).toBe(false)
+    expect(t.butler.shouldOffer).toBe(true)
   })
   it('setup marks: valid ids only, clearable, remembered', () => {
     const t = setup()
@@ -391,9 +408,6 @@ describe('one-time offer', () => {
       spawn: () => new FakePty([], ''), kill: () => {}, killStale: () => {}, onState: () => {}
     })
     expect(again.pinned).toBe(true)
-  })
-  it('never offered while already on', () => {
-    expect(setup({ enabled: true }).butler.shouldOffer).toBe(false)
   })
 })
 
