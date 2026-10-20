@@ -6,9 +6,9 @@ import { mkdirSync, rmSync, existsSync, readFileSync, writeFileSync, chmodSync }
 import { tmpdir } from 'os'
 
 /**
- * The one-time "Control Hive from your phone?" dialog: shown at launch to
+ * The one-time "Set up Hive with Butler?" card: shown at launch to
  * someone with agents who never answered; "Not now" is final across a
- * restart; "Turn on" switches Butler on and opens App Settings, where
+ * restart; "Start" opens App Settings (the switch stays off), where
  * Remote Control is the first section. `claude` is a fake that never
  * connects (no real Remote Control session).
  */
@@ -17,7 +17,7 @@ const PROJECT_ROOT = join(__dirname, '..')
 const ROOT = join(tmpdir(), 'hive-e2e-butler-offer')
 const FAKE = join(ROOT, 'fake-claude')
 const SWITCH = 'Allow remote control from my phone (Butler)'
-const OFFER = 'Control Hive from your phone?'
+const OFFER = 'Set up Hive with Butler?'
 
 let app: ElectronApplication | undefined
 let page: Page
@@ -26,9 +26,10 @@ function seed(dataDir: string) {
   if (existsSync(dataDir)) rmSync(dataDir, { recursive: true })
   mkdirSync(dataDir, { recursive: true })
   const prefs = { autoRunClaude: false, startupCommand: '' }
+  const avatar = { skinTone: '#f5d0a9', hairStyle: 'short', hairColor: '#2c1810', topStyle: 'tee', topColor: '#7c3aed', bottomStyle: 'pants', bottomColor: '#1e293b', hat: 'none', accessories: [] }
   writeFileSync(join(dataDir, 'data.json'), JSON.stringify({
     projects: [{ id: 'p1', name: 'Offer Test', officePath: ROOT, zones: [{ id: 'z1', name: 'src', path: ROOT, type: 'rnd', hasGit: false }] }],
-    agents: [{ id: 'a1', projectId: 'p1', zoneId: 'z1', name: 'Missy', role: 'Eng', type: 'coding', department: 'R&D', group: '', order: 0, status: 'done', soul: '', enabledSkills: [], preferences: prefs, model: 'inherit', effort: 'high' }],
+    agents: [{ avatar, id: 'a1', projectId: 'p1', zoneId: 'z1', name: 'Missy', role: 'Eng', type: 'coding', department: 'R&D', group: '', order: 0, status: 'done', soul: '', enabledSkills: [], preferences: prefs, model: 'inherit', effort: 'high' }],
     appPrefs: { autoRunClaude: false, maxLogs: 100, continueSession: false }
   }))
 }
@@ -70,14 +71,15 @@ test('"Not now" answers it for good', async () => {
   await expect(page.getByRole('dialog', { name: OFFER })).toHaveCount(0)
 })
 
-test('"Turn on" switches Butler on and shows it at the top of App Settings', async () => {
+test('"Start" opens App Settings with Remote Control on top, answering the offer', async () => {
   const dataDir = join(ROOT, 'data-turn-on')
   seed(dataDir)
   await launch(dataDir)
-  await page.getByRole('button', { name: 'Turn on' }).click()
+  await page.getByRole('button', { name: 'Start' }).click()
   await expect(page.getByRole('heading', { name: 'App Settings' })).toBeVisible()
-  await expect(page.getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'true')
-  await expect(page.getByText('Connecting…')).toBeVisible()
+  await expect(page.getByRole('dialog', { name: OFFER })).toHaveCount(0)
+  await expect(page.getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'false')
+  await expect.poll(() => JSON.parse(readFileSync(join(dataDir, 'butler.json'), 'utf8')).offered).toBe(true)
   const remote = await page.getByText('Remote Control', { exact: true }).boundingBox()
   const style = await page.getByText('Visual style', { exact: true }).boundingBox()
   expect(remote!.y).toBeLessThan(style!.y)

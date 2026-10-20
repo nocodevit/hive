@@ -37,6 +37,22 @@ name when the agent name repeats). No fuzzy matching: `not_found` /
   bubble (`chat:externalUser:<id>`).
 - Hive must be running; these routes live in its main process.
 
+## Butler panel (v2.30.0)
+
+- **Button**: right end of the rightmost column header (Files panel when
+  open, else the main panel). Green dot = phone session connected; red
+  number = agents waiting for you.
+- **Panel** (`components/butler/ButlerPanel.tsx`): Chat (a HiveChat with id
+  `chat-butler`, cwd `~/.hive/butler`, auto-resumed on first open) and
+  Sessions (waiting → working → off, Answer / Open / Resume). One element
+  for drawer and page so the chat never remounts; the whole panel is
+  `no-drag` because it floats over header drag regions.
+- **Page + pin**: ⤢ opens it as a page with a Butler entry at the top of
+  the project list; 📌 keeps the entry (`butler.json` `pinned`); ✕ on an
+  unpinned entry closes it.
+- **First-run card**: "Set up Hive with Butler?" under the button (Start →
+  App Settings; replaced by the wizard in v2.31).
+
 ## Built-in Butler (v2.28.0)
 
 App Settings → Remote Control (the first section) → "Allow remote control

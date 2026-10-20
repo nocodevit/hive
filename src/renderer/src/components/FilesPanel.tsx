@@ -9,6 +9,8 @@ interface Props {
   agentCwd: string
   width: number
   onOpenFile?: (filePath: string) => void
+  /** Rendered at the right end of the header (the Butler button lives there when this is the rightmost column). */
+  headerTrailing?: React.ReactNode
 }
 
 interface FileEntry {
@@ -182,7 +184,7 @@ function TreeItem({ node, depth, agentCwd, expanded, toggleExpand, search, onOpe
   )
 }
 
-export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Props) {
+export default function FilesPanel({ project, agentCwd, width, onOpenFile, headerTrailing }: Props) {
   const [files, setFiles] = useState<FileEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -285,6 +287,7 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile }: Pro
             className="w-7 h-7 rounded-lg inline-flex items-center justify-center text-text-muted hover:bg-bg-hover hover:text-text-primary cursor-pointer">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" /></svg>
           </button>
+          {headerTrailing && <span className="ml-1.5">{headerTrailing}</span>}
         </div>
       </div>
 

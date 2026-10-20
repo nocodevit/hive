@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Terminal from './components/Terminal'
 import { ButlerSettings } from './components/ButlerSettings'
-import ButlerOfferModal from './components/ButlerOfferModal'
+import { ButlerOfferCard } from './components/butler/ButlerOfferCard'
+import { ButlerButton } from './components/butler/ButlerButton'
+import { ButlerPanel, type ButlerMode } from './components/butler/ButlerPanel'
 import { FeishuConnection } from './components/FeishuConnection'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import Modal from './components/Modal'
@@ -92,6 +94,31 @@ export default function App() {
   // Chats that were still open when Hive last closed — offered once at startup.
   const [unclosedAgents, setUnclosedAgents] = useState<UnclosedAgent[]>([])
   const [butlerOffer, setButlerOffer] = useState(false)
+  const [butlerOpen, setButlerOpen] = useState(false)
+  const [butlerMode, setButlerMode] = useState<ButlerMode>('drawer')
+  // Pinned = Butler stays at the top of the project list (butler.json).
+  const [butlerPinned, setButlerPinnedState] = useState(false)
+  useEffect(() => { window.api.butler.pinned().then(setButlerPinnedState).catch(() => {}) }, [])
+  const setButlerPinned = (v: boolean) => {
+    setButlerPinnedState(v)
+    void window.api.butler.setPinned(v)
+  }
+  const [butlerPhone, setButlerPhone] = useState(false)
+  const [butlerWaiting, setButlerWaiting] = useState(0)
+  useEffect(() => {
+    const apply = (s: { status: string }) => setButlerPhone(s.status === 'connected')
+    window.api.butler.state().then(apply).catch(() => {})
+    return window.api.butler.onState(apply)
+  }, [])
+  useEffect(() => {
+    let alive = true
+    const load = () => window.api.butler.agents()
+      .then(rows => { if (alive) setButlerWaiting(rows.filter(r => r.activity === 'waiting').length) })
+      .catch(() => {})
+    load()
+    const t = setInterval(load, 10_000)
+    return () => { alive = false; clearInterval(t) }
+  }, [])
   // v2.15.7: last-touched timestamp per agent (Map in a ref instead of
   // useState so bumping doesn't churn re-renders). Read by pickLRUToEvict
   // when the set hits MAX_ACTIVE_TERMINALS to choose which sticky
@@ -864,6 +891,17 @@ export default function App() {
     )
   }
 
+  const filesVisible = !!(showFiles && selectedProject && selectedAgent)
+  const butlerButton = (
+    <ButlerButton
+      open={butlerOpen}
+      phoneConnected={butlerPhone}
+      waiting={butlerWaiting}
+      onClick={() => setButlerOpen(o => !o)}
+    />
+  )
+  const butlerInList = butlerPinned || (butlerOpen && butlerMode === 'page')
+
   return (
     <div className="flex h-screen bg-sidebar-bg text-text-primary pr-2.5 pb-2.5">
       {/* Left: Projects */}
@@ -875,6 +913,22 @@ export default function App() {
           <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
         </div>
         <div className="flex-1 overflow-y-auto py-1 space-y-0.5">
+          {butlerInList && (
+            <div className={`group flex items-center gap-2.5 px-2.5 py-[7px] mb-1.5 rounded-[10px] text-[13px] ${butlerOpen && butlerMode === 'page' ? 'bg-bg-secondary text-text-primary font-semibold shadow-sm' : 'text-text-secondary hover:bg-bg-hover'}`}>
+              <button onClick={() => { setButlerMode('page'); setButlerOpen(true) }} aria-label="Open Butler page" className="flex-1 min-w-0 flex items-center gap-2.5 text-left cursor-pointer">
+                <span className="text-[14px]">🎩</span>Butler
+              </button>
+              {butlerPinned ? (
+                <span role="img" aria-label="Pinned" title="Pinned" className="text-[11px]">📌</span>
+              ) : (
+                <button
+                  aria-label="Close Butler page"
+                  onClick={() => setButlerOpen(false)}
+                  className="text-[11px] text-text-muted hover:text-text-primary cursor-pointer"
+                >✕</button>
+              )}
+            </div>
+          )}
           {(() => {
             const groups = [...new Set(projects.map(p => p.group || ''))]
             // Put ungrouped ('') first, then alphabetical
@@ -904,6 +958,7 @@ export default function App() {
                 onClick={() => {
                   setSelectedProjectId(project.id)
                   setSelectedAgentId(null)
+                  if (butlerMode === 'page') setButlerOpen(false)
                 }}
                 onContextMenu={(e) => {
                   e.preventDefault()
@@ -1595,6 +1650,7 @@ export default function App() {
               )}
             </div>
           )}
+          {!filesVisible && butlerButton}
         </div>
         <div className="flex-1 relative">
           {!selectedAgent && !selectedProject && (
@@ -3013,6 +3069,7 @@ export default function App() {
               agentCwd={cwd}
               width={panelWidths.files}
               onOpenFile={setPreviewFilePath}
+              headerTrailing={butlerButton}
             />
           </>
         )
@@ -3035,11 +3092,10 @@ export default function App() {
       )}
 
       {butlerOffer && unclosedAgents.length === 0 && (
-        <ButlerOfferModal
-          onTurnOn={() => {
+        <ButlerOfferCard
+          onStart={() => {
             setButlerOffer(false)
-            void window.api.butler.setEnabled(true)
-            // Its status (and the one-time trust OK) lives there.
+            void window.api.butler.offerAnswered()
             setShowAppSettings(true)
           }}
           onNotNow={() => {
@@ -3048,6 +3104,28 @@ export default function App() {
           }}
         />
       )}
+
+      <ButlerPanel
+        mode={butlerMode}
+        visible={butlerOpen}
+        pinned={butlerPinned}
+        phoneConnected={butlerPhone}
+        chatFontSize={appPrefs.chatFontSize}
+        pageLeft={panelWidths.projects + 20}
+        onClose={() => setButlerOpen(false)}
+        onMode={setButlerMode}
+        onPin={setButlerPinned}
+        onOpenAgent={(r) => {
+          setButlerOpen(false)
+          setSelectedProjectId(r.projectId)
+          setSelectedAgentId(r.agentId)
+          setMainView('terminal')
+        }}
+        onResumeAgent={(r) => {
+          const a = agents.find(x => x.id === r.agentId)
+          if (a) bulkResume([a])
+        }}
+      />
 
       {/* Modals */}
       <CreateProjectModal

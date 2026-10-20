@@ -7,6 +7,11 @@ export type FeishuStatus =
   | { state: 'expired' }
   | { state: 'error'; error: string }
 
+export type ButlerAgentRow = {
+  agentId: string; agent: string; projectId: string; project: string
+  role: string; note: string; chatLive: boolean; activity: 'working' | 'waiting' | 'off'
+}
+
 export type ButlerState = {
   enabled: boolean
   status: 'off' | 'starting' | 'needs_trust' | 'connected' | 'error'
@@ -259,6 +264,10 @@ const api = {
     confirmTrust: () => ipcRenderer.invoke('butler:confirmTrust') as Promise<{ ok: boolean }>,
     retry: () => ipcRenderer.invoke('butler:retry') as Promise<ButlerState>,
     shouldOffer: () => ipcRenderer.invoke('butler:shouldOffer') as Promise<boolean>,
+    folder: () => ipcRenderer.invoke('butler:folder') as Promise<string>,
+    pinned: () => ipcRenderer.invoke('butler:pinned') as Promise<boolean>,
+    setPinned: (v: boolean) => ipcRenderer.invoke('butler:setPinned', v) as Promise<boolean>,
+    agents: () => ipcRenderer.invoke('butler:agents') as Promise<ButlerAgentRow[]>,
     offerAnswered: () => ipcRenderer.invoke('butler:offerAnswered') as Promise<{ ok: boolean }>,
     onState: (cb: (s: ButlerState) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, s: ButlerState) => cb(s)
