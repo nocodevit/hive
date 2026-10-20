@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { existsSync, mkdtempSync, readFileSync } from 'fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { defaultRoutineSettings } from '../../shared/butler-routines'
@@ -74,6 +74,11 @@ describe('late detection', () => {
 })
 
 describe('routinePlist', () => {
+  it('names Hive as the owner in Login Items when given a bundle id', () => {
+    const x = routinePlist({ id: 'morning-plan', program: ['/H'], schedule: { kind: 'times', times: ['08:30'] }, weekdays: [1], logPath: '/l', bundleId: 'com.hive.app' })
+    expect(x).toContain('<key>AssociatedBundleIdentifiers</key>\n  <array>\n    <string>com.hive.app</string>\n  </array>')
+    expect(routinePlist({ id: 'morning-plan', program: ['/H'], schedule: { kind: 'times', times: ['08:30'] }, weekdays: [1], logPath: '/l' })).not.toContain('AssociatedBundleIdentifiers')
+  })
   it('writes the exact LaunchAgent XML', () => {
     const xml = routinePlist({
       id: 'morning-plan',
@@ -155,6 +160,18 @@ describe('scheduler (fake launchctl)', () => {
       ['bootstrap', 'gui/501', join(t.root, 'LaunchAgents', 'com.hive.butler.evening-report.plist')]
     ])
     expect(readFileSync(t.s.plistPath('morning-plan'), 'utf8')).toContain('<string>--butler-routine=morning-plan</string>')
+  })
+  it('sync: rewrites and reloads only installed plists that are out of date', async () => {
+    const t = setup()
+    await t.s.apply(defaultRoutineSettings())
+    t.calls.length = 0
+    expect(await t.s.sync(defaultRoutineSettings())).toEqual([])
+    expect(t.calls).toEqual([])
+    writeFileSync(t.s.plistPath('morning-plan'), '<old/>')
+    expect(await t.s.sync(defaultRoutineSettings())).toEqual(['morning-plan'])
+    expect(t.calls.map(c => c[0])).toEqual(['bootout', 'bootstrap'])
+    expect(readFileSync(t.s.plistPath('morning-plan'), 'utf8')).toContain('--butler-routine=morning-plan')
+    expect(existsSync(t.s.plistPath('jira-check'))).toBe(false)
   })
   it('turning one off boots it out and removes its plist', async () => {
     const t = setup()

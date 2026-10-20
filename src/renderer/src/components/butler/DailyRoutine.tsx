@@ -1,10 +1,28 @@
 import { useEffect, useState, type MutableRefObject } from 'react'
-import { ROUTINE_IDS, ROUTINE_NAME, scheduleLabel, type RoutineId, type RoutineSettings, type RoutinesView } from '../../../../shared/butler-routines'
+import { ROUTINE_DESC, ROUTINE_IDS, ROUTINE_NAME, ROUTINE_SKILL, scheduleLabel, type RoutineId, type RoutineSettings, type RoutinesView } from '../../../../shared/butler-routines'
+import { openSkill } from '../../lib/butler-skills'
 import { WEEKDAY_CHIPS, toggleWeekday } from '../../lib/butler-today'
 
 type View = RoutinesView & { saved: boolean; errors?: Record<string, string> }
 
-const timeInput = 'w-[76px] px-1.5 py-0.5 rounded-md bg-bg-secondary border border-border text-[12px] font-mono text-text-primary focus:outline-none focus:border-accent'
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
+
+/**
+ * 24-hour "HH:MM" text box. The native time input renders AM/PM by locale
+ * and clipped it ("08:30 A"); this one is fixed-width and always fits.
+ */
+function TimeBox({ value, label, onCommit }: { value: string; label: string; onCommit: (v: string) => void }) {
+  const [text, setText] = useState(value)
+  useEffect(() => setText(value), [value])
+  const bad = !HHMM.test(text)
+  const commit = () => { if (!bad && text !== value) onCommit(text); if (bad) setText(value) }
+  return (
+    <input value={text} aria-label={label} inputMode="numeric" maxLength={5} placeholder="08:30"
+      onChange={e => setText(e.target.value.replace(/[^\d:]/g, ''))}
+      onBlur={commit} onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+      className={`w-[58px] px-1.5 py-0.5 rounded-md bg-bg-secondary border text-[12px] font-mono text-center text-text-primary focus:outline-none ${bad ? 'border-red-400' : 'border-border focus:border-accent'}`} />
+  )
+}
 
 /** Daily routine rows (settings section and wizard step). Changes apply to launchd at once. */
 export function DailyRoutine({ framed = true, commitRef }: { framed?: boolean; commitRef?: MutableRefObject<(() => Promise<void>) | null> }) {
@@ -43,17 +61,24 @@ export function DailyRoutine({ framed = true, commitRef }: { framed?: boolean; c
         const last = v.lastRuns[id]
         const err = v.errors?.[id] || (last && !last.ok ? last.error : '')
         return (
-          <div key={id} className="flex items-center gap-2.5 text-[13px]">
+          <div key={id} className="flex items-center gap-2.5 text-[13px] flex-wrap">
             <input type="checkbox" checked={r.enabled} disabled={busy} aria-label={ROUTINE_NAME[id]}
               onChange={e => setRoutine(id, { enabled: e.target.checked })} className="accent-accent cursor-pointer" />
-            <span className="flex-1 text-text-primary">{ROUTINE_NAME[id]}</span>
+            <span className="flex-1 min-w-[160px]">
+              <span className="block text-text-primary">{ROUTINE_NAME[id]}</span>
+              <span className="block text-[11px] text-text-muted">{ROUTINE_DESC[id]}</span>
+            </span>
+            {ROUTINE_SKILL[id] && (
+              <button onClick={() => openSkill(ROUTINE_SKILL[id])} aria-label={`${ROUTINE_NAME[id]} skill`}
+                className="text-[11px] font-semibold text-accent cursor-pointer">Skill ›</button>
+            )}
             {r.schedule.kind === 'times' ? (
-              <span className="flex gap-1">
+              <span className="flex gap-1 flex-wrap justify-end">
                 {r.schedule.times.map((t, i) => (
-                  <input key={i} type="time" value={t} className={timeInput} aria-label={`${ROUTINE_NAME[id]} time ${i + 1}`}
-                    onChange={e => {
-                      if (r.schedule.kind !== 'times' || !e.target.value) return
-                      const times = [...r.schedule.times]; times[i] = e.target.value
+                  <TimeBox key={i} value={t} label={`${ROUTINE_NAME[id]} time ${i + 1}`}
+                    onCommit={v => {
+                      if (r.schedule.kind !== 'times') return
+                      const times = [...r.schedule.times]; times[i] = v
                       setRoutine(id, { schedule: { kind: 'times', times } })
                     }} />
                 ))}

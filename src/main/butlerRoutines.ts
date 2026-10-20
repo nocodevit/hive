@@ -106,6 +106,8 @@ export interface PlistInput {
   weekdays: number[]
   logPath: string
   env?: Record<string, string>
+  /** Shown as this app in System Settings → Login Items (else the signer's name). */
+  bundleId?: string
 }
 
 /** The LaunchAgent for one routine. Weekday: 1 = Monday … 7 = Sunday (launchd). */
@@ -117,6 +119,7 @@ export function routinePlist(p: PlistInput): string {
     '<dict>',
     '  <key>Label</key>',
     `  <string>${xml(routineLabel(p.id))}</string>`,
+    ...(p.bundleId ? ['  <key>AssociatedBundleIdentifiers</key>', '  <array>', `    <string>${xml(p.bundleId)}</string>`, '  </array>'] : []),
     '  <key>ProgramArguments</key>',
     '  <array>',
     ...[...p.program, `${ROUTINE_ARG}${p.id}`].map(a => `    <string>${xml(a)}</string>`),
@@ -180,6 +183,8 @@ export interface SchedulerDeps {
   program: () => string[]
   logDir: string
   env?: Record<string, string>
+  /** Hive's bundle id, so Login Items shows "Hive" rather than the signer. */
+  bundleId?: string
 }
 
 export function createRoutineScheduler(deps: SchedulerDeps) {
@@ -190,8 +195,33 @@ export function createRoutineScheduler(deps: SchedulerDeps) {
     await deps.launchctl(['bootout', `${domain}/${routineLabel(id)}`]).catch(() => ({ code: 1, stderr: '' }))
   }
 
+  const plistFor = (s: RoutineSettings, id: RoutineId) => routinePlist({
+    id, program: deps.program(), schedule: s.routines[id].schedule, weekdays: s.weekdays,
+    logPath: join(deps.logDir, `routine-${id}.log`), env: deps.env, bundleId: deps.bundleId
+  })
+
   return {
     plistPath,
+    /**
+     * At start: rewrite + reload installed routines whose file is not what this
+     * version writes (new keys, a moved app). Untouched when already current.
+     */
+    async sync(s: RoutineSettings): Promise<RoutineId[]> {
+      const changed: RoutineId[] = []
+      for (const id of ROUTINE_IDS) {
+        const path = plistPath(id)
+        if (!existsSync(path)) continue
+        const text = plistFor(s, id)
+        let cur = ''
+        try { cur = readFileSync(path, 'utf8') } catch { /* unreadable: rewrite */ }
+        if (cur === text) continue
+        writeFileSync(path, text)
+        await unload(id)
+        await deps.launchctl(['bootstrap', domain, path]).catch(() => ({ code: 1, stderr: '' }))
+        changed.push(id)
+      }
+      return changed
+    },
     installed(): Record<RoutineId, boolean> {
       return Object.fromEntries(ROUTINE_IDS.map(id => [id, existsSync(plistPath(id))])) as Record<RoutineId, boolean>
     },
@@ -209,7 +239,7 @@ export function createRoutineScheduler(deps: SchedulerDeps) {
           }
           continue
         }
-        const text = routinePlist({ id, program: deps.program(), schedule: r.schedule, weekdays: s.weekdays, logPath: join(deps.logDir, `routine-${id}.log`), env: deps.env })
+        const text = plistFor(s, id)
         mkdirSync(deps.agentsDir, { recursive: true })
         mkdirSync(deps.logDir, { recursive: true })
         writeFileSync(path, text)

@@ -109,6 +109,21 @@ export const PROFILE_MORE: ReadonlyArray<[ProfileKey, string, string]> = [
   ['extra', 'Extra', '涉及客户的回复先抄送 PMO；周五下午不约会']
 ]
 
+// "Open this skill in Settings" from anywhere (Daily routine, the wizard,
+// the Butler panel). Settings may not be mounted yet, so the request waits.
+// undefined = no request; null = "Skills, no particular one".
+let pendingSkill: string | null | undefined
+export const OPEN_SKILL_EVENT = 'hive:open-skill'
+export function openSkill(id: string | null): void {
+  pendingSkill = id
+  window.dispatchEvent(new CustomEvent(OPEN_SKILL_EVENT, { detail: id }))
+}
+export function takePendingSkill(): string | null | undefined {
+  const id = pendingSkill
+  pendingSkill = undefined
+  return id
+}
+
 /**
  * Tab in an empty field takes its example (the placeholder) and moves on,
  * so the shown example can be accepted with one key.

@@ -107,6 +107,16 @@ test('About you writes profile.md; Skip leaves Voice open', async () => {
   expect(setup).toMatchObject({ voice: 'skipped', about: 'done' })
 })
 
+test('Daily routine step fits: every row readable, times not clipped', async () => {
+  await steps().getByRole('button', { name: /Daily routine/ }).click()
+  await expect(wizard().getByText('What every agent did today → Today')).toBeVisible()
+  const times = wizard().getByLabel(/ time \d$/)
+  for (let i = 0; i < await times.count(); i++) {
+    expect(await times.nth(i).evaluate(el => el.scrollWidth > el.clientWidth + 1)).toBe(false)
+  }
+  await page.screenshot({ path: test.info().outputPath('wizard-routine.png') })
+})
+
 test('the Butler panel shows what is left and reopens the wizard there', async () => {
   await page.keyboard.press('Escape')
   await expect(wizard()).toBeHidden()

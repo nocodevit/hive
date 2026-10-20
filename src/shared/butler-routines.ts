@@ -22,9 +22,27 @@ export interface RoutineSettings {
 export const ROUTINE_NAME: Record<RoutineId, string> = {
   'morning-plan': 'Morning plan',
   'sort-inbox': 'Sort inbox',
-  'feishu-digest': 'Feishu digest',
+  'feishu-digest': 'Feishu @mentions',
   'jira-check': 'Jira check',
   'evening-report': 'Evening report'
+}
+
+/** One line each: what it does → where the result goes. */
+export const ROUTINE_DESC: Record<RoutineId, string> = {
+  'morning-plan': 'Plan for the day from mail, calendar, agents → Today',
+  'sort-inbox': 'Sorts new mail, drafts replies → Approve',
+  'feishu-digest': 'Messages that @mention you, summarized → Today',
+  'jira-check': 'Your stale or moved tickets → Today',
+  'evening-report': 'What every agent did today → Today'
+}
+
+/** The skill that decides how each routine works (Settings → Skills). */
+export const ROUTINE_SKILL: Record<RoutineId, string | null> = {
+  'morning-plan': 'morning-plan',
+  'sort-inbox': 'sort-inbox',
+  'feishu-digest': null,
+  'jira-check': 'jira-check',
+  'evening-report': 'evening-report'
 }
 
 export function defaultRoutineSettings(): RoutineSettings {

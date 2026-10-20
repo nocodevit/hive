@@ -1,4 +1,4 @@
-import { PROFILE_FRONT, PROFILE_MORE, acceptPlaceholderOnTab } from '../../lib/butler-skills'
+import { PROFILE_FRONT, PROFILE_MORE, acceptPlaceholderOnTab, openSkill } from '../../lib/butler-skills'
 import { useEffect, useRef, useState } from 'react'
 import { ButlerSettings } from '../ButlerSettings'
 import { FeishuConnection } from '../FeishuConnection'
@@ -179,6 +179,8 @@ export function ButlerWizard(p: Props) {
           <span className="text-[11px] text-text-muted">{p.marks[s.id] === 'done' ? 'done' : 'later'}</span>
         </Row>
       ))}
+      <Row><span className="flex-1 font-semibold">🧩 Skills · how each job is done</span>
+        <button onClick={() => openSkill(null)} className="px-2.5 py-1 rounded-lg bg-bg-secondary border border-border text-[12px] font-semibold cursor-pointer">Open</button></Row>
       <Row><span className="flex-1 font-semibold">⚙️ Change later</span><span className="text-[11px] text-text-muted">App Settings · or ask me</span></Row>
     </>
   )
@@ -212,7 +214,7 @@ export function ButlerWizard(p: Props) {
           <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2.5">{body}</div>
           <div className="flex items-center justify-between pt-3">
             <div className="flex gap-1" aria-hidden>
-              {SETUP_STEPS.map((s, i) => <i key={s.id} className={`block h-1.5 rounded-full ${i === cur ? 'w-4 bg-accent' : 'w-1.5 bg-text-muted/40'}`} />)}
+              {SETUP_STEPS.map((s, i) => <i key={s.id} className={`block h-1.5 rounded-full ${i === cur ? 'w-4 bg-accent' : 'w-1.5 bg-border'}`} />)}
             </div>
             <div className="flex items-center gap-1.5">
               <button onClick={p.onAskButler} className="px-2 text-[12px] font-semibold text-accent cursor-pointer">Ask Butler</button>

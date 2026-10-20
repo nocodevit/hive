@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
-  TONE_OPTS, chipLabel, cleanOverlay, foldDiff, isIpcError, sameOverlay, skillMeta,
+  OPEN_SKILL_EVENT, TONE_OPTS, chipLabel, cleanOverlay, foldDiff, isIpcError, sameOverlay, skillMeta, takePendingSkill,
   type DiffLine, type EditProposal, type LintProblem, type SkillDetail, type SkillInfo, type SkillOverlay
 } from '../../lib/butler-skills'
 import { Field, sectionLabel, summaryCls } from './AboutMeSettings'
@@ -57,6 +57,19 @@ export function SkillsSettings() {
     setD(r); setForm(r.overlay); setMd(r.override ?? r.effective); setProblems([]); setCompare(null)
   }
   useEffect(() => { refreshList().catch(() => {}) }, [refreshList])
+  // "Skill ›" elsewhere: select it here and bring the section into view.
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  useEffect(() => {
+    const go = (id: string | null) => {
+      if (id) setSel(id)
+      setTimeout(() => rootRef.current?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 50)
+    }
+    const pending = takePendingSkill()
+    if (pending !== undefined) go(pending)
+    const on = (e: Event) => { takePendingSkill(); go((e as CustomEvent<string | null>).detail ?? null) }
+    window.addEventListener(OPEN_SKILL_EVENT, on)
+    return () => window.removeEventListener(OPEN_SKILL_EVENT, on)
+  }, [])
   useEffect(() => {
     if (!sel) return
     setProposal(null); setTryOut(null); setTrying(false); setAsk(''); setSample(skillMeta(sel).sample); setErr('')
@@ -102,7 +115,7 @@ export function SkillsSettings() {
   }
 
   return (
-    <div>
+    <div ref={rootRef} aria-label="Skills section">
       <label className={sectionLabel}>Skills</label>
       <div className="rounded-xl bg-bg-secondary border border-border flex min-h-[300px] overflow-hidden">
         <div className="w-40 shrink-0 border-r border-border p-1.5 flex flex-col gap-0.5" role="listbox" aria-label="Skills">

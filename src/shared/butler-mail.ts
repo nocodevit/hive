@@ -19,21 +19,21 @@ export const MAIL_PRESETS: MailPreset[] = [
     id: 'exmail', name: '腾讯企业邮箱',
     imap: { host: 'imap.exmail.qq.com', port: 993, secure: true },
     smtp: { host: 'smtp.exmail.qq.com', port: 465, secure: true },
-    steps: ['exmail.qq.com → sign in', '设置 → 客户端设置 → IMAP/SMTP on', '微信绑定 → 生成新密码'],
+    steps: ['Sign in at exmail.qq.com', 'Settings (设置) → Client settings (客户端设置) → turn on IMAP/SMTP', 'WeChat binding (微信绑定) → Generate new password (生成新密码), paste it here'],
     url: 'https://exmail.qq.com'
   },
   {
     id: 'qq', name: 'QQ 邮箱',
     imap: { host: 'imap.qq.com', port: 993, secure: true },
     smtp: { host: 'smtp.qq.com', port: 465, secure: true },
-    steps: ['mail.qq.com → 设置 → 账号', 'IMAP/SMTP 服务 → 开启', '生成授权码'],
+    steps: ['Sign in at mail.qq.com → Settings (设置) → Account (账号)', 'IMAP/SMTP service (IMAP/SMTP 服务) → turn on (开启)', 'Generate an authorization code (生成授权码), paste it here'],
     url: 'https://mail.qq.com'
   },
   {
     id: '163', name: '163',
     imap: { host: 'imap.163.com', port: 993, secure: true },
     smtp: { host: 'smtp.163.com', port: 465, secure: true },
-    steps: ['mail.163.com → 设置 → POP3/SMTP/IMAP', 'IMAP/SMTP 服务 → 开启', '新增授权密码'],
+    steps: ['Sign in at mail.163.com → Settings (设置) → POP3/SMTP/IMAP', 'IMAP/SMTP service (IMAP/SMTP 服务) → turn on (开启)', 'Add an authorization password (新增授权密码), paste it here'],
     url: 'https://mail.163.com'
   },
   {
