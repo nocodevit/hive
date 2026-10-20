@@ -7,6 +7,7 @@ import { ButlerPanel, type ButlerMode } from './components/butler/ButlerPanel'
 import { ButlerWizard } from './components/butler/ButlerWizard'
 import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { FeishuConnection } from './components/FeishuConnection'
+import { AboutMeSettings, SkillsSettings } from './components/butler/SkillsSettings' // [butler:skills]
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import Modal from './components/Modal'
 import CreateProjectModal from './components/CreateProjectModal'
@@ -3310,6 +3311,8 @@ export default function App() {
             <ButlerSettings />
             <FeishuConnection />
             {/* [butler:skills] About me + Skills sections */}
+            <AboutMeSettings />
+            <SkillsSettings />
 
             {/* [butler:mail-routines] Email accounts + Daily routine sections */}
 
