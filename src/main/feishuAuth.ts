@@ -92,6 +92,12 @@ export function parseRelayResponse(
 
 /** Refresh when less than this is left on the access token. */
 export const REFRESH_MARGIN_MS = 5 * 60_000
+/**
+ * Keep-alive: refresh once the refresh token has less than this left. With
+ * Feishu's ~7-day refresh token that is about once a day, so a session only
+ * dies when Hive (and its scheduled routines) did not run for a week.
+ */
+export const KEEPALIVE_LEFT_MS = 6 * 86400_000
 export const RELAY_TIMEOUT_MS = 90_000
 export const LOGIN_TIMEOUT_MS = 10 * 60_000
 
@@ -249,6 +255,16 @@ export function createFeishuAuth(deps: FeishuAuthDeps) {
     return { ok: false, error: r.error }
   }
 
+  /** Refresh early so an unused session never runs out (see KEEPALIVE_LEFT_MS). */
+  async function keepAlive(): Promise<boolean> {
+    const t = deps.store.load()
+    if (!t) return false
+    if (t.refreshExpiresAt <= now()) { deps.store.clear(); set({ state: 'expired' }); return false }
+    if (t.refreshExpiresAt - now() >= KEEPALIVE_LEFT_MS && t.accessExpiresAt - now() > REFRESH_MARGIN_MS) return true
+    const r = await refreshNow(t)
+    return r.ok
+  }
+
   function logout() {
     loginGen++
     cancelLogin?.()
@@ -256,5 +272,5 @@ export function createFeishuAuth(deps: FeishuAuthDeps) {
     set({ state: 'signed_out' })
   }
 
-  return { init, login, logout, accessToken, getStatus: () => status }
+  return { init, login, logout, accessToken, keepAlive, getStatus: () => status }
 }

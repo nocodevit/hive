@@ -33,7 +33,7 @@ export function FeishuConnection() {
       <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Feishu</label>
       <div className="rounded-xl bg-bg-secondary border border-border px-4 py-2.5">
         <div className="flex items-center justify-between gap-3">
-          <span role="status" className={`text-sm ${s?.state === 'signed_in' ? 'text-accent' : s?.state === 'error' || s?.state === 'expired' ? 'text-red-400' : 'text-text-primary'}`}>{line}</span>
+          <span role="status" aria-label="Feishu sign-in" className={`text-sm ${s?.state === 'signed_in' ? 'text-accent' : s?.state === 'error' || s?.state === 'expired' ? 'text-red-400' : 'text-text-primary'}`}>{line}</span>
           {s?.state === 'signed_in' ? (
             <button onClick={logout} className="px-3 py-1 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] cursor-pointer">Sign out</button>
           ) : (

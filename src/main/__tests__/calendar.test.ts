@@ -107,3 +107,19 @@ describe('createCalendar.getDayAgenda', () => {
     expect(await mk({ helperPath: () => null }).requestMacAccess()).toMatchObject({ ok: false, error: 'helper_missing' })
   })
 })
+
+describe('agendaText', () => {
+  it('one line per event, times local, all-day labelled, location kept', async () => {
+    const { agendaText } = await import('../calendar')
+    const d = new Date(2026, 9, 21)
+    const at = (h: number, m = 0) => new Date(2026, 9, 21, h, m).getTime()
+    expect(agendaText({ date: '2026-10-21', errors: {}, events: [
+      { title: 'Offsite', start: d.getTime(), end: d.getTime() + 86400_000, allDay: true, source: 'feishu' },
+      { title: 'Standup', start: at(9, 30), end: at(9, 45), allDay: false, source: 'mac', location: 'Room 3' }
+    ] })).toBe('- all day Offsite\n- 09:30–09:45 Standup @ Room 3')
+  })
+  it('nothing → empty string', async () => {
+    const { agendaText } = await import('../calendar')
+    expect(agendaText({ date: 'x', errors: {}, events: [] })).toBe('')
+  })
+})

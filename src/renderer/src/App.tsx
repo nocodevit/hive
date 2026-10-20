@@ -11,6 +11,7 @@ import { EmailAccounts } from './components/butler/EmailAccounts' // [butler:mai
 import { DailyRoutine } from './components/butler/DailyRoutine' // [butler:mail-routines]
 import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { FeishuConnection } from './components/FeishuConnection'
+import { FeishuExpiredBanner } from './components/butler/FeishuExpiredBanner'
 import { AboutMeSettings, SkillsSettings } from './components/butler/SkillsSettings' // [butler:skills]
 import { FeishuAgentSettings } from './components/butler/FeishuAgent' // [butler:feishu-agent-calendar]
 import { CalendarSettings } from './components/butler/CalendarSettings' // [butler:feishu-agent-calendar]
@@ -3107,6 +3108,8 @@ export default function App() {
 
       {/* [butler:wake] forward toast */}
       <WakeToast onOpenButler={() => setButlerOpen(true)} />
+
+      <FeishuExpiredBanner />
 
       {butlerOffer && unclosedAgents.length === 0 && (
         <ButlerOfferCard

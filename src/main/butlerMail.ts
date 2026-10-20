@@ -156,14 +156,18 @@ export function replySubject(subject: string): string {
 export function replyApproval(account: MailAccount, m: RawMail, draft: string): Pick<Approval, 'kind' | 'title' | 'subtitle' | 'draft' | 'payload' | 'action'> {
   const refs: string[] = []
   for (const r of [...m.references, m.messageId]) if (r && !refs.includes(r)) refs.push(r)
+  const to = m.replyTo?.address || m.from.address
+  // Reply-To can point somewhere else than the sender (phishing): the card
+  // always names the real recipient, and says so when it differs.
+  const toLabel = to.toLowerCase() === m.from.address.toLowerCase() ? `to ${to}` : `⚠ to ${to} (not the sender)`
   return {
     kind: EMAIL_REPLY_KIND,
     title: `${m.from.name || m.from.address} · ${m.subject || '(no subject)'}`,
-    subtitle: `email reply · from ${account.address}`,
+    subtitle: `email reply · ${toLabel} · from ${account.address}`,
     draft,
     payload: {
       accountId: account.id,
-      to: (m.replyTo?.address || m.from.address),
+      to,
       subject: replySubject(m.subject),
       inReplyTo: m.messageId,
       references: refs
