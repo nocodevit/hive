@@ -11,6 +11,7 @@ import type { HandoffBreakers } from './handoff-supervisor'
 import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } from './ptyHealth'
 import { execSync, execFileSync, execFile, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
+import { setupButlerMailRoutines } from './butlerMailRoutines' // [butler:mail-routines]
 
 // GUI apps launched from Finder/Dock inherit launchd's minimal PATH
 // (/usr/bin:/bin:/usr/sbin:/sbin), so spawn('claude') ENOENTs even though
@@ -645,6 +646,13 @@ ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' &
 // ── Butler features: each phase registers itself at its own marker ────
 // [butler:skills]
 // [butler:mail-routines]
+const butlerRoutineMode = setupButlerMailRoutines({
+  app, ipcMain, safeStorage, dataDir: DATA_DIR, approvals, claudeBin, feishu,
+  openExternal: u => { shell.openExternal(u).catch(() => {}) },
+  folder: () => butler.ensureFolder(),
+  agents: () => butlerRows(),
+  agentCwd: id => findAgentWorktree(id)
+})
 // [butler:feishu-agent-calendar]
 // [butler:wake]
 
@@ -2182,6 +2190,7 @@ ipcMain.handle('skills:scan', () => {
 })
 
 app.whenReady().then(() => {
+  if (butlerRoutineMode.headless) return // [butler:mail-routines] --butler-routine run: no window
   app.setName('Hive')
   electronApp.setAppUserModelId('com.hive.app')
 

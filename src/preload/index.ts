@@ -301,6 +301,24 @@ const api = {
   // [butler:skills]
 
   // [butler:mail-routines]
+  mail: {
+    list: () => ipcRenderer.invoke('mail:list'),
+    test: (input: unknown) => ipcRenderer.invoke('mail:test', input),
+    save: (input: unknown) => ipcRenderer.invoke('mail:save', input),
+    remove: (id: string) => ipcRenderer.invoke('mail:remove', id),
+    sortNow: () => ipcRenderer.invoke('mail:sortNow'),
+    openHelp: (presetId: string) => ipcRenderer.invoke('mail:openHelp', presetId)
+  },
+  routines: {
+    get: () => ipcRenderer.invoke('routines:get'),
+    save: (settings: unknown) => ipcRenderer.invoke('routines:save', settings),
+    run: (id: string) => ipcRenderer.invoke('routines:run', id)
+  },
+  journal: {
+    day: (date?: string) => ipcRenderer.invoke('journal:day', date),
+    dates: () => ipcRenderer.invoke('journal:dates'),
+    toggle: (date: string, index: number, text: string, done: boolean) => ipcRenderer.invoke('journal:toggle', date, index, text, done)
+  },
 
   // [butler:feishu-agent-calendar]
 

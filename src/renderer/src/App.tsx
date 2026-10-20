@@ -5,6 +5,8 @@ import { ButlerOfferCard } from './components/butler/ButlerOfferCard'
 import { ButlerButton } from './components/butler/ButlerButton'
 import { ButlerPanel, type ButlerMode } from './components/butler/ButlerPanel'
 import { ButlerWizard } from './components/butler/ButlerWizard'
+import { EmailAccounts } from './components/butler/EmailAccounts' // [butler:mail-routines]
+import { DailyRoutine } from './components/butler/DailyRoutine' // [butler:mail-routines]
 import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { FeishuConnection } from './components/FeishuConnection'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
@@ -3312,6 +3314,8 @@ export default function App() {
             {/* [butler:skills] About me + Skills sections */}
 
             {/* [butler:mail-routines] Email accounts + Daily routine sections */}
+            <EmailAccounts />
+            <DailyRoutine />
 
             {/* [butler:feishu-agent-calendar] Answer-for-me + Calendar sections */}
 
