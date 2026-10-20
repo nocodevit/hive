@@ -303,6 +303,23 @@ const api = {
   // [butler:mail-routines]
 
   // [butler:feishu-agent-calendar]
+  feishuAgent: {
+    get: () => ipcRenderer.invoke('feishuAgent:get') as Promise<import('./feishuAgentTypes').FeishuAgentView>,
+    set: (patch: Partial<import('./feishuAgentTypes').FeishuAgentSettings>) => ipcRenderer.invoke('feishuAgent:set', patch) as Promise<import('./feishuAgentTypes').FeishuAgentView>,
+    log: () => ipcRenderer.invoke('feishuAgent:log') as Promise<import('./feishuAgentTypes').FeishuLogEntry[]>,
+    recall: (id: string) => ipcRenderer.invoke('feishuAgent:recall', id) as Promise<{ ok: boolean; error?: string }>,
+    onChange: (cb: () => void) => {
+      const handler = () => cb()
+      ipcRenderer.on('feishuAgent:changed', handler)
+      return () => ipcRenderer.removeListener('feishuAgent:changed', handler)
+    }
+  },
+  calendar: {
+    get: () => ipcRenderer.invoke('calendar:get') as Promise<import('./feishuAgentTypes').CalendarSettings>,
+    set: (patch: Partial<import('./feishuAgentTypes').CalendarSettings>) => ipcRenderer.invoke('calendar:set', patch) as Promise<import('./feishuAgentTypes').CalendarSettings>,
+    allowMac: () => ipcRenderer.invoke('calendar:allowMac') as Promise<{ ok: boolean; granted: boolean; error?: string }>,
+    agenda: (date?: string) => ipcRenderer.invoke('calendar:agenda', date) as Promise<import('./feishuAgentTypes').DayAgenda>
+  },
 
   // [butler:wake]
 
