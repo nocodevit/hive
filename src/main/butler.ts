@@ -175,14 +175,19 @@ export const STABLE_AFTER_MS = 10 * 60_000
  * Hive answers the question itself only while this is set AND Claude
  * Code's own record still trusts the folder (claudeTrustsFolder).
  */
-export interface ButlerSettings { enabled: boolean; trusted: boolean }
+export interface ButlerSettings {
+  enabled: boolean
+  trusted: boolean
+  /** The one-time "control Hive from your phone?" offer was answered. */
+  offered: boolean
+}
 
 export function readButlerSettings(dataDir: string): ButlerSettings {
   try {
     const j = JSON.parse(readFileSync(join(dataDir, SETTINGS_FILE), 'utf8'))
-    return { enabled: j?.enabled === true, trusted: j?.trusted === true }
+    return { enabled: j?.enabled === true, trusted: j?.trusted === true, offered: j?.offered === true }
   } catch {
-    return { enabled: false, trusted: false }
+    return { enabled: false, trusted: false, offered: false }
   }
 }
 
@@ -199,8 +204,9 @@ export function createButler(deps: ButlerDeps) {
 
   const saved = readButlerSettings(deps.dataDir)
   let trusted = saved.trusted
+  let offered = saved.offered
   let state: ButlerState = { enabled: saved.enabled, status: 'off' }
-  const persist = () => writeButlerSettings(deps.dataDir, { enabled: state.enabled, trusted })
+  const persist = () => writeButlerSettings(deps.dataDir, { enabled: state.enabled, trusted, offered })
   let term: PtyLike | null = null
   let output = ''
   let connectedAt = 0
@@ -319,8 +325,16 @@ export function createButler(deps: ButlerDeps) {
       sweepStale()
       launch(resumeMode())
     },
+    /** Ask once whether to turn it on: never after an answer or once it was on. */
+    get shouldOffer() { return !offered && !state.enabled },
+    /** The offer was answered ("Turn on" or "Not now"). */
+    offerAnswered() {
+      offered = true
+      persist()
+    },
     setEnabled(enabled: boolean) {
       state.enabled = enabled
+      if (enabled) offered = true
       // Turning it off withdraws the OK: the next "on" asks again.
       if (!enabled) trusted = false
       persist()

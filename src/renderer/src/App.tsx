@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import Terminal from './components/Terminal'
 import { ButlerSettings } from './components/ButlerSettings'
+import ButlerOfferModal from './components/ButlerOfferModal'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import Modal from './components/Modal'
 import CreateProjectModal from './components/CreateProjectModal'
@@ -89,6 +90,7 @@ export default function App() {
   const [startNewPending, setStartNewPending] = useState<Set<string>>(new Set())
   // Chats that were still open when Hive last closed — offered once at startup.
   const [unclosedAgents, setUnclosedAgents] = useState<UnclosedAgent[]>([])
+  const [butlerOffer, setButlerOffer] = useState(false)
   // v2.15.7: last-touched timestamp per agent (Map in a ref instead of
   // useState so bumping doesn't churn re-renders). Read by pickLRUToEvict
   // when the set hits MAX_ACTIVE_TERMINALS to choose which sticky
@@ -448,6 +450,12 @@ export default function App() {
     window.api.chat.listUnclosed()
       .then(rows => { if (!cancelled && rows.length) setUnclosedAgents(rows) })
       .catch(() => { /* main not ready — nothing to offer */ })
+    // Phone remote control is offered once, at launch, to someone who
+    // already has agents — never in the middle of creating the first one.
+    const hadAgents = agents.length > 0
+    window.api.butler.shouldOffer()
+      .then(ask => { if (!cancelled && ask && hadAgents) setButlerOffer(true) })
+      .catch(() => { /* main not ready */ })
     return () => { cancelled = true }
   }, [projectsLoaded])
 
@@ -3025,6 +3033,21 @@ export default function App() {
         />
       )}
 
+      {butlerOffer && unclosedAgents.length === 0 && (
+        <ButlerOfferModal
+          onTurnOn={() => {
+            setButlerOffer(false)
+            void window.api.butler.setEnabled(true)
+            // Its status (and the one-time trust OK) lives there.
+            setShowAppSettings(true)
+          }}
+          onNotNow={() => {
+            setButlerOffer(false)
+            void window.api.butler.offerAnswered()
+          }}
+        />
+      )}
+
       {/* Modals */}
       <CreateProjectModal
         open={showCreateProject}
@@ -3178,6 +3201,8 @@ export default function App() {
             </div>
             <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-5 max-h-[70vh] overflow-y-auto">
+            <ButlerSettings />
+
             {/* v2.9.0: STYLE picker (Accent | Prime). Prime is a full
                 visual-language swap (mono font, glow, scanlines, hex
                 avatars). Available palettes reconcile automatically —
@@ -3351,8 +3376,6 @@ export default function App() {
                 </div>
               </div>
             </div>
-
-            <ButlerSettings />
 
             {/* Voice input */}
             <div>
