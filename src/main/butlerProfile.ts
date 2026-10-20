@@ -25,11 +25,13 @@ export interface ButlerProfile {
   whenUnsure: string
   prefix: string
   intro: string
+  /** Free-form extra requirements for everything written on the owner's behalf. */
+  extra: string
 }
 
 export const EMPTY_PROFILE: ButlerProfile = {
   assistantName: '', name: '', role: '', team: '', responsibleFor: '', worksWith: '', style: 'direct',
-  oftenSays: '', neverSays: '', language: '', answerLike: '', whenUnsure: '', prefix: '', intro: ''
+  oftenSays: '', neverSays: '', language: '', answerLike: '', whenUnsure: '', prefix: '', intro: '', extra: ''
 }
 
 const STYLE_TEXT: Record<ProfileStyle, string> = {
@@ -46,7 +48,7 @@ export function normalizeProfile(raw: unknown): ButlerProfile {
     const v = src[k]
     if (typeof v !== 'string') continue
     if (k === 'style') { if ((PROFILE_STYLES as readonly string[]).includes(v)) out.style = v as ProfileStyle }
-    else out[k] = v.trim().slice(0, 500)
+    else out[k] = v.trim().slice(0, k === 'extra' ? 2000 : 500)
   }
   return out
 }
@@ -81,6 +83,7 @@ export function renderProfileMd(p: ButlerProfile): string {
     if (p.whenUnsure) lines.push(`- When unsure: ${p.whenUnsure}`)
     lines.push('')
   }
+  if (p.extra) lines.push('## Extra requirements', '', p.extra, '')
   if (p.prefix || p.intro || p.assistantName) {
     lines.push('## As their agent', '')
     if (p.prefix) lines.push(`- Start every message you send for them with: ${p.prefix}`)

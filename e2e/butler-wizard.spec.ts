@@ -77,7 +77,15 @@ test('About you writes profile.md; Skip leaves Voice open', async () => {
   await steps().getByRole('button', { name: /Voice/ }).click()
   await wizard().getByRole('button', { name: 'Skip' }).click()
   await expect(wizard().getByRole('heading', { name: 'About you' })).toBeVisible()
-  await wizard().getByLabel('Role').fill('产品负责人')
+  // Tab in an empty field accepts its example.
+  await wizard().getByLabel('Role').focus()
+  await page.keyboard.press('Tab')
+  await expect(wizard().getByLabel('Role')).toHaveValue('产品负责人')
+  // More has the full set, with "your" name and the assistant's apart.
+  await wizard().getByText('More', { exact: true }).click()
+  await expect(wizard().getByLabel('Your name')).toBeVisible()
+  await expect(wizard().getByLabel('Assistant name · prefix & intro')).toBeVisible()
+  await expect(wizard().getByLabel('Never says')).toBeVisible()
   await wizard().getByLabel('Answer like a').fill('资深 IoT 产品经理')
   await wizard().getByRole('radio', { name: 'Warm' }).click()
   await wizard().getByRole('button', { name: 'Next' }).click()
