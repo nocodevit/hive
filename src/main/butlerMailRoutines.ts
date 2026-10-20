@@ -35,6 +35,8 @@ export interface ButlerMailRoutinesDeps {
     accessToken: () => Promise<{ ok: boolean; token?: string; error?: string }>
     getStatus: () => { state: string; openId?: string }
   }
+  /** Today's meetings as text for the morning plan ('' when none). */
+  calendar?: (date: string) => Promise<string>
 }
 
 export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode {
@@ -71,7 +73,10 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode 
   })
 
   const runner = createRoutineRunner({
-    folder: d.folder,
+    calendar: d.calendar,
+    // State and journal live at the plain path; only a claude run (runClaude's
+    // cwd is d.folder) installs the Butler files.
+    folder: () => folder,
     runClaude,
     settings: () => readRoutineSettings(folder),
     mail,
@@ -95,7 +100,9 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode 
   })
 
   registerButlerMailIpc({ ipcMain: d.ipcMain, mail, openExternal: d.openExternal })
-  registerButlerRoutinesIpc({ ipcMain: d.ipcMain, folder: d.folder, scheduler, runner })
+  // Settings and journal reads/writes use the plain path: opening Settings
+  // must not install the Butler folder (only running a routine does).
+  registerButlerRoutinesIpc({ ipcMain: d.ipcMain, folder: () => folder, scheduler, runner })
 
   return startRoutineMode(d.app, process.argv, (id, opts) => runner.run(id, opts), msg => console.log(`[butler] ${msg}`))
 }

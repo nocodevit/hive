@@ -161,7 +161,7 @@ export function SkillsSettings() {
                 </div>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-[10px] font-bold text-text-muted uppercase tracking-wider">Ask me first</span>
-                  <div className="flex flex-wrap gap-1.5">
+                  <div className="flex flex-wrap gap-1.5" role="group" aria-label="Ask me first">
                     {d.locked.map(l => (
                       <span key={l} title={l.replace(/^🔒\s*/u, '')} className="px-2.5 py-1 rounded-full bg-bg-hover text-text-muted text-[12px]">🔒 {chipLabel(l)}</span>
                     ))}
