@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive Butler 效果图</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --canvas: #F3F0F8; --card: #FFFFFF; --ink: #1E1B2E; --ink-2: #4A4560; --muted: #8C87A0; --faint: #B9B4C9;
+  --hover: #ECE8F4; --accent: #7C3AED; --accent-soft: #EFE7FD; --ok: #22C55E; --warn: #F59E0B; --bad: #EF4444;
+  --radius: 18px; --gap: 10px;
+  --shadow: 0 1px 2px rgba(30,27,46,.04), 0 6px 20px rgba(30,27,46,.05);
+  --shadow-lg: 0 24px 60px rgba(30,27,46,.22);
+}
+body[data-palette="blue"] { --accent: #0284C7; --accent-soft: #E0F2FE; }
+body[data-palette="pink"] { --accent: #C026D3; --accent-soft: #FAE8FF; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #E6E2EE; font-family: 'Inter Tight', -apple-system, 'PingFang SC', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; padding: 16px; }
+button { font: inherit; }
+.mono { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+.hidden { display: none !important; }
+
+/* review bar — not part of Hive */
+.bar { max-width: 1400px; margin: 0 auto 8px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 13px; }
+.bar strong { font-size: 15px; }
+.seg { display: inline-flex; background: var(--card); border-radius: 999px; padding: 3px; box-shadow: var(--shadow); flex-wrap: wrap; }
+.seg button { border: 0; background: transparent; font-size: 12px; font-weight: 600; color: var(--muted); padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.seg button.on { background: var(--accent); color: #fff; }
+.note { max-width: 1400px; margin: 0 auto 10px; color: var(--muted); font-size: 12px; min-height: 18px; }
+
+/* window */
+.window { max-width: 1400px; height: 860px; margin: 0 auto; position: relative; background: var(--canvas); border-radius: 14px; overflow: hidden; box-shadow: 0 30px 80px rgba(30,27,46,.18);
+  display: grid; grid-template-columns: 200px 236px 1fr; grid-template-rows: 44px 1fr; column-gap: var(--gap); padding: 0 var(--gap) var(--gap) 0; }
+.titlebar { grid-column: 1 / -1; display: flex; align-items: center; padding-left: 18px; gap: 8px; }
+.traffic { display: flex; gap: 8px; } .traffic i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.titlebar .crumb { font-size: 12px; color: var(--muted); font-weight: 500; margin-left: 76px; }
+.spacer { flex: 1; }
+.tb-btn { height: 28px; border-radius: 9px; border: 0; background: transparent; color: var(--muted); display: inline-flex; align-items: center; gap: 6px; padding: 0 9px; cursor: pointer; font-size: 12px; font-weight: 600; }
+.tb-btn:hover { background: var(--hover); color: var(--ink); }
+
+.butler-btn { position: relative; height: 30px; padding: 0 10px 0 5px; border-radius: 999px; border: 0; cursor: pointer; background: var(--card); box-shadow: var(--shadow);
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12px; font-weight: 600; color: var(--ink); margin-right: 4px; }
+.butler-btn.on { background: var(--accent); color: #fff; }
+.face { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; position: relative; flex-shrink: 0; }
+.butler-btn.on .face { background: rgba(255,255,255,.25); }
+.face .live { position: absolute; right: -1px; bottom: -1px; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); border: 2px solid var(--card); }
+.butler-btn.on .face .live { border-color: var(--accent); }
+.badge { min-width: 17px; height: 17px; padding: 0 5px; border-radius: 999px; background: var(--bad); color: #fff; font-size: 10px; font-weight: 700; display: inline-flex; align-items: center; justify-content: center; }
+.ear { display: none; width: 18px; height: 18px; border-radius: 50%; background: rgba(239,68,68,.12); color: var(--bad); font-size: 10px; align-items: center; justify-content: center; position: relative; }
+.butler-btn.listening .ear { display: inline-flex; }
+.butler-btn.listening .ear::after { content: ''; position: absolute; inset: -3px; border-radius: 50%; border: 2px solid rgba(239,68,68,.45); animation: ping 1.6s ease-out infinite; }
+@keyframes ping { from { transform: scale(.8); opacity: 1 } to { transform: scale(1.5); opacity: 0 } }
+
+/* app chrome */
+.side { display: flex; flex-direction: column; padding-left: 10px; min-height: 0; }
+.brand { display: flex; align-items: center; justify-content: space-between; padding: 4px 8px 10px; font-size: 14px; }
+.brand span { font-size: 11px; color: var(--muted); margin-left: 6px; }
+.nav { display: flex; flex-direction: column; gap: 2px; }
+.nav a { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 10px; font-size: 13px; color: var(--ink-2); font-weight: 500; }
+.nav a.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); font-weight: 600; }
+.nav a .n { margin-left: auto; font-size: 11px; color: var(--muted); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: var(--faint); flex-shrink: 0; }
+.dot.ok { background: var(--ok); } .dot.warn { background: var(--warn); }
+.card { background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow); display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
+.head { height: 52px; display: flex; align-items: center; justify-content: space-between; padding: 0 16px; flex-shrink: 0; gap: 8px; }
+.head h2 { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+.sub { font-size: 12px; color: var(--muted); font-weight: 500; }
+.agent { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 12px; margin: 0 8px; }
+.agent.on { background: var(--accent-soft); }
+.av { width: 32px; height: 32px; border-radius: 10px; background: var(--canvas); display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.agent b { font-size: 13px; display: block; } .agent small { font-size: 11px; color: var(--muted); }
+.chat { flex: 1; padding: 8px 28px; display: flex; flex-direction: column; gap: 14px; font-size: 14px; line-height: 1.6; color: var(--ink-2); }
+.bubble { align-self: flex-end; background: var(--accent-soft); color: var(--ink); padding: 8px 14px; border-radius: 14px; }
+.composer { margin: auto 20px 18px; border-radius: 14px; border: 1.5px solid var(--accent); padding: 10px 12px; color: var(--faint); font-size: 13px; display: flex; justify-content: space-between; }
+
+/* shared bits */
+.btn { border: 0; border-radius: 10px; padding: 8px 15px; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; }
+.btn.p { background: var(--accent); color: #fff; } .btn.s { background: var(--canvas); color: var(--ink); } .btn.g { background: transparent; color: var(--muted); }
+.mini { white-space: nowrap; border: 0; border-radius: 8px; padding: 5px 11px; font-size: 12px; font-weight: 600; cursor: pointer; background: var(--canvas); color: var(--ink); }
+.mini.p { background: var(--accent); color: #fff; }
+.icon { width: 26px; height: 26px; border-radius: 8px; border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 13px; }
+.icon:hover { background: var(--hover); color: var(--ink); }
+.link { border: 0; background: transparent; color: var(--accent); font-size: 12px; font-weight: 600; cursor: pointer; }
+.pill { font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--canvas); color: var(--ink-2); white-space: nowrap; }
+.pill.ok { background: #DCFCE7; color: #166534; } .pill.warn { background: #FEF3C7; color: #92400E; } .pill.acc { background: var(--accent-soft); color: var(--accent); }
+.toggle { width: 36px; height: 20px; border-radius: 999px; background: var(--accent); position: relative; flex-shrink: 0; }
+.toggle::after { content: ''; position: absolute; top: 2px; left: 18px; width: 16px; height: 16px; border-radius: 50%; background: #fff; }
+.toggle.off { background: var(--faint); } .toggle.off::after { left: 2px; }
+.seg2 { display: inline-flex; background: var(--canvas); border-radius: 10px; padding: 3px; gap: 2px; }
+.seg2 button { border: 0; background: transparent; font-size: 12px; font-weight: 600; color: var(--muted); padding: 5px 12px; border-radius: 8px; cursor: pointer; }
+.seg2 button.on { background: var(--card); color: var(--ink); box-shadow: var(--shadow); }
+.field { display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.field input { border: 1.5px solid var(--hover); border-radius: 10px; padding: 7px 10px; font: inherit; font-size: 13px; font-weight: 500; color: var(--ink); background: var(--card); }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 9px 11px; background: var(--canvas); border-radius: 12px; font-size: 13px; }
+.row .grow { flex: 1; min-width: 0; }
+.t1 { font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.t2 { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.label { font-size: 10px; font-weight: 700; color: var(--muted); letter-spacing: .07em; text-transform: uppercase; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; background: var(--canvas); border-radius: 999px; padding: 4px 10px; color: var(--ink); }
+.chip.lock { background: var(--hover); color: var(--muted); }
+.chip.add { color: var(--accent); background: transparent; border: 1px dashed var(--accent); cursor: pointer; }
+
+/* collapsible "More" */
+details.more > summary { list-style: none; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--muted); display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: '▸'; font-size: 10px; transition: transform .15s; }
+details.more[open] > summary::before { transform: rotate(90deg); }
+details.more > .in { display: flex; flex-direction: column; gap: 10px; padding-top: 8px; }
+
+/* first-run card */
+.offer { position: absolute; top: 52px; right: 14px; width: 300px; background: var(--card); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 14px; display: flex; gap: 12px; align-items: center; }
+.offer::before { content: ''; position: absolute; top: -6px; right: 44px; width: 12px; height: 12px; background: var(--card); transform: rotate(45deg); }
+.offer .big { width: 38px; height: 38px; border-radius: 12px; background: var(--accent-soft); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.offer h3 { font-size: 14px; } .offer p { font-size: 12px; color: var(--muted); margin: 2px 0 8px; }
+
+/* drawer */
+.scrim { position: absolute; inset: 44px 0 0 0; background: rgba(30,27,46,.12); }
+.drawer { position: absolute; top: 50px; right: 10px; bottom: 10px; width: 400px; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; }
+.tabs { display: flex; gap: 2px; padding: 0 12px 4px; }
+.tabs button { border: 0; background: transparent; padding: 6px 10px; font-size: 12px; font-weight: 600; color: var(--muted); border-radius: 8px; cursor: pointer; display: inline-flex; gap: 5px; align-items: center; }
+.tabs button.on { background: var(--accent-soft); color: var(--accent); }
+.dbody { flex: 1; overflow: auto; padding: 10px 14px; display: flex; flex-direction: column; gap: 10px; font-size: 13px; line-height: 1.5; color: var(--ink-2); }
+.stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.stat { background: var(--canvas); border-radius: 12px; padding: 8px 10px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.stat b { font-size: 18px; color: var(--ink); }
+.msg-u { align-self: flex-end; background: var(--accent-soft); color: var(--ink); border-radius: 14px; padding: 7px 12px; max-width: 85%; }
+.msg-b { background: var(--canvas); border-radius: 14px; padding: 8px 12px; color: var(--ink); }
+.dcomposer { margin: 0 12px 12px; border-radius: 12px; border: 1.5px solid var(--accent); padding: 9px 12px; color: var(--faint); font-size: 13px; display: flex; justify-content: space-between; }
+
+/* approval card: who + what + one button */
+.ap { border-radius: 14px; background: var(--canvas); padding: 9px 11px; display: flex; flex-direction: column; gap: 6px; }
+.ap .top { display: flex; align-items: center; gap: 8px; }
+.ap .top .grow { flex: 1; min-width: 0; }
+.ap .who { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ap .what { font-size: 11px; color: var(--muted); }
+.draft { background: var(--card); border-radius: 10px; padding: 7px 9px; font-size: 12px; color: var(--ink); }
+
+/* setup card */
+.setup { border-radius: 14px; background: var(--accent-soft); padding: 9px 11px; display: flex; flex-direction: column; gap: 6px; }
+.setup .top { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; }
+.prog { height: 4px; border-radius: 999px; background: rgba(255,255,255,.8); overflow: hidden; } .prog i { display: block; height: 100%; width: 60%; background: var(--accent); }
+.setup .it { display: flex; align-items: center; gap: 8px; font-size: 12px; } .setup .it .grow { flex: 1; }
+
+/* toast */
+.toast { position: absolute; top: 52px; right: 14px; width: 360px; background: var(--card); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 12px; display: flex; align-items: center; gap: 12px; }
+.ring { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; background: conic-gradient(var(--accent) 0 66%, var(--hover) 66% 100%); display: flex; align-items: center; justify-content: center; }
+.ring span { width: 26px; height: 26px; border-radius: 50%; background: var(--card); font-size: 12px; font-weight: 700; color: var(--accent); display: flex; align-items: center; justify-content: center; }
+.toast .to { font-size: 12px; font-weight: 700; color: var(--accent); } .toast .txt { font-size: 14px; color: var(--ink); font-weight: 600; }
+
+/* sheets */
+.sheet { position: absolute; top: 50px; right: 10px; bottom: 10px; width: 560px; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-lg); display: flex; flex-direction: column; overflow: hidden; }
+.sbody { flex: 1; overflow: auto; padding: 2px 20px 16px; display: flex; flex-direction: column; gap: 14px; font-size: 13px; color: var(--ink-2); }
+.sec { display: flex; flex-direction: column; gap: 8px; }
+.hero { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: var(--accent-soft); }
+.hero b { font-size: 14px; color: var(--ink); } .hero .grow { flex: 1; }
+.presets { display: flex; gap: 6px; flex-wrap: wrap; }
+.preset { border: 2px solid transparent; background: var(--canvas); border-radius: 10px; padding: 7px 11px; cursor: pointer; font-size: 12px; font-weight: 600; color: var(--ink); }
+.preset.on { border-color: var(--accent); background: var(--accent-soft); }
+.okline { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: #166534; background: #DCFCE7; border-radius: 10px; padding: 8px 10px; }
+.kv { display: grid; grid-template-columns: 70px 1fr; gap: 4px 10px; font-size: 12px; } .kv .k { color: var(--muted); } .kv .v { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink); }
+.steps-list { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--ink-2); counter-reset: s; }
+.steps-list div::before { counter-increment: s; content: counter(s) '. '; color: var(--muted); font-weight: 700; }
+.fmsg { display: flex; flex-direction: column; gap: 5px; }
+.fmsg .them { background: var(--canvas); border-radius: 10px; padding: 6px 10px; align-self: flex-start; color: var(--ink); font-size: 12px; }
+.fmsg .me { background: #DBEAFE; border-radius: 10px; padding: 6px 10px; align-self: flex-end; color: var(--ink); font-size: 12px; max-width: 90%; }
+.fmsg .me b { color: #1D4ED8; }
+.foot { display: flex; justify-content: flex-end; gap: 6px; }
+
+/* skills */
+.skills { position: absolute; top: 50px; right: 10px; bottom: 10px; width: 760px; background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow-lg); display: grid; grid-template-columns: 220px 1fr; grid-template-rows: 52px 1fr; overflow: hidden; }
+.skills .head { grid-column: 1 / -1; }
+.sk-list { background: var(--canvas); padding: 8px; display: flex; flex-direction: column; gap: 3px; overflow: auto; }
+.sk { border: 0; text-align: left; background: transparent; border-radius: 10px; padding: 8px 10px; cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.sk .m { margin-left: auto; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.sk.on { background: var(--card); box-shadow: var(--shadow); }
+.sk-edit { padding: 4px 20px 16px; overflow: auto; display: flex; flex-direction: column; gap: 14px; font-size: 13px; }
+.diff { font-family: 'JetBrains Mono', monospace; font-size: 11px; line-height: 1.5; border-radius: 10px; overflow: hidden; }
+.diff div { padding: 2px 8px; } .diff .h { background: var(--canvas); color: var(--muted); } .diff .del { background: #FEE2E2; color: #991B1B; } .diff .add { background: #DCFCE7; color: #166534; }
+.chg { border: 1.5px solid var(--accent); border-radius: 14px; padding: 10px 11px; display: flex; flex-direction: column; gap: 8px; background: var(--card); }
+
+/* wizard */
+.wiz-scrim { position: absolute; inset: 0; background: rgba(30,27,46,.35); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; }
+.wiz { width: 760px; height: 560px; background: var(--card); border-radius: 22px; box-shadow: var(--shadow-lg); display: grid; grid-template-columns: 200px 1fr; overflow: hidden; }
+.wiz-left { background: var(--canvas); padding: 18px 12px; display: flex; flex-direction: column; gap: 1px; overflow: auto; }
+.who { display: flex; gap: 8px; align-items: center; margin: 0 6px 10px; font-size: 14px; font-weight: 700; }
+.wgroup { font-size: 10px; font-weight: 700; color: var(--faint); letter-spacing: .08em; text-transform: uppercase; padding: 8px 10px 2px; }
+.step { display: flex; gap: 9px; align-items: center; padding: 5px 10px; border-radius: 9px; font-size: 13px; color: var(--muted); font-weight: 500; cursor: pointer; border: 0; background: transparent; text-align: left; }
+.step .num { width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--faint); font-size: 10px; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
+.step.done { color: var(--ink-2); } .step.done .num { background: var(--accent); border-color: var(--accent); color: #fff; }
+.step.on { background: var(--card); color: var(--ink); font-weight: 600; box-shadow: var(--shadow); } .step.on .num { border-color: var(--accent); color: var(--accent); }
+.wiz-right { padding: 26px 28px 18px; display: flex; flex-direction: column; min-width: 0; }
+.say { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.say .line { background: var(--canvas); border-radius: 4px 12px 12px 12px; padding: 6px 11px; }
+.wiz-right h2 { font-size: 22px; font-weight: 700; letter-spacing: -0.02em; margin: 16px 0 14px; }
+.panel { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 10px; overflow: auto; }
+.wfoot { display: flex; align-items: center; justify-content: space-between; padding-top: 12px; }
+.dots { display: flex; gap: 4px; } .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); } .dots i.on { background: var(--accent); width: 16px; border-radius: 999px; }
+.swatches { display: flex; gap: 8px; }
+.sw { flex: 1; border-radius: 14px; padding: 8px; border: 2px solid transparent; background: var(--canvas); cursor: pointer; font-size: 12px; font-weight: 600; text-align: left; }
+.sw.on { border-color: var(--accent); }
+.sw .pv { height: 46px; border-radius: 10px; margin-bottom: 6px; display: flex; gap: 4px; padding: 5px; } .sw .pv i { flex: 1; border-radius: 6px; }
+.meter { height: 8px; border-radius: 999px; background: var(--canvas); overflow: hidden; } .meter i { display: block; height: 100%; width: 62%; background: var(--accent); }
+.rt { display: grid; grid-template-columns: 18px 1fr auto auto; gap: 10px; align-items: center; padding: 8px 10px; background: var(--canvas); border-radius: 12px; font-size: 13px; font-weight: 600; color: var(--ink); }
+.rt input { accent-color: var(--accent); }
+.rt .when { font-family: 'JetBrains Mono', monospace; font-size: 11px; background: var(--card); padding: 3px 8px; border-radius: 7px; font-weight: 500; }
+.days { display: flex; gap: 4px; } .days span { width: 24px; height: 22px; border-radius: 7px; background: var(--canvas); font-size: 11px; display: flex; align-items: center; justify-content: center; color: var(--muted); font-weight: 600; } .days span.on { background: var(--accent); color: #fff; }
+.phone { width: 76px; height: 120px; border-radius: 16px; background: #1E1B2E; padding: 6px; flex-shrink: 0; }
+.phone div { background: #fff; border-radius: 11px; height: 100%; padding: 6px 5px; font-size: 7px; display: flex; flex-direction: column; gap: 4px; }
+.phone .it { background: var(--canvas); border-radius: 5px; padding: 3px 4px; } .phone .it.on { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+
+/* butler page */
+.page { grid-column: 2 / -1; }
+.pbody { flex: 1; display: grid; grid-template-columns: 1fr 280px; gap: 14px; padding: 4px 18px 16px; min-height: 0; }
+.pchat { display: flex; flex-direction: column; gap: 10px; font-size: 14px; line-height: 1.55; }
+.pside { display: flex; flex-direction: column; gap: 6px; }
+</style>
+</head>
+<body data-palette="purple">
+
+<div class="bar">
+  <strong>Hive Butler</strong>
+  <div class="seg" id="views">
+    <button data-v="offer" class="on">① 首次卡片</button>
+    <button data-v="wizard">② 向导</button>
+    <button data-v="drawer">③ 抽屉</button>
+    <button data-v="listen">④ 唤醒词</button>
+    <button data-v="page">⑤ 钉住</button>
+    <button data-v="email">⑥ 邮箱</button>
+    <button data-v="feishu">⑦ 飞书代管</button>
+    <button data-v="skills">⑧ Skills</button>
+    <button data-v="skilltalk">⑨ 一句话改</button>
+    <button data-v="persona">⑩ 关于我</button>
+  </div>
+</div>
+<p class="note" id="note"></p>
+
+<div class="window">
+  <div class="titlebar">
+    <div class="traffic"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+    <span class="crumb">Cube v2 / Missy</span>
+    <div class="spacer"></div>
+    <button class="tb-btn">⌘K</button>
+    <button class="butler-btn" id="butlerBtn"><span class="face">🎩<i class="live"></i></span>Butler<span class="ear">🎙</span><span class="badge">2</span></button>
+  </div>
+
+  <aside class="side">
+    <div class="brand"><b>Hive<span>v2.29</span></b><span>⚙️</span></div>
+    <nav class="nav">
+      <a class="hidden" id="butlerItem" style="margin-bottom:6px">🎩 Butler<span class="n">📌 ✕</span></a>
+      <a class="on" id="cubeItem"><span class="dot ok"></span>Cube v2<span class="n">4</span></a>
+      <a><span class="dot ok"></span>Hive<span class="n">3</span></a>
+      <a><span class="dot"></span>sphere2<span class="n">2</span></a>
+      <a><span class="dot"></span>Linksfield site<span class="n">1</span></a>
+    </nav>
+  </aside>
+
+  <section class="card" id="agentsCard">
+    <div class="head"><h2>Agents <span class="sub">4</span></h2></div>
+    <div class="agent on"><div class="av">🧑‍💻</div><div><b>Missy</b><small>working</small></div></div>
+    <div class="agent"><div class="av">🧪</div><div><b>Quinn</b><small>waiting for you</small></div></div>
+    <div class="agent"><div class="av">🛠️</div><div><b>Bolt</b><small>off</small></div></div>
+    <div class="agent"><div class="av">📐</div><div><b>Ada</b><small>off</small></div></div>
+  </section>
+  <section class="card" id="chatCard">
+    <div class="head"><h2>Missy <span class="sub">Cube v2 · Opus</span></h2></div>
+    <div class="chat">
+      <div class="bubble">继续做 mobile e2e</div>
+      <div>Mobile suite on staging: 14/18 pass. The 4 failures are the iOS address-form focus bug — fixing the handler now.</div>
+    </div>
+    <div class="composer"><span>Message Missy…</span><span class="mono" style="font-size:11px">ctx 42%</span></div>
+  </section>
+
+  <!-- ⑤ butler page -->
+  <section class="card page hidden" id="butlerPage">
+    <div class="head"><h2><span class="face">🎩<i class="live"></i></span>Butler <span class="pill ok">📱 connected</span><span class="pill acc">🎙 listening</span></h2><div><button class="mini">📌 Pinned</button></div></div>
+    <div class="tabs"><button class="on">Chat</button><button>Today</button><button>Sessions</button><button>Approve <span class="badge">2</span></button></div>
+    <div class="pbody">
+      <div class="pchat">
+        <div class="msg-u">今天有什么？</div>
+        <div class="msg-b"><b>3 things</b> · review Missy's fix · reply Lin (draft ready) · CUBE-1432 → In Review</div>
+        <div class="msg-u">主题换成蓝色</div>
+        <div class="msg-b">✓ Tech blue</div>
+        <div style="flex:1"></div>
+        <div class="dcomposer" style="margin:0"><span>Ask Butler…</span><span>🎙</span></div>
+      </div>
+      <div class="pside">
+        <span class="label">Waiting for you</span>
+        <div class="row"><span class="dot warn"></span><div class="grow"><div class="t1">Quinn</div><div class="t2">needs a test card</div></div><button class="mini p">Answer</button></div>
+        <span class="label" style="margin-top:6px">Working</span>
+        <div class="row"><span class="dot ok"></span><div class="grow"><div class="t1">Missy</div><div class="t2">checkout fix</div></div></div>
+        <div class="row"><span class="dot ok"></span><div class="grow"><div class="t1">Ada</div><div class="t2">docs</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ① first-run card -->
+  <div class="offer" id="offer">
+    <div class="big">🎩</div>
+    <div><h3>Set up Hive with Butler?</h3><p>Theme · voice · phone · 2 min</p>
+      <div style="display:flex;gap:6px"><button class="mini p" data-go="wizard">Start</button><button class="mini">Not now</button></div></div>
+  </div>
+
+  <!-- ④ wake word toast -->
+  <div class="toast hidden" id="toast">
+    <div class="ring"><span>3</span></div>
+    <div style="flex:1;min-width:0"><div class="to">→ Cube v2 / Missy</div><div class="txt">继续做 mobile e2e</div></div>
+    <button class="mini">Cancel</button><button class="mini p">Send</button>
+  </div>
+
+  <!-- ③ drawer -->
+  <div class="scrim hidden" id="scrim"></div>
+  <div class="drawer hidden" id="drawer">
+    <div class="head"><h2><span class="face">🎩<i class="live"></i></span>Butler <span class="pill ok">📱</span></h2>
+      <div><button class="icon" data-go="page" title="Open as chat">⤢</button><button class="icon" title="Settings">⚙️</button><button class="icon">✕</button></div></div>
+    <div class="tabs" id="dtabs">
+      <button data-t="chat" class="on">Chat</button><button data-t="today">Today</button><button data-t="sessions">Sessions</button><button data-t="approve">Approve <span class="badge">2</span></button>
+    </div>
+
+    <div class="dbody" data-p="chat">
+      <div class="setup">
+        <div class="top"><span>Setup 3/5</span><button class="link">Hide</button></div>
+        <div class="prog"><i></i></div>
+        <div class="it"><span>✉️</span><span class="grow">Email</span><button class="mini p" data-go="email">Set up</button></div>
+        <div class="it"><span>💬</span><span class="grow">Feishu</span><button class="mini p" data-go="feishu">Set up</button></div>
+      </div>
+      <div class="stats"><div class="stat"><span class="dot ok"></span><b>2</b>working</div><div class="stat"><span class="dot warn"></span><b>1</b>waiting</div><div class="stat"><span class="dot"></span><b>7</b>off</div></div>
+      <div class="row"><span class="dot warn"></span><div class="grow"><div class="t1">Quinn · Cube v2</div><div class="t2">needs a test card</div></div><button class="mini p">Answer</button></div>
+      <div class="msg-u">告诉 Quinn 用 UAT 新建一张</div>
+      <div class="msg-b">✓ Sent → Quinn</div>
+    </div>
+
+    <div class="dbody hidden" data-p="today">
+      <span class="label">Plan · Tue 20 Oct</span>
+      <div class="row"><input type="checkbox" checked><div class="grow t1">Review Missy's checkout fix</div></div>
+      <div class="row"><input type="checkbox"><div class="grow t1">Reply Lin · UAT outage</div><span class="pill acc">draft</span></div>
+      <div class="row"><input type="checkbox"><div class="grow t1">CUBE-1432 → In Review</div><span class="pill">Jira</span></div>
+      <details class="more"><summary>Yesterday · 9h 40m · v2.28.3 shipped</summary>
+        <div class="in"><div class="msg-b" style="font-size:12px">Shipped v2.28.3 · checkout 14/18 · stuck: Quinn (test card) · next: checkout, reply Lin</div></div></details>
+    </div>
+
+    <div class="dbody hidden" data-p="sessions">
+      <div class="row"><span class="dot warn"></span><div class="grow"><div class="t1">Quinn</div><div class="t2">question · 12 min</div></div><button class="mini p">Answer</button></div>
+      <div class="row"><span class="dot ok"></span><div class="grow"><div class="t1">Missy</div><div class="t2">checkout fix · 42%</div></div><button class="mini">Open</button></div>
+      <div class="row"><span class="dot ok"></span><div class="grow"><div class="t1">Ada</div><div class="t2">docs · 18%</div></div><button class="mini">Open</button></div>
+      <div class="row"><span class="dot"></span><div class="grow"><div class="t1">Bolt</div><div class="t2">off · PR ready</div></div><button class="mini">Resume</button></div>
+    </div>
+
+    <div class="dbody hidden" data-p="approve">
+      <div class="ap">
+        <div class="top"><span>✉️</span><div class="grow"><div class="who">Lin · UAT down?</div><div class="what">email reply</div></div><button class="mini p">Send</button><button class="icon" title="Edit">✎</button><button class="icon" title="Reject">✕</button></div>
+        <details class="more"><summary>Draft</summary><div class="in"><div class="draft">Hi Lin, UAT was down 09:05–10:20, back now. Thanks for flagging.</div></div></details>
+      </div>
+      <div class="ap">
+        <div class="top"><span>🎫</span><div class="grow"><div class="who">CUBE-1432 → In Review</div><div class="what">Jira</div></div><button class="mini p">Apply</button><button class="icon">✎</button><button class="icon">✕</button></div>
+        <details class="more"><summary>Comment</summary><div class="in"><div class="draft">Fix merged in !812, mobile e2e 18/18.</div></div></details>
+      </div>
+    </div>
+
+    <div class="dbody hidden" data-p="skilltalk">
+      <div class="msg-u">回飞书别太正式，招聘的事先问我</div>
+      <div class="chg">
+        <div style="display:flex;align-items:center;gap:8px"><b style="font-size:13px;flex:1">💬 Answer Feishu</b><span class="pill ok">✓ checks</span></div>
+        <div class="chips"><span class="chip">Tone → casual</span><span class="chip">＋ hiring → ask you</span></div>
+        <div class="fmsg"><div class="me"><b>【Mei 的 AI 代理】</b>PR 提了，在等 review。周五能不能上我跟 Mei 确认下，稍后回你。</div></div>
+        <details class="more"><summary>Diff · before</summary><div class="in">
+          <div class="diff"><div class="h">## 语气和格式</div><div class="del">- 正式、礼貌，完整句子</div><div class="add">+ 口语、简短，不用“您好”</div><div class="h">## 什么时候问你</div><div class="add">+ 招聘相关 → 稍后回复，转给 Mei</div></div>
+          <div class="fmsg"><div class="me" style="background:var(--canvas)"><b>Before</b> 您好，Bolt 已提交 PR，目前正在等待评审……</div></div>
+        </div></details>
+        <div class="foot"><button class="mini">Discard</button><button class="mini" data-go="skills">Edit</button><button class="mini p">Accept</button></div>
+      </div>
+    </div>
+
+    <div class="dcomposer"><span>Ask Butler…</span><span>🎙</span></div>
+  </div>
+
+  <!-- ⑥ email -->
+  <div class="sheet hidden" id="emailSheet">
+    <div class="head"><h2>Email</h2><button class="icon">✕</button></div>
+    <div class="sbody">
+      <div class="presets"><button class="preset on">腾讯企业邮箱</button><button class="preset">QQ 邮箱</button><button class="preset">163</button><button class="preset">Gmail</button><button class="preset">Other</button></div>
+      <div class="grid2"><div class="field">Email<input value="mei.yang@linksfield.net"></div><div class="field">Client password<input value="••••••••••••"></div></div>
+      <div class="okline">✓ Connected · 12 unread</div>
+      <details class="more"><summary>Get a client password</summary><div class="in">
+        <div class="steps-list"><div>exmail.qq.com → sign in</div><div>设置 → 客户端设置 → IMAP/SMTP on</div><div>微信绑定 → 生成新密码</div></div>
+        <button class="link" style="align-self:flex-start">Open exmail.qq.com ↗</button></div></details>
+      <details class="more"><summary>More · servers · permissions</summary><div class="in">
+        <div class="kv"><span class="k">IMAP</span><span class="v">imap.exmail.qq.com:993</span><span class="k">SMTP</span><span class="v">smtp.exmail.qq.com:465</span><span class="k">Stored</span><span class="v">macOS Keychain</span></div>
+        <div class="row"><span class="grow t1">Sort every 30 min</span><span class="toggle"></span></div>
+        <div class="row"><span class="grow t1">Draft replies</span><span class="toggle"></span></div>
+        <div class="row"><span class="grow t2">🔒 Send needs approval</span></div></div></details>
+      <div class="foot" style="margin-top:auto"><button class="btn s">Cancel</button><button class="btn p">Save</button></div>
+    </div>
+  </div>
+
+  <!-- ⑦ feishu -->
+  <div class="sheet hidden" id="feishuSheet">
+    <div class="head"><h2>Feishu</h2><button class="icon">✕</button></div>
+    <div class="sbody">
+      <div class="hero"><span style="font-size:20px">💬</span><div class="grow"><b>代管 On</b><div class="sub">as 【Mei 的 AI 代理】</div></div><span class="pill ok">Connected</span><span class="toggle"></span></div>
+      <div class="sec"><span class="label">Answers</span><div class="seg2" style="align-self:flex-start"><button class="on">Everyone</button><button>People I pick</button></div></div>
+      <div class="sec"><span class="label">Always asks you</span>
+        <div class="chips"><span class="chip lock">🔒 dates</span><span class="chip lock">🔒 prices</span><span class="chip lock">🔒 approvals</span><span class="chip lock">🔒 customers</span><span class="chip">hiring</span><span class="chip add">＋</span></div></div>
+      <details class="more"><summary>More · timing · prefix · preview</summary><div class="in">
+        <div class="grid2"><div class="field">Wait before reply<input value="2 min"></div><div class="field">Remind me after<input value="30 min"></div></div>
+        <div class="field">Prefix<input value="【Mei 的 AI 代理】"></div>
+        <div class="row"><span class="grow t1">Real-time messages</span><span class="pill warn">to verify</span></div>
+        <div class="row"><span class="grow t1">Status “🤖 代理中”</span><span class="pill warn">to verify</span></div>
+        <div class="fmsg"><div class="them">checkout 什么时候好？</div><div class="me"><b>【Mei 的 AI 代理】</b>Missy 在修 iOS 失焦，14/18 通过。上线日期我跟 Mei 确认，稍后回你。</div></div>
+      </div></details>
+      <div class="foot" style="margin-top:auto"><button class="btn s">Cancel</button><button class="btn p">Save</button></div>
+    </div>
+  </div>
+
+  <!-- ⑩ about me -->
+  <div class="sheet hidden" id="personaSheet">
+    <div class="head"><h2>About me</h2><div><button class="mini">✨ Learn from my messages</button> <button class="icon">✕</button></div></div>
+    <div class="sbody">
+      <div class="grid2">
+        <div class="field">Role<input value="产品负责人"></div>
+        <div class="field">Responsible for<input value="Cube v2、sphere2、需求排期"></div>
+      </div>
+      <div class="sec"><span class="label">Style</span><div class="seg2" style="align-self:flex-start"><button class="on">Direct</button><button>Warm</button><button>Formal</button></div></div>
+      <div class="grid2">
+        <div class="field">Answer like a<input value="资深 IoT 产品经理"></div>
+        <div class="field">When unsure<input value="说“我去确认”，转给我"></div>
+      </div>
+      <details class="more"><summary>More · name · phrases · language · intro</summary><div class="in">
+        <div class="grid2"><div class="field">Name<input value="Mei Yang"></div><div class="field">Team<input value="Linksfield · IoT 平台"></div></div>
+        <div class="field">Works with<input value="Ben、Zackery · 寇文华 · PMO"></div>
+        <div class="grid2"><div class="field">Often says<input value="先说结论；我确认下"></div><div class="field">Never says<input value="您好、敬请、亲"></div></div>
+        <div class="field">Language<input value="跟对方；技术词用英文"></div>
+        <div class="field">Intro<input value="我是 Mei 的 AI 代理，先帮她回复。"></div>
+      </div></details>
+      <details class="more"><summary>What your agent reads</summary><div class="in"><div class="msg-b" style="font-size:12px;line-height:1.6">你是 Mei Yang 的个人 AI 代理。Mei 是产品负责人，负责 Cube v2、sphere2、需求排期。风格直接，先说结论，不用“您好”。用资深 IoT 产品经理的专业度回答；不确定就说“我去确认”并转给 Mei。每条回复以【Mei 的 AI 代理】开头。</div></div></details>
+      <div class="foot" style="margin-top:auto"><button class="btn s">Cancel</button><button class="btn p">Save</button></div>
+    </div>
+  </div>
+
+  <!-- ⑧ skills -->
+  <div class="skills hidden" id="skillsSheet">
+    <div class="head"><h2>Skills</h2><button class="icon">✕</button></div>
+    <div class="sk-list">
+      <button class="sk">🌅 Morning plan</button>
+      <button class="sk">🌙 Evening report<span class="m" title="customized"></span></button>
+      <button class="sk">📥 Sort inbox</button>
+      <button class="sk">✉️ Reply email<span class="m"></span></button>
+      <button class="sk on">💬 Answer Feishu<span class="m"></span></button>
+      <button class="sk">🎫 Jira check</button>
+      <button class="sk" style="color:var(--accent)">＋ New</button>
+    </div>
+    <div class="sk-edit">
+      <div style="display:flex;align-items:center;gap:8px"><b style="font-size:15px;flex:1">💬 Answer Feishu</b><span class="pill acc">customized</span><button class="mini">Try</button><button class="mini p">Save</button></div>
+      <div class="sec"><span class="label">Tone</span><div class="seg2" style="align-self:flex-start"><button>Formal</button><button class="on">Direct</button><button>Friendly</button></div></div>
+      <div class="sec"><span class="label">Ask me first</span>
+        <div class="chips"><span class="chip lock">🔒 dates</span><span class="chip lock">🔒 prices</span><span class="chip lock">🔒 approvals</span><span class="chip lock">🔒 customers</span><span class="chip">hiring</span><span class="chip add">＋</span></div></div>
+      <details class="more"><summary>More · length · language · instructions</summary><div class="in">
+        <div class="grid2"><div class="field">Max length<input value="3 sentences"></div><div class="field">Language<input value="same as asker"></div></div>
+        <div class="field">Extra<input value="Status questions: answer from agents' latest progress"></div></div></details>
+      <details class="more"><summary>Advanced · markdown · default updated ●</summary><div class="in">
+        <div class="row"><span class="grow mono" style="font-size:11px">~/.hive/butler/skills/feishu-answer.md</span><button class="link">Finder</button><button class="link">Compare</button><button class="link">Reset</button></div></div></details>
+    </div>
+  </div>
+
+  <!-- ② wizard -->
+  <div class="wiz-scrim hidden" id="wizard">
+    <div class="wiz">
+      <div class="wiz-left" id="steps"></div>
+      <div class="wiz-right">
+        <div class="say"><span class="face">🎩</span><span class="line" id="say"></span></div>
+        <h2 id="title"></h2>
+        <div class="panel" id="panel"></div>
+        <div class="wfoot">
+          <div class="dots" id="dots"></div>
+          <div style="display:flex;gap:6px;align-items:center"><button class="link">Ask Butler</button><button class="btn g" id="skip">Skip</button><button class="btn s" id="back">Back</button><button class="btn p" id="next">Next</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const NOTES = {
+  offer: '首次打开：图标下一张小卡片 · Start / Not now',
+  wizard: '12 步 · 三组 · 每步可跳过 · 次要项收起',
+  drawer: '抽屉：设置进度 · 状态数字 · 等你的事 · 待批准一键操作，草稿收起',
+  listen: '唤醒词「管家」· 3 秒倒计时 · Cancel / Send',
+  page: 'Butler 钉在 project 列表第一位 · 📌 常驻 · ✕ 关闭',
+  email: '腾讯企业邮箱：选预设 · 两个输入框 · 结果一行；其余收起',
+  feishu: '代管开关 · 回复谁 · 必问清单；时间 / 前缀 / 预览收起',
+  skills: '每个任务一份：语气 · 必问；长度、markdown、路径收起',
+  skilltalk: '一句话改：改动两枚标签 + 改后示例；diff 和改前收起',
+  persona: '关于我：四个核心字段 + 风格；其余和生成文本收起'
+}
+const STEPS = [
+  { g: 'Basics', name: 'Welcome', say: 'Hi, I’m Butler', title: 'Welcome to Hive',
+    panel: `<div class="row"><span>🐝</span><span class="grow t1">Many Claude Code agents, one per role</span></div>
+            <div class="row"><span>🎩</span><span class="grow t1">I’m top-right, always</span></div>
+            <div class="row"><span>⏱</span><span class="grow t1">~2 min · skip anything</span></div>` },
+  { name: 'Claude Code', say: 'The engine', title: 'Claude Code',
+    panel: `<div class="row"><span class="dot ok"></span><span class="grow t1">Installed</span><span class="pill">2.1.299</span></div>
+            <div class="row"><span class="dot warn"></span><span class="grow t1">Not signed in</span><span class="pill mono">claude /login</span><button class="mini">Check</button></div>` },
+  { name: 'First project', say: 'Pick a folder', title: 'First project',
+    panel: `<div class="row" style="justify-content:center;padding:22px;border:2px dashed var(--faint);background:transparent">📁 Drop a folder · <button class="link">Browse</button></div>
+            <div class="field">First agent<input value="Missy · Frontend"></div>` },
+  { name: 'Theme', say: 'Try one', title: 'Theme',
+    panel: `<div class="swatches">
+              <button class="sw on" data-pal="purple"><div class="pv" style="background:#F3F0F8"><i style="background:#7C3AED"></i><i style="background:#EFE7FD"></i></div>Purple</button>
+              <button class="sw" data-pal="blue"><div class="pv" style="background:#EEF6FB"><i style="background:#0284C7"></i><i style="background:#E0F2FE"></i></div>Blue</button>
+              <button class="sw" data-pal="pink"><div class="pv" style="background:#FBF0FB"><i style="background:#C026D3"></i><i style="background:#FAE8FF"></i></div>Pink</button></div>
+            <div class="seg2" style="align-self:flex-start"><button class="on">Accent</button><button>Prime</button></div>` },
+  { name: 'Voice', say: 'Say something', title: 'Voice',
+    panel: `<div class="row"><span class="dot ok"></span><span class="grow t1">Mic · MV7</span></div><div class="meter"><i></i></div>
+            <div class="row"><span class="grow t1">“帮我看下 checkout 为什么 fail”</span></div>
+            <details class="more"><summary>中英混说 · OpenAI key</summary><div class="in"><div class="field">OpenAI key<input placeholder="sk-…"></div></div></details>` },
+  { g: 'Connect', name: 'About you', say: 'So I sound like you', title: 'About you',
+    panel: `<div class="grid2"><div class="field">Role<input value="产品负责人"></div><div class="field">Responsible for<input value="Cube v2、sphere2"></div></div>
+            <div class="seg2" style="align-self:flex-start"><button class="on">Direct</button><button>Warm</button><button>Formal</button></div>
+            <div class="field">Answer like a<input value="资深 IoT 产品经理"></div>
+            <details class="more"><summary>More</summary><div class="in"><div class="field">When unsure<input value="说“我去确认”"></div><button class="mini" style="align-self:flex-start">✨ Learn from my messages</button></div></details>` },
+  { name: 'Your phone', say: 'Check in from anywhere', title: 'Phone',
+    panel: `<div class="row"><span class="grow t1">Remote control</span><span class="toggle"></span></div>
+            <div class="row"><span class="dot warn"></span><span class="grow t1">Trust Butler folder</span><button class="mini p">Trust</button></div>
+            <div style="display:flex;gap:12px;align-items:center"><div class="phone"><div><b>Code</b><div class="it on">🎩 Hive Butler</div><div class="it">hive</div></div></div><span class="t1" style="font-size:13px">Claude app → Code → Hive Butler</span></div>` },
+  { name: 'Email', say: 'Sort & draft', title: 'Email',
+    panel: `<div class="presets"><button class="preset on">腾讯企业邮箱</button><button class="preset">QQ</button><button class="preset">Gmail</button><button class="preset">Other</button></div>
+            <div class="grid2"><div class="field">Email<input value="mei.yang@linksfield.net"></div><div class="field">Client password<input value="••••••••"></div></div>
+            <div class="okline">✓ Connected · 12 unread</div>
+            <details class="more"><summary>Get a client password</summary><div class="in"><div class="steps-list"><div>exmail.qq.com</div><div>客户端设置 → IMAP/SMTP</div><div>生成新密码</div></div></div></details>` },
+  { name: 'Feishu', say: 'Answer for you', title: 'Feishu',
+    panel: `<button class="btn p" style="align-self:flex-start">Sign in with Feishu</button>
+            <div class="row"><span class="grow t1">代管 · 【Mei 的 AI 代理】</span><span class="toggle"></span></div>
+            <div class="seg2" style="align-self:flex-start"><button class="on">Everyone</button><button>People I pick</button></div>` },
+  { name: 'Calendar', say: 'Plan around meetings', title: 'Calendar',
+    panel: `<div class="row"><input type="checkbox" checked><span class="grow t1">Feishu calendar</span><span class="pill ok">via Feishu</span></div>
+            <div class="row"><input type="checkbox" checked><span class="grow t1">Mac Calendar</span><button class="mini">Allow</button></div>` },
+  { g: 'Automate', name: 'Daily routine', say: 'Every day, even with Hive closed', title: 'Daily routine',
+    panel: `<div class="rt"><input type="checkbox" checked><span>Morning plan</span><span class="when">08:30</span><span></span></div>
+            <div class="rt"><input type="checkbox" checked><span>Sort inbox</span><span class="when">30 min · 9–19</span><span class="pill ok">✓</span></div>
+            <div class="rt"><input type="checkbox"><span>Feishu digest</span><span class="when">11:00 · 16:00</span><span class="pill ok">✓</span></div>
+            <div class="rt"><input type="checkbox"><span>Jira check</span><span class="when">09:00</span><button class="link">Connect</button></div>
+            <div class="rt"><input type="checkbox" checked><span>Evening report</span><span class="when">19:00</span><span></span></div>
+            <div class="days"><span class="on">M</span><span class="on">T</span><span class="on">W</span><span class="on">T</span><span class="on">F</span><span>S</span><span>S</span></div>` },
+  { name: 'Done', say: 'Top-right, any time', title: 'Ready',
+    panel: `<div class="row"><span class="dot ok"></span><span class="grow t1">Status · forward · phone</span></div>
+            <div class="row"><span class="dot ok"></span><span class="grow t1">Email · Feishu · calendar</span></div>
+            <div class="row"><span class="grow t1">🎙 Listen for “管家”</span><span class="toggle off"></span></div>
+            <div class="row"><span class="grow t1">⚙️ Change later</span><span class="pill">Settings · or ask me</span></div>` }
+]
+let cur = 5
+const done = new Set([0, 1, 2, 3, 4])
+const $ = id => document.getElementById(id)
+function renderWizard() {
+  const s = STEPS[cur]
+  $('say').textContent = s.say
+  $('title').textContent = s.title
+  $('panel').innerHTML = s.panel
+  const left = $('steps')
+  left.innerHTML = '<div class="who"><span class="face">🎩</span>Butler</div>'
+  STEPS.forEach((st, i) => {
+    if (st.g) left.insertAdjacentHTML('beforeend', `<div class="wgroup">${st.g}</div>`)
+    const b = document.createElement('button')
+    b.className = 'step' + (i === cur ? ' on' : done.has(i) ? ' done' : '')
+    b.innerHTML = `<span class="num">${done.has(i) && i !== cur ? '✓' : i + 1}</span>${st.name}`
+    b.onclick = () => { cur = i; renderWizard() }
+    left.appendChild(b)
+  })
+  $('dots').innerHTML = STEPS.map((_, i) => `<i class="${i === cur ? 'on' : ''}"></i>`).join('')
+  $('back').style.visibility = cur === 0 ? 'hidden' : 'visible'
+  $('skip').style.visibility = cur === STEPS.length - 1 ? 'hidden' : 'visible'
+  $('next').textContent = cur === STEPS.length - 1 ? 'Finish' : 'Next'
+  $('panel').querySelectorAll('[data-pal]').forEach(b => {
+    b.classList.toggle('on', b.dataset.pal === document.body.dataset.palette)
+    b.onclick = () => { document.body.dataset.palette = b.dataset.pal; renderWizard() }
+  })
+}
+$('next').onclick = () => { done.add(cur); if (cur < STEPS.length - 1) { cur++; renderWizard() } else show('drawer') }
+$('back').onclick = () => { if (cur > 0) { cur--; renderWizard() } }
+$('skip').onclick = () => { if (cur < STEPS.length - 1) { cur++; renderWizard() } }
+
+function tab(t) {
+  document.querySelectorAll('#dtabs button').forEach(x => x.classList.toggle('on', x.dataset.t === (t === 'skilltalk' ? 'chat' : t)))
+  document.querySelectorAll('#drawer .dbody').forEach(p => p.classList.toggle('hidden', p.dataset.p !== t))
+}
+function show(v) {
+  document.querySelectorAll('#views button').forEach(b => b.classList.toggle('on', b.dataset.v === v))
+  $('note').textContent = NOTES[v]
+  const sheets = { email: 'emailSheet', feishu: 'feishuSheet', skills: 'skillsSheet', persona: 'personaSheet' }
+  const drawerOpen = v === 'drawer' || v === 'skilltalk'
+  $('offer').classList.toggle('hidden', v !== 'offer')
+  $('wizard').classList.toggle('hidden', v !== 'wizard')
+  $('toast').classList.toggle('hidden', v !== 'listen')
+  $('drawer').classList.toggle('hidden', !drawerOpen)
+  Object.entries(sheets).forEach(([k, id]) => $(id).classList.toggle('hidden', v !== k))
+  $('scrim').classList.toggle('hidden', !(drawerOpen || sheets[v]))
+  $('butlerBtn').classList.toggle('on', drawerOpen || v === 'page' || !!sheets[v])
+  $('butlerBtn').classList.toggle('listening', v === 'listen' || v === 'page')
+  const page = v === 'page'
+  $('butlerPage').classList.toggle('hidden', !page)
+  $('agentsCard').classList.toggle('hidden', page)
+  $('chatCard').classList.toggle('hidden', page)
+  $('butlerItem').classList.toggle('hidden', !page)
+  $('butlerItem').classList.toggle('on', page)
+  $('cubeItem').classList.toggle('on', !page)
+  if (drawerOpen) tab(v === 'skilltalk' ? 'skilltalk' : 'chat')
+  if (v === 'wizard') renderWizard()
+}
+document.querySelectorAll('#views button').forEach(b => b.onclick = () => show(b.dataset.v))
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => show(b.dataset.go))
+document.querySelectorAll('#dtabs button').forEach(b => b.onclick = () => tab(b.dataset.t))
+$('butlerBtn').onclick = () => show($('drawer').classList.contains('hidden') ? 'drawer' : 'offer')
+$('scrim').onclick = () => show('offer')
+show('offer')
+</script>
+</body>
+</html>

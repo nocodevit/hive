@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+export type FeishuStatus =
+  | { state: 'signed_out' }
+  | { state: 'signing_in' }
+  | { state: 'signed_in'; name: string; openId: string; scope: string; refreshExpiresAt: number }
+  | { state: 'expired' }
+  | { state: 'error'; error: string }
+
 export type ButlerState = {
   enabled: boolean
   status: 'off' | 'starting' | 'needs_trust' | 'connected' | 'error'
@@ -257,6 +264,16 @@ const api = {
       const handler = (_e: Electron.IpcRendererEvent, s: ButlerState) => cb(s)
       ipcRenderer.on('butler:state', handler)
       return () => ipcRenderer.removeListener('butler:state', handler)
+    }
+  },
+  feishu: {
+    status: () => ipcRenderer.invoke('feishu:status') as Promise<FeishuStatus>,
+    login: () => ipcRenderer.invoke('feishu:login') as Promise<FeishuStatus>,
+    logout: () => ipcRenderer.invoke('feishu:logout') as Promise<FeishuStatus>,
+    onStatus: (cb: (s: FeishuStatus) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, s: FeishuStatus) => cb(s)
+      ipcRenderer.on('feishu:status', handler)
+      return () => ipcRenderer.removeListener('feishu:status', handler)
     }
   },
   speech: {

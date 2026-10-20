@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import Terminal from './components/Terminal'
 import { ButlerSettings } from './components/ButlerSettings'
 import ButlerOfferModal from './components/ButlerOfferModal'
+import { FeishuConnection } from './components/FeishuConnection'
 import AvatarEditor, { AvatarPreview } from './components/AvatarEditor'
 import Modal from './components/Modal'
 import CreateProjectModal from './components/CreateProjectModal'
@@ -3202,6 +3203,7 @@ export default function App() {
             <div className="flex-1 overflow-y-auto p-6">
           <div className="space-y-5 max-h-[70vh] overflow-y-auto">
             <ButlerSettings />
+            <FeishuConnection />
 
             {/* v2.9.0: STYLE picker (Accent | Prime). Prime is a full
                 visual-language swap (mono font, glow, scanlines, hex
