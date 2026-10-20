@@ -73,6 +73,48 @@ name when the agent name repeats). No fuzzy matching: `not_found` /
   localStorage) moves to `$HIVE_DATA_DIR/electron-user-data` — before
   v2.31 every e2e run shared the real app's storage.
 
+## Email + daily routines (Butler phase 4)
+
+- **Accounts** (App Settings → Email, wizard step Email): presets 腾讯企业邮箱 /
+  QQ / 163 / Gmail (IMAP 993 + SMTP 465, SSL) or Other. Address + client
+  (app) password; Test shows "✓ Connected · N unread" or the server's own
+  error. Settings in `butler/mail/accounts.json`, each password in
+  `butler/mail/<accountId>.bin` (safeStorage; plain only with an isolated
+  `HIVE_DATA_DIR` + `HIVE_MAIL_PLAIN_STORE=1`). Code: `main/butlerMail*.ts`.
+- **Sorting**: per account, mail with UID > the last one (`mail/state.json`,
+  with UIDVALIDITY; first run looks back 50 UIDs, unread only) goes to a
+  fresh `claude -p` naming the `sort-inbox` skill → needs-reply / customer /
+  fyi / notice / noise. Needs-reply and customer get a `reply-email` draft
+  in the approval queue (`email.reply`, button Send). Every handled message
+  is in `mail/processed.jsonl` and never handled twice (UID key, plus
+  Message-ID across a UIDVALIDITY change). Sending happens only when the
+  owner approves: SMTP from the receiving account, `In-Reply-To` +
+  `References` set (`mail/sent.jsonl`).
+- **`claude -p` runs** (`main/butlerClaude.ts`): Butler folder, new session
+  every time, prompt on stdin, `--permission-mode dontAsk` and no
+  Bash/Edit/Write/Web tools (mail and chat text are untrusted input).
+- **Routines** (App Settings → Daily routine, wizard step Daily routine):
+  morning plan 08:30, sort inbox every 30 min 09–19, Feishu digest
+  11:00·16:00, Jira check 09:00, evening report 19:00; Mon–Fri by default.
+  Settings in `butler/routines.json`. Each enabled routine is a LaunchAgent
+  `~/Library/LaunchAgents/com.hive.butler.<id>.plist` (StartCalendarInterval,
+  loaded with `launchctl bootstrap gui/<uid>`); off = `bootout` + plist
+  removed. An isolated `HIVE_DATA_DIR` uses `$HIVE_DATA_DIR/LaunchAgents`
+  and no real launchctl (unless `HIVE_LAUNCHD_REAL=1`).
+- **`Hive --butler-routine=<id>`** (what launchd runs): a running Hive gets
+  it through the single-instance lock and runs it; otherwise Hive runs it
+  headless (no window, no dock icon) and quits. A scheduled run that starts
+  more than 15 min after its slot (Mac was asleep) is marked late.
+- **Journal**: `butler/journal/YYYY-MM-DD.md`, sections `## Plan` (checklist,
+  ` #draft` / ` #jira` = pills), `## Feishu`, `## Jira`, `## Summary`.
+  The Today tab shows the plan (ticking writes back, by exact index +
+  text), yesterday's summary folded, and older days. Morning plan reads
+  the previous Summary, sorted mail, agents (calendar: phase 5 hook);
+  evening report reads today's chat logs (turns, last lines) and commits;
+  Feishu digest reads chats/messages with the user token and keeps only
+  messages that mention the owner; Jira check says "not connected" unless
+  `butler/.mcp.json` has a `jira` / `atlassian` server.
+
 ## Built-in Butler (v2.28.0)
 
 App Settings → Remote Control (the first section) → "Allow remote control

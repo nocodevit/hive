@@ -3,11 +3,12 @@ import HiveChat from '../hive-chat'
 import { orderSessions, sessionCounts, type SessionRow } from '../../lib/butler-sessions'
 import { setupProgress, type SetupMark } from '../../lib/butler-setup'
 import { ApprovalsList } from './ApprovalsList'
+import { TodayTab } from './TodayTab' // [butler:mail-routines]
 
 export type ButlerMode = 'drawer' | 'page'
 // [butler:mail-routines] add 'today'
-type Tab = 'chat' | 'sessions' | 'approve'
-const TAB_LABEL: Record<Tab, string> = { chat: 'Chat', sessions: 'Sessions', approve: 'Approve' }
+type Tab = 'chat' | 'today' | 'sessions' | 'approve'
+const TAB_LABEL: Record<Tab, string> = { chat: 'Chat', today: 'Today', sessions: 'Sessions', approve: 'Approve' }
 
 interface Props {
   mode: ButlerMode
@@ -162,6 +163,7 @@ export function ButlerPanel(p: Props) {
       )}
 
       {/* [butler:mail-routines] Today tab body */}
+      {tab === 'today' && <TodayTab visible={p.visible} />}
 
       {tab === 'sessions' && (
         <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-2">
