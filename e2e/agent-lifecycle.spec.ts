@@ -111,33 +111,16 @@ test.describe('Agent lifecycle', () => {
   })
 
   test('delete: hover row → Delete button → agent removed from sidebar + data.json', async () => {
-    // Hover the agent row to reveal action buttons
-    const agentEl = page.locator('text=[TEST] Solo').first()
-    await agentEl.hover()
-    await page.waitForTimeout(300)
+    await page.getByText('[TEST] Solo').first().hover()
+    await page.getByRole('button', { name: 'Delete', exact: true }).click()
 
-    // Delete button — has title="Delete" per App.tsx
-    const deleteBtn = page.locator('button[title="Delete"]').first()
-    if (await deleteBtn.isVisible().catch(() => false)) {
-      // window.confirm() dialog auto-accept
-      page.once('dialog', dialog => { dialog.accept().catch(() => {}) })
-      await deleteBtn.click()
-      await page.waitForTimeout(600)
-    } else {
-      // Fallback: drive directly via data layer if button selector drifted.
-      // Still asserts the data-layer effect is correct.
-      await page.evaluate(async () => {
-        const d = await window.api.data.load()
-        const next = { ...d, agents: (d.agents as any[]).filter((a: any) => a.name !== '[TEST] Solo') }
-        await window.api.data.save(next)
-      })
-      await page.waitForTimeout(400)
-    }
+    // v2.15.9+ — Delete opens the in-app AgentDeleteConfirmModal, not window.confirm().
+    await page.getByRole('button', { name: 'Delete permanently' }).click()
 
-    const after = await page.evaluate(async () => {
+    await expect.poll(async () => page.evaluate(async () => {
       const d = await window.api.data.load()
       return ((d.agents as any[]) || []).map((a: any) => a.name)
-    })
-    expect(after).not.toContain('[TEST] Solo')
+    })).not.toContain('[TEST] Solo')
+    await expect(page.getByText('[TEST] Solo')).toHaveCount(0)
   })
 })

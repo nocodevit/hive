@@ -4,6 +4,13 @@ import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { resolveAgentSession } from './session-locator'
 
+// Honors HIVE_DATA_DIR like the rest of main: the e2e suites point it at a temp
+// dir, and scanning the real ~/.hive/chat-logs there blocked the main process
+// for seconds on launch.
+export function hiveChatLogsDir(): string {
+  return join(process.env.HIVE_DATA_DIR || join(homedir(), '.hive'), 'chat-logs')
+}
+
 export interface RecentSession {
   sid: string
   title: string
@@ -59,7 +66,7 @@ export function getRecentSessions(cwd: string, limit = 5): RecentSession[] {
     // Resolve a context window size for this cwd from Hive logs (best-effort)
     let contextWindowTokens = 0
     try {
-      const hiveLogs = join(homedir(), '.hive', 'chat-logs')
+      const hiveLogs = hiveChatLogsDir()
       if (existsSync(hiveLogs)) {
         const hiveFiles = readdirSync(hiveLogs)
           .filter(f => f.endsWith('.jsonl'))
@@ -209,7 +216,7 @@ export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInf
     if (!sessionFile && chatId) {
       const resolved = resolveAgentSession(
         join(homedir(), '.claude', 'projects'),
-        join(homedir(), '.hive', 'chat-logs'),
+        hiveChatLogsDir(),
         chatId
       )
       if (resolved) {
@@ -233,7 +240,7 @@ export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInf
 
     let contextSize = ''
     try {
-      const hiveLogs = join(homedir(), '.hive', 'chat-logs')
+      const hiveLogs = hiveChatLogsDir()
       if (existsSync(hiveLogs)) {
         const hiveFiles = readdirSync(hiveLogs)
           .filter(f => f.endsWith('.jsonl'))
