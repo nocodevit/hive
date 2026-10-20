@@ -649,6 +649,21 @@ import { registerButlerSkillsIpc } from './butlerSkillsIpc'
 registerButlerSkillsIpc({ ipcMain, butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
 // [butler:feishu-agent-calendar]
+import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc } from './butlerFeishuAgentIpc'
+registerButlerFeishuAgentIpc({
+  ipcMain, butlerDir: butlerDir(DATA_DIR), feishu, approvals, claudeBin, readProfile,
+  agents: () => butlerRows(),
+  tail: agentId => {
+    const log = getChatSessionInfo(`chat-${agentId}`)?.logPath || latestChatLogPath(join(DATA_DIR, 'chat-logs'), agentId)
+    return log && existsSync(log) ? parseChatTail(readLogTailLines(log), 10) : []
+  },
+  broadcast: (ch, v) => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send(ch, v) }
+})
+/** Phase 4 (morning plan): butlerCalendar.getDayAgenda(date). */
+const butlerCalendar = registerButlerCalendarIpc({
+  ipcMain, butlerDir: butlerDir(DATA_DIR), feishu,
+  helperCandidates: [join(__dirname, '..', '..', 'scripts', 'hive-calendar'), join(process.resourcesPath, 'scripts', 'hive-calendar')]
+})
 // [butler:wake]
 
 ipcMain.handle('butler:state', () => butler.getState())
