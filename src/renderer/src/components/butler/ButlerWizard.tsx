@@ -187,7 +187,7 @@ export function ButlerWizard(p: Props) {
     <div className="no-drag fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={p.onClose} />
       <div role="dialog" aria-modal="true" aria-label="Butler setup"
-        className="hive-card relative w-[780px] max-w-[94vw] h-[580px] max-h-[90vh] grid grid-cols-[200px_1fr] overflow-hidden">
+        className="hive-card relative w-[780px] max-w-[94vw] h-[580px] max-h-[90vh] grid grid-cols-[200px_1fr] grid-rows-[minmax(0,1fr)] overflow-hidden">
         <nav className="bg-bg-primary p-3 flex flex-col gap-px overflow-y-auto" aria-label="Setup steps">
           <div className="flex items-center gap-2 px-1.5 pb-2.5 text-[14px] font-bold text-text-primary">🎩 Butler</div>
           {SETUP_STEPS.map((s, i) => (
@@ -203,7 +203,7 @@ export function ButlerWizard(p: Props) {
             </div>
           ))}
         </nav>
-        <div className="p-7 pb-5 flex flex-col min-w-0">
+        <div className="p-7 pb-5 flex flex-col min-w-0 min-h-0">
           <div className="flex items-center gap-2 text-[13px] text-text-secondary">
             <span className="w-[22px] h-[22px] rounded-full bg-accent-subtle inline-flex items-center justify-center text-[13px]">🎩</span>
             <span className="px-3 py-1 rounded-[4px_12px_12px_12px] bg-bg-primary">{SAY[step.id]}</span>
