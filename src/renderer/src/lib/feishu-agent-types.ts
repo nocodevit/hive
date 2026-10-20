@@ -22,7 +22,7 @@ export type FeishuAgentView = {
   locked: string[]
   senders: Record<string, string>
   lastError: string
-  capabilities: { realtime: boolean; status: boolean }
+  capabilities: { realtime: boolean }
 }
 
 export type FeishuLogEntry = {
