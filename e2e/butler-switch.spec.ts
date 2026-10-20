@@ -128,7 +128,7 @@ test('switching off stops the session and keeps the folder', async () => {
   await expect(page.getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'false')
   await expect.poll(() => alive(pid), { timeout: 10000 }).toBe(false)
   expect(existsSync(join(BUTLER_DIR, 'CLAUDE.md'))).toBe(true)
-  expect(JSON.parse(readFileSync(join(HIVE_DATA_DIR, 'butler.json'), 'utf8'))).toEqual({ enabled: false, trusted: false })
+  expect(JSON.parse(readFileSync(join(HIVE_DATA_DIR, 'butler.json'), 'utf8'))).toEqual({ enabled: false, trusted: false, offered: true })
 })
 
 test('switching on again asks for the OK again', async () => {

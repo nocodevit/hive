@@ -251,6 +251,8 @@ const api = {
     setEnabled: (enabled: boolean) => ipcRenderer.invoke('butler:setEnabled', enabled) as Promise<ButlerState>,
     confirmTrust: () => ipcRenderer.invoke('butler:confirmTrust') as Promise<{ ok: boolean }>,
     retry: () => ipcRenderer.invoke('butler:retry') as Promise<ButlerState>,
+    shouldOffer: () => ipcRenderer.invoke('butler:shouldOffer') as Promise<boolean>,
+    offerAnswered: () => ipcRenderer.invoke('butler:offerAnswered') as Promise<{ ok: boolean }>,
     onState: (cb: (s: ButlerState) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, s: ButlerState) => cb(s)
       ipcRenderer.on('butler:state', handler)

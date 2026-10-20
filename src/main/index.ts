@@ -590,6 +590,11 @@ ipcMain.handle('butler:setEnabled', (_e, enabled: unknown) => {
   return butler.getState()
 })
 ipcMain.handle('butler:confirmTrust', () => ({ ok: butler.confirmTrust() }))
+// Not offered with an isolated HIVE_DATA_DIR (the e2e suites) unless a
+// test asks for it; real installs never set that variable.
+ipcMain.handle('butler:shouldOffer', () =>
+  butler.shouldOffer && (!process.env.HIVE_DATA_DIR || process.env.HIVE_BUTLER_OFFER === '1'))
+ipcMain.handle('butler:offerAnswered', () => { butler.offerAnswered(); return { ok: true } })
 ipcMain.handle('butler:retry', () => { butler.retry(); return butler.getState() })
 
 async function unclosedDetail(rec: { agentId: string; cwd: string; since: number }) {

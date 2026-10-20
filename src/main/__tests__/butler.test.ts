@@ -253,7 +253,7 @@ describe('createButler', () => {
     t.butler.setEnabled(true)
     t.last().emit(TRUST_PROMPT)
     t.butler.confirmTrust()
-    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: true, trusted: true })
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: true, trusted: true, offered: true })
     t.butler.shutdown()
     t.butler.restore()
     t.last().emit(TRUST_PROMPT)
@@ -266,7 +266,7 @@ describe('createButler', () => {
     t.last().emit(TRUST_PROMPT)
     t.butler.confirmTrust()
     t.butler.setEnabled(false)
-    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false })
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offered: true })
     t.butler.setEnabled(true)
     t.last().emit(TRUST_PROMPT)
     expect(t.last().written).toEqual([])
@@ -347,6 +347,33 @@ describe('createButler', () => {
     t.butler.shutdown()
     expect(t.killed).toHaveLength(1)
     expect(readButlerSettings(t.dataDir).enabled).toBe(true)
+  })
+})
+
+describe('one-time offer', () => {
+  it('offered to someone who never answered and has it off', () => {
+    const t = setup()
+    expect(t.butler.shouldOffer).toBe(true)
+  })
+  it('"Not now" is final and survives a restart', () => {
+    const t = setup()
+    t.butler.offerAnswered()
+    expect(t.butler.shouldOffer).toBe(false)
+    expect(readButlerSettings(t.dataDir)).toEqual({ enabled: false, trusted: false, offered: true })
+    const again = createButler({
+      dataDir: t.dataDir, resourcesDir: RESOURCES, claudeTrusts: () => true, recordedSessionId: () => null,
+      spawn: () => new FakePty([], ''), kill: () => {}, killStale: () => {}, onState: () => {}
+    })
+    expect(again.shouldOffer).toBe(false)
+  })
+  it('turning it on counts as the answer, also after turning it off', () => {
+    const t = setup()
+    t.butler.setEnabled(true)
+    t.butler.setEnabled(false)
+    expect(t.butler.shouldOffer).toBe(false)
+  })
+  it('never offered while already on', () => {
+    expect(setup({ enabled: true }).butler.shouldOffer).toBe(false)
   })
 })
 

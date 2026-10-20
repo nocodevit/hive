@@ -39,8 +39,16 @@ name when the agent name repeats). No fuzzy matching: `not_found` /
 
 ## Built-in Butler (v2.28.0)
 
-Settings → Remote Control → "Allow remote control from my phone (Butler)",
-off by default. Code: `src/main/butler.ts`, bundled files in
+App Settings → Remote Control (the first section) → "Allow remote control
+from my phone (Butler)", off by default.
+
+- **Offer:** once, at launch, someone who already has agents and never
+  answered gets "Control Hive from your phone?" (Turn on / Not now; after
+  the resume-chats dialog if that shows). Either answer, or ever turning
+  the switch on, is final (`butler.json` `offered`). "Turn on" opens App
+  Settings so the status and the trust OK are in view. Creating the first
+  agent never triggers it mid-flow. Skipped with an isolated
+  `HIVE_DATA_DIR` (the e2e suites) unless `HIVE_BUTLER_OFFER=1`. Code: `src/main/butler.ts`, bundled files in
 `resources/butler/` (shipped as `extraResources/butler`).
 
 - **On:** Hive writes `CLAUDE.md` (rules), `hive` (the CLI) and
