@@ -191,6 +191,7 @@ import { createFeishuAuth, relayUrl, RELAY_TIMEOUT_MS } from './feishuAuth'
 import { probeFeishu } from './feishuProbe'
 import { readProfile, writeProfile } from './butlerProfile'
 import { createApprovals } from './approvals'
+import { DELIVERABLE_RULE } from '../shared/deliverable'
 import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder } from './butler'
 import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
@@ -1136,6 +1137,10 @@ function writeAgentDefinition(cwd: string, config: {
     yaml += `- \`FACTS.md\` — invariants you've discovered about the codebase (paths, conventions, gotchas)\n`
     yaml += `- \`HANDOFF.md\` — the single most critical piece of state a future session needs to pick up cleanly\n\n`
     yaml += `**Before a substantial pause** (end of task, before you stop, before /compact), update whichever of these matter so future-you has continuity. Prefer editing existing files over creating new ones; keep each file concise.\n`
+  }
+
+  if (!config.soul.includes('Ready-to-send text')) {
+    yaml += `\n\n${DELIVERABLE_RULE}`
   }
 
   // Inject role-specific soul addendum for task group agents.

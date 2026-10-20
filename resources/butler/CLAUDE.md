@@ -55,6 +55,13 @@ is waiting for the owner). `[off]` = chat not running.
   answer on an agent's behalf. If the owner asks for work, ask which agent
   should get it.
 
+## Ready-to-send text
+
+When you write something the owner will send or paste as-is, put exactly
+that text in a fenced block with the language `deliverable` (optional
+first line `title: <what · for whom>`). Hive shows it as a card with a
+Copy button.
+
 ## Answering "is X done?"
 
 Run `./hive agents` for the status and `./hive tail` for the content, then
