@@ -41,3 +41,21 @@ describe('butler-skills helpers', () => {
     expect(sameProfile(p, { ...p, team: 'x' })).toBe(false)
   })
 })
+
+describe('acceptPlaceholderOnTab', () => {
+  it('Tab in an empty field takes the example', async () => {
+    const { acceptPlaceholderOnTab } = await import('../butler-skills')
+    const got: string[] = []
+    acceptPlaceholderOnTab({ key: 'Tab', shiftKey: false }, '', '产品负责人', v => got.push(v))
+    expect(got).toEqual(['产品负责人'])
+  })
+  it('leaves typed values, Shift+Tab, other keys and fields without an example alone', async () => {
+    const { acceptPlaceholderOnTab } = await import('../butler-skills')
+    const got: string[] = []
+    acceptPlaceholderOnTab({ key: 'Tab', shiftKey: false }, 'PM', '产品负责人', v => got.push(v))
+    acceptPlaceholderOnTab({ key: 'Tab', shiftKey: true }, '', '产品负责人', v => got.push(v))
+    acceptPlaceholderOnTab({ key: 'Enter', shiftKey: false }, '', '产品负责人', v => got.push(v))
+    acceptPlaceholderOnTab({ key: 'Tab', shiftKey: false }, '', undefined, v => got.push(v))
+    expect(got).toEqual([])
+  })
+})

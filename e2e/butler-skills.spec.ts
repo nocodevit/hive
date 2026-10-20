@@ -53,7 +53,10 @@ test.afterAll(async () => {
 })
 
 test('About me saves the profile and shows what the agent reads', async () => {
-  await page.getByLabel('Assistant name · reply prefix & intro').fill('Mimi')
+  const about = page.getByRole('group', { name: 'About me' })
+  await about.getByText(/^More ·/).click()
+  await about.getByLabel('Assistant name · prefix & intro').fill('Mimi')
+  await about.getByLabel('Extra').fill('客户相关先抄送 PMO')
   await page.getByLabel('Role').first().fill('产品负责人')
   await page.getByRole('radio', { name: 'Warm' }).click()
   await page.getByRole('button', { name: 'Save', exact: true }).first().click()
@@ -62,10 +65,12 @@ test('About me saves the profile and shows what the agent reads', async () => {
   expect(saved.role).toBe('产品负责人')
   expect(saved.style).toBe('warm')
   expect(saved.assistantName).toBe('Mimi')
+  expect(saved.extra).toBe('客户相关先抄送 PMO')
   // The name is for replies and introductions only; Hive still says Butler.
   await expect(page.getByRole('button', { name: 'Butler', exact: true })).not.toContainText('Mimi')
   await page.getByText('What your agent reads').click()
   await expect(page.getByLabel('What your agent reads')).toContainText('Role: 产品负责人')
+  await expect(page.getByLabel('What your agent reads')).toContainText('客户相关先抄送 PMO')
 })
 
 test('Skills: tone + ask-first chip save as the form overlay', async () => {
