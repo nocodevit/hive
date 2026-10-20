@@ -2,8 +2,12 @@ import { useEffect, useState } from 'react'
 import HiveChat from '../hive-chat'
 import { orderSessions, sessionCounts, type SessionRow } from '../../lib/butler-sessions'
 import { setupProgress, type SetupMark } from '../../lib/butler-setup'
+import { ApprovalsList } from './ApprovalsList'
 
 export type ButlerMode = 'drawer' | 'page'
+// [butler:mail-routines] add 'today'
+type Tab = 'chat' | 'sessions' | 'approve'
+const TAB_LABEL: Record<Tab, string> = { chat: 'Chat', sessions: 'Sessions', approve: 'Approve' }
 
 interface Props {
   mode: ButlerMode
@@ -33,7 +37,8 @@ const DOT = { working: 'bg-status-working', waiting: 'bg-status-waiting', off: '
  * the rules); it is mounted the first time the panel opens.
  */
 export function ButlerPanel(p: Props) {
-  const [tab, setTab] = useState<'chat' | 'sessions'>('chat')
+  const [tab, setTab] = useState<Tab>('chat')
+  const [approvals, setApprovals] = useState<Array<{ id: string; kind: string; title: string; subtitle: string; draft: string; action: string }>>([])
   const [folder, setFolder] = useState<string | null>(null)
   const [rows, setRows] = useState<SessionRow[]>([])
   const [mounted, setMounted] = useState(false)
@@ -43,6 +48,11 @@ export function ButlerPanel(p: Props) {
     if (!mounted || folder) return
     window.api.butler.folder().then(setFolder).catch(() => { /* main not ready */ })
   }, [mounted, folder])
+  useEffect(() => {
+    if (!mounted) return
+    window.api.approvals.list().then(setApprovals).catch(() => {})
+    return window.api.approvals.onChange(setApprovals)
+  }, [mounted])
   useEffect(() => {
     if (!p.visible) return
     let alive = true
@@ -92,13 +102,16 @@ export function ButlerPanel(p: Props) {
       </div>
 
       <div className="no-drag flex gap-0.5 px-3 pb-1" role="tablist">
-        {(['chat', 'sessions'] as const).map(t => (
-          <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
-            className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer inline-flex items-center gap-1 ${tab === t ? 'bg-accent-subtle text-accent' : 'text-text-muted hover:text-text-primary'}`}>
-            {t === 'chat' ? 'Chat' : 'Sessions'}
-            {t === 'sessions' && n.waiting > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center">{n.waiting}</span>}
-          </button>
-        ))}
+        {(Object.keys(TAB_LABEL) as Tab[]).map(t => {
+          const count = t === 'sessions' ? n.waiting : t === 'approve' ? approvals.length : 0
+          return (
+            <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
+              className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer inline-flex items-center gap-1 ${tab === t ? 'bg-accent-subtle text-accent' : 'text-text-muted hover:text-text-primary'}`}>
+              {TAB_LABEL[t]}
+              {count > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center">{count}</span>}
+            </button>
+          )
+        })}
       </div>
 
       <div className="flex-1 min-h-0 relative" style={{ display: tab === 'chat' ? 'flex' : 'none', flexDirection: 'column' }}>
@@ -141,6 +154,14 @@ export function ButlerPanel(p: Props) {
           )}
         </div>
       </div>
+
+      {tab === 'approve' && (
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-2">
+          <ApprovalsList items={approvals} />
+        </div>
+      )}
+
+      {/* [butler:mail-routines] Today tab body */}
 
       {tab === 'sessions' && (
         <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-2">

@@ -190,6 +190,7 @@ import { readOpenChats, writeOpenChats, buildUnclosedRows, lastUserText } from '
 import { createFeishuAuth, relayUrl, RELAY_TIMEOUT_MS } from './feishuAuth'
 import { probeFeishu } from './feishuProbe'
 import { readProfile, writeProfile } from './butlerProfile'
+import { createApprovals } from './approvals'
 import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder } from './butler'
 import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
@@ -628,6 +629,24 @@ const feishu = createFeishuAuth({
 ipcMain.handle('feishu:status', () => feishu.getStatus())
 ipcMain.handle('feishu:login', () => feishu.login())
 ipcMain.handle('feishu:logout', () => { feishu.logout(); return feishu.getStatus() })
+
+// ── Butler approval queue (approvals.ts) ──────────────────────────────
+// Everything that leaves Hive on the owner's behalf waits here. Features
+// register an executor for their kind (approvals.register) and add items.
+const approvals = createApprovals({
+  dir: butlerDir(DATA_DIR),
+  onChange: pending => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send('approvals:changed', pending) }
+})
+ipcMain.handle('approvals:list', () => approvals.pending())
+ipcMain.handle('approvals:approve', (_e, id: unknown, draft: unknown) =>
+  typeof id === 'string' ? approvals.approve(id, typeof draft === 'string' ? draft : undefined) : { ok: false, error: 'bad_id' })
+ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' && approvals.reject(id))
+
+// ── Butler features: each phase registers itself at its own marker ────
+// [butler:skills]
+// [butler:mail-routines]
+// [butler:feishu-agent-calendar]
+// [butler:wake]
 
 ipcMain.handle('butler:state', () => butler.getState())
 ipcMain.handle('butler:setEnabled', (_e, enabled: unknown) => {

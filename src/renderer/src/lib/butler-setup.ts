@@ -22,6 +22,10 @@ export const SETUP_STEPS: SetupStep[] = [
   { id: 'about', group: 'Connect', name: 'About you' },
   { id: 'phone', group: 'Connect', name: 'Your phone' },
   { id: 'feishu', group: 'Connect', name: 'Feishu' },
+  // [butler:mail-routines] email (Connect), routine (Automate)
+
+  // [butler:feishu-agent-calendar] calendar (Connect)
+
   { id: 'done', group: 'Automate', name: 'Done', framing: true }
 ]
 
