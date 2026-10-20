@@ -11,6 +11,7 @@ import { EmailAccounts } from './components/butler/EmailAccounts' // [butler:mai
 import { DailyRoutine } from './components/butler/DailyRoutine' // [butler:mail-routines]
 import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { reconcileLiveStatus } from './lib/live-status'
+import { OPEN_SKILL_EVENT } from './lib/butler-skills'
 import { FeishuConnection } from './components/FeishuConnection'
 import { FeishuExpiredBanner } from './components/butler/FeishuExpiredBanner'
 import { AboutMeSettings, SkillsSettings } from './components/butler/SkillsSettings' // [butler:skills]
@@ -117,6 +118,12 @@ export default function App() {
   const [butlerPhone, setButlerPhone] = useState(false)
   const [butlerSetup, setButlerSetup] = useState<{ marks: Record<string, SetupMark>; cardHidden: boolean }>({ marks: {}, cardHidden: false })
   const [wizardAt, setWizardAt] = useState<number | null>(null)
+  // "Skill ›" / ⚙ anywhere opens App Settings at Skills (the section picks it up).
+  useEffect(() => {
+    const on = () => { setWizardAt(null); setShowAppSettings(true) }
+    window.addEventListener(OPEN_SKILL_EVENT, on)
+    return () => window.removeEventListener(OPEN_SKILL_EVENT, on)
+  }, [])
   useEffect(() => { window.api.butler.setup().then(setButlerSetup).catch(() => {}) }, [])
   const [butlerWaiting, setButlerWaiting] = useState(0)
   const wakeListening = useWakeListening() // [butler:wake]
@@ -1004,7 +1011,7 @@ export default function App() {
                   if (projectAgents.length === 0) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 border border-text-muted/50" title="No agents" role="img" aria-label="No agents" />
                   if (hasWorking) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-working" title="Agents working" role="img" aria-label="Agents working" />
                   if (hasWaiting) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-waiting" title="Agents idle" role="img" aria-label="Agents idle" />
-                  return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-text-muted/40" title="Agents offline" role="img" aria-label="Agents offline" />
+                  return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-done" title="Agents offline" role="img" aria-label="Agents offline" />
                 })()}
                 <span className="truncate">{project.name}</span>
                 {(() => {
