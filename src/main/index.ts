@@ -11,6 +11,7 @@ import type { HandoffBreakers } from './handoff-supervisor'
 import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } from './ptyHealth'
 import { execSync, execFileSync, execFile, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
+import { setupButlerMailRoutines } from './butlerMailRoutines' // [butler:mail-routines]
 
 // GUI apps launched from Finder/Dock inherit launchd's minimal PATH
 // (/usr/bin:/bin:/usr/sbin:/sbin), so spawn('claude') ENOENTs even though
@@ -649,6 +650,13 @@ ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' &
 import { registerButlerSkillsIpc } from './butlerSkillsIpc'
 registerButlerSkillsIpc({ ipcMain, butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
+const butlerRoutineMode = setupButlerMailRoutines({
+  app, ipcMain, safeStorage, dataDir: DATA_DIR, approvals, claudeBin, feishu,
+  openExternal: u => { shell.openExternal(u).catch(() => {}) },
+  folder: () => butler.ensureFolder(),
+  agents: () => butlerRows(),
+  agentCwd: id => findAgentWorktree(id)
+})
 // [butler:feishu-agent-calendar]
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc } from './butlerFeishuAgentIpc'
 registerButlerFeishuAgentIpc({
@@ -2213,6 +2221,7 @@ ipcMain.handle('skills:scan', () => {
 })
 
 app.whenReady().then(() => {
+  if (butlerRoutineMode.headless) return // [butler:mail-routines] --butler-routine run: no window
   app.setName('Hive')
   electronApp.setAppUserModelId('com.hive.app')
 
