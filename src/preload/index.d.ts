@@ -5,6 +5,11 @@ type FeishuStatus =
   | { state: 'expired' }
   | { state: 'error'; error: string }
 
+type ButlerAgentRow = {
+  agentId: string; agent: string; projectId: string; project: string
+  role: string; note: string; chatLive: boolean; activity: 'working' | 'waiting' | 'off'
+}
+
 type ButlerState = {
   enabled: boolean
   status: 'off' | 'starting' | 'needs_trust' | 'connected' | 'error'
@@ -70,6 +75,10 @@ declare global {
         confirmTrust: () => Promise<{ ok: boolean }>
         retry: () => Promise<ButlerState>
         shouldOffer: () => Promise<boolean>
+        folder: () => Promise<string>
+        pinned: () => Promise<boolean>
+        setPinned: (v: boolean) => Promise<boolean>
+        agents: () => Promise<ButlerAgentRow[]>
         offerAnswered: () => Promise<{ ok: boolean }>
         onState: (cb: (s: ButlerState) => void) => () => void
         onStartAgent: (cb: (payload: { agentId: string; mode: 'resume' | 'new' }) => void) => () => void

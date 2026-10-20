@@ -180,14 +180,16 @@ export interface ButlerSettings {
   trusted: boolean
   /** The one-time "control Hive from your phone?" offer was answered. */
   offered: boolean
+  /** Butler stays at the top of the project list. */
+  pinned: boolean
 }
 
 export function readButlerSettings(dataDir: string): ButlerSettings {
   try {
     const j = JSON.parse(readFileSync(join(dataDir, SETTINGS_FILE), 'utf8'))
-    return { enabled: j?.enabled === true, trusted: j?.trusted === true, offered: j?.offered === true }
+    return { enabled: j?.enabled === true, trusted: j?.trusted === true, offered: j?.offered === true, pinned: j?.pinned === true }
   } catch {
-    return { enabled: false, trusted: false, offered: false }
+    return { enabled: false, trusted: false, offered: false, pinned: false }
   }
 }
 
@@ -205,8 +207,9 @@ export function createButler(deps: ButlerDeps) {
   const saved = readButlerSettings(deps.dataDir)
   let trusted = saved.trusted
   let offered = saved.offered
+  let pinned = saved.pinned
   let state: ButlerState = { enabled: saved.enabled, status: 'off' }
-  const persist = () => writeButlerSettings(deps.dataDir, { enabled: state.enabled, trusted, offered })
+  const persist = () => writeButlerSettings(deps.dataDir, { enabled: state.enabled, trusted, offered, pinned })
   let term: PtyLike | null = null
   let output = ''
   let connectedAt = 0
@@ -327,6 +330,11 @@ export function createButler(deps: ButlerDeps) {
     },
     /** Ask once whether to turn it on: never after an answer or once it was on. */
     get shouldOffer() { return !offered && !state.enabled },
+    get pinned() { return pinned },
+    setPinned(v: boolean) {
+      pinned = v
+      persist()
+    },
     /** The offer was answered ("Turn on" or "Not now"). */
     offerAnswered() {
       offered = true
@@ -364,6 +372,11 @@ export function createButler(deps: ButlerDeps) {
       if (!state.enabled || term) return
       restarts = 0
       launch(resumeMode())
+    },
+    /** The folder, with the bundled files written — for Hive's own Butler chat. */
+    ensureFolder(): string {
+      installButlerFiles(deps.resourcesDir, dir)
+      return dir
     },
     /** App quit: stop the session but keep the switch as it is. */
     shutdown: stop,

@@ -635,6 +635,10 @@ ipcMain.handle('butler:confirmTrust', () => ({ ok: butler.confirmTrust() }))
 ipcMain.handle('butler:shouldOffer', () =>
   butler.shouldOffer && (!process.env.HIVE_DATA_DIR || process.env.HIVE_BUTLER_OFFER === '1'))
 ipcMain.handle('butler:offerAnswered', () => { butler.offerAnswered(); return { ok: true } })
+ipcMain.handle('butler:folder', () => butler.ensureFolder())
+ipcMain.handle('butler:pinned', () => butler.pinned)
+ipcMain.handle('butler:setPinned', (_e, v: unknown) => { butler.setPinned(v === true); return butler.pinned })
+ipcMain.handle('butler:agents', () => butlerRows())
 ipcMain.handle('butler:retry', () => { butler.retry(); return butler.getState() })
 
 async function unclosedDetail(rec: { agentId: string; cwd: string; since: number }) {
