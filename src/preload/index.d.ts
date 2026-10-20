@@ -62,6 +62,8 @@ declare global {
         setEnabled: (enabled: boolean) => Promise<ButlerState>
         confirmTrust: () => Promise<{ ok: boolean }>
         retry: () => Promise<ButlerState>
+        shouldOffer: () => Promise<boolean>
+        offerAnswered: () => Promise<{ ok: boolean }>
         onState: (cb: (s: ButlerState) => void) => () => void
         onStartAgent: (cb: (payload: { agentId: string; mode: 'resume' | 'new' }) => void) => () => void
       }
