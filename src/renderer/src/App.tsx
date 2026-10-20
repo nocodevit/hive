@@ -7,6 +7,8 @@ import { ButlerPanel, type ButlerMode } from './components/butler/ButlerPanel'
 import { ButlerWizard } from './components/butler/ButlerWizard'
 import { WakeToast, useWakeListening } from './components/butler/WakeToast' // [butler:wake]
 import { WakeSettings } from './components/butler/WakeSettings' // [butler:wake]
+import { EmailAccounts } from './components/butler/EmailAccounts' // [butler:mail-routines]
+import { DailyRoutine } from './components/butler/DailyRoutine' // [butler:mail-routines]
 import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { FeishuConnection } from './components/FeishuConnection'
 import { AboutMeSettings, SkillsSettings } from './components/butler/SkillsSettings' // [butler:skills]
@@ -3324,6 +3326,8 @@ export default function App() {
             <SkillsSettings />
 
             {/* [butler:mail-routines] Email accounts + Daily routine sections */}
+            <EmailAccounts />
+            <DailyRoutine />
 
             {/* [butler:feishu-agent-calendar] Answer-for-me + Calendar sections */}
             <FeishuAgentSettings />
