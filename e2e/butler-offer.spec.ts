@@ -8,15 +8,13 @@ import { tmpdir } from 'os'
 /**
  * The one-time "Set up Hive with Butler?" card: shown at launch to
  * someone with agents who never answered; "Not now" is final across a
- * restart; "Start" opens App Settings (the switch stays off), where
- * Remote Control is the first section. `claude` is a fake that never
+ * restart; "Start" opens the setup wizard. `claude` is a fake that never
  * connects (no real Remote Control session).
  */
 
 const PROJECT_ROOT = join(__dirname, '..')
 const ROOT = join(tmpdir(), 'hive-e2e-butler-offer')
 const FAKE = join(ROOT, 'fake-claude')
-const SWITCH = 'Allow remote control from my phone (Butler)'
 const OFFER = 'Set up Hive with Butler?'
 
 let app: ElectronApplication | undefined
@@ -71,18 +69,14 @@ test('"Not now" answers it for good', async () => {
   await expect(page.getByRole('dialog', { name: OFFER })).toHaveCount(0)
 })
 
-test('"Start" opens App Settings with Remote Control on top, answering the offer', async () => {
+test('"Start" opens the setup wizard and answers the offer', async () => {
   const dataDir = join(ROOT, 'data-turn-on')
   seed(dataDir)
   await launch(dataDir)
   await page.getByRole('button', { name: 'Start' }).click()
-  await expect(page.getByRole('heading', { name: 'App Settings' })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Butler setup' })).toBeVisible()
   await expect(page.getByRole('dialog', { name: OFFER })).toHaveCount(0)
-  await expect(page.getByRole('switch', { name: SWITCH })).toHaveAttribute('aria-checked', 'false')
   await expect.poll(() => JSON.parse(readFileSync(join(dataDir, 'butler.json'), 'utf8')).offered).toBe(true)
-  const remote = await page.getByText('Remote Control', { exact: true }).boundingBox()
-  const style = await page.getByText('Visual style', { exact: true }).boundingBox()
-  expect(remote!.y).toBeLessThan(style!.y)
 })
 
 test('no dialog for someone without agents yet', async () => {

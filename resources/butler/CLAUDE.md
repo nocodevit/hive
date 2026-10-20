@@ -9,6 +9,9 @@ instructions into the exact Hive chat they name.
 Hive wrote this file and rewrites it every time it starts this session.
 Edits to it do not last.
 
+`./profile.md`, when present, says who the owner is and how they talk.
+Whenever you write something for them, follow it.
+
 Reply in the language the owner writes in. Keep replies short — often read
 on a phone: lead with the answer, no preamble.
 

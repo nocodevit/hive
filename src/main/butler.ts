@@ -182,14 +182,31 @@ export interface ButlerSettings {
   offered: boolean
   /** Butler stays at the top of the project list. */
   pinned: boolean
+  /** Setup wizard: step id → answered how. */
+  setup: Record<string, SetupMark>
+  /** The "Setup n/m" card in the Butler panel was dismissed. */
+  setupCardHidden: boolean
+}
+
+export type SetupMark = 'done' | 'skipped'
+
+function readSetup(v: unknown): Record<string, SetupMark> {
+  const out: Record<string, SetupMark> = {}
+  if (v && typeof v === 'object') {
+    for (const [k, m] of Object.entries(v as Record<string, unknown>)) if (m === 'done' || m === 'skipped') out[k] = m
+  }
+  return out
 }
 
 export function readButlerSettings(dataDir: string): ButlerSettings {
   try {
     const j = JSON.parse(readFileSync(join(dataDir, SETTINGS_FILE), 'utf8'))
-    return { enabled: j?.enabled === true, trusted: j?.trusted === true, offered: j?.offered === true, pinned: j?.pinned === true }
+    return {
+      enabled: j?.enabled === true, trusted: j?.trusted === true, offered: j?.offered === true, pinned: j?.pinned === true,
+      setup: readSetup(j?.setup), setupCardHidden: j?.setupCardHidden === true
+    }
   } catch {
-    return { enabled: false, trusted: false, offered: false, pinned: false }
+    return { enabled: false, trusted: false, offered: false, pinned: false, setup: {}, setupCardHidden: false }
   }
 }
 
@@ -208,8 +225,10 @@ export function createButler(deps: ButlerDeps) {
   let trusted = saved.trusted
   let offered = saved.offered
   let pinned = saved.pinned
+  let setup = saved.setup
+  let setupCardHidden = saved.setupCardHidden
   let state: ButlerState = { enabled: saved.enabled, status: 'off' }
-  const persist = () => writeButlerSettings(deps.dataDir, { enabled: state.enabled, trusted, offered, pinned })
+  const persist = () => writeButlerSettings(deps.dataDir, { enabled: state.enabled, trusted, offered, pinned, setup, setupCardHidden })
   let term: PtyLike | null = null
   let output = ''
   let connectedAt = 0
@@ -330,6 +349,18 @@ export function createButler(deps: ButlerDeps) {
     },
     /** Ask once whether to turn it on: never after an answer or once it was on. */
     get shouldOffer() { return !offered && !state.enabled },
+    getSetup: () => ({ marks: { ...setup }, cardHidden: setupCardHidden }),
+    markSetup(step: string, mark: SetupMark | null) {
+      if (!/^[a-z][a-z0-9-]{0,31}$/.test(step)) return
+      setup = { ...setup }
+      if (mark) setup[step] = mark
+      else delete setup[step]
+      persist()
+    },
+    hideSetupCard(hidden: boolean) {
+      setupCardHidden = hidden
+      persist()
+    },
     get pinned() { return pinned },
     setPinned(v: boolean) {
       pinned = v
