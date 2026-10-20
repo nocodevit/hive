@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { ButlerSettings } from '../ButlerSettings'
 import { FeishuConnection } from '../FeishuConnection'
+import { FeishuAgentQuick } from './FeishuAgent'
+import { CalendarConnect } from './CalendarSettings'
 import { PALETTES, PALETTE_META, STYLES, STYLE_META, type Palette, type Style } from '../../palette'
 import { SETUP_STEPS, groupStarts, type SetupMark } from '../../lib/butler-setup'
 
@@ -23,11 +25,11 @@ interface Props {
 const SAY: Record<string, string> = {
   welcome: 'Hi, I’m Butler', claude: 'The engine', project: 'Pick a folder', theme: 'Try one',
   voice: 'Talk instead of typing', about: 'So I sound like you', phone: 'Check in from anywhere',
-  feishu: 'Answer for you', done: 'Top-right, any time'
+  feishu: 'Answer for you', calendar: 'Plan around meetings', done: 'Top-right, any time'
 }
 const TITLE: Record<string, string> = {
   welcome: 'Welcome to Hive', claude: 'Claude Code', project: 'First project', theme: 'Theme', voice: 'Voice',
-  about: 'About you', phone: 'Phone', feishu: 'Feishu', done: 'Ready'
+  about: 'About you', phone: 'Phone', feishu: 'Feishu', calendar: 'Calendar', done: 'Ready'
 }
 const STYLE_OPTS = [['direct', 'Direct'], ['warm', 'Warm'], ['formal', 'Formal']] as const
 
@@ -149,7 +151,8 @@ export function ButlerWizard(p: Props) {
     </>
   )
   else if (step.id === 'phone') body = <ButlerSettings />
-  else if (step.id === 'feishu') body = <FeishuConnection />
+  else if (step.id === 'feishu') body = <><FeishuConnection /><FeishuAgentQuick /></>
+  else if (step.id === 'calendar') body = <CalendarConnect />
   else if (step.id === 'done') body = (
     <>
       {SETUP_STEPS.filter(s => !s.framing).map(s => (

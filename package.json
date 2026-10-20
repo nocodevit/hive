@@ -18,13 +18,19 @@
       "entitlementsInherit": "entitlements.mac.plist",
       "extendInfo": {
         "NSMicrophoneUsageDescription": "Hive needs microphone access to transcribe your voice into agent prompts.",
-        "NSSpeechRecognitionUsageDescription": "Hive uses on-device speech recognition to convert your voice into text for the agent chat."
+        "NSSpeechRecognitionUsageDescription": "Hive uses on-device speech recognition to convert your voice into text for the agent chat.",
+        "NSCalendarsUsageDescription": "Butler reads today's events to plan your day around meetings.",
+        "NSCalendarsFullAccessUsageDescription": "Butler reads today's events to plan your day around meetings."
       }
     },
     "extraResources": [
       {
         "from": "scripts/hive-speech",
         "to": "scripts/hive-speech"
+      },
+      {
+        "from": "scripts/hive-calendar",
+        "to": "scripts/hive-calendar"
       },
       {
         "from": "resources/butler",
