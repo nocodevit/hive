@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, Menu } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, Menu, safeStorage } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync, fstatSync } from 'fs'
 import { createServer } from 'http'
@@ -187,6 +187,8 @@ import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSess
 import { getPrevSessionInfo } from './chat-recent-sessions'
 import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
 import { readOpenChats, writeOpenChats, buildUnclosedRows, lastUserText } from './openChats'
+import { createFeishuAuth, relayUrl, RELAY_TIMEOUT_MS } from './feishuAuth'
+import { probeFeishu } from './feishuProbe'
 import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder } from './butler'
 import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
@@ -584,6 +586,44 @@ const butler = createButler({
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send('butler:state', s)
   }
 })
+// ── Feishu sign-in (feishuAuth.ts) ────────────────────────────────────
+// Tokens are encrypted with Electron safeStorage (key in the macOS
+// Keychain). Isolated test data dirs may opt into a plain file so e2e runs
+// never touch the Keychain.
+const feishuTokenFile = join(DATA_DIR, 'feishu-token.bin')
+const feishuPlainStore = !!process.env.HIVE_DATA_DIR && process.env.HIVE_FEISHU_PLAIN_STORE === '1'
+const feishu = createFeishuAuth({
+  relay: relayUrl(process.env.HIVE_FEISHU_RELAY),
+  store: {
+    load: () => {
+      try {
+        const raw = readFileSync(feishuTokenFile)
+        return JSON.parse(feishuPlainStore ? raw.toString('utf8') : safeStorage.decryptString(raw))
+      } catch { return null }
+    },
+    save: t => {
+      const json = JSON.stringify(t)
+      writeFileSync(feishuTokenFile, feishuPlainStore ? json : safeStorage.encryptString(json), { mode: 0o600 })
+    },
+    clear: () => { try { unlinkSync(feishuTokenFile) } catch { /* none */ } }
+  },
+  // Main-process fetch: the relay refuses requests that carry an Origin.
+  post: async (u, body) => {
+    const r = await fetch(u, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Hive-Client': '1' },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(RELAY_TIMEOUT_MS)
+    })
+    return { status: r.status, retryAfter: r.headers.get('retry-after'), body: await r.json().catch(() => ({})) }
+  },
+  openBrowser: u => { shell.openExternal(u).catch(() => {}) },
+  onStatus: s => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send('feishu:status', s) }
+})
+ipcMain.handle('feishu:status', () => feishu.getStatus())
+ipcMain.handle('feishu:login', () => feishu.login())
+ipcMain.handle('feishu:logout', () => { feishu.logout(); return feishu.getStatus() })
+
 ipcMain.handle('butler:state', () => butler.getState())
 ipcMain.handle('butler:setEnabled', (_e, enabled: unknown) => {
   butler.setEnabled(enabled === true)
@@ -669,6 +709,19 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
 
     if (req.method === 'GET' && url.pathname === '/agents') {
       return reply(200, { ok: true, agents: rows })
+    }
+
+    // What the signed-in user's Feishu token can do (feishuProbe.ts):
+    // counts and kinds only, never message text.
+    if (req.method === 'GET' && url.pathname === '/feishu/probe') {
+      const tok = await feishu.accessToken()
+      if (!tok.ok) return reply(409, { ok: false, error: tok.error })
+      const st = feishu.getStatus()
+      const report = await probeFeishu(tok.token, st.state === 'signed_in' ? st.scope : '', async (u, token) => {
+        const r = await fetch(u, { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(20_000) })
+        return { status: r.status, body: await r.json().catch(() => ({})) }
+      })
+      return reply(200, { ok: true, report })
     }
 
     if (req.method === 'GET' && url.pathname === '/chat/tail') {
@@ -2409,6 +2462,7 @@ app.whenReady().then(() => {
 
   createWindow()
   butler.restore()
+  feishu.init()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
