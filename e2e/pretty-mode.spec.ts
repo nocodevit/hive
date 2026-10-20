@@ -1,17 +1,21 @@
 import { test, expect, ElectronApplication, Page } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import { join } from 'path'
+import { tmpdir } from 'os'
+import { mkdtempSync, rmSync } from 'fs'
 
 let app: ElectronApplication
 let page: Page
+let dataDir: string
 
 test.beforeAll(async () => {
   const { execSync } = require('child_process')
   execSync('npx electron-vite build', { cwd: join(__dirname, '..'), stdio: 'pipe', timeout: 60000 })
 
+  dataDir = mkdtempSync(join(tmpdir(), 'hive-e2e-pretty-'))
   app = await electron.launch({
     args: [join(__dirname, '..', 'out', 'main', 'index.js')],
-    env: { ...process.env, NODE_ENV: 'test', HEADLESS: '1', HIVE_PORT: '17801' }
+    env: { ...process.env, NODE_ENV: 'test', HEADLESS: '1', HIVE_PORT: '17801', HIVE_DATA_DIR: dataDir }
   })
   page = await app.firstWindow({ timeout: 60000 })
   await page.waitForLoadState('domcontentloaded')
@@ -20,6 +24,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close()
+  if (dataDir) rmSync(dataDir, { recursive: true, force: true })
 })
 
 /**
