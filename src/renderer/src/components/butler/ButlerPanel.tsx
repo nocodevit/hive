@@ -3,6 +3,7 @@ import HiveChat from '../hive-chat'
 import { orderSessions, sessionCounts, type SessionRow } from '../../lib/butler-sessions'
 import { setupProgress, type SetupMark } from '../../lib/butler-setup'
 import { ApprovalsList } from './ApprovalsList'
+import { openSkill } from '../../lib/butler-skills'
 import { TodayTab } from './TodayTab' // [butler:mail-routines]
 
 export type ButlerMode = 'drawer' | 'page'
@@ -98,6 +99,8 @@ export function ButlerPanel(p: Props) {
             <button onClick={() => p.onMode('drawer')} title="Back to the side panel" aria-label="Back to the side panel"
               className="w-7 h-7 rounded-lg text-text-muted hover:bg-bg-hover cursor-pointer">⤡</button>
           )}
+          <button onClick={() => openSkill(null)} aria-label="Butler settings" title="Skills & settings"
+            className="w-7 h-7 rounded-lg text-text-muted hover:bg-bg-hover cursor-pointer">⚙️</button>
           <button onClick={p.onClose} aria-label="Close Butler" className="w-7 h-7 rounded-lg text-text-muted hover:bg-bg-hover cursor-pointer">✕</button>
         </div>
       </div>

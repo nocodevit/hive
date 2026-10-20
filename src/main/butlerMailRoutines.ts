@@ -69,6 +69,7 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode 
     uid: process.getuid?.() ?? 501,
     program: () => (d.app.isPackaged ? [process.execPath] : [process.execPath, d.app.getAppPath()]),
     logDir: join(folder, 'logs'),
+    bundleId: 'com.hive.app',
     env: isolated ? { HIVE_DATA_DIR: d.dataDir } : undefined
   })
 
@@ -98,6 +99,10 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode 
       }
     }
   })
+
+  // Bring installed LaunchAgents up to what this version writes (e.g. the
+  // bundle id that makes Login Items say "Hive"). No-op when current.
+  { const rs = readRoutineSettings(folder); if (rs.saved) void scheduler.sync(rs) }
 
   registerButlerMailIpc({ ipcMain: d.ipcMain, mail, openExternal: d.openExternal })
   // Settings and journal reads/writes use the plain path: opening Settings
