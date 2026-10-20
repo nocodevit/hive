@@ -5,6 +5,8 @@ import { ButlerOfferCard } from './components/butler/ButlerOfferCard'
 import { ButlerButton } from './components/butler/ButlerButton'
 import { ButlerPanel, type ButlerMode } from './components/butler/ButlerPanel'
 import { ButlerWizard } from './components/butler/ButlerWizard'
+import { WakeToast, useWakeListening } from './components/butler/WakeToast' // [butler:wake]
+import { WakeSettings } from './components/butler/WakeSettings' // [butler:wake]
 import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { FeishuConnection } from './components/FeishuConnection'
 import { AboutMeSettings, SkillsSettings } from './components/butler/SkillsSettings' // [butler:skills]
@@ -113,6 +115,7 @@ export default function App() {
   const [wizardAt, setWizardAt] = useState<number | null>(null)
   useEffect(() => { window.api.butler.setup().then(setButlerSetup).catch(() => {}) }, [])
   const [butlerWaiting, setButlerWaiting] = useState(0)
+  const wakeListening = useWakeListening() // [butler:wake]
   useEffect(() => {
     const apply = (s: { status: string }) => setButlerPhone(s.status === 'connected')
     window.api.butler.state().then(apply).catch(() => {})
@@ -905,6 +908,7 @@ export default function App() {
       open={butlerOpen}
       phoneConnected={butlerPhone}
       waiting={butlerWaiting}
+      listening={wakeListening}
       onClick={() => setButlerOpen(o => !o)}
     />
   )
@@ -3099,6 +3103,9 @@ export default function App() {
         />
       )}
 
+      {/* [butler:wake] forward toast */}
+      <WakeToast onOpenButler={() => setButlerOpen(true)} />
+
       {butlerOffer && unclosedAgents.length === 0 && (
         <ButlerOfferCard
           onStart={() => {
@@ -3323,6 +3330,7 @@ export default function App() {
             <CalendarSettings />
 
             {/* [butler:wake] Wake word section */}
+            <WakeSettings />
 
 
             {/* v2.9.0: STYLE picker (Accent | Prime). Prime is a full

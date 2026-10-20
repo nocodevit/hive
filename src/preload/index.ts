@@ -26,6 +26,22 @@ export type ButlerState = {
   error?: string
 }
 
+// [butler:wake]
+export type WakeState = { enabled: boolean; status: 'off' | 'starting' | 'listening' | 'error'; error?: string }
+export type WakePlan =
+  | { kind: 'agent'; row: ButlerAgentRow; text: string }
+  | { kind: 'no_session'; row: ButlerAgentRow; text: string }
+  | { kind: 'ambiguous'; name: string; project?: string; candidates: ButlerAgentRow[]; text: string }
+  | { kind: 'not_found'; name: string; project?: string; candidates: ButlerAgentRow[]; text: string }
+  | { kind: 'butler'; live: boolean; text: string }
+  | { kind: 'empty' }
+export type WakeProposal = { id: string; heard: string; plan: WakePlan }
+export type WakeEvent =
+  | { type: 'state'; state: WakeState }
+  | { type: 'wake' } | { type: 'cancel' } | { type: 'timeout' }
+  | { type: 'proposal'; proposal: WakeProposal }
+export type WakeSendResult = { ok: true; to: string } | { ok: false; error: string }
+
 const api = {
   pty: {
     create: (id: string, cwd?: string) => ipcRenderer.invoke('pty:create', { id, cwd }),
@@ -335,6 +351,17 @@ const api = {
   },
 
   // [butler:wake]
+  wake: {
+    state: () => ipcRenderer.invoke('wake:state') as Promise<WakeState>,
+    setEnabled: (enabled: boolean) => ipcRenderer.invoke('wake:setEnabled', enabled) as Promise<WakeState>,
+    send: (id: string, agentId?: string) => ipcRenderer.invoke('wake:send', id, agentId) as Promise<WakeSendResult>,
+    dismiss: (id: string) => ipcRenderer.invoke('wake:dismiss', id) as Promise<{ ok: boolean }>,
+    onEvent: (cb: (ev: WakeEvent) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, ev: WakeEvent) => cb(ev)
+      ipcRenderer.on('wake:event', handler)
+      return () => ipcRenderer.removeListener('wake:event', handler)
+    }
+  },
 
   feishu: {
     status: () => ipcRenderer.invoke('feishu:status') as Promise<FeishuStatus>,
