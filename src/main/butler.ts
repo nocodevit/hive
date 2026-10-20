@@ -177,13 +177,24 @@ export const STABLE_AFTER_MS = 10 * 60_000
  * Hive answers the question itself only while this is set AND Claude
  * Code's own record still trusts the folder (claudeTrustsFolder).
  */
+/**
+ * Bumped when Butler's setup changes enough that everyone — upgraded users
+ * too — should go through it again. Below this, the first-run card shows
+ * and wizard progress starts over; the settings themselves are kept, so
+ * the wizard opens on the owner's current values.
+ * 2 = Butler assistant (v2.33): skills, email, routines, Feishu, calendar.
+ */
+export const SETUP_VERSION = 2
+
 export interface ButlerSettings {
   enabled: boolean
   trusted: boolean
-  /** The one-time "control Hive from your phone?" offer was answered. */
-  offered: boolean
+  /** Setup version the owner last answered the first-run card for (0 = never). */
+  offeredVersion: number
   /** Butler stays at the top of the project list. */
   pinned: boolean
+  /** Setup version the wizard marks below belong to. */
+  setupVersion: number
   /** Setup wizard: step id → answered how. */
   setup: Record<string, SetupMark>
   /** The "Setup n/m" card in the Butler panel was dismissed. */
@@ -204,11 +215,13 @@ export function readButlerSettings(dataDir: string): ButlerSettings {
   try {
     const j = JSON.parse(readFileSync(join(dataDir, SETTINGS_FILE), 'utf8'))
     return {
-      enabled: j?.enabled === true, trusted: j?.trusted === true, offered: j?.offered === true, pinned: j?.pinned === true,
+      enabled: j?.enabled === true, trusted: j?.trusted === true,
+      offeredVersion: Number.isInteger(j?.offeredVersion) ? j.offeredVersion : 0, pinned: j?.pinned === true,
+      setupVersion: Number.isInteger(j?.setupVersion) ? j.setupVersion : 0,
       setup: readSetup(j?.setup), setupCardHidden: j?.setupCardHidden === true
     }
   } catch {
-    return { enabled: false, trusted: false, offered: false, pinned: false, setup: {}, setupCardHidden: false }
+    return { enabled: false, trusted: false, offeredVersion: 0, pinned: false, setupVersion: 0, setup: {}, setupCardHidden: false }
   }
 }
 
@@ -225,12 +238,15 @@ export function createButler(deps: ButlerDeps) {
 
   const saved = readButlerSettings(deps.dataDir)
   let trusted = saved.trusted
-  let offered = saved.offered
+  let offeredVersion = saved.offeredVersion
   let pinned = saved.pinned
   let setup = saved.setup
-  let setupCardHidden = saved.setupCardHidden
+  // Progress from an older setup does not count; the card comes back too.
+  const current = saved.setupVersion === SETUP_VERSION
+  if (!current) { setup = {} }
+  let setupCardHidden = current && saved.setupCardHidden
   let state: ButlerState = { enabled: saved.enabled, status: 'off' }
-  const persist = () => writeButlerSettings(deps.dataDir, { enabled: state.enabled, trusted, offered, pinned, setup, setupCardHidden })
+  const persist = () => writeButlerSettings(deps.dataDir, { enabled: state.enabled, trusted, offeredVersion, pinned, setupVersion: SETUP_VERSION, setup, setupCardHidden })
   let term: PtyLike | null = null
   let output = ''
   let connectedAt = 0
@@ -350,7 +366,8 @@ export function createButler(deps: ButlerDeps) {
       launch(resumeMode())
     },
     /** Ask once whether to turn it on: never after an answer or once it was on. */
-    get shouldOffer() { return !offered && !state.enabled },
+    /** Once per setup version, whatever was set before (upgraded users too). */
+    get shouldOffer() { return offeredVersion < SETUP_VERSION },
     getSetup: () => ({ marks: { ...setup }, cardHidden: setupCardHidden }),
     markSetup(step: string, mark: SetupMark | null) {
       if (!/^[a-z][a-z0-9-]{0,31}$/.test(step)) return
@@ -370,12 +387,11 @@ export function createButler(deps: ButlerDeps) {
     },
     /** The offer was answered ("Turn on" or "Not now"). */
     offerAnswered() {
-      offered = true
+      offeredVersion = SETUP_VERSION
       persist()
     },
     setEnabled(enabled: boolean) {
       state.enabled = enabled
-      if (enabled) offered = true
       // Turning it off withdraws the OK: the next "on" asks again.
       if (!enabled) trusted = false
       persist()

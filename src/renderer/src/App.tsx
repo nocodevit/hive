@@ -10,6 +10,7 @@ import { WakeSettings } from './components/butler/WakeSettings' // [butler:wake]
 import { EmailAccounts } from './components/butler/EmailAccounts' // [butler:mail-routines]
 import { DailyRoutine } from './components/butler/DailyRoutine' // [butler:mail-routines]
 import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
+import { reconcileLiveStatus } from './lib/live-status'
 import { FeishuConnection } from './components/FeishuConnection'
 import { FeishuExpiredBanner } from './components/butler/FeishuExpiredBanner'
 import { AboutMeSettings, SkillsSettings } from './components/butler/SkillsSettings' // [butler:skills]
@@ -124,11 +125,19 @@ export default function App() {
     window.api.butler.state().then(apply).catch(() => {})
     return window.api.butler.onState(apply)
   }, [])
+  // Live chats from main: the Butler badge, and the agent/project dots for
+  // chats that are open but idle (no hook event ever arrives for those).
+  const refreshLiveRef = useRef<() => void>(() => {})
   useEffect(() => {
     let alive = true
     const load = () => window.api.butler.agents()
-      .then(rows => { if (alive) setButlerWaiting(rows.filter(r => r.activity === 'waiting').length) })
+      .then(rows => {
+        if (!alive) return
+        setButlerWaiting(rows.filter(r => r.activity === 'waiting').length)
+        setAgents(prev => reconcileLiveStatus(prev, rows))
+      })
       .catch(() => {})
+    refreshLiveRef.current = load
     load()
     const t = setInterval(load, 10_000)
     return () => { alive = false; clearInterval(t) }
@@ -852,6 +861,8 @@ export default function App() {
     const ids = agentList.map(a => a.id)
     setActiveTerminals(prev => { const next = new Set(prev); for (const id of ids) next.add(id); return next })
     setRestartPending(prev => { const next = new Set(prev); for (const id of ids) next.add(id); return next })
+    // Resumed chats come up over a few seconds; show them live as they do.
+    for (const ms of [3000, 8000, 15000]) setTimeout(() => refreshLiveRef.current(), ms)
   }
   // "Whip lazy bones": resume only the agents that are NOT currently running.
   const whipLazyBones = (projectId: string) => {
@@ -990,10 +1001,10 @@ export default function App() {
                   const projectAgents = agents.filter((a) => a.projectId === project.id)
                   const hasWorking = projectAgents.some((a) => a.status === 'working')
                   const hasWaiting = projectAgents.some((a) => a.status === 'waiting')
-                  if (projectAgents.length === 0) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 border border-text-muted/50" title="No agents" />
-                  if (hasWorking) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-working" title="Agents working" />
-                  if (hasWaiting) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-waiting" title="Agents idle" />
-                  return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-text-muted/40" title="Agents offline" />
+                  if (projectAgents.length === 0) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 border border-text-muted/50" title="No agents" role="img" aria-label="No agents" />
+                  if (hasWorking) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-working" title="Agents working" role="img" aria-label="Agents working" />
+                  if (hasWaiting) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-waiting" title="Agents idle" role="img" aria-label="Agents idle" />
+                  return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-text-muted/40" title="Agents offline" role="img" aria-label="Agents offline" />
                 })()}
                 <span className="truncate">{project.name}</span>
                 {(() => {

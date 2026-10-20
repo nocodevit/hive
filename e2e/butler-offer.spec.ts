@@ -61,7 +61,7 @@ test('"Not now" answers it for good', async () => {
   await expect(page.getByRole('dialog', { name: OFFER })).toBeVisible()
   await page.getByRole('button', { name: 'Not now' }).click()
   await expect(page.getByRole('dialog', { name: OFFER })).toBeHidden()
-  expect(JSON.parse(readFileSync(join(dataDir, 'butler.json'), 'utf8'))).toMatchObject({ enabled: false, offered: true })
+  expect(JSON.parse(readFileSync(join(dataDir, 'butler.json'), 'utf8'))).toMatchObject({ enabled: false, offeredVersion: 2 })
 
   await app!.close()
   await launch(dataDir)
@@ -76,7 +76,7 @@ test('"Start" opens the setup wizard and answers the offer', async () => {
   await page.getByRole('button', { name: 'Start' }).click()
   await expect(page.getByRole('dialog', { name: 'Butler setup' })).toBeVisible()
   await expect(page.getByRole('dialog', { name: OFFER })).toHaveCount(0)
-  await expect.poll(() => JSON.parse(readFileSync(join(dataDir, 'butler.json'), 'utf8')).offered).toBe(true)
+  await expect.poll(() => JSON.parse(readFileSync(join(dataDir, 'butler.json'), 'utf8')).offeredVersion).toBe(2)
 })
 
 test('no dialog for someone without agents yet', async () => {
