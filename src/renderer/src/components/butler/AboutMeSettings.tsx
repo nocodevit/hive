@@ -1,16 +1,25 @@
 import { useEffect, useState } from 'react'
-import { PROFILE_FRONT, PROFILE_MORE, sameProfile, toProfile, type Profile, type ProfileKey } from '../../lib/butler-skills'
+import { PROFILE_FRONT, PROFILE_MORE, acceptPlaceholderOnTab, sameProfile, toProfile, type Profile, type ProfileKey } from '../../lib/butler-skills'
 
 const STYLE_OPTS = [['direct', 'Direct'], ['warm', 'Warm'], ['formal', 'Formal']] as const
 
 export const sectionLabel = 'block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2'
 export const summaryCls = 'cursor-pointer text-[12px] font-semibold text-text-muted select-none'
 
-export function Field({ label, value, onChange, placeholder, disabled }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean }) {
+export function Field({ label, value, onChange, placeholder, disabled, multiline }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; disabled?: boolean; multiline?: boolean }) {
+  if (multiline) return (
+    <label className="col-span-2 flex flex-col gap-1 text-[11px] font-semibold text-text-muted">
+      {label}
+      <textarea value={value} placeholder={placeholder} disabled={disabled} rows={3} onChange={e => onChange(e.target.value)}
+        onKeyDown={e => acceptPlaceholderOnTab(e, value, placeholder, onChange)}
+        className="px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-[13px] font-medium text-text-primary focus:outline-none focus:border-accent resize-y disabled:opacity-50" />
+    </label>
+  )
   return (
     <label className="flex flex-col gap-1 text-[11px] font-semibold text-text-muted">
       {label}
       <input value={value} placeholder={placeholder} disabled={disabled} onChange={e => onChange(e.target.value)}
+        onKeyDown={e => acceptPlaceholderOnTab(e, value, placeholder, onChange)}
         className="px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-[13px] font-medium text-text-primary focus:outline-none focus:border-accent disabled:opacity-50" />
     </label>
   )
@@ -42,7 +51,7 @@ export function AboutMeSettings() {
   }
 
   return (
-    <div>
+    <div role="group" aria-label="About me">
       <div className="flex items-center justify-between mb-2">
         <label className={sectionLabel.replace(' mb-2', '')}>About me</label>
         <button onClick={save} disabled={!dirty || busy}
@@ -51,7 +60,6 @@ export function AboutMeSettings() {
         </button>
       </div>
       <div className="rounded-xl bg-bg-secondary border border-border px-4 py-3 flex flex-col gap-3">
-        <Field label="Assistant name · reply prefix & intro" value={p.assistantName} placeholder="Mimi" onChange={v => set('assistantName', v)} />
         <div className="grid grid-cols-2 gap-2.5">
           {PROFILE_FRONT.slice(0, 2).map(([k, label, ph]) => <Field key={k} label={label} value={p[k]} placeholder={ph} onChange={v => set(k, v)} />)}
         </div>
@@ -65,9 +73,9 @@ export function AboutMeSettings() {
           {PROFILE_FRONT.slice(2).map(([k, label, ph]) => <Field key={k} label={label} value={p[k]} placeholder={ph} onChange={v => set(k, v)} />)}
         </div>
         <details>
-          <summary className={summaryCls}>More · name · phrases · prefix</summary>
+          <summary className={summaryCls}>More · names · phrases · prefix · extra</summary>
           <div className="grid grid-cols-2 gap-2.5 mt-2">
-            {PROFILE_MORE.map(([k, label, ph]) => <Field key={k} label={label} value={p[k]} placeholder={ph} onChange={v => set(k, v)} />)}
+            {PROFILE_MORE.map(([k, label, ph]) => <Field key={k} label={label} value={p[k]} placeholder={ph} multiline={k === 'extra'} onChange={v => set(k, v)} />)}
           </div>
         </details>
         <details>

@@ -62,3 +62,16 @@ describe('assistant name', () => {
     expect(renderProfileMd({ ...EMPTY_PROFILE, name: 'Mei' })).toContain("You are Mei's personal AI agent.")
   })
 })
+
+describe('extra requirements', () => {
+  it('rendered as its own section, kept longer than other fields', () => {
+    const p = normalizeProfile({ extra: '  客户相关先抄送 PMO\n周五下午不约会 ' + 'x'.repeat(1000) })
+    expect(p.extra.length).toBeGreaterThan(500)
+    const md = renderProfileMd(p)
+    expect(md).toContain('## Extra requirements')
+    expect(md).toContain('客户相关先抄送 PMO\n周五下午不约会')
+  })
+  it('absent when empty', () => {
+    expect(renderProfileMd(EMPTY_PROFILE)).not.toContain('Extra requirements')
+  })
+})

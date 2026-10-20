@@ -86,7 +86,7 @@ export function foldDiff(diff: DiffLine[], context = 1): Array<DiffLine | { op: 
 
 // ── About me ──────────────────────────────────────────────────────────
 
-export const PROFILE_KEYS = ['assistantName', 'name', 'role', 'team', 'responsibleFor', 'worksWith', 'style', 'oftenSays', 'neverSays', 'language', 'answerLike', 'whenUnsure', 'prefix', 'intro'] as const
+export const PROFILE_KEYS = ['assistantName', 'name', 'role', 'team', 'responsibleFor', 'worksWith', 'style', 'oftenSays', 'neverSays', 'language', 'answerLike', 'whenUnsure', 'prefix', 'intro', 'extra'] as const
 export type ProfileKey = (typeof PROFILE_KEYS)[number]
 export type Profile = Record<ProfileKey, string>
 
@@ -97,15 +97,25 @@ export const PROFILE_FRONT: ReadonlyArray<[ProfileKey, string, string]> = [
   ['whenUnsure', 'When unsure', '说“我去确认”，转给我']
 ]
 export const PROFILE_MORE: ReadonlyArray<[ProfileKey, string, string]> = [
-  ['name', 'Name', 'Mei Yang'],
+  ['name', 'Your name', 'Mei Yang'],
+  ['assistantName', 'Assistant name · prefix & intro', 'Mimi'],
   ['team', 'Team', 'IoT 平台'],
   ['worksWith', 'Works with', 'Ben、PMO'],
   ['oftenSays', 'Often says', '先说结论'],
   ['neverSays', 'Never says', '您好、亲'],
   ['language', 'Language', '跟对方'],
   ['prefix', 'Prefix', '【Mei 的 AI 代理】'],
-  ['intro', 'Intro', '我是 Mei 的 AI 代理']
+  ['intro', 'Intro', '我是 Mei 的 AI 代理'],
+  ['extra', 'Extra', '涉及客户的回复先抄送 PMO；周五下午不约会']
 ]
+
+/**
+ * Tab in an empty field takes its example (the placeholder) and moves on,
+ * so the shown example can be accepted with one key.
+ */
+export function acceptPlaceholderOnTab(e: { key: string; shiftKey: boolean }, value: string, placeholder: string | undefined, onChange: (v: string) => void): void {
+  if (e.key === 'Tab' && !e.shiftKey && !value && placeholder) onChange(placeholder)
+}
 
 export function toProfile(raw: Record<string, unknown> | null | undefined): Profile {
   const out = {} as Profile

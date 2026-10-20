@@ -1,3 +1,4 @@
+import { PROFILE_FRONT, PROFILE_MORE, acceptPlaceholderOnTab } from '../../lib/butler-skills'
 import { useEffect, useRef, useState } from 'react'
 import { ButlerSettings } from '../ButlerSettings'
 import { FeishuConnection } from '../FeishuConnection'
@@ -41,11 +42,20 @@ const STYLE_OPTS = [['direct', 'Direct'], ['warm', 'Warm'], ['formal', 'Formal']
 function Row({ children }: { children: React.ReactNode }) {
   return <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-bg-primary text-[13px] text-text-primary">{children}</div>
 }
-function Field({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+function Field({ label, value, onChange, placeholder, multiline }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; multiline?: boolean }) {
+  if (multiline) return (
+    <label className="col-span-2 flex flex-col gap-1 text-[11px] font-semibold text-text-muted">
+      {label}
+      <textarea value={value} placeholder={placeholder} rows={3} onChange={e => onChange(e.target.value)}
+        onKeyDown={e => acceptPlaceholderOnTab(e, value, placeholder, onChange)}
+        className="px-2.5 py-1.5 rounded-lg bg-bg-secondary border border-border text-[13px] font-medium text-text-primary focus:outline-none focus:border-accent resize-y" />
+    </label>
+  )
   return (
     <label className="flex flex-col gap-1 text-[11px] font-semibold text-text-muted">
       {label}
       <input value={value} placeholder={placeholder} onChange={e => onChange(e.target.value)}
+        onKeyDown={e => acceptPlaceholderOnTab(e, value, placeholder, onChange)}
         className="px-2.5 py-1.5 rounded-lg bg-bg-secondary border border-border text-[13px] font-medium text-text-primary focus:outline-none focus:border-accent" />
     </label>
   )
@@ -138,8 +148,7 @@ export function ButlerWizard(p: Props) {
   else if (step.id === 'about') body = (
     <>
       <div className="grid grid-cols-2 gap-2.5">
-        <Field label="Role" value={profile.role || ''} onChange={v => setP('role', v)} placeholder="产品负责人" />
-        <Field label="Responsible for" value={profile.responsibleFor || ''} onChange={v => setP('responsibleFor', v)} placeholder="Cube v2、需求排期" />
+        {PROFILE_FRONT.slice(0, 2).map(([k, label, ph]) => <Field key={k} label={label} value={profile[k] || ''} placeholder={ph} onChange={v => setP(k, v)} />)}
       </div>
       <div className="inline-flex self-start gap-0.5 p-[3px] rounded-[10px] bg-bg-primary" role="radiogroup" aria-label="Style">
         {STYLE_OPTS.map(([id, label]) => (
@@ -147,12 +156,11 @@ export function ButlerWizard(p: Props) {
             className={`px-3 py-1 rounded-lg text-[12px] font-semibold cursor-pointer ${(profile.style || 'direct') === id ? 'bg-bg-secondary text-text-primary shadow-sm' : 'text-text-muted'}`}>{label}</button>
         ))}
       </div>
-      <Field label="Answer like a" value={profile.answerLike || ''} onChange={v => setP('answerLike', v)} placeholder="资深 IoT 产品经理" />
+      {PROFILE_FRONT.slice(2, 3).map(([k, label, ph]) => <Field key={k} label={label} value={profile[k] || ''} placeholder={ph} onChange={v => setP(k, v)} />)}
       <details>
         <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">More</summary>
         <div className="grid grid-cols-2 gap-2.5 mt-2">
-          <Field label="Name" value={profile.name || ''} onChange={v => setP('name', v)} />
-          <Field label="When unsure" value={profile.whenUnsure || ''} onChange={v => setP('whenUnsure', v)} placeholder="说“我去确认”" />
+          {[...PROFILE_FRONT.slice(3), ...PROFILE_MORE].map(([k, label, ph]) => <Field key={k} label={label} value={profile[k] || ''} placeholder={ph} multiline={k === 'extra'} onChange={v => setP(k, v)} />)}
         </div>
       </details>
     </>
