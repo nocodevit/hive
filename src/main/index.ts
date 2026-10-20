@@ -192,6 +192,7 @@ import { probeFeishu } from './feishuProbe'
 import { readProfile, writeProfile } from './butlerProfile'
 import { createApprovals } from './approvals'
 import { DELIVERABLE_RULE } from '../shared/deliverable'
+import { registerButlerWakeIpc } from './butlerWakeIpc'
 import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder } from './butler'
 import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
@@ -665,6 +666,14 @@ const butlerCalendar = registerButlerCalendarIpc({
   helperCandidates: [join(__dirname, '..', '..', 'scripts', 'hive-calendar'), join(process.resourcesPath, 'scripts', 'hive-calendar')]
 })
 // [butler:wake]
+registerButlerWakeIpc({
+  butlerDir: butlerDir(DATA_DIR),
+  loadData,
+  rows: () => butlerRows(),
+  isLive: chatId => !!getChatSessionInfo(chatId)?.live,
+  sendMessage: (chatId, text) => sendExternalUserMessage(chatId, text),
+  isDictating: () => speechProcess !== null
+})
 
 ipcMain.handle('butler:state', () => butler.getState())
 ipcMain.handle('butler:setEnabled', (_e, enabled: unknown) => {

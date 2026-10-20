@@ -24,6 +24,21 @@ type ButlerState = {
   error?: string
 }
 
+// [butler:wake]
+type WakeState = { enabled: boolean; status: 'off' | 'starting' | 'listening' | 'error'; error?: string }
+type WakePlan =
+  | { kind: 'agent'; row: ButlerAgentRow; text: string }
+  | { kind: 'no_session'; row: ButlerAgentRow; text: string }
+  | { kind: 'ambiguous'; name: string; project?: string; candidates: ButlerAgentRow[]; text: string }
+  | { kind: 'not_found'; name: string; project?: string; candidates: ButlerAgentRow[]; text: string }
+  | { kind: 'butler'; live: boolean; text: string }
+  | { kind: 'empty' }
+type WakeEvent =
+  | { type: 'state'; state: WakeState }
+  | { type: 'wake' } | { type: 'cancel' } | { type: 'timeout' }
+  | { type: 'proposal'; proposal: { id: string; heard: string; plan: WakePlan } }
+type WakeSendResult = { ok: true; to: string } | { ok: false; error: string }
+
 declare global {
   interface Window {
     api: {
@@ -134,6 +149,13 @@ declare global {
       }
 
       // [butler:wake]
+      wake: {
+        state: () => Promise<WakeState>
+        setEnabled: (enabled: boolean) => Promise<WakeState>
+        send: (id: string, agentId?: string) => Promise<WakeSendResult>
+        dismiss: (id: string) => Promise<{ ok: boolean }>
+        onEvent: (cb: (ev: WakeEvent) => void) => () => void
+      }
 
       feishu: {
         status: () => Promise<FeishuStatus>

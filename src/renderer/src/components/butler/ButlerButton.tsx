@@ -3,10 +3,12 @@ interface Props {
   phoneConnected: boolean
   waiting: number
   onClick: () => void
+  /** "Hola Butler" wake word is listening: pulsing red mic. */
+  listening?: boolean
 }
 
 /** Fixed slot at the right end of the rightmost column header. */
-export function ButlerButton({ open, phoneConnected, waiting, onClick }: Props) {
+export function ButlerButton({ open, phoneConnected, waiting, onClick, listening }: Props) {
   return (
     <button
       onClick={onClick}
@@ -23,6 +25,12 @@ export function ButlerButton({ open, phoneConnected, waiting, onClick }: Props) 
         )}
       </span>
       Butler
+      {listening && (
+        <span title="Listening for “Hola Butler”" aria-label="Listening" className="relative w-[18px] h-[18px] rounded-full bg-red-500/15 text-red-500 text-[10px] inline-flex items-center justify-center">
+          🎙
+          <span className="absolute -inset-[3px] rounded-full border-2 border-red-500/45 animate-ping" />
+        </span>
+      )}
       {waiting > 0 && (
         <span title={`${waiting} waiting for you`} className="min-w-[17px] h-[17px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center">{waiting}</span>
       )}
