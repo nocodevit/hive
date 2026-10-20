@@ -644,6 +644,8 @@ ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' &
 
 // ── Butler features: each phase registers itself at its own marker ────
 // [butler:skills]
+import { registerButlerSkillsIpc } from './butlerSkillsIpc'
+registerButlerSkillsIpc({ ipcMain, butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
 // [butler:feishu-agent-calendar]
 // [butler:wake]
