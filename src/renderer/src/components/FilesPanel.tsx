@@ -268,7 +268,7 @@ export default function FilesPanel({ project, agentCwd, width, onOpenFile, heade
     : expanded
 
   return (
-    <div className="hive-card mt-2.5 flex-shrink-0 flex flex-col" style={{ width }}>
+    <div className="hive-card flex-shrink-0 flex flex-col" style={{ width }}>
       {/* Header */}
       <div className="drag-region hive-head">
         <h2 className="no-drag hive-head-title truncate">
