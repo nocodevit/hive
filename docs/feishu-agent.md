@@ -19,8 +19,10 @@ wizard steps Feishu (switch + Everyone / People I pick) and Calendar.
 - **Decide**: `claude -p` in the Butler folder, naming the `answer-feishu`
   skill, with profile.md, agents' status + last line, last 20 messages.
   Strict JSON `{decision, reply, reason}`; bad JSON / failure → escalate.
-- **Locked** (code-level keywords on question and reply): dates, prices,
-  promises, approvals, customers + "Always asks you". Escalate = holding
+- **Locked** (code-level keywords on question and reply): prices,
+  approvals, private chats (what the owner talks about with others),
+  personal / sensitive / confidential info + "Always asks you". The prompt
+  also forbids revealing anything from other chats. Escalate = holding
   reply "我需要和 <name> 确认，稍后回复你" + approval `feishu.followup`
   (draft = suggested answer); Approve sends the draft as a reply to the
   original message. Notification if still pending after `remindAfterMs`.

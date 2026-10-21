@@ -46,7 +46,7 @@ describe('shipped defaults', () => {
     const md = def('answer-feishu')
     expect(md).toMatch(/我需要和 <name> 确认，稍后回复你/)
     expect(md).toMatch(/prefix from `profile\.md`/)
-    expect(lockedLines(md).map(l => l.split(' — ')[0])).toEqual(['- 🔒 dates', '- 🔒 prices', '- 🔒 promises', '- 🔒 approvals', '- 🔒 customers'])
+    expect(lockedLines(md).map(l => l.split(' — ')[0])).toEqual(['- 🔒 prices', '- 🔒 approvals', '- 🔒 private chats', '- 🔒 personal info', '- 🔒 sensitive info', '- 🔒 confidential'])
   })
 })
 

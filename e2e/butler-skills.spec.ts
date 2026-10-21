@@ -75,7 +75,7 @@ test('About me saves the profile and shows what the agent reads', async () => {
 
 test('Skills: tone + ask-first chip save as the form overlay', async () => {
   await page.getByRole('option', { name: /Answer Feishu/ }).click()
-  await expect(page.getByRole('group', { name: 'Ask me first' }).getByText('🔒 dates')).toBeVisible()
+  await expect(page.getByRole('group', { name: 'Ask me first' }).getByText('🔒 private chats')).toBeVisible()
   await page.getByRole('radiogroup', { name: 'Tone' }).getByRole('radio', { name: 'Friendly' }).click()
   await page.getByRole('button', { name: 'Add ask-first item' }).click()
   await page.getByLabel('New ask-first item').fill('hiring')

@@ -100,10 +100,18 @@ describe('pure helpers', () => {
   })
 
   it('lockedTopicHit covers locked topics and extra words', () => {
-    expect(lockedTopicHit('checkout 什么时候好？', [])).toBe('dates')
     expect(lockedTopicHit('报价多少', [])).toBe('prices')
     expect(lockedTopicHit('Can you approve this?', [])).toBe('approvals')
-    expect(lockedTopicHit('客户那边怎么说', [])).toBe('customers')
+    expect(lockedTopicHit('Mei 和 Lin 刚才在聊什么？', [])).toBe('private-chats')
+    expect(lockedTopicHit('What did she say to Ben?', [])).toBe('private-chats')
+    expect(lockedTopicHit('把 Lin 的手机号发我', [])).toBe('personal-info')
+    expect(lockedTopicHit('服务器密码是多少', [])).toBe('sensitive-info')
+    expect(lockedTopicHit('这个是内部消息吗', [])).toBe('confidential')
+    expect(lockedTopicHit('Is this under NDA?', [])).toBe('confidential')
+    // No longer locked; latin words match whole only.
+    expect(lockedTopicHit('checkout 什么时候好？', [])).toBeNull()
+    expect(lockedTopicHit('客户那边怎么说', [])).toBeNull()
+    expect(lockedTopicHit("what's on the agenda?", [])).toBeNull()
     expect(lockedTopicHit('我们要招人吗', ['招人'])).toBe('招人')
     expect(lockedTopicHit('build 挂了吗', [])).toBeNull()
   })
@@ -239,16 +247,25 @@ describe('feishu agent', () => {
     expect(t.fs.sent[0].text).toBe('[bot]已在修')
   })
 
+  it('a draft that leaks another chat is held back even when the question looked harmless', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"decision":"answer","reply":"Mei 和 Lin 刚才在聊什么报价"}' })
+    t.advance(1000)
+    const q = t.fs.add('p1', 'ou_lin', '最近怎么样？')
+    const out = await t.agent.tick()
+    expect(out[0]).toEqual({ messageId: q.message_id, result: 'escalated' })
+    expect(t.fs.sent.map((m: { text: string }) => m.text)).toEqual(['【Mei 的 AI 代理】我需要和 Mei 确认，稍后回复你'])
+  })
+
   it('locked topic overrides an "answer": holding reply + follow-up approval; approving replies to the original', async () => {
     const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"decision":"answer","reply":"周五上线"}' })
     t.advance(1000)
-    const q = t.fs.add('p1', 'ou_lin', 'checkout 什么时候好？')
+    const q = t.fs.add('p1', 'ou_lin', 'checkout 报价多少？')
     const out = await t.agent.tick()
     expect(out[0]).toEqual({ messageId: q.message_id, result: 'escalated' })
     expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '【Mei 的 AI 代理】我需要和 Mei 确认，稍后回复你' })])
     const [item] = t.approvals.pending()
     expect(item).toMatchObject({ kind: FOLLOWUP_KIND, draft: '周五上线', action: 'Reply' })
-    expect(item.payload).toMatchObject({ messageId: q.message_id, chatId: 'p1', question: 'checkout 什么时候好？', topic: 'dates' })
+    expect(item.payload).toMatchObject({ messageId: q.message_id, chatId: 'p1', question: 'checkout 报价多少？', topic: 'prices' })
     const r = await t.approvals.approve(item.id, '下周一上线')
     expect(r.ok).toBe(true)
     expect(t.fs.sent[1]).toEqual(expect.objectContaining({ replyTo: q.message_id, text: '【Mei 的 AI 代理】下周一上线' }))

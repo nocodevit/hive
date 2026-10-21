@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { FeishuAgentSettings, FeishuAgentView, FeishuLogEntry } from '../../lib/feishu-agent-types'
 
 const RECALL_MS = 24 * 3600_000
-const LOCK_LABEL: Record<string, string> = { dates: 'dates', prices: 'prices', promises: 'promises', approvals: 'approvals', customers: 'customers' }
+const LOCK_LABEL: Record<string, string> = { prices: 'prices', approvals: 'approvals', 'private-chats': 'private chats', 'personal-info': 'personal info', 'sensitive-info': 'sensitive info', confidential: 'confidential' }
 const KIND_ICON: Record<FeishuLogEntry['kind'], string> = { answer: '💬', holding: '⏳', followup: '↩️' }
 
 function useFeishuAgent() {

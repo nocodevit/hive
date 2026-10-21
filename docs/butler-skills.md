@@ -47,7 +47,7 @@ description: <what it does>. Use when <trigger>.
 - `## Input` and `## Output` must stay identical to the default: they are
   the contract with the code that runs the skill.
 - `## Ask me first` lines that start with `- 🔒` are the safety floor
-  (dates, prices, promises, sending…). Keep every one word for word; add
+  (prices, approvals, private chats, sending…). Keep every one word for word; add
   your own as `- <topic> — <when>`.
 - Rules are lines, not essays. Change only what you mean to change.
 - Nothing a skill produces leaves Hive without the owner's approval
