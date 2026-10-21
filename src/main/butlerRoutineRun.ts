@@ -7,7 +7,7 @@ import { homedir } from 'os'
 import { claudeJsonPath, jiraTools, type ToolSet } from './butlerTools'
 import { join } from 'path'
 import type { RoutineId, RoutineRunRecord, RoutineSettings } from '../shared/butler-routines'
-import { journalDir, localDate, previousWithSection, readJournalText, setJournalSection, splitSections, toChecklist } from './butlerJournal'
+import { journalDir, localDate, previousWithSection, readJournalText, resolveMailRefs, setJournalSection, splitSections, toChecklist } from './butlerJournal'
 import { lateness } from './butlerRoutines'
 import { parseChatTail } from './butlerApi'
 import type { ProcessedEntry, SortResult } from './butlerMail'
@@ -149,16 +149,16 @@ export function createRoutineRunner(deps: RoutineRunDeps) {
       '', '# Input',
       '## Yesterday', yesterday ? `(${yesterday.date})\n${yesterday.body}` : '(no report)',
       '## Mail', `${deps.mail.unreadTotal()} unread`,
-      ...mail.map(m => `- [${m.category}] ${m.from} · ${m.subject}${m.summary ? ` — ${m.summary}` : ''}${m.approvalId ? ' (reply drafted, in Approve)' : ''}`),
+      ...mail.map((m, i) => `- m${i + 1} [${m.category}] ${m.from} · ${m.subject}${m.summary ? ` — ${m.summary}` : ''}${m.approvalId ? ' (reply drafted, in Approve)' : ''}`),
       '## Agents', ...(agents.length ? agents.map(a => `- ${a.agent} · ${a.project} · ${a.activity}`) : ['(none)']),
       '## Calendar', calendar || '(not connected)',
       '## Waiting for the owner (Approve)', ...(waiting.length ? waiting.slice(0, 10).map(w => `- ${w}`) : ['(nothing)']),
       '## Jira', jira || '(nothing)',
       '', '# Output',
       'Today\'s plan as a checklist, 3–8 lines, each "- [ ] <short task>": the 3 that matter most first (meetings to prepare, what waits for the owner, Jira).',
-      'End a line with " #draft" when it is answering a drafted email, " #jira" for a Jira ticket. Nothing else.'
+      'End a line with " #draft:<m-ref>" when it is answering a drafted email, " #mail:<m-ref>" for any other email (the m1, m2 … in front of it), " #jira" for a Jira ticket. Nothing else.'
     ].join('\n')
-    const list = toChecklist(await deps.runClaude(prompt))
+    const list = resolveMailRefs(toChecklist(await deps.runClaude(prompt)), new Map(mail.map((m, i) => [`m${i + 1}`, m.key])))
     if (!list) throw new Error('morning-plan: no checklist in the answer')
     // Today's meetings, as the calendars say (code, not the model).
     setJournalSection(jdir, today, 'Meetings', deps.calendar ? (calendar || 'No meetings today') : 'Calendar not connected')

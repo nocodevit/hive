@@ -158,6 +158,7 @@ declare global {
         day: (date?: string) => Promise<import('../shared/butler-routines').JournalDay>
         dates: () => Promise<string[]>
         toggle: (date: string, index: number, text: string, done: boolean) => Promise<{ ok: boolean; error?: string }>
+        ignore: (date: string, index: number, text: string) => Promise<{ ok: boolean; markedRead?: boolean; error?: string }>
       }
 
       // [butler:feishu-agent-calendar]
