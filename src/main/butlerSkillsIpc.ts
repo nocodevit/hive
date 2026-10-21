@@ -24,6 +24,24 @@ export interface ButlerSkillsDeps {
   defaultsDir: string
   run?: Runner
   reveal?: (path: string) => void
+  /** answer-feishu's real decision for a made-up message (nothing sent); see feishuAgent.preview. */
+  previewFeishu?: (text: string) => Promise<any>
+}
+
+/** The real answer-feishu check, as the owner reads it. */
+export function readablePreview(r: any): string {
+  const a = r.answer ?? {}
+  const claims = (Array.isArray(a.claims) ? a.claims : []).map((c: any) => `- ${c.claim} → ${c.verdict}${c.source ? ` (${c.source})` : ''}`)
+  return 'Real check · tools ran, nothing was sent\n\n' + [
+    `Would send: ${r.wouldSend ?? ''}`,
+    r.ack ? '' : `${String(r.gate?.level ?? '').toUpperCase()} · ${a.category ?? '-'} · confidence ${a.confidence ?? '-'} · ${((r.ms ?? 0) / 1000).toFixed(1)}s`,
+    r.gate?.reasons?.length ? `Why it goes to you: ${r.gate.reasons.join('; ')}` : '',
+    r.draft && r.draft !== r.wouldSend ? `Draft for you: ${r.draft}` : '',
+    Array.isArray(a.sources) && a.sources.length ? `Sources: ${a.sources.join(', ')}` : '',
+    claims.length ? `Claims:\n${claims.join('\n')}` : '',
+    r.ack ? '' : `Sender: ${r.relation ?? 'unknown'} · calendar ${r.calendarKnown ? 'yes' : 'no'}`,
+    r.error ? `Error: ${r.error}` : ''
+  ].filter(Boolean).join('\n')
 }
 
 export const RUN_TIMEOUT_MS = 180_000
@@ -67,7 +85,15 @@ export function registerButlerSkillsIpc(deps: ButlerSkillsDeps): void {
   h('butlerSkills:ackDefault', (_e, id: unknown) => wrap(() => { const s = store(); ackDefault(s, id as string); return skillDetail(s, id as string) }))
   h('butlerSkills:compare', (_e, id: unknown) => wrap(() => compareSkill(store(), id as string)))
   h('butlerSkills:try', async (_e, id: unknown, sample: unknown, md: unknown) => {
-    try { const s = store(); return await tryIt(s, id as string, sample, run, { md, profileMd: profileMd(s.butlerDir) }) } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+    try {
+      // answer-feishu with the saved skill: the real thing (tools, guardrail, gate), nothing sent.
+      if (id === 'answer-feishu' && !(typeof md === 'string' && md.trim()) && deps.previewFeishu && typeof sample === 'string' && sample.trim()) {
+        const r = await deps.previewFeishu(sample)
+        if (r?.ok) return { ok: true, output: readablePreview(r) }
+      }
+      const s = store()
+      return await tryIt(s, id as string, sample, run, { md, profileMd: profileMd(s.butlerDir) })
+    } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
   })
   h('butlerSkills:propose', async (_e, id: unknown, request: unknown) => {
     try { return await proposeEdit(store(), id as string, request, run) } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
