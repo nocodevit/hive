@@ -197,20 +197,6 @@ export function scanSkills(skillsDir: string): { name: string; pack: string; pat
   return skills
 }
 
-// Generate hook settings JSON
-export function generateHookSettings(agentId: string, port: number): Record<string, unknown> {
-  const curlPost = (endpoint: string, jsonBody: string) =>
-    `curl -s -X POST http://127.0.0.1:${port}${endpoint} -H "Content-Type: application/json" -d '${jsonBody}' > /dev/null 2>&1`
-
-  return {
-    hooks: {
-      Stop: [{ matcher: '', hooks: [{ type: 'command', command: curlPost('/status', `{"agentId":"${agentId}","status":"waiting","event":"stop"}`) }] }],
-      PreToolUse: [{ matcher: '', hooks: [{ type: 'command', command: curlPost('/status', `{"agentId":"${agentId}","status":"working","event":"tool_use"}`) }] }],
-      Notification: [{ matcher: '', hooks: [{ type: 'command', command: curlPost('/report', `{"agentId":"${agentId}","type":"notification","message":"Agent needs attention"}`) }] }]
-    }
-  }
-}
-
 // Generate report script content
 // dataDir: absolute path to this Hive instance's data dir (default: ~/.hive, dev: /tmp/hive-dev)
 export function generateReportScript(agentId: string, port: number, dataDir?: string, targetBranch?: string): string {
