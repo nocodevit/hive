@@ -14,7 +14,7 @@ import { chmodSync, copyFileSync, mkdirSync, readFileSync, realpathSync, unlinkS
 import { join } from 'path'
 import { claudeProjectSlug } from '../shared/claude-project-slug'
 import { composeSkills } from './butlerSkills'
-import { ownerAllow } from './butlerTools'
+import { discoveredAllow, ownerAllow } from './butlerTools'
 
 export const BUTLER_SESSION_NAME = 'Hive Butler'
 
@@ -31,8 +31,9 @@ export function butlerDir(dataDir: string): string {
 
 /** Overwrite the bundled files into the butler folder. Other files are left alone.
  *  .claude/settings.json is the Butler allow-list: every claude run in the folder
- *  (phone / desk chat, routines, answer-for-me) follows it. The owner's additions
- *  (allow-list.json) are merged in, so an upgrade never drops them. */
+ *  (phone / desk chat, routines, answer-for-me) follows it. It fits the owner: the
+ *  read tools their own MCP servers offer (tools-cache.json, see butlerTools) plus
+ *  their additions (allow-list.json), merged in so an upgrade never drops them. */
 export function installButlerFiles(srcDir: string, destDir: string): void {
   for (const f of BUTLER_FILES) {
     const dest = join(destDir, f.to)
@@ -40,7 +41,7 @@ export function installButlerFiles(srcDir: string, destDir: string): void {
     copyFileSync(join(srcDir, f.from), dest)
     if (f.mode) chmodSync(dest, f.mode)
   }
-  const extra = ownerAllow(destDir)
+  const extra = [...discoveredAllow(destDir), ...ownerAllow(destDir)]
   if (extra.length) {
     const settingsPath = join(destDir, '.claude', 'settings.json')
     const s = JSON.parse(readFileSync(settingsPath, 'utf8'))

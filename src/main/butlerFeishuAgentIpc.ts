@@ -3,7 +3,8 @@
 
 import { execFile } from 'child_process'
 import { DISALLOWED_TOOLS } from './butlerClaude'
-import { STARGATE_JIRA_WRITE } from './butlerTools'
+import { discoveredWrites } from './butlerTools'
+import { createRelationLookup } from './feishuAnswer'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { Notification, type IpcMain } from 'electron'
@@ -56,13 +57,13 @@ export interface FeishuAgentIpcDeps {
 
 /** answer-feishu run: the Butler allow-list (dontAsk), minus anything that writes —
  *  the message being answered comes from someone else. */
-export function feishuAnswerArgs(prompt: string): string[] {
-  return ['-p', prompt, '--output-format', 'text', '--permission-mode', 'dontAsk', '--disallowedTools', [...DISALLOWED_TOOLS, ...STARGATE_JIRA_WRITE].join(',')]
+export function feishuAnswerArgs(prompt: string, writes: string[]): string[] {
+  return ['-p', prompt, '--output-format', 'text', '--permission-mode', 'dontAsk', '--disallowedTools', [...DISALLOWED_TOOLS, ...writes].join(',')]
 }
 
 export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
   const runClaude = (prompt: string) => new Promise<string>((resolve, reject) => {
-    execFile(d.claudeBin(), feishuAnswerArgs(prompt),
+    execFile(d.claudeBin(), feishuAnswerArgs(prompt, discoveredWrites(d.butlerDir)),
       { cwd: d.butlerDir, timeout: CLAUDE_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, env: process.env },
       (err, stdout) => (err && !stdout ? reject(err) : resolve(String(stdout))))
   })
@@ -74,6 +75,11 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     profile: () => d.readProfile(d.butlerDir),
     profileMd: () => { try { return readFileSync(join(d.butlerDir, 'profile.md'), 'utf8') } catch { return '' } },
     runClaude,
+    relation: createRelationLookup({
+      get: (url, token) => feishuHttp('GET', url, token),
+      token: async () => { const t = await d.feishu.accessToken(); return t.ok && t.token ? t.token : null },
+      selfOpenId: () => { const s = d.feishu.getStatus(); return s.state === 'signed_in' && s.openId ? s.openId : null }
+    }),
     approvals: d.approvals,
     notify: d.notify ?? ((title, body) => { try { new Notification({ title, body }).show() } catch { /* no notification center */ } }),
     context: () => agentsContext(d.agents(), d.tail),

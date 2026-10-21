@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { STARGATE_READ, STARGATE_JIRA_WRITE } from '../butlerTools'
 import { feishuAnswerArgs } from '../butlerFeishuAgentIpc'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, realpathSync } from 'fs'
 import { tmpdir } from 'os'
@@ -145,9 +144,8 @@ describe('installButlerFiles', () => {
     expect(settings.permissions.allow.slice(0, 4)).toEqual([
       'Bash(./hive agents:*)', 'Bash(./hive tail:*)', 'Bash(./hive send:*)', 'Bash(./hive start:*)'
     ])
-    // The allow-list: stargate reads + the Jira writes handle-jira uses; nothing that deletes.
-    expect(settings.permissions.allow).toEqual(expect.arrayContaining([...STARGATE_READ, ...STARGATE_JIRA_WRITE]))
-    expect(settings.permissions.allow.some((t: string) => /delete|remove/.test(t))).toBe(false)
+    // Shipped: nothing for any MCP server — that comes from the owner's own tools.
+    expect(settings.permissions.allow.some((t: string) => t.startsWith('mcp__'))).toBe(false)
     expect(settings.permissions.deny).toEqual(expect.arrayContaining(['Edit', 'Write']))
     expect(readFileSync(join(dest, 'notes.txt'), 'utf8')).toBe('keep me')
   })
@@ -159,17 +157,25 @@ describe('installButlerFiles', () => {
     installButlerFiles(RESOURCES, dest)
     const allow: string[] = JSON.parse(readFileSync(join(dest, '.claude', 'settings.json'), 'utf8')).permissions.allow
     expect(allow.filter(t => t === 'mcp__stargate__gitlab_get_file')).toHaveLength(1)
-    expect(allow).toEqual(expect.arrayContaining(['Bash(./hive agents:*)', ...STARGATE_READ]))
+    expect(allow).toEqual(expect.arrayContaining(['Bash(./hive agents:*)']))
+  })
+  it("adds the owner's discovered read tools and the Jira writes, never other writes", () => {
+    const dest = join(mkdtempSync(join(tmpdir(), 'hive-butler-dest-')), 'butler')
+    mkdirSync(dest)
+    writeFileSync(join(dest, 'tools-cache.json'), JSON.stringify({ at: 1, servers: { stargate: ['jira_search', 'jira_get_transitions', 'jira_add_comment', 'jira_delete_issue', 'feishu_write_markdown', 'eagle_list_assets'] } }))
+    installButlerFiles(RESOURCES, dest)
+    const allow: string[] = JSON.parse(readFileSync(join(dest, '.claude', 'settings.json'), 'utf8')).permissions.allow
+    expect(allow.filter(t => t.startsWith('mcp__'))).toEqual(['mcp__stargate__jira_search', 'mcp__stargate__jira_get_transitions', 'mcp__stargate__eagle_list_assets', 'mcp__stargate__jira_add_comment'])
   })
 })
 
 describe('answer-feishu run', () => {
   it('follows the allow-list (dontAsk) with every write tool off', () => {
-    const a = feishuAnswerArgs('hi')
+    const a = feishuAnswerArgs('hi', ['mcp__stargate__jira_add_comment'])
     expect(a.slice(0, 2)).toEqual(['-p', 'hi'])
     expect(a[a.indexOf('--permission-mode') + 1]).toBe('dontAsk')
     const off = a[a.indexOf('--disallowedTools') + 1].split(',')
-    expect(off).toEqual(expect.arrayContaining(['Bash', 'Edit', 'Write', ...STARGATE_JIRA_WRITE]))
+    expect(off).toEqual(expect.arrayContaining(['Bash', 'Edit', 'Write', 'mcp__stargate__jira_add_comment']))
   })
 })
 

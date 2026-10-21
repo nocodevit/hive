@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
-  createFeishuAgent, parseDecision, ensurePrefix, lockedTopicHit, inQuietHours, messageText, normalizeAgentSettings,
+  createFeishuAgent, ensurePrefix, lockedTopicHit, inQuietHours, messageText, normalizeAgentSettings,
   defaultPrefix, FOLLOWUP_KIND, RECALL_WINDOW_MS
 } from '../feishuAgent'
 import { createApprovals } from '../approvals'
@@ -70,7 +70,7 @@ function setup(opts: { claude?: (p: string) => string | Promise<string>; setting
     token: async () => ({ ok: true, token: 'u-test' }),
     selfOpenId: () => SELF,
     profile: () => ({ ...EMPTY_PROFILE, name: 'Mei', ...opts.profile }),
-    runClaude: async (p: string) => { prompts.push(p); return opts.claude ? opts.claude(p) : '{"decision":"answer","reply":"Missy 在修 iOS 失焦"}' },
+    runClaude: async (p: string) => { prompts.push(p); return opts.claude ? opts.claude(p) : '{"category":"product-status","level":"auto","confidence":"high","reply":"Missy 在修 iOS 失焦","sources":[],"claims":[]}' },
     approvals,
     notify: (_t: string, b: string) => { notes.push(b) }
   }
@@ -80,14 +80,6 @@ function setup(opts: { claude?: (p: string) => string | Promise<string>; setting
 }
 
 describe('pure helpers', () => {
-  it('parseDecision: strict JSON, anything else escalates', () => {
-    expect(parseDecision('{"decision":"answer","reply":"ok"}')).toEqual({ decision: 'answer', reply: 'ok' })
-    expect(parseDecision('Sure!\n```json\n{"decision":"escalate","reply":"draft","reason":"date"}\n```')).toEqual({ decision: 'escalate', reply: 'draft', reason: 'date' })
-    expect(parseDecision('not json').decision).toBe('escalate')
-    expect(parseDecision('{"decision":"maybe","reply":"x"}').decision).toBe('escalate')
-    expect(parseDecision('{"decision":"answer","reply":"  "}')).toMatchObject({ decision: 'escalate', reason: 'empty_reply' })
-    expect(parseDecision('{bad')).toMatchObject({ decision: 'escalate', reason: 'bad_json' })
-  })
 
   it('ensurePrefix prepends once', () => {
     expect(ensurePrefix('hi', '【Mei 的 AI 代理】')).toBe('【Mei 的 AI 代理】hi')
@@ -260,7 +252,7 @@ describe('feishu agent', () => {
   })
 
   it('enforces the prefix even when the model omits or adds it', async () => {
-    const t = setup({ settings: { waitBeforeReplyMs: 0, prefix: '[bot]' }, claude: () => '{"decision":"answer","reply":"[bot]已在修"}' })
+    const t = setup({ settings: { waitBeforeReplyMs: 0, prefix: '[bot]' }, claude: () => '{"category":"product-status","level":"auto","confidence":"high","reply":"[bot]已在修","sources":[],"claims":[]}' })
     t.advance(1000)
     t.fs.add('p1', 'ou_lin', 'build?')
     await t.agent.tick()
@@ -268,7 +260,7 @@ describe('feishu agent', () => {
   })
 
   it('a draft that leaks another chat is held back even when the question looked harmless', async () => {
-    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"decision":"answer","reply":"Mei 和 Lin 刚才在聊什么报价"}' })
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"product-status","level":"auto","confidence":"high","reply":"Mei 和 Lin 刚才在聊什么报价","sources":[],"claims":[]}' })
     t.advance(1000)
     const q = t.fs.add('p1', 'ou_lin', '最近怎么样？')
     const out = await t.agent.tick()
@@ -277,7 +269,7 @@ describe('feishu agent', () => {
   })
 
   it('locked topic overrides an "answer": holding reply + follow-up approval; approving replies to the original', async () => {
-    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"decision":"answer","reply":"周五上线"}' })
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"product-status","level":"auto","confidence":"high","reply":"周五上线","sources":[],"claims":[]}' })
     t.advance(1000)
     const q = t.fs.add('p1', 'ou_lin', 'checkout 报价多少？')
     const out = await t.agent.tick()
@@ -293,7 +285,7 @@ describe('feishu agent', () => {
   })
 
   it('a locked word in the model reply also escalates; owner topics too', async () => {
-    const t = setup({ settings: { waitBeforeReplyMs: 0, askFirstTopics: [{ name: 'hiring', words: ['招人'], hint: 'hiring plans' }] }, claude: () => '{"decision":"answer","reply":"报价是 5 万"}' })
+    const t = setup({ settings: { waitBeforeReplyMs: 0, askFirstTopics: [{ name: 'hiring', words: ['招人'], hint: 'hiring plans' }] }, claude: () => '{"category":"product-status","level":"auto","confidence":"high","reply":"报价是 5 万","sources":[],"claims":[]}' })
     t.advance(1000)
     t.fs.add('p1', 'ou_lin', '那个方案怎么样')
     t.fs.add('p1', 'ou_lin', '要招人吗')
@@ -310,11 +302,34 @@ describe('feishu agent', () => {
     const out = await t.agent.tick()
     expect(out.map(o => o.result)).toEqual(['escalated', 'escalated'])
     expect(t.approvals.pending()).toHaveLength(2)
-    expect(t.fs.sent.every(s => s.text.endsWith('稍后回复你'))).toBe(true)
+    expect(t.fs.sent.every(s => s.text.endsWith('我是 Mei 的助理，可能不太了解上下文，判断和回答不一定准确，我会转给 Mei 处理。'))).toBe(true)
+  })
+
+  it('a message from the owner\'s manager is never answered on its own', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 } })
+    t.deps.relation = async () => 'boss'
+    const again = createFeishuAgent(t.deps)
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', 'checkout 好了吗？')
+    expect((await again.tick())[0].result).toBe('escalated')
+    expect(t.approvals.pending()[0].payload).toMatchObject({ relation: 'boss', topic: 'from your manager' })
+  })
+
+  it('the prompt says who wrote, where, and how they relate to the owner', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 } })
+    t.deps.relation = async () => 'requester'
+    const again = createFeishuAgent(t.deps)
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', 'FAE-1 上线了吗？')
+    await again.tick()
+    const p = t.prompts.at(-1)!
+    expect(p).toContain('## Who and where')
+    expect(p).toContain('from another department (a requester)')
+    expect(p).toContain('Check every assertion the sender makes before agreeing with it.')
   })
 
   it('reminds once when a follow-up is still pending after remindAfterMs', async () => {
-    const t = setup({ settings: { waitBeforeReplyMs: 0, remindAfterMs: 30 * MIN }, claude: () => '{"decision":"escalate","reply":"draft"}' })
+    const t = setup({ settings: { waitBeforeReplyMs: 0, remindAfterMs: 30 * MIN }, claude: () => '{"category":"cannot-answer","level":"hold","confidence":"low","reply":"draft","sources":[],"claims":[]}' })
     t.advance(1000)
     t.fs.add('p1', 'ou_lin', 'build?')
     await t.agent.tick()
@@ -328,7 +343,7 @@ describe('feishu agent', () => {
   })
 
   it('no reminder once the follow-up was handled', async () => {
-    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"decision":"escalate","reply":"draft"}' })
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"cannot-answer","level":"hold","confidence":"low","reply":"draft","sources":[],"claims":[]}' })
     t.advance(1000)
     t.fs.add('p1', 'ou_lin', 'build?')
     await t.agent.tick()

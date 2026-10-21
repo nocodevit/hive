@@ -11,6 +11,8 @@ import type { HandoffBreakers } from './handoff-supervisor'
 import { countOpenPtmxFds, buildHealthReport, formatHealthReport, PtmxDeps } from './ptyHealth'
 import { execSync, execFileSync, execFile, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
+import { claudeJsonPath, discoverTools } from './butlerTools'
+import { createMcpClient } from './mcpHttp'
 import { setupButlerMailRoutines } from './butlerMailRoutines' // [butler:mail-routines]
 import { agendaText } from './calendar'
 
@@ -195,7 +197,7 @@ import { readProfile, writeProfile } from './butlerProfile'
 import { createApprovals } from './approvals'
 import { DELIVERABLE_RULE } from '../shared/deliverable'
 import { registerButlerWakeIpc } from './butlerWakeIpc'
-import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder } from './butler'
+import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder, installButlerFiles } from './butler'
 import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
 import { randomBytes } from 'crypto'
@@ -568,10 +570,13 @@ ipcMain.handle('chat:resolveUnclosed', () => {
 // ── Built-in Butler (phone remote control) ───────────────────────────
 // See butler.ts. Main owns the switch (~/.hive/butler.json), so a session
 // comes back at launch before any window has loaded.
+function butlerResourcesDir(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'butler') : join(__dirname, '..', '..', 'resources', 'butler')
+}
 const butler = createButler({
   dataDir: DATA_DIR,
   // Dev: resources/butler in the repo. Packaged: extraResources/butler.
-  resourcesDir: app.isPackaged ? join(process.resourcesPath, 'butler') : join(__dirname, '..', '..', 'resources', 'butler'),
+  resourcesDir: butlerResourcesDir(),
   claudeTrusts: () => claudeTrustsFolder(
     process.env.CLAUDE_CONFIG_DIR ? join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : join(app.getPath('home'), '.claude.json'),
     butlerDir(DATA_DIR)
@@ -2469,6 +2474,17 @@ app.whenReady().then(() => {
     portLockLog(`wrote port ${HIVE_PORT}`)
   }
   statusServer.on('error', e => console.log(`[Hive] Status server: ${e.message}`))
+
+  // Fit the Butler allow-list to the tools this owner's own MCP servers offer
+  // (their credentials, from ~/.claude.json): now, then once a day.
+  const refreshButlerTools = () => {
+    const folder = butlerDir(DATA_DIR)
+    void discoverTools(folder, claudeJsonPath(app.getPath('home')), s => createMcpClient(s).listTools().then(ts => ts.map(t => t.name)))
+      .then(c => { if (existsSync(folder) && Object.keys(c.servers).length) installButlerFiles(butlerResourcesDir(), folder) })
+      .catch(e => console.log(`[butler] tool discovery: ${e instanceof Error ? e.message : e}`))
+  }
+  refreshButlerTools()
+  setInterval(refreshButlerTools, 24 * 3600_000).unref?.()
 
   statusServer.listen(HIVE_PORT, '127.0.0.1', () => {
     // Create the butler token now so a client's very first call can read it.
