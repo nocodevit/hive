@@ -253,6 +253,8 @@ export interface FeishuAgentDeps {
   profileMd?: () => string
   /** How the sender relates to the owner (Feishu contacts; 'unknown' when it cannot tell). */
   relation?: (openId: string) => Promise<Relation>
+  /** Jira projects whose keys never go out in a reply (the owner's jira-config dev project). */
+  neverQuote?: () => string[]
   /** The sender's name from Feishu contacts ('' when unknown). */
   senderName?: (openId: string) => Promise<string>
   /** Is the owner free then (re-checked right before creating)? */
@@ -517,7 +519,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const draft = answer?.reply ?? ''
     // The guardrail is code: a hit on the question or the draft never goes out.
     const guard = lockedTopicHit(job.text, settings.askFirstTopics) ?? lockedTopicHit(draft, settings.askFirstTopics)
-    const gate = guard === null ? gateAnswer({ answer, relation, calendarKnown: busy.known }) : { level: 'hold' as const, reasons: [guard], notify: true }
+    const gate = guard === null ? gateAnswer({ answer, relation, calendarKnown: busy.known, neverQuote: deps.neverQuote?.() ?? [] }) : { level: 'hold' as const, reasons: [guard], notify: true }
     return { relation, senderName, calendarKnown: busy.known, answer, draft, guard, gate, error, ms: now() - started }
   }
 

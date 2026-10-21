@@ -65,9 +65,8 @@ const LEVELS: Level[] = ['auto', 'approve', 'hold']
 const VERDICTS: Verdict[] = ['confirmed', 'contradicted', 'unverified']
 const RANK: Record<Level, number> = { auto: 0, approve: 1, hold: 2 }
 
-/** Jira keys of the projects a reply may name (PR is never quoted). */
-const JIRA_KEY = /\b(?:FAE|P4|LFCS|OUTLET)-\d+\b/g
-const PR_KEY = /\bPR-\d+\b/
+/** Any Jira-style key ("ABC-123"). Which projects are never quoted comes from the owner's jira-config. */
+const JIRA_KEY = /\b[A-Z][A-Z0-9]+-\d+\b/g
 
 const str = (v: unknown, n: number) => (typeof v === 'string' ? v.trim().slice(0, n) : '')
 
@@ -96,7 +95,7 @@ export function parseAnswer(output: string): Answer | null {
       } : undefined
   const jiraFixes = (Array.isArray(j.jira_fixes) ? j.jira_fixes : []).slice(0, 5)
     .map((f: any) => ({ key: str(f?.key, 20), to: str(f?.to, 40), why: str(f?.why, 200) }))
-    .filter((f: { key: string; to: string; why: string }) => /^(?:FAE|P4|LFCS|OUTLET)-\d+$/.test(f.key) && f.to && f.why)
+    .filter((f: { key: string; to: string; why: string }) => /^[A-Z][A-Z0-9]+-\d+$/.test(f.key) && f.to && f.why)
   return { category, level, confidence, reply: str(j.reply, 2000), sources, claims, jiraFixes, ...(proposal ? { proposal } : {}) }
 }
 
@@ -105,7 +104,7 @@ export function consentReply(ownerName: string): string {
   return `好的，我会转给 ${ownerName.trim() || '主人'} 确认和批准。`
 }
 
-export interface GateInput { answer: Answer | null; relation: Relation; calendarKnown?: boolean }
+export interface GateInput { answer: Answer | null; relation: Relation; calendarKnown?: boolean; /** Projects whose keys never go out (engineering tasks). */ neverQuote?: string[] }
 export interface GateResult {
   level: Level
   /** Why the level is lower than the model asked for (shown to the owner). */
@@ -115,7 +114,7 @@ export interface GateResult {
 }
 
 /** Decide what goes out. Only ever lowers the model's level. */
-export function gateAnswer({ answer, relation, calendarKnown = false }: GateInput): GateResult {
+export function gateAnswer({ answer, relation, calendarKnown = false, neverQuote = [] }: GateInput): GateResult {
   if (!answer) return { level: 'hold', reasons: ['unreadable answer'], notify: true }
   let level: Level = answer.level
   const reasons: string[] = []
@@ -123,7 +122,8 @@ export function gateAnswer({ answer, relation, calendarKnown = false }: GateInpu
   let notify = false
 
   if (!answer.reply) lower('hold', 'empty reply')
-  if (PR_KEY.test(answer.reply)) lower('hold', 'mentions a PR task')
+  const hidden = (answer.reply.match(JIRA_KEY) ?? []).filter(k => neverQuote.includes(k.split('-')[0]))
+  if (hidden.length) lower('hold', `mentions ${hidden[0].split('-')[0]} (never quoted)`)
   const cited = new Set(answer.sources.join(' ').match(JIRA_KEY) ?? [])
   const named = answer.reply.match(JIRA_KEY) ?? []
   const unchecked = named.filter(k => !cited.has(k))
