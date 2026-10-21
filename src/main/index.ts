@@ -16,7 +16,7 @@ import { claudeJsonPath, discoverTools } from './butlerTools'
 import { createMcpClient } from './mcpHttp'
 import { freeBusyText, workingDays } from './feishuAnswer'
 import { slotIsFree } from './calendar'
-import { jiraCaller, registerJiraActions } from './butlerJira'
+import { registerJiraActions, registerJiraWriteActions } from './butlerJira'
 import { setupButlerMailRoutines } from './butlerMailRoutines' // [butler:mail-routines]
 import { agendaText } from './calendar'
 
@@ -730,9 +730,11 @@ const butlerRoutines = setupButlerMailRoutines({
 const butlerRoutineMode = butlerRoutines.mode
 // [butler:feishu-agent-calendar]
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory, previewFeishuAnswer } from './butlerFeishuAgentIpc'
+const JIRA_READ_TOOLS = new Set(['jira_search', 'jira_get_issue', 'jira_get_transitions', 'jira_get_user_profile'])
 // Approved Jira changes (status fixes from answers, later handle-jira) run through the
 // owner's own Jira MCP server; the model never holds these write tools.
-registerJiraActions(approvals, () => jiraCaller(butlerDir(DATA_DIR), claudeJsonPath(app.getPath('home'))))
+registerJiraActions(approvals, () => butlerRoutines.jiraCall())
+registerJiraWriteActions(approvals, () => butlerRoutines.jiraCall())
 registerButlerFeishuAgentIpc({
   ipcMain, butlerDir: butlerDir(DATA_DIR), feishu, approvals, claudeBin, readProfile,
   // butlerCalendar is created below; this only runs when a message is answered.
@@ -906,6 +908,17 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
         routineName: id => (isRoutineId(id) ? ROUTINE_NAME[id] : id),
         dayStart: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
       }))
+    }
+
+    // ./hive jira …: read Jira the way Butler is connected (Stargate or REST). Reads only.
+    if (req.method === 'POST' && url.pathname === '/jira/read') {
+      const body = await readJsonBody(req).catch(() => null)
+      const tool = String(body?.tool ?? '')
+      if (!JIRA_READ_TOOLS.has(tool)) return reply(400, { ok: false, error: 'not_a_read_tool' })
+      const call = butlerRoutines.jiraCall()
+      if (!call) return reply(409, { ok: false, error: 'Jira not connected (Settings › Jira › Connection)' })
+      try { return reply(200, { ok: true, result: await call(tool, body?.args && typeof body.args === 'object' ? body.args : {}) }) }
+      catch (e) { return reply(502, { ok: false, error: e instanceof Error ? e.message : String(e) }) }
     }
 
     // ./hive run jira: one routine now, as if its time had come; the Jira run's result comes back.

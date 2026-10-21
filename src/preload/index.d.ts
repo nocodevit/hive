@@ -10,6 +10,8 @@ type ButlerAgentRow = {
   role: string; note: string; chatLive: boolean; activity: 'working' | 'waiting' | 'off'; updatedAt: number
 }
 
+type JiraConnectionView = { mode: 'auto' | 'mcp' | 'rest'; url: string; email: string; hasToken: boolean; mcp: boolean; using: 'mcp' | 'rest' | null }
+
 type ApprovalItem = {
   id: string; kind: string; title: string; subtitle: string; draft: string
   payload: Record<string, unknown>; action: string; status: string; createdAt: number; resolvedAt?: number; error?: string
@@ -135,9 +137,11 @@ declare global {
       }
 
       jira: {
-        get: () => Promise<{ settings: any | null; connected: boolean }>
+        get: () => Promise<{ settings: any | null; connected: boolean; connection: JiraConnectionView }>
         save: (settings: unknown) => Promise<{ ok: true; settings: any } | { ok: false; error: string }>
         discover: () => Promise<{ ok: boolean; draft?: any; error?: string }>
+        saveConnection: (conn: { mode: string; url: string; email: string }, token?: string | null) => Promise<JiraConnectionView>
+        testConnection: (conn: { mode: string; url: string; email: string }, token?: string) => Promise<{ ok: boolean; name?: string; error?: string }>
       }
       // [butler:mail-routines]
       mail: {

@@ -345,7 +345,9 @@ const api = {
   jira: {
     get: () => ipcRenderer.invoke('jira:get'),
     save: (settings: unknown) => ipcRenderer.invoke('jira:save', settings),
-    discover: () => ipcRenderer.invoke('jira:discover')
+    discover: () => ipcRenderer.invoke('jira:discover'),
+    saveConnection: (conn: unknown, token?: string | null) => ipcRenderer.invoke('jira:saveConnection', conn, token),
+    testConnection: (conn: unknown, token?: string) => ipcRenderer.invoke('jira:testConnection', conn, token)
   },
   routines: {
     get: () => ipcRenderer.invoke('routines:get'),

@@ -3,6 +3,7 @@
 // pieces, registers their IPC, and handles a --butler-routine launch.
 // index.ts calls setupButlerMailRoutines once (marker [butler:mail-routines]).
 
+import { butlerJiraCall, createJiraConnectionStore, createJiraRestCaller, normalizeConnection, type Call } from './jiraRest'
 import { execFile, execFileSync } from 'child_process'
 import { readJiraConfig, runHandleJira } from './handleJira'
 import { discoverPrompt, parseDiscovery, readJiraSettings, writeJiraSettings, readJiraMd } from './butlerJiraSettings'
@@ -49,7 +50,7 @@ export interface ButlerMailRoutinesDeps {
   onRoutineRun?: (rec: RoutineRunRecord) => void
 }
 
-export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: RoutineMode; runner: RoutineRunner } {
+export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: RoutineMode; runner: RoutineRunner; jiraCall: () => Call | null } {
   const folder = butlerDir(d.dataDir)
   const isolated = !!process.env.HIVE_DATA_DIR
   // Isolated test data dirs may keep passwords in plain files (never the Keychain).
@@ -59,6 +60,8 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
     : { encrypt: s => d.safeStorage.encryptString(s), decrypt: b => d.safeStorage.decryptString(b) }
 
   const runClaude = createClaudeRunner({ bin: d.claudeBin, cwd: d.folder })
+  const jiraConn = createJiraConnectionStore(folder, crypto)
+  const jiraCall = () => butlerJiraCall(folder, claudeJsonPath(homedir()), jiraConn)?.call ?? null
   const mail = createButlerMail({
     folder,
     accounts: createAccountStore(mailDir(folder)),
@@ -84,14 +87,16 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
   })
 
   const runner = createRoutineRunner({
+    // The model's Jira: Stargate / MCP tools, else ./hive jira over direct REST.
+    jira: () => jiraTools(folder, claudeJsonPath(homedir())) ?? (jiraCall() ? { server: 'rest', read: ['Bash(./hive jira:*)'] } : null),
     calendar: d.calendar,
     waiting: () => waitingLines(d.approvals.all()),
     butlerToday: since => butlerDayText(createCaseLog(folder).all(), d.approvals.all(), since),
     handleJira: async () => {
       const cfg = readJiraConfig(folder)
       if (!cfg) return null
-      const call = jiraCaller(folder, claudeJsonPath(homedir()))
-      if (!call) throw new Error('Jira not connected')
+      const call = jiraCall()
+      if (!call) throw new Error('Jira not connected (Settings › Jira › Connection)')
       return (await runHandleJira({ folder, call, write: p => runClaude(`${p}\n\n# The owner's Jira (settings)\n${readJiraMd(folder)}`), approvals: d.approvals }, cfg)).text
     },
     onRun: d.onRoutineRun,
@@ -127,16 +132,40 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
   registerButlerMailIpc({ ipcMain: d.ipcMain, mail, openExternal: d.openExternal })
 
   // Settings › Jira: the owner's company specifics (not a skill), and "Set up from Jira".
-  d.ipcMain.handle('jira:get', () => ({ settings: readJiraSettings(folder), connected: !!jiraTools(folder, claudeJsonPath(homedir())) }))
+  const connView = () => {
+    const c = jiraConn.read()
+    const using = butlerJiraCall(folder, claudeJsonPath(homedir()), jiraConn)?.via ?? null
+    return { ...c, hasToken: jiraConn.hasToken(), mcp: !!jiraCaller(folder, claudeJsonPath(homedir())), using }
+  }
+  d.ipcMain.handle('jira:get', () => ({ settings: readJiraSettings(folder), connected: !!jiraCall(), connection: connView() }))
+  d.ipcMain.handle('jira:saveConnection', (_e, raw: unknown, token: unknown) => {
+    jiraConn.save(raw, typeof token === 'string' ? token : token === null ? null : undefined)
+    return connView()
+  })
+  // Test: who Jira says you are, over the chosen way (a typed token is tried without saving it).
+  d.ipcMain.handle('jira:testConnection', async (_e, raw: unknown, token: unknown) => {
+    const c = normalizeConnection(raw)
+    let call: Call | null
+    if (c.mode !== 'mcp' && c.url && typeof token === 'string' && token.trim()) call = createJiraRestCaller(c, token.trim())
+    else call = butlerJiraCall(folder, claudeJsonPath(homedir()), { read: () => c, token: () => jiraConn.token() })?.call ?? null
+    if (!call) return { ok: false, error: c.mode === 'mcp' ? 'No Jira tools in Stargate / MCP' : 'Add the Jira URL and a token' }
+    try {
+      const me = JSON.parse(await call('jira_get_user_profile', {}))
+      return { ok: true, name: me.displayName || me.name || me.emailAddress || 'signed in' }
+    } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+  })
   d.ipcMain.handle('jira:save', (_e, raw: unknown) => {
     const s = writeJiraSettings(folder, raw)
     return s ? { ok: true, settings: s } : { ok: false, error: 'Pick the product project first' }
   })
   d.ipcMain.handle('jira:discover', async () => {
     const tools = jiraTools(folder, claudeJsonPath(homedir()))
-    if (!tools) return { ok: false, error: 'Jira is not connected (no Jira tools in your Claude setup)' }
+    // Without Jira tools in Stargate / MCP, the model reads Jira through ./hive jira (direct REST).
+    const rest = !tools && !!jiraCall()
+    if (!tools && !rest) return { ok: false, error: 'Jira is not connected (Settings › Jira › Connection)' }
     try {
-      const draft = parseDiscovery(await runClaude(discoverPrompt(), { allowedTools: tools.read }))
+      const prompt = rest ? `${discoverPrompt()}\nYou have no jira_* tools: use ./hive jira search "<JQL>" --fields <list> --max 100, ./hive jira get KEY, ./hive jira transitions KEY, ./hive jira me instead.` : discoverPrompt()
+      const draft = parseDiscovery(await runClaude(prompt, { allowedTools: tools ? tools.read : ['Bash(./hive jira:*)'] }))
       return draft ? { ok: true, draft } : { ok: false, error: 'Could not work it out — fill it in by hand' }
     } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
   })
@@ -144,5 +173,5 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
   // must not install the Butler folder (only running a routine does).
   registerButlerRoutinesIpc({ ipcMain: d.ipcMain, folder: () => folder, scheduler, runner, markMailRead: key => mail.markRead(key) })
 
-  return { runner, mode: startRoutineMode(d.app, process.argv, (id, opts) => runner.run(id, opts), msg => console.log(`[butler] ${msg}`), d.reopen) }
+  return { runner, jiraCall, mode: startRoutineMode(d.app, process.argv, (id, opts) => runner.run(id, opts), msg => console.log(`[butler] ${msg}`), d.reopen) }
 }

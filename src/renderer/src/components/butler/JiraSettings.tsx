@@ -69,6 +69,55 @@ export function fromForm(f: Form): any {
 const input = 'min-w-0 px-2 py-1 rounded-lg bg-bg-secondary border border-border text-[12px] text-text-primary focus:outline-none focus:border-accent'
 const btn = 'px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer disabled:opacity-50'
 
+type ConnView = Awaited<ReturnType<typeof window.api.jira.get>>['connection']
+const MODES: Array<[ConnView['mode'], string]> = [['auto', 'Auto'], ['mcp', 'Stargate'], ['rest', 'Direct']]
+
+/** How Butler reaches Jira: Stargate / MCP, direct REST (URL + token), or Auto (Stargate first). */
+function JiraConnection({ view, onChange }: { view: ConnView; onChange: (v: ConnView) => void }) {
+  const [c, setC] = useState({ mode: view.mode, url: view.url, email: view.email })
+  const [token, setToken] = useState('')
+  const [res, setRes] = useState('')
+  const [busy, setBusy] = useState(false)
+  const status = view.using === 'mcp' ? 'via Stargate' : view.using === 'rest' ? 'via REST' : 'not connected'
+  const save = async () => {
+    setBusy(true)
+    const v = await window.api.jira.saveConnection(c, token || undefined)
+    setBusy(false); setToken(''); setRes(v.using ? `Saved · ${v.using === 'mcp' ? 'via Stargate' : 'via REST'}` : 'Saved · not connected'); onChange(v)
+  }
+  const test = async () => {
+    setBusy(true); setRes('')
+    const r = await window.api.jira.testConnection(c, token || undefined)
+    setBusy(false); setRes(r.ok ? `✓ ${r.name}` : r.error ?? 'failed')
+  }
+  return (
+    <div className="rounded-lg bg-bg-primary px-2.5 py-2 flex flex-col gap-2" role="group" aria-label="Jira connection">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-semibold text-text-muted">Connection</span>
+        <span className={`flex-1 text-[12px] ${view.using ? 'text-status-working' : 'text-status-waiting'}`}>{status}</span>
+        <span className="inline-flex p-0.5 rounded-lg bg-bg-secondary">
+          {MODES.map(([m, l]) => (
+            <button key={m} onClick={() => setC({ ...c, mode: m })} aria-pressed={c.mode === m}
+              className={`px-2 py-0.5 rounded-md text-[11px] cursor-pointer ${c.mode === m ? 'bg-bg-primary text-text-primary font-semibold shadow-sm' : 'text-text-muted'}`}>{l}</button>
+          ))}
+        </span>
+      </div>
+      {c.mode !== 'mcp' && (
+        <div className="flex flex-col gap-1.5 text-[12px] text-text-muted">
+          {c.mode === 'auto' && <span className="text-[11px]">Stargate first{view.mcp ? '' : ' (no Jira tools there)'}; else direct:</span>}
+          <label className="flex items-center gap-2"><span className="w-16">Jira URL</span><input aria-label="Jira URL" value={c.url} placeholder="https://jira.example.com" onChange={e => setC({ ...c, url: e.target.value })} className={`${input} flex-1 font-mono`} /></label>
+          <label className="flex items-center gap-2"><span className="w-16">Token</span><input aria-label="Jira token" type="password" value={token} placeholder={view.hasToken ? '•••••• saved' : 'personal access token'} onChange={e => setToken(e.target.value)} className={`${input} flex-1 font-mono`} /></label>
+          <label className="flex items-center gap-2"><span className="w-16">Email</span><input aria-label="Jira email" value={c.email} placeholder="Cloud only" onChange={e => setC({ ...c, email: e.target.value })} className={`${input} flex-1`} /></label>
+        </div>
+      )}
+      <div className="flex items-center gap-2">
+        <span className="flex-1 text-[11px] text-text-muted truncate" aria-live="polite" aria-label="Jira connection result">{res}</span>
+        <button onClick={test} disabled={busy} aria-label="Test connection" className={`${btn} bg-bg-secondary text-text-primary`}>Test</button>
+        <button onClick={save} disabled={busy} aria-label="Save connection" className={`${btn} bg-accent text-text-on-purple`}>Save</button>
+      </div>
+    </div>
+  )
+}
+
 /** Settings › Jira: the owner's company specifics (not a skill). "Set up from Jira" drafts them. */
 export function JiraSettings() {
   const [form, setForm] = useState<Form | null>(null)
@@ -77,8 +126,9 @@ export function JiraSettings() {
   const [draft, setDraft] = useState(false)
   const [busy, setBusy] = useState<'' | 'discover' | 'save'>('')
   const [msg, setMsg] = useState('')
+  const [conn, setConn] = useState<ConnView | null>(null)
   useEffect(() => {
-    window.api.jira.get().then(r => { setConnected(r.connected); setSaved(!!r.settings); setForm(toForm(r.settings)) }).catch(() => {})
+    window.api.jira.get().then(r => { setConnected(r.connected); setConn(r.connection); setSaved(!!r.settings); setForm(toForm(r.settings)) }).catch(() => {})
   }, [])
   if (!form) return null
   const set = (patch: Partial<Form>) => setForm(f => ({ ...f!, ...patch }))
@@ -99,6 +149,7 @@ export function JiraSettings() {
   }
   return (
     <div className="flex flex-col gap-2.5">
+      {conn && <JiraConnection view={conn} onChange={v => { setConn(v); setConnected(!!v.using) }} />}
       <div className="flex items-center gap-2">
         <span className={`flex-1 text-[12px] ${saved ? 'text-text-primary' : 'text-text-muted'}`}>
           {!connected ? 'Jira not connected' : saved ? `Set up · ${form.projects.length} projects` : 'Not set up'}
