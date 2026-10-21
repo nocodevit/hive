@@ -2249,6 +2249,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             borderRadius: 16,
             padding: '12px 14px 10px'
           }}>
+            <VoicePartial />
             <textarea
               ref={textareaRef}
               value={input}
@@ -4227,13 +4228,26 @@ function VoicePill({ agentId }: { agentId: string }) {
         aria-label={state.listening ? 'Stop listening' : 'Voice input'}
         style={{ ...pillStyle(state.listening), background: 'transparent', color: state.listening ? CRUSH.Sriracha : 'inherit' }}
       >{state.listening ? '■' : '🎙'}</button>
-      {state.listening && state.partial && (
-        <span style={{ padding: '0 10px 0 2px', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500 }}>{state.partial}</span>
-      )}
       {state.notice && (
         <span role="status" title={state.notice} style={{ padding: '0 10px 0 2px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, color: CRUSH.Zest }}>⚠ {state.notice}</span>
       )}
     </span>
+  )
+}
+
+/** What the mic is hearing right now, in full, inside the input box; it becomes input text when final. */
+function VoicePartial() {
+  const [state, setState] = useState<{ listening: boolean; partial: string }>({ listening: false, partial: '' })
+  useEffect(() => {
+    const onState = (e: Event) => setState((e as CustomEvent<{ listening: boolean; partial: string }>).detail)
+    window.addEventListener('hive:voice-state', onState)
+    return () => window.removeEventListener('hive:voice-state', onState)
+  }, [])
+  if (!state.listening || !state.partial) return null
+  return (
+    <div aria-label="Hearing" aria-live="polite" style={{ fontFamily: FONT_PROSE, fontSize: 13, lineHeight: 1.45, color: CHAT.muted, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+      🎙 {state.partial}
+    </div>
   )
 }
 
