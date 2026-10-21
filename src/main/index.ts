@@ -13,6 +13,7 @@ import { execSync, execFileSync, execFile, spawn } from 'child_process'
 import { isHeadlessMode } from './headless'
 import { claudeJsonPath, discoverTools } from './butlerTools'
 import { createMcpClient } from './mcpHttp'
+import { freeBusyText, workingDays } from './feishuAnswer'
 import { setupButlerMailRoutines } from './butlerMailRoutines' // [butler:mail-routines]
 import { agendaText } from './calendar'
 
@@ -676,6 +677,12 @@ const butlerRoutineMode = setupButlerMailRoutines({
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc } from './butlerFeishuAgentIpc'
 registerButlerFeishuAgentIpc({
   ipcMain, butlerDir: butlerDir(DATA_DIR), feishu, approvals, claudeBin, readProfile,
+  // butlerCalendar is created below; this only runs when a message is answered.
+  freeBusy: async () => {
+    const s = butlerCalendar.getSettings()
+    const days = await Promise.all(workingDays(new Date(), 5).map(d => butlerCalendar.getDayAgenda(d)))
+    return freeBusyText(days, s.feishu || s.mac)
+  },
   agents: () => butlerRows(),
   tail: agentId => {
     const log = getChatSessionInfo(`chat-${agentId}`)?.logPath || latestChatLogPath(join(DATA_DIR, 'chat-logs'), agentId)

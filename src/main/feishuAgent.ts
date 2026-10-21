@@ -245,6 +245,8 @@ export interface FeishuAgentDeps {
   profileMd?: () => string
   /** How the sender relates to the owner (Feishu contacts; 'unknown' when it cannot tell). */
   relation?: (openId: string) => Promise<Relation>
+  /** The owner's busy blocks for the next working days (no titles); known=false when no calendar. */
+  freeBusy?: () => Promise<{ known: boolean; text: string }>
   now?: () => number
   onChange?: () => void
 }
@@ -400,7 +402,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     saveState()
   }
 
-  function buildPrompt(job: Job, history: any[], self: string, relation: Relation): string {
+  function buildPrompt(job: Job, history: any[], self: string, relation: Relation, busy: { known: boolean; text: string }): string {
     const p = deps.profile()
     const name = p.name || 'the owner'
     const sender = state.senders[job.senderId] || 'them'
@@ -415,6 +417,10 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       '',
       '## Owner profile',
       deps.profileMd?.() || `Name: ${name}`,
+      '',
+      `## ${name}'s calendar, next 5 working days (busy blocks only; working hours 10:00–18:30)`,
+      busy.known ? busy.text : '(not available — do not say whether any time is free; meeting requests go to the owner)',
+      'You cannot create meetings yet: if asked to, say you will pass it to the owner.',
       '',
       '## Agents status (what the team is working on)',
       deps.context?.() || '(none)',
@@ -454,12 +460,13 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     if (sentInLastHour(job.chatId) >= settings.maxRepliesPerChatPerHour) return { messageId: job.messageId, result: 'skipped', why: 'rate_limited' }
 
     const relation: Relation = await (deps.relation?.(job.senderId) ?? Promise.resolve('unknown' as Relation)).catch(() => 'unknown' as Relation)
+    const busy = await (deps.freeBusy?.() ?? Promise.resolve({ known: false, text: '' })).catch(() => ({ known: false, text: '' }))
     let answer: Answer | null = null
-    try { answer = parseAnswer(await deps.runClaude(buildPrompt(job, history, self, relation))) } catch { answer = null }
+    try { answer = parseAnswer(await deps.runClaude(buildPrompt(job, history, self, relation, busy))) } catch { answer = null }
     const draft = answer?.reply ?? ''
     // The guardrail is code: a hit on the question or the draft never goes out.
     const guard = lockedTopicHit(job.text, settings.askFirstTopics) ?? lockedTopicHit(draft, settings.askFirstTopics)
-    const gate = guard === null ? gateAnswer({ answer, relation }) : { level: 'hold' as const, reasons: [guard], notify: true }
+    const gate = guard === null ? gateAnswer({ answer, relation, calendarKnown: busy.known }) : { level: 'hold' as const, reasons: [guard], notify: true }
 
     if (gate.level === 'auto') {
       const r = await reply(token, job, draft, 'answer')
