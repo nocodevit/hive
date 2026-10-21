@@ -62,6 +62,9 @@ describe('relation', () => {
     expect(await look('ou_boss')).toBe('boss')
     expect(calls).toHaveLength(2)
     expect(await look('ou_stranger')).toBe('unknown')
+    users.ou_boss.name = 'Boss Wang'
+    expect(await createRelationLookup({ get, token: async () => 'u-t', selfOpenId: () => 'ou_me' }).nameOf('ou_boss')).toBe('Boss Wang')
+    expect(await look.nameOf('ou_stranger')).toBe('')
     expect(await createRelationLookup({ get, token: async () => null, selfOpenId: () => 'ou_me' })('ou_boss')).toBe('unknown')
   })
 })
