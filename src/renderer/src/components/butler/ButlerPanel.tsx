@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import HiveChat from '../hive-chat'
 import { orderSessions, sessionCounts, type SessionRow } from '../../lib/butler-sessions'
 import { setupProgress, type SetupMark } from '../../lib/butler-setup'
-import { ApprovalsList } from './ApprovalsList'
+import { ApprovalsList, type ApprovalCard } from './ApprovalsList'
 import { openSkill } from '../../lib/butler-skills'
 import { TodayTab } from './TodayTab' // [butler:mail-routines]
 
@@ -40,7 +40,7 @@ const DOT = { working: 'bg-status-working', waiting: 'bg-status-waiting', off: '
  */
 export function ButlerPanel(p: Props) {
   const [tab, setTab] = useState<Tab>('chat')
-  const [approvals, setApprovals] = useState<Array<{ id: string; kind: string; title: string; subtitle: string; draft: string; action: string }>>([])
+  const [approvals, setApprovals] = useState<ApprovalCard[]>([])
   const [folder, setFolder] = useState<string | null>(null)
   const [rows, setRows] = useState<SessionRow[]>([])
   const [mounted, setMounted] = useState(false)
@@ -161,7 +161,10 @@ export function ButlerPanel(p: Props) {
 
       {tab === 'approve' && (
         <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-2">
-          <ApprovalsList items={approvals} />
+          <ApprovalsList items={approvals} onDiscuss={text => {
+            setTab('chat')
+            window.api.chat.send('chat-butler', text).catch(() => {})
+          }} />
         </div>
       )}
 

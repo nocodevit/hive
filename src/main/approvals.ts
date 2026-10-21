@@ -114,6 +114,25 @@ export function createApprovals(deps: ApprovalsDeps) {
       return true
     },
 
+    /** Rewrite a pending item in place (migrations, a re-draft). */
+    update(id: string, patch: Partial<Pick<Approval, 'kind' | 'title' | 'subtitle' | 'draft' | 'payload' | 'action'>>): boolean {
+      const item = items.find(i => i.id === id)
+      if (!item || item.status !== 'pending') return false
+      Object.assign(item, patch)
+      save()
+      return true
+    },
+
+    /** A pending item answered another way (its follow-up was queued): done, nothing executed. */
+    supersede(id: string): boolean {
+      const item = items.find(i => i.id === id)
+      if (!item || item.status !== 'pending') return false
+      item.status = 'approved'
+      item.resolvedAt = now()
+      save()
+      return true
+    },
+
     /** A failed item can go back to pending for another try. */
     retry(id: string): boolean {
       const item = items.find(i => i.id === id)

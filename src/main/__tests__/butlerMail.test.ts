@@ -6,7 +6,7 @@ import { MAIL_PRESETS, mailPreset, presetForAddress } from '../../shared/butler-
 import { createAccountStore, createPasswordStore, mailDir, normalizeAccount } from '../butlerMailStore'
 import { createApprovals } from '../approvals'
 import {
-  buildReplyMessage, createButlerMail, parseClassification, replyApproval, replySubject, FIRST_RUN_LOOKBACK,
+  buildReplyMessage, createButlerMail, parseClassification, parseReplyDecision, replyApproval, replySubject, stripHeaders, FIRST_RUN_LOOKBACK,
   type MailClients, type OutgoingMail, type RawMail
 } from '../butlerMail'
 
@@ -17,7 +17,9 @@ const mail = (uid: number, over: Partial<RawMail> = {}): RawMail => ({
   date: 1_700_000_000_000, text: `Body ${uid}`, references: [], seen: false, ...over
 })
 
-function setup(opts: { inbox?: RawMail[]; uidValidity?: number; classify?: (uids: number[]) => string } = {}) {
+const DRAFT = JSON.stringify({ about: 'asks about UAT', decision: 'draft', reply: 'Thanks, on it.', question: '' })
+
+function setup(opts: { inbox?: RawMail[]; uidValidity?: number; classify?: (uids: number[]) => string; reply?: (prompt: string) => string } = {}) {
   const folder = mkdtempSync(join(tmpdir(), 'hive-mail-'))
   let n = 0
   const accounts = createAccountStore(mailDir(folder), () => 'acc-aaaaaaa' + n++)
@@ -45,7 +47,7 @@ function setup(opts: { inbox?: RawMail[]; uidValidity?: number; classify?: (uids
       const uids = [...prompt.matchAll(/^### uid (\d+)$/gm)].map(m => Number(m[1]))
       return classify(uids)
     }
-    return 'Thanks, on it.'
+    return opts.reply ? opts.reply(prompt) : DRAFT
   }
   const m = createButlerMail({ folder, accounts, passwords, clients, runClaude, approvals, now: () => 1_700_000_000_000 })
   const saved = m.save({ address: 'mei@corp.com', preset: 'exmail', password: 'pw', label: 'Work' })
@@ -186,7 +188,7 @@ describe('classification → approval', () => {
     expect(p).toHaveLength(2)
     expect(p[0]).toMatchObject({
       kind: 'email.reply', title: 'Lin · UAT down?', subtitle: 'email reply · ⚠ to support@c.com (not the sender) · from mei@corp.com', draft: 'Thanks, on it.', action: 'Send',
-      payload: { accountId: t.id, to: 'support@c.com', subject: 'Re: UAT down?', inReplyTo: '<m1@x.com>', references: ['<a@x>', '<m1@x.com>'] }
+      payload: { v: 2, accountId: t.id, to: 'support@c.com', subject: 'Re: UAT down?', inReplyTo: '<m1@x.com>', references: ['<a@x>', '<m1@x.com>'], about: 'asks about UAT' }
     })
     expect(t.sent).toEqual([])
     expect(t.prompts.filter(x => x.startsWith('Use the reply-email skill.'))).toHaveLength(2)
@@ -200,6 +202,60 @@ describe('classification → approval', () => {
     expect(replySubject('Re: hi')).toBe('Re: hi')
     expect(replySubject('回复：你好')).toBe('回复：你好')
     expect(replySubject('hi')).toBe('Re: hi')
+  })
+})
+
+describe('reply-email decisions', () => {
+  const one = { inbox: [mail(1, { from: { name: 'Gary', address: 'gary@c.com' }, subject: 'Claro roaming', text: 'Please study Claro roaming for Sphere2.' })], classify: () => '[{"uid":1,"category":"needs-reply"}]' }
+  it('"ask" becomes a needs-you card: no Send, the question and the email travel with it', async () => {
+    const t = setup({ ...one, reply: () => JSON.stringify({ about: 'Gary wants a Claro roaming study', decision: 'ask', reply: '', question: 'Take it on, and by when?' }) })
+    await t.m.sortInbox()
+    const [c] = t.approvals.pending()
+    expect(c).toMatchObject({ kind: 'email.decide', draft: '', action: 'Discuss', subtitle: 'needs you · email · to gary@c.com · from mei@corp.com' })
+    expect(c.payload).toMatchObject({ about: 'Gary wants a Claro roaming study', question: 'Take it on, and by when?', original: 'Please study Claro roaming for Sphere2.', to: 'gary@c.com' })
+    expect(await t.approvals.approve(c.id)).toEqual({ ok: false, error: 'needs_answer' })
+    expect(t.sent).toEqual([])
+  })
+  it('model text that is not a clear draft never lands in the reply box', async () => {
+    const t = setup({ ...one, reply: () => 'Gary is asking you to study Claro roaming. What should I tell him?' })
+    await t.m.sortInbox()
+    const [c] = t.approvals.pending()
+    expect(c.kind).toBe('email.decide')
+    expect(c.draft).toBe('')
+  })
+  it('To / Subject lines are stripped from a draft', () => {
+    expect(parseReplyDecision(JSON.stringify({ about: 'x', decision: 'draft', reply: 'To: a@b.com\nSubject: Re: hi\n\nHi Lin, fixed. — Mei' }))).toEqual({ about: 'x', decision: 'draft', reply: 'Hi Lin, fixed. — Mei', question: '' })
+    expect(stripHeaders('Hi Lin')).toBe('Hi Lin')
+  })
+  it('answering a needs-you card drafts with the answer and swaps it for a reply card', async () => {
+    let n = 0
+    const t = setup({ ...one, reply: p => (n++ === 0
+      ? JSON.stringify({ about: 'Gary wants a study', decision: 'ask', question: 'Take it on?' })
+      : (expect(p).toContain('The owner says: yes, findings by 11/5'), JSON.stringify({ about: 'Gary wants a study', decision: 'draft', reply: 'Hi Gary, I will send findings by 11/5. — Mei' }))) })
+    await t.m.sortInbox()
+    const [c] = t.approvals.pending()
+    const r = await t.m.answer(c.id, 'yes, findings by 11/5')
+    expect(r.ok).toBe(true)
+    const [reply] = t.approvals.pending()
+    expect(reply).toMatchObject({ kind: 'email.reply', action: 'Send', draft: 'Hi Gary, I will send findings by 11/5. — Mei', subtitle: 'email reply · to gary@c.com · from mei@corp.com' })
+    expect(reply.payload).toMatchObject({ to: 'gary@c.com', subject: 'Re: Claro roaming', inReplyTo: '<m1@x.com>' })
+    expect(t.approvals.get(c.id)!.status).toBe('approved')
+    expect(t.sent).toEqual([])
+  })
+  it('an answer that still needs the owner updates the question', async () => {
+    const t = setup({ ...one, reply: () => JSON.stringify({ about: 'a', decision: 'ask', question: 'Which date?' }) })
+    await t.m.sortInbox()
+    const [c] = t.approvals.pending()
+    expect(await t.m.answer(c.id, 'yes')).toEqual({ ok: false, error: 'still_needs_you', question: 'Which date?' })
+    expect(t.approvals.pending()).toHaveLength(1)
+  })
+  it('old cards are migrated on start: a question leaves the Send box, To/Subject lines go', () => {
+    const t = setup()
+    const q = t.approvals.add({ kind: 'email.reply', title: 'Gary · Claro', subtitle: 'email reply · to gary@c.com · from mei@corp.com', draft: 'Gary is asking you… What should I tell him?', payload: { accountId: t.id, to: 'gary@c.com' }, action: 'Send' })
+    const d = t.approvals.add({ kind: 'email.reply', title: 'Lin · UAT', subtitle: 'email reply · to lin@c.com · from mei@corp.com', draft: 'To: lin@c.com\nSubject: Re: UAT\n\nHi Lin, fixed.', payload: { accountId: t.id, to: 'lin@c.com' }, action: 'Send' })
+    createButlerMail({ folder: t.folder, accounts: t.accounts, passwords: t.passwords, clients: {} as any, runClaude: async () => '', approvals: t.approvals })
+    expect(t.approvals.get(q.id)).toMatchObject({ kind: 'email.decide', action: 'Discuss', draft: '', subtitle: 'needs you · email · to gary@c.com · from mei@corp.com', payload: { question: 'Gary is asking you… What should I tell him?', from: 'Gary', v: 2 } })
+    expect(t.approvals.get(d.id)).toMatchObject({ kind: 'email.reply', draft: 'Hi Lin, fixed.', payload: { v: 2 } })
   })
 })
 

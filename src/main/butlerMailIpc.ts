@@ -51,6 +51,8 @@ export function registerButlerMailIpc(deps: ButlerMailIpcDeps): void {
   })
   ipcMain.handle('mail:remove', (_e, id: unknown) => isAccountId(id) && mail.remove(id))
   ipcMain.handle('mail:sortNow', () => mail.sortInbox())
+  ipcMain.handle('mail:answer', (_e, id: unknown, text: unknown) =>
+    typeof id === 'string' && typeof text === 'string' ? mail.answer(id, text) : { ok: false, error: 'bad_input' })
   // Only the preset's own help page, never a URL from the renderer.
   ipcMain.handle('mail:openHelp', (_e, presetId: unknown) => {
     const url = typeof presetId === 'string' ? mailPreset(presetId)?.url : undefined
