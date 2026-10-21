@@ -82,7 +82,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
       defaultPrefix: defaultPrefix(profile),
       holding: holdingReply(profile.name),
       connected: st.state === 'signed_in',
-      locked: LOCKED_TOPICS.map(t => t.id),
+      locked: LOCKED_TOPICS.map(({ id, label, hint, example }) => ({ id, label, hint, example })),
       senders: agent.senders(),
       lastError: agent.lastError(),
       capabilities: { realtime: false }

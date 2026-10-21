@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readFileSync, existsSync } from 'fs'
+import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -112,7 +112,8 @@ describe('pure helpers', () => {
     expect(lockedTopicHit('checkout 什么时候好？', [])).toBeNull()
     expect(lockedTopicHit('客户那边怎么说', [])).toBeNull()
     expect(lockedTopicHit("what's on the agenda?", [])).toBeNull()
-    expect(lockedTopicHit('我们要招人吗', ['招人'])).toBe('招人')
+    expect(lockedTopicHit('我们要招人吗', [{ name: 'hiring', words: ['招人', 'hire'], hint: 'hiring plans' }])).toBe('hiring')
+    expect(lockedTopicHit('Do we hire?', [{ name: 'hiring', words: ['招人', 'hire'], hint: 'hiring plans' }])).toBe('hiring')
     expect(lockedTopicHit('build 挂了吗', [])).toBeNull()
   })
 
@@ -130,6 +131,15 @@ describe('pure helpers', () => {
     expect(messageText({ msg_type: 'image', body: { content: '{}' } })).toBe('[image]')
   })
 
+  it('owner topics need name, keywords and description; old bare words migrate', () => {
+    expect(normalizeAgentSettings({ askFirstTopics: [
+      { name: 'hiring', words: ['招人', ' '], hint: 'hiring plans' },
+      { name: 'no-words', words: [], hint: 'x' },
+      { name: 'no-hint', words: ['a'], hint: '' }
+    ] }).askFirstTopics).toEqual([{ name: 'hiring', words: ['招人'], hint: 'hiring plans' }])
+    expect(normalizeAgentSettings({ extraAskFirst: ['招人'] }).askFirstTopics).toEqual([{ name: '招人', words: ['招人'], hint: '招人' }])
+  })
+
   it('normalizeAgentSettings applies defaults and bounds', () => {
     const s = normalizeAgentSettings({ scope: 'x', waitBeforeReplyMs: -5, quietHours: { start: '25:00', end: '1' } })
     expect(s).toMatchObject({ enabled: false, scope: 'everyone', waitBeforeReplyMs: 0, quietHours: null, maxRepliesPerChatPerHour: 10 })
@@ -137,6 +147,16 @@ describe('pure helpers', () => {
 })
 
 describe('feishu agent', () => {
+  it('an old settings file is rewritten with topics on load', () => {
+    const t = setup()
+    writeFileSync(join(t.dir, 'feishu-agent.json'), JSON.stringify({ enabled: false, extraAskFirst: ['招人'] }))
+    const again = createFeishuAgent(t.deps)
+    expect(again.getSettings().askFirstTopics).toEqual([{ name: '招人', words: ['招人'], hint: '招人' }])
+    const onDisk = JSON.parse(readFileSync(join(t.dir, 'feishu-agent.json'), 'utf8'))
+    expect(onDisk.extraAskFirst).toBeUndefined()
+    expect(onDisk.askFirstTopics).toEqual([{ name: '招人', words: ['招人'], hint: '招人' }])
+  })
+
   it('first enable starts at now: history is never answered', async () => {
     const t = setup({ settings: { enabled: false } })
     t.fs.add('p1', 'ou_lin', 'old question', T0 - 10 * MIN)
@@ -272,13 +292,13 @@ describe('feishu agent', () => {
     expect(t.agent.log(5)[0]).toMatchObject({ kind: 'followup', inReplyTo: q.message_id })
   })
 
-  it('a locked word in the model reply also escalates; extraAskFirst too', async () => {
-    const t = setup({ settings: { waitBeforeReplyMs: 0, extraAskFirst: ['招人'] }, claude: () => '{"decision":"answer","reply":"报价是 5 万"}' })
+  it('a locked word in the model reply also escalates; owner topics too', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0, askFirstTopics: [{ name: 'hiring', words: ['招人'], hint: 'hiring plans' }] }, claude: () => '{"decision":"answer","reply":"报价是 5 万"}' })
     t.advance(1000)
     t.fs.add('p1', 'ou_lin', '那个方案怎么样')
     t.fs.add('p1', 'ou_lin', '要招人吗')
     await t.agent.tick()
-    expect(t.approvals.pending().map(i => (i.payload as any).topic)).toEqual(['prices', '招人'])
+    expect(t.approvals.pending().map(i => (i.payload as any).topic)).toEqual(['prices', 'hiring'])
   })
 
   it('bad JSON from claude escalates; a claude failure escalates too', async () => {

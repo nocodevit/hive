@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { FeishuAgentSettings, FeishuAgentView, FeishuLogEntry } from '../../lib/feishu-agent-types'
+import type { AskTopic, FeishuAgentSettings, FeishuAgentView, FeishuLogEntry, LockedTopic } from '../../lib/feishu-agent-types'
 
 const RECALL_MS = 24 * 3600_000
-const LOCK_LABEL: Record<string, string> = { prices: 'prices', approvals: 'approvals', 'private-chats': 'private chats', 'personal-info': 'personal info', 'sensitive-info': 'sensitive info', confidential: 'confidential' }
 const KIND_ICON: Record<FeishuLogEntry['kind'], string> = { answer: '💬', holding: '⏳', followup: '↩️' }
 
 function useFeishuAgent() {
@@ -70,6 +69,71 @@ function AddChip({ onAdd, label, options }: { onAdd: (v: string) => void; label:
     <input autoFocus aria-label={label} value={text} onChange={e => setText(e.target.value)} onBlur={done}
       onKeyDown={e => { if (e.key === 'Enter') done(); if (e.key === 'Escape') { setText(''); setOpen(false) } }}
       className="w-24 px-2 py-0.5 rounded-lg bg-bg-secondary border border-border text-[12px] text-text-primary focus:outline-none focus:border-accent" />
+  )
+}
+
+const splitWords = (v: string) => [...new Set(v.split(/[,，、;；\n]/).map(w => w.trim()).filter(Boolean))]
+
+/** "Always asks you": guardrail chips. A chip opens one line (what it covers + an example);
+ *  an owner topic needs a name, keywords (the code gate) and a description (for the model). */
+function AskFirstTopics({ locked, topics, onChange }: { locked: LockedTopic[]; topics: AskTopic[]; onChange: (t: AskTopic[]) => void }) {
+  const [open, setOpen] = useState<string | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [name, setName] = useState('')
+  const [words, setWords] = useState('')
+  const [hint, setHint] = useState('')
+  const kw = splitWords(words)
+  const ready = !!name.trim() && kw.length > 0 && !!hint.trim() && !topics.some(t => t.name === name.trim()) && !locked.some(t => t.label === name.trim())
+  const reset = () => { setName(''); setWords(''); setHint(''); setAdding(false) }
+  const add = () => { if (!ready) return; onChange([...topics, { name: name.trim(), words: kw, hint: hint.trim() }]); reset() }
+  const lockedOpen = locked.find(t => t.id === open)
+  const topicOpen = topics.find(t => t.name === open)
+  const toggle = (id: string) => setOpen(o => (o === id ? null : id))
+  const chip = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[12px] text-text-primary cursor-pointer'
+  const field = 'px-2 py-1 rounded-lg bg-bg-secondary border border-border text-[12px] text-text-primary focus:outline-none focus:border-accent'
+  return (
+    <div className="flex flex-col gap-1.5" role="group" aria-label="Always asks you">
+      <Label>Always asks you</Label>
+      <div className="flex flex-wrap gap-1.5">
+        {locked.map(t => (
+          <button key={t.id} title="Locked" aria-expanded={open === t.id} onClick={() => toggle(t.id)}
+            className={`${chip} ${open === t.id ? 'bg-accent-subtle' : 'bg-bg-primary'}`}>🔒 {t.label}</button>
+        ))}
+        {topics.map(t => (
+          <span key={t.name} className={`${chip} ${open === t.name ? 'bg-accent-subtle' : 'bg-bg-primary'}`}>
+            <button aria-expanded={open === t.name} onClick={() => toggle(t.name)} className="cursor-pointer">{t.name}</button>
+            <button aria-label={`Remove ${t.name}`} onClick={() => { onChange(topics.filter(x => x.name !== t.name)); if (open === t.name) setOpen(null) }}
+              className="text-text-muted hover:text-text-primary cursor-pointer">×</button>
+          </span>
+        ))}
+        {!adding && <button onClick={() => setAdding(true)} aria-label="Add topic" className="px-2 py-0.5 rounded-full bg-bg-primary text-[12px] text-accent cursor-pointer">＋</button>}
+      </div>
+      {lockedOpen && (
+        <div className="px-2.5 py-1.5 rounded-lg bg-bg-primary text-[12px] text-text-secondary" aria-label={`${lockedOpen.label} details`}>
+          {lockedOpen.hint} · e.g. <span className="text-text-primary">“{lockedOpen.example}”</span>
+        </div>
+      )}
+      {topicOpen && (
+        <div className="px-2.5 py-1.5 rounded-lg bg-bg-primary text-[12px] text-text-secondary" aria-label={`${topicOpen.name} details`}>
+          {topicOpen.hint} · keywords: <span className="font-mono text-text-primary">{topicOpen.words.join(', ')}</span>
+        </div>
+      )}
+      {adding && (
+        <div className="flex flex-col gap-1.5 p-2 rounded-lg bg-bg-primary">
+          {([['Name', 'Topic name', 'hiring', name, setName], ['Keywords', 'Topic keywords', '招人, 招聘, hire', words, setWords], ['Covers', 'Topic description', 'hiring plans, headcount', hint, setHint]] as const).map(([label, aria, ph, val, setVal], i) => (
+            <label key={aria} className="flex items-center gap-2">
+              <span className="w-16 shrink-0 text-[11px] font-semibold text-text-muted">{label}</span>
+              <input autoFocus={i === 0} aria-label={aria} placeholder={ph} value={val} onChange={e => setVal(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') add(); if (e.key === 'Escape') reset() }} className={`flex-1 min-w-0 ${field}`} />
+            </label>
+          ))}
+          <div className="flex gap-2 justify-end">
+            <button onClick={reset} className="px-2.5 py-1 rounded-lg text-[12px] text-text-muted cursor-pointer">Cancel</button>
+            <button onClick={add} disabled={!ready} className="px-2.5 py-1 rounded-lg bg-accent text-white text-[12px] font-semibold cursor-pointer disabled:opacity-40 disabled:cursor-default">Add</button>
+          </div>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -184,14 +248,7 @@ export function FeishuAgentSettings() {
           )}
         </div>
 
-        <div className="flex flex-col gap-1.5">
-          <Label>Always asks you</Label>
-          <div className="flex flex-wrap gap-1.5">
-            {v.locked.map(id => <Chip key={id} title="Locked">🔒 {LOCK_LABEL[id] ?? id}</Chip>)}
-            {s.extraAskFirst.map(w => <Chip key={w} onRemove={() => set({ extraAskFirst: s.extraAskFirst.filter(x => x !== w) })}>{w}</Chip>)}
-            <AddChip label="Add topic" onAdd={w => set({ extraAskFirst: [...s.extraAskFirst, w] })} />
-          </div>
-        </div>
+        <AskFirstTopics locked={v.locked} topics={s.askFirstTopics} onChange={askFirstTopics => set({ askFirstTopics })} />
 
         <details>
           <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">More · timing · prefix · preview</summary>
