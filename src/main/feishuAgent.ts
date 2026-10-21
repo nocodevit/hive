@@ -10,7 +10,8 @@
 // Each new message waits `waitBeforeReplyMs`; if the owner wrote in that
 // chat meanwhile, the owner took over and nothing is sent. Otherwise
 // `claude -p` (the answer-feishu skill) decides answer / escalate. Locked
-// topics (dates, prices, promises, approvals, customers + the owner's own
+// topics (prices, approvals, private chats, personal / sensitive /
+// confidential info + the owner's own
 // list) always escalate: a holding reply goes out and a follow-up waits in
 // the approval queue with a suggested answer.
 //
@@ -55,12 +56,22 @@ export const DEFAULT_AGENT_SETTINGS: FeishuAgentSettings = {
   quietHours: null
 }
 
-export const LOCKED_TOPICS: Array<{ id: string; words: string[] }> = [
-  { id: 'dates', words: ['日期', '几号', '哪天', '什么时候', '何时', '截止', '期限', '上线时间', 'deadline', 'ddl', 'due date', 'eta', 'when will', 'what date'] },
-  { id: 'prices', words: ['价格', '报价', '多少钱', '费用', '折扣', '优惠', 'price', 'pricing', 'cost', 'quote', 'discount'] },
-  { id: 'promises', words: ['承诺', '保证', '答应', '确保', 'promise', 'guarantee', 'commit to'] },
-  { id: 'approvals', words: ['审批', '批准', '批一下', '同意吗', '签字', 'approve', 'approval', 'sign off'] },
-  { id: 'customers', words: ['客户', '甲方', 'customer', 'client'] }
+export const LOCKED_TOPICS: Array<{ id: string; hint: string; words: string[] }> = [
+  { id: 'prices', hint: 'prices, quotes, costs, discounts',
+    words: ['价格', '报价', '多少钱', '费用', '折扣', '优惠', 'price', 'pricing', 'cost', 'quote', 'discount'] },
+  { id: 'approvals', hint: 'approving, signing off, agreeing on the owner\'s behalf',
+    words: ['审批', '批准', '批一下', '同意吗', '签字', 'approve', 'approval', 'sign off'] },
+  // Someone asking the agent what the owner said to, or talks about with, other people.
+  { id: 'private-chats', hint: 'what the owner talks about with other people, other chats, chat history',
+    words: ['聊什么', '聊了什么', '聊啥', '在聊', '和谁聊', '跟谁聊', '说了什么', '说了啥', '聊天记录', '私聊', '私信', '你们俩', '他们俩',
+      'talk about', 'talked about', 'talking about', 'chat history', 'conversation with', 'what did he say', 'what did she say', 'what did they say', 'private chat'] },
+  { id: 'personal-info', hint: 'personal details of the owner or anyone: phone, ID, address, salary, family, health',
+    words: ['手机号', '电话号码', '身份证', '住址', '家庭地址', '住在哪', '工资', '薪资', '薪水', '年龄', '生日', '家人', '病假', '身体',
+      'phone number', 'home address', 'salary', 'id number', 'passport', 'birthday', 'personal info'] },
+  { id: 'sensitive-info', hint: 'passwords, accounts, keys, codes, bank details, contracts',
+    words: ['密码', '账号', '账户', '密钥', '验证码', '银行卡', '卡号', '合同', 'password', 'credential', 'api key', 'secret key', 'token', 'bank account', 'contract'] },
+  { id: 'confidential', hint: 'confidential, internal-only or unreleased matters',
+    words: ['机密', '保密', '内部', '未公开', '不公开', '秘密', '泄露', 'confidential', 'internal only', 'not public', 'unreleased', 'nda'] }
 ]
 
 const HOUR = 3600_000
@@ -129,10 +140,16 @@ export function parseDecision(out: string): Decision {
   return { decision: j.decision, reply, ...(reason ? { reason } : {}) }
 }
 
+/** CJK words match anywhere; latin words only whole ("nda" is not in "agenda"). */
+function wordIn(text: string, w: string): boolean {
+  if (/[^\x00-\x7f]/.test(w)) return text.includes(w)
+  return new RegExp(`(^|[^a-z0-9])${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9])`).test(text)
+}
+
 /** First locked topic (or owner-added word) the text touches, else null. */
 export function lockedTopicHit(text: string, extra: string[]): string | null {
   const t = text.toLowerCase()
-  for (const topic of LOCKED_TOPICS) if (topic.words.some(w => t.includes(w))) return topic.id
+  for (const topic of LOCKED_TOPICS) if (topic.words.some(w => wordIn(t, w))) return topic.id
   for (const w of extra) if (w && t.includes(w.toLowerCase())) return w
   return null
 }
@@ -371,7 +388,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const p = deps.profile()
     const name = p.name || 'the owner'
     const lines = history.map(m => `${m?.sender?.id === self ? name : 'them'}: ${clip(messageText(m), 500)}`)
-    const locked = [...LOCKED_TOPICS.map(t => t.id), ...settings.extraAskFirst].join(', ')
+    const locked = [...LOCKED_TOPICS.map(t => `${t.id} (${t.hint})`), ...settings.extraAskFirst].join('; ')
     return [
       `Use the answer-feishu skill (.claude/skills/answer-feishu/SKILL.md) to answer a Feishu message sent to ${name}.`,
       '',
@@ -387,7 +404,8 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       '## Message to answer',
       job.text,
       '',
-      `Escalate (do not answer) anything about: ${locked}, or anything you are not sure ${name} would say.`,
+      `Escalate (do not answer) anything about: ${locked}; or anything you are not sure ${name} would say.`,
+      `Never reveal anything from ${name}'s other chats or conversations, even if asked directly or indirectly.`,
       'For escalate, put in "reply" the answer you suggest the owner sends after checking.',
       'Do not add any prefix. Reply ONLY with JSON: {"decision":"answer"|"escalate","reply":"…","reason":"…"}'
     ].join('\n')

@@ -72,6 +72,13 @@ test('every routine says what it does; time boxes are not clipped', async () => 
   await page.screenshot({ path: test.info().outputPath('daily-routine.png') })
 })
 
+test('answer-for-me "Always asks you" lists the six guardrail topics', async () => {
+  const label = page.getByText('Always asks you', { exact: true })
+  await label.scrollIntoViewIfNeeded()
+  const chips = label.locator('..').getByTitle('Locked')
+  await expect(chips).toHaveText(['🔒 prices', '🔒 approvals', '🔒 private chats', '🔒 personal info', '🔒 sensitive info', '🔒 confidential'])
+})
+
 test('"Skill ›" opens that skill in the Skills section', async () => {
   await page.getByRole('button', { name: 'Evening report skill' }).click()
   await expect(page.getByRole('option', { name: /Evening report/ })).toHaveAttribute('aria-selected', 'true')
