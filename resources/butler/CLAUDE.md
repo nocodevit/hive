@@ -24,6 +24,7 @@ Any other tool is blocked for this session.
 | Owner wants | Run |
 |---|---|
 | What is waiting for me | `./hive pending` |
+| Handle my Jira / sort mail / make the plan / the evening report — now | `./hive run jira` (`sort-inbox`, `morning-plan`, `evening-report`) |
 | Who is running / who is done | `./hive agents` (add `--project "Cube v2"` to narrow) |
 | What did X say / is X finished | `./hive tail --project "Cube v2" --agent "Missy" -n 10` |
 | Tell X something | `./hive send --project "Cube v2" --agent "Missy" 继续做 mobile e2e` |

@@ -23,6 +23,7 @@ describe('isButlerRoute', () => {
     expect(isButlerRoute('/chat/send')).toBe(true)
     expect(isButlerRoute('/chat/start')).toBe(true)
     expect(isButlerRoute('/pending')).toBe(true)
+    expect(isButlerRoute('/routines/run')).toBe(true)
   })
   it('leaves the existing task routes alone', () => {
     expect(isButlerRoute('/task-status?projectId=p1')).toBe(false)

@@ -161,3 +161,11 @@ test('feishu-try: owner only, needs text, not signed in is said plainly', async 
   expect(inRun.status).toBe(403)
   expect(await (await post('/feishu/try', { text: 'FAE-1 上线了吗？' })).json()).toEqual({ ok: false, error: 'signed_out' })
 })
+
+test('routines/run: runs one routine now and says how it went; "jira" is the Jira routine', async () => {
+  expect((await post('/routines/run', { id: 'nope' })).status).toBe(400)
+  const inbox = await (await post('/routines/run', { id: 'sort-inbox' })).json()
+  expect(inbox).toMatchObject({ ok: true, name: 'Sort inbox', run: { id: 'sort-inbox', ok: true } })
+  const jira = await (await post('/routines/run', { id: 'jira' })).json()
+  expect(jira).toMatchObject({ ok: false, name: 'Jira', run: { id: 'jira-check', ok: false, error: 'Jira not connected' } })
+})
