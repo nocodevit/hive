@@ -198,7 +198,7 @@ export interface LogEntry {
   recalled?: boolean
 }
 
-interface Job {
+export interface Job {
   messageId: string
   chatId: string
   chatName: string
@@ -247,6 +247,8 @@ export interface FeishuAgentDeps {
   profileMd?: () => string
   /** How the sender relates to the owner (Feishu contacts; 'unknown' when it cannot tell). */
   relation?: (openId: string) => Promise<Relation>
+  /** The sender's name from Feishu contacts ('' when unknown). */
+  senderName?: (openId: string) => Promise<string>
   /** The owner's busy blocks for the next working days (no titles); known=false when no calendar. */
   freeBusy?: () => Promise<{ known: boolean; text: string }>
   now?: () => number
@@ -264,6 +266,23 @@ const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n) + '…' : s
 export function quoteBlock(label: string, text: string): string {
   const clean = text.replace(/<<<|>>>/g, '‹‹')
   return `<<<${label}\n${clean}\n>>>`
+}
+
+/** Messages one person sent in one chat are answered together, once the last
+ *  of them has waited its turn (someone typing three lines gets one reply). */
+export function dueGroups(jobs: Job[], at: number): Job[][] {
+  const groups = new Map<string, Job[]>()
+  for (const j of [...jobs].sort((a, b) => a.createTime - b.createTime)) {
+    const k = `${j.chatId}\u0000${j.senderId}`
+    groups.set(k, [...(groups.get(k) ?? []), j])
+  }
+  return [...groups.values()].filter(g => g.every(j => j.dueAt <= at))
+}
+
+/** One job for a group: the reply goes under the last message; the text is all of them. */
+export function mergeJobs(group: Job[]): Job {
+  const last = group[group.length - 1]
+  return group.length === 1 ? last : { ...last, text: group.map(j => j.text).join('\n') }
 }
 
 export function createFeishuAgent(deps: FeishuAgentDeps) {
@@ -410,10 +429,10 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     saveState()
   }
 
-  function buildPrompt(job: Job, history: any[], self: string, relation: Relation, busy: { known: boolean; text: string }): string {
+  function buildPrompt(job: Job, history: any[], self: string, relation: Relation, busy: { known: boolean; text: string }, senderName: string): string {
     const p = deps.profile()
     const name = p.name || 'the owner'
-    const sender = state.senders[job.senderId] || 'them'
+    const sender = senderName || state.senders[job.senderId] || 'them'
     const lines = history.map(m => `${m?.sender?.id === self ? name : m?.sender?.id === job.senderId ? sender : 'other'}: ${clip(messageText(m), 500)}`)
     const locked = [...LOCKED_TOPICS, ...settings.askFirstTopics.map(t => ({ id: t.name, hint: t.hint }))].map(t => `${t.id} (${t.hint})`).join('; ')
     return [
@@ -479,8 +498,9 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
 
     const relation: Relation = await (deps.relation?.(job.senderId) ?? Promise.resolve('unknown' as Relation)).catch(() => 'unknown' as Relation)
     const busy = await (deps.freeBusy?.() ?? Promise.resolve({ known: false, text: '' })).catch(() => ({ known: false, text: '' }))
+    const senderName = await (deps.senderName?.(job.senderId) ?? Promise.resolve('')).catch(() => '')
     let answer: Answer | null = null
-    try { answer = parseAnswer(await deps.runClaude(buildPrompt(job, history, self, relation, busy), { senderId: job.senderId, chatId: job.chatId, chatName: job.chatName })) } catch { answer = null }
+    try { answer = parseAnswer(await deps.runClaude(buildPrompt(job, history, self, relation, busy, senderName), { senderId: job.senderId, chatId: job.chatId, chatName: job.chatName })) } catch { answer = null }
     const draft = answer?.reply ?? ''
     // The guardrail is code: a hit on the question or the draft never goes out.
     const guard = lockedTopicHit(job.text, settings.askFirstTopics) ?? lockedTopicHit(draft, settings.askFirstTopics)
@@ -548,11 +568,12 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       if (!tok.ok || !tok.token) { lastError = tok.error || 'signed_out'; return done }
       try { await poll(tok.token, self); lastError = '' } catch (e) { lastError = e instanceof Error ? e.message : String(e) }
       if (inQuietHours(settings.quietHours, new Date(now()))) return done
-      const due = state.jobs.filter(j => j.dueAt <= now()).sort((a, b) => a.createTime - b.createTime)
-      for (const job of due) {
+      for (const group of dueGroups(state.jobs, now())) {
+        const job = mergeJobs(group)
         // Off the queue before anything is sent: a crash mid-send must not
-        // answer the same message again on the next start.
-        state.jobs = state.jobs.filter(j => j.messageId !== job.messageId)
+        // answer the same messages again on the next start.
+        const ids = new Set(group.map(j => j.messageId))
+        state.jobs = state.jobs.filter(j => !ids.has(j.messageId))
         saveState()
         const o = await handle(tok.token, self, job)
         saveState()

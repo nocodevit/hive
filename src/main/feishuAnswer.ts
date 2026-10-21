@@ -101,7 +101,7 @@ export function assistantHolding(ownerName: string): string {
 
 // ── Who is the sender to the owner (Feishu contacts) ─────────────────────
 
-export interface Person { openId: string; leader: string; departments: string[] }
+export interface Person { openId: string; name: string; leader: string; departments: string[] }
 
 /** Manager / report / same department / anyone else. */
 export function relationOf(owner: Person, sender: Person): Relation {
@@ -128,18 +128,24 @@ export function createRelationLookup(deps: { get: Get; token: () => Promise<stri
     try {
       const r = await deps.get(`${CONTACT}/${encodeURIComponent(openId)}?user_id_type=open_id&department_id_type=open_department_id`, token)
       const u = r.status === 200 && r.body?.code === 0 ? r.body.data?.user : null
-      if (u) p = { openId, leader: typeof u.leader_user_id === 'string' ? u.leader_user_id : '', departments: Array.isArray(u.department_ids) ? u.department_ids.filter((d: unknown) => typeof d === 'string') : [] }
+      if (u) p = { openId, name: typeof u.name === 'string' ? u.name : '', leader: typeof u.leader_user_id === 'string' ? u.leader_user_id : '', departments: Array.isArray(u.department_ids) ? u.department_ids.filter((d: unknown) => typeof d === 'string') : [] }
     } catch { p = null }
     cache.set(openId, { p, at: now() })
     return p
   }
-  return async (senderId: string): Promise<Relation> => {
+  const relation = async (senderId: string): Promise<Relation> => {
     const self = deps.selfOpenId()
     const token = await deps.token()
     if (!self || !token) return 'unknown'
     const [owner, sender] = await Promise.all([person(self, token), person(senderId, token)])
     return owner && sender ? relationOf(owner, sender) : 'unknown'
   }
+  /** The sender's display name ('' when contacts cannot be read). */
+  const nameOf = async (openId: string): Promise<string> => {
+    const token = await deps.token()
+    return token ? (await person(openId, token))?.name ?? '' : ''
+  }
+  return Object.assign(relation, { nameOf })
 }
 
 // ── The owner's free / busy (meeting requests) ───────────────────────────
