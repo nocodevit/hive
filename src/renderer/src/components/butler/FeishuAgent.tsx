@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { AskTopic, FeishuAgentSettings, FeishuAgentView, FeishuLogEntry, LockedTopic } from '../../lib/feishu-agent-types'
 
 const RECALL_MS = 24 * 3600_000
+const RELATION_OPTS: Array<[string, string]> = [['unknown', '—'], ['boss', 'Manager'], ['report', 'Reports to me'], ['peer', 'Colleague'], ['requester', 'Other team']]
 const KIND_ICON: Record<FeishuLogEntry['kind'], string> = { answer: '💬', holding: '⏳', followup: '↩️' }
 
 function useFeishuAgent() {
@@ -15,7 +16,7 @@ function useFeishuAgent() {
     return () => { alive = false; off(); offF() }
   }, [])
   const set = useCallback(async (patch: Partial<FeishuAgentSettings>) => setV(await window.api.feishuAgent.set(patch)), [])
-  return { v, set }
+  return { v, set, setV }
 }
 
 function Switch({ on, label, onChange, disabled }: { on: boolean; label: string; onChange: (v: boolean) => void; disabled?: boolean }) {
@@ -218,7 +219,7 @@ export function FeishuAgentQuick() {
 
 /** App Settings → Feishu 代管 (answer-for-me, main/feishuAgent.ts). */
 export function FeishuAgentSettings() {
-  const { v, set } = useFeishuAgent()
+  const { v, set, setV } = useFeishuAgent()
   if (!v) return null
   const s = v.settings
   const senderOpts = Object.entries(v.senders).filter(([id]) => !s.picked.includes(id))
@@ -249,6 +250,24 @@ export function FeishuAgentSettings() {
         </div>
 
         <AskFirstTopics locked={v.locked} topics={s.askFirstTopics} onChange={askFirstTopics => set({ askFirstTopics })} />
+
+        {Object.keys(v.senders).length > 0 && (
+          <details>
+            <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">People · how they relate to you</summary>
+            <div className="mt-2 flex flex-col gap-1" role="group" aria-label="People">
+              {Object.entries(v.senders).map(([id, name]) => (
+                <label key={id} className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-bg-primary text-[12px]">
+                  <span className="flex-1 min-w-0 truncate text-text-primary">{name || id.slice(0, 12)}</span>
+                  <select aria-label={`${name || id} relation`} value={v.people[id] ?? 'unknown'}
+                    onChange={async e => setV(await window.api.feishuAgent.setPerson(id, e.target.value))}
+                    className="px-2 py-0.5 rounded-lg bg-bg-secondary border border-border text-[12px] text-text-primary">
+                    {RELATION_OPTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
+                  </select>
+                </label>
+              ))}
+            </div>
+          </details>
+        )}
 
         <details>
           <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">More · timing · prefix · preview</summary>
