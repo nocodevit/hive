@@ -12,7 +12,7 @@ import { registerButlerSkillsIpc } from '../butlerSkillsIpc'
 
 const RESOURCES = join(__dirname, '..', '..', '..', 'resources', 'butler')
 const SHIPPED = join(RESOURCES, 'skills')
-const IDS = ['answer-feishu', 'evening-report', 'jira-check', 'morning-plan', 'reply-email', 'sort-inbox']
+const IDS = ['answer-feishu', 'evening-report', 'handle-jira', 'morning-plan', 'reply-email', 'sort-inbox']
 /** Every shipped skill: the task skills above + references. */
 const ALL_IDS = [...IDS, 'jira-knowledge'].sort()
 
@@ -96,7 +96,7 @@ describe('overlay', () => {
     expect(lintSkill('answer-feishu', md, def('answer-feishu'))).toEqual([])
   })
   it('empty overlay = the default unchanged', () => {
-    expect(applyOverlay(def('jira-check'), {})).toBe(def('jira-check'))
+    expect(applyOverlay(def('handle-jira'), {})).toBe(def('handle-jira'))
   })
 })
 
@@ -151,19 +151,19 @@ describe('store', () => {
     expect(composeSkills(store)).toEqual(ALL_IDS)
     for (const id of ALL_IDS) expect(existsSync(join(store.butlerDir, '.claude', 'skills', id, 'SKILL.md'))).toBe(true)
     expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'answer-feishu', 'SKILL.md'), 'utf8')).toMatch(/Friendly/)
-    expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'jira-check', 'SKILL.md'), 'utf8')).toBe(def('jira-check'))
+    expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'handle-jira', 'SKILL.md'), 'utf8')).toBe(def('handle-jira'))
   })
   it('installButlerFiles composes the skills and never touches the owner\'s files', () => {
     const dest = join(mkdtempSync(join(tmpdir(), 'hive-butler-')), 'butler')
     mkdirSync(join(dest, 'skills'), { recursive: true })
     const mine = readFileSync(join(SHIPPED, 'reply-email.md'), 'utf8').replace('Plain and calm.', 'Very casual.')
     writeFileSync(join(dest, 'skills', 'reply-email.md'), mine)
-    writeFileSync(join(dest, 'skills', 'jira-check.json'), '{"tone":"formal"}')
+    writeFileSync(join(dest, 'skills', 'handle-jira.json'), '{"tone":"formal"}')
     installButlerFiles(RESOURCES, dest)
     expect(readFileSync(join(dest, 'skills', 'reply-email.md'), 'utf8')).toBe(mine)
-    expect(readFileSync(join(dest, 'skills', 'jira-check.json'), 'utf8')).toBe('{"tone":"formal"}')
+    expect(readFileSync(join(dest, 'skills', 'handle-jira.json'), 'utf8')).toBe('{"tone":"formal"}')
     expect(readFileSync(join(dest, '.claude', 'skills', 'reply-email', 'SKILL.md'), 'utf8')).toBe(mine)
-    expect(readFileSync(join(dest, '.claude', 'skills', 'jira-check', 'SKILL.md'), 'utf8')).toMatch(/Formal —/)
+    expect(readFileSync(join(dest, '.claude', 'skills', 'handle-jira', 'SKILL.md'), 'utf8')).toMatch(/Formal —/)
   })
   it('override wins over default + overlay', () => {
     saveOverlay(store, 'reply-email', { tone: 'formal' })
@@ -189,30 +189,30 @@ describe('store', () => {
     expect(listSkills(store).find(s => s.id === 'answer-feishu')!.overrideProblems).toHaveLength(1)
   })
   it('lists customized state', () => {
-    saveOverlay(store, 'jira-check', { maxLength: '5 lines' })
+    saveOverlay(store, 'handle-jira', { maxLength: '5 lines' })
     const l = listSkills(store)
     expect(l.map(s => s.id)).toEqual(ALL_IDS)
-    expect(l.find(s => s.id === 'jira-check')!.customized).toBe('form')
+    expect(l.find(s => s.id === 'handle-jira')!.customized).toBe('form')
     expect(l.find(s => s.id === 'sort-inbox')!.customized).toBe('none')
   })
   it('saving an empty form removes the overlay file', () => {
-    saveOverlay(store, 'jira-check', { maxLength: '5 lines' })
-    expect(existsSync(userFile('jira-check.json'))).toBe(true)
-    saveOverlay(store, 'jira-check', {})
-    expect(existsSync(userFile('jira-check.json'))).toBe(false)
-    expect(readOverlay(store, 'jira-check')).toEqual({})
+    saveOverlay(store, 'handle-jira', { maxLength: '5 lines' })
+    expect(existsSync(userFile('handle-jira.json'))).toBe(true)
+    saveOverlay(store, 'handle-jira', {})
+    expect(existsSync(userFile('handle-jira.json'))).toBe(false)
+    expect(readOverlay(store, 'handle-jira')).toEqual({})
   })
   it('reset deletes only that skill\'s files', () => {
     saveOverlay(store, 'reply-email', { tone: 'formal' })
     saveOverride(store, 'reply-email', def('reply-email').replace('Plain and calm.', 'Warm.'))
-    saveOverlay(store, 'jira-check', { tone: 'formal' })
+    saveOverlay(store, 'handle-jira', { tone: 'formal' })
     resetSkill(store, 'reply-email')
     expect(existsSync(userFile('reply-email.md'))).toBe(false)
     expect(existsSync(userFile('reply-email.json'))).toBe(false)
-    expect(existsSync(userFile('jira-check.json'))).toBe(true)
+    expect(existsSync(userFile('handle-jira.json'))).toBe(true)
     expect(effectiveSkill(store, 'reply-email').md).toBe(def('reply-email'))
     const meta = JSON.parse(readFileSync(userFile('.meta.json'), 'utf8'))
-    expect(Object.keys(meta)).toEqual(['jira-check'])
+    expect(Object.keys(meta)).toEqual(['handle-jira'])
   })
 })
 
@@ -250,9 +250,9 @@ describe('diff + chips', () => {
     expect(changeChips(before, after)).toEqual(['Ask first ＋ hiring — anything about hiring', 'Tone ＋ Casual, no 您好.'])
   })
   it('caps the number of chips', () => {
-    const p = parseSkill(def('jira-check'))
+    const p = parseSkill(def('handle-jira'))
     for (const s of p.sections) s.body += '\n- new line'
-    expect(changeChips(def('jira-check'), renderSkill(p), 3)).toEqual(['Purpose ＋ new line', 'Input ＋ new line', '+5 more'])
+    expect(changeChips(def('handle-jira'), renderSkill(p), 3)).toEqual(['Purpose ＋ new line', 'Input ＋ new line', '+5 more'])
   })
 })
 

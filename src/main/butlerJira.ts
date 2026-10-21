@@ -8,7 +8,9 @@ import { httpServers, readToolCache } from './butlerTools'
 import type { Approval } from './approvals'
 
 export const JIRA_FIX_KIND = 'jira.fix'
-const KEY = /^(?:FAE|P4|LFCS|OUTLET)-\d+$/
+export const JIRA_COMMENT_KIND = 'jira.comment'
+export const JIRA_ASSIGN_KIND = 'jira.assign'
+const KEY = /^[A-Z][A-Z0-9]+-\d+$/
 
 export interface JiraFix { key: string; to: string; why: string; via?: string[] }
 type Call = (tool: string, args: Record<string, unknown>) => Promise<string>
@@ -71,6 +73,41 @@ export function registerJiraActions(approvals: { register: (kind: string, exec: 
     }
   })
 }
+
+type Card = Pick<Approval, 'kind' | 'title' | 'subtitle' | 'draft' | 'payload' | 'action'>
+
+/** A comment the owner approves (edits) before it goes on the ticket. */
+export function jiraCommentApproval(key: string, why: string, comment: string): Card {
+  return { kind: JIRA_COMMENT_KIND, title: `${key} · comment`, subtitle: `Jira · ${why}`.slice(0, 160), draft: comment, payload: { key }, action: 'Comment' }
+}
+
+/** Hand a ticket to its owner, with a comment saying why. */
+export function jiraAssignApproval(key: string, to: { user: string; name: string }, comment: string): Card {
+  return { kind: JIRA_ASSIGN_KIND, title: `${key} → ${to.name}`, subtitle: `Jira · reassign to ${to.name} (${to.user})`, draft: comment, payload: { key, user: to.user }, action: 'Reassign' }
+}
+
+/** Comment and reassign executors (same server rules as the status fixes). */
+export function registerJiraWriteActions(approvals: { register: (kind: string, exec: (item: Approval) => Promise<{ ok: boolean; error?: string }>) => void }, client: () => Call | null) {
+  const run = async (fn: (call: Call) => Promise<void>) => {
+    const call = client()
+    if (!call) return { ok: false, error: 'no Jira server with write tools (check Butler tools)' }
+    try { await fn(call); return { ok: true } } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+  }
+  approvals.register(JIRA_COMMENT_KIND, item => {
+    const key = item.payload.key
+    if (typeof key !== 'string' || !KEY_ANY.test(key) || !item.draft.trim()) return Promise.resolve({ ok: false, error: 'bad_payload' })
+    return run(async call => { await call('jira_add_comment', { issue_key: key, comment: item.draft.trim() }) })
+  })
+  approvals.register(JIRA_ASSIGN_KIND, item => {
+    const { key, user } = item.payload as { key?: unknown; user?: unknown }
+    if (typeof key !== 'string' || !KEY_ANY.test(key) || typeof user !== 'string' || !user) return Promise.resolve({ ok: false, error: 'bad_payload' })
+    return run(async call => {
+      await call('jira_update_issue', { issue_key: key, assignee: user })
+      if (item.draft.trim()) await call('jira_add_comment', { issue_key: key, comment: item.draft.trim() })
+    })
+  })
+}
+const KEY_ANY = /^[A-Z][A-Z0-9]+-\d+$/
 
 /** A Call over MCP for the owner's Jira server, or null. */
 export function jiraCaller(butlerFolder: string, claudeJsonPath: string): Call | null {

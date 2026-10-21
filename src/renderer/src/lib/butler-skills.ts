@@ -44,9 +44,8 @@ const META: Record<string, { icon: string; label: string; sample: string }> = {
   'sort-inbox': { icon: '📥', label: 'Sort inbox', sample: 'Lin (customer): dashboard shows no data\nPMO: sprint notes\nNewsletter: AI weekly' },
   'reply-email': { icon: '✉️', label: 'Reply email', sample: 'From Lin: "The dashboard shows no data since this morning."\nOwner: fixed' },
   'answer-feishu': { icon: '💬', label: 'Answer Feishu', sample: 'Ben: checkout 什么时候好？' },
-  'jira-check': { icon: '🎫', label: 'Jira check', sample: 'CUBE-812 blocked, SPH-77 no update 8 days' },
   'jira-knowledge': { icon: '📚', label: 'Jira knowledge', sample: '' },
-  'handle-jira': { icon: '🛠️', label: 'Handle Jira', sample: 'Daily run, 09:00' }
+  'handle-jira': { icon: '🎫', label: 'Handle Jira', sample: 'FAE-1 in 需求分析 for 12 days: write the questions for the requester' }
 }
 
 export function skillMeta(id: string): { icon: string; label: string; sample: string } {

@@ -37,6 +37,8 @@ export interface RoutineRunDeps {
   calendar?: (date: string) => Promise<string>
   /** Read-only Jira tools (butlerTools.jiraTools); null = Jira not connected. */
   jira?: () => ToolSet | null
+  /** handle-jira for an owner with a jira-config.json: Today's Jira text, or null when not configured. */
+  handleJira?: () => Promise<string | null>
   now?: () => number
 }
 
@@ -210,9 +212,12 @@ export function createRoutineRunner(deps: RoutineRunDeps) {
   }
 
   async function jiraCheck(t: number) {
+    // An owner who set up jira-config.json gets handle-jira (code finds, acts at L2/L1/L0).
+    const handled = deps.handleJira ? await deps.handleJira() : null
+    if (handled !== null) { setJournalSection(journalDir(deps.folder()), localDate(t), 'Jira', handled); return }
     const tools = (deps.jira ?? (() => jiraTools(deps.folder(), claudeJsonPath(homedir()))))()
     if (!tools) throw new Error('Jira not connected')
-    const text = (await deps.runClaude('Use the jira-check skill (read jira-knowledge first). List my open tickets that need me today, one line each: "KEY · title · what to do".', { allowedTools: tools.read })).trim()
+    const text = (await deps.runClaude('Use the handle-jira skill (read jira-knowledge first). List my open tickets that need me today, one line each: "KEY · title · what to do".', { allowedTools: tools.read })).trim()
     setJournalSection(journalDir(deps.folder()), localDate(t), 'Jira', text || 'Nothing open')
   }
 

@@ -42,7 +42,7 @@ describe('Jira transitions', () => {
   it('an unreachable status or a bad key is an error, nothing moved', async () => {
     const j = fakeJira('需求设计')
     expect(await transitionTo(j.call, 'FAE-1', 'Rejected', 'x')).toMatchObject({ ok: false, error: 'no transition to "Rejected" from the current status' })
-    expect(await transitionTo(j.call, 'PR-1', '完成', 'x')).toMatchObject({ ok: false, error: 'bad_key' })
+    expect(await transitionTo(j.call, 'not-a-key', '完成', 'x')).toMatchObject({ ok: false, error: 'bad_key' })
     expect(j.log).toEqual([])
   })
   it('an approved card runs the transition with the card text as the comment', async () => {
