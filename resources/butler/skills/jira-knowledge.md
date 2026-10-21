@@ -8,6 +8,10 @@ kind: reference
 
 General knowledge for every Jira-aware skill (answer-feishu, handle-jira). The owner's company specifics — which project is which, final statuses, owners, the dev lead, what labels mean — are not here: they are in Butler settings › Jira and reach you as `jira.md`. When the two disagree, `jira.md` wins.
 
+## Reaching Jira
+
+Use your `jira_*` tools. If you have none, Jira is connected directly: `./hive jira search "<JQL>"`, `./hive jira get KEY`, `./hive jira transitions KEY`, `./hive jira me` (read only).
+
 ## Three kinds of project
 
 - Request projects: what sales, field engineers or customers ask for (requirements, support tickets, supplier requests). They are where questions come from.

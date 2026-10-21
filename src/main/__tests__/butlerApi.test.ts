@@ -24,6 +24,7 @@ describe('isButlerRoute', () => {
     expect(isButlerRoute('/chat/start')).toBe(true)
     expect(isButlerRoute('/pending')).toBe(true)
     expect(isButlerRoute('/routines/run')).toBe(true)
+    expect(isButlerRoute('/jira/read')).toBe(true)
   })
   it('leaves the existing task routes alone', () => {
     expect(isButlerRoute('/task-status?projectId=p1')).toBe(false)
