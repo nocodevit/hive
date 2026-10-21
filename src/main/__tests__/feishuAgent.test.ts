@@ -385,6 +385,17 @@ describe('feishu agent', () => {
     expect(t.prompts.at(-1)).toContain('<<<message\n在吗\ncheckout 好了吗？\n>>>')
   })
 
+  it('preview runs the whole decision but sends and records nothing', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"product-status","level":"auto","confidence":"high","reply":"FAE-1 已上线","sources":["FAE-1"],"claims":[]}' })
+    const r = await t.agent.preview({ text: 'FAE-1 上线了吗？' })
+    expect(r).toMatchObject({ ok: true, gate: { level: 'auto' }, wouldSend: 'FAE-1 已上线', relation: 'unknown', calendarKnown: false })
+    const held = await t.agent.preview({ text: '报价多少？' })
+    expect(held).toMatchObject({ ok: true, gate: { level: 'hold' }, wouldSend: '我需要和 Mei 确认，稍后回复你' })
+    expect(t.fs.sent).toEqual([])
+    expect(t.agent.cases()).toEqual([])
+    expect(t.approvals.pending()).toEqual([])
+  })
+
   it('reminds once when a follow-up is still pending after remindAfterMs', async () => {
     const t = setup({ settings: { waitBeforeReplyMs: 0, remindAfterMs: 30 * MIN }, claude: () => '{"category":"cannot-answer","level":"hold","confidence":"low","reply":"draft","sources":[],"claims":[]}' })
     t.advance(1000)

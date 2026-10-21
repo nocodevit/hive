@@ -481,6 +481,22 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     question: job.text, category: '', confidence: '', claims: [], sources: [], draft: '', level: 'hold', reasons: [], sent: '', outcome: 'pending'
   })
 
+  /** Who / calendar / the model / the guardrail and gate — everything but sending. */
+  async function decide(job: Job, history: any[], self: string) {
+    const started = now()
+    const relation: Relation = await (deps.relation?.(job.senderId) ?? Promise.resolve('unknown' as Relation)).catch(() => 'unknown' as Relation)
+    const busy = await (deps.freeBusy?.() ?? Promise.resolve({ known: false, text: '' })).catch(() => ({ known: false, text: '' }))
+    const senderName = await (deps.senderName?.(job.senderId) ?? Promise.resolve('')).catch(() => '')
+    let answer: Answer | null = null
+    let error = ''
+    try { answer = parseAnswer(await deps.runClaude(buildPrompt(job, history, self, relation, busy, senderName), { senderId: job.senderId, chatId: job.chatId, chatName: job.chatName })) } catch (e) { answer = null; error = e instanceof Error ? e.message : String(e) }
+    const draft = answer?.reply ?? ''
+    // The guardrail is code: a hit on the question or the draft never goes out.
+    const guard = lockedTopicHit(job.text, settings.askFirstTopics) ?? lockedTopicHit(draft, settings.askFirstTopics)
+    const gate = guard === null ? gateAnswer({ answer, relation, calendarKnown: busy.known }) : { level: 'hold' as const, reasons: [guard], notify: true }
+    return { relation, senderName, calendarKnown: busy.known, answer, draft, guard, gate, error, ms: now() - started }
+  }
+
   async function handle(token: string, self: string, job: Job): Promise<Outcome> {
     const ownSent = new Set(readLog().map(e => e.id))
     let history: any[] = []
@@ -496,15 +512,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     }
     if (sentInLastHour(job.chatId) >= settings.maxRepliesPerChatPerHour) return { messageId: job.messageId, result: 'skipped', why: 'rate_limited' }
 
-    const relation: Relation = await (deps.relation?.(job.senderId) ?? Promise.resolve('unknown' as Relation)).catch(() => 'unknown' as Relation)
-    const busy = await (deps.freeBusy?.() ?? Promise.resolve({ known: false, text: '' })).catch(() => ({ known: false, text: '' }))
-    const senderName = await (deps.senderName?.(job.senderId) ?? Promise.resolve('')).catch(() => '')
-    let answer: Answer | null = null
-    try { answer = parseAnswer(await deps.runClaude(buildPrompt(job, history, self, relation, busy, senderName), { senderId: job.senderId, chatId: job.chatId, chatName: job.chatName })) } catch { answer = null }
-    const draft = answer?.reply ?? ''
-    // The guardrail is code: a hit on the question or the draft never goes out.
-    const guard = lockedTopicHit(job.text, settings.askFirstTopics) ?? lockedTopicHit(draft, settings.askFirstTopics)
-    const gate = guard === null ? gateAnswer({ answer, relation, calendarKnown: busy.known }) : { level: 'hold' as const, reasons: [guard], notify: true }
+    const { relation, answer, draft, guard, gate } = await decide(job, history, self)
 
     const decided = { ...baseCase(job, relation), category: answer?.category ?? 'cannot-answer', confidence: answer?.confidence ?? 'low', claims: answer?.claims ?? [], sources: answer?.sources ?? [], draft, level: gate.level, reasons: gate.reasons }
     if (gate.level === 'auto') {
@@ -602,6 +610,21 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     stop,
     /** The case log (memory layer 1). */
     cases: () => cases.all(),
+    /** Try a message through the whole decision without sending or recording anything.
+     *  With a chat id its recent history is read (read-only) as the real run would. */
+    async preview(input: { text: string; senderId?: string; chatId?: string; chatName?: string; p2p?: boolean }) {
+      const self = deps.selfOpenId()
+      const tok = await deps.token()
+      if (!self || !tok.ok || !tok.token) return { ok: false as const, error: 'signed_out' }
+      let history: any[] = []
+      if (input.chatId) { try { history = await recentMessages(tok.token, input.chatId, 20) } catch { history = [] } }
+      const job: Job = {
+        messageId: 'preview', chatId: input.chatId ?? 'preview', chatName: input.chatName ?? 'Preview', p2p: input.p2p ?? true,
+        senderId: input.senderId ?? 'preview-sender', text: input.text.slice(0, 2000), createTime: now(), dueAt: now()
+      }
+      const d = await decide(job, history, self)
+      return { ok: true as const, ...d, wouldSend: d.gate.level === 'auto' ? d.draft : d.guard !== null || d.gate.level === 'approve' ? holdingReply(deps.profile().name) : assistantHolding(deps.profile().name) }
+    },
     getSettings: () => ({ ...settings }),
     setSettings(patch: Partial<FeishuAgentSettings>): FeishuAgentSettings {
       const next = normalizeAgentSettings({ ...settings, ...patch })

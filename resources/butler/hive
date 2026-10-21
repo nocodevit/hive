@@ -6,6 +6,7 @@
   ./hive send  (--id AGENT_ID | [--project NAME] --agent NAME) TEXT...
   ./hive start (--id AGENT_ID | [--project NAME] --agent NAME) [--mode resume|new]
   ./hive chat-search --q "words"
+  ./hive feishu-try --text "message" [--sender OPEN_ID] [--chat CHAT_ID]   (nothing is sent)
 """
 import argparse, json, os, subprocess, sys, urllib.error, urllib.request
 
@@ -97,6 +98,7 @@ def main():
     sub = p.add_subparsers(dest='cmd', required=True)
     a = sub.add_parser('agents'); a.add_argument('--project')
     c = sub.add_parser('chat-search'); c.add_argument('--q', required=True)
+    f = sub.add_parser('feishu-try'); f.add_argument('--text', required=True); f.add_argument('--sender'); f.add_argument('--chat')
     for name in ('tail', 'send', 'start'):
         s = sub.add_parser(name)
         s.add_argument('--id'); s.add_argument('--project'); s.add_argument('--agent')
@@ -124,6 +126,21 @@ def main():
         if not data['hits']: print('No messages found.')
         for h in data['hits']:
             print(f"[{h['chatName'] or h['chatId']} · {h['time']}] {h['text']}")
+        return
+
+    if args.cmd == 'feishu-try':
+        body = {'text': args.text, **({'senderId': args.sender} if args.sender else {}), **({'chatId': args.chat} if args.chat else {})}
+        status, data = call('POST', '/feishu/try', body, timeout=600)
+        if status != 200 or not data.get('ok'): fail(status, data)
+        g = data['gate']
+        print(f"{g['level'].upper()}  ({data['ms'] / 1000:.1f}s)  relation={data['relation']}  calendar={'yes' if data['calendarKnown'] else 'no'}")
+        if g['reasons']: print('  why: ' + '; '.join(g['reasons']))
+        a = data.get('answer') or {}
+        print(f"  category={a.get('category')}  confidence={a.get('confidence')}  sources={', '.join(a.get('sources') or []) or '-'}")
+        for c in a.get('claims') or []: print(f"  claim: {c['claim']} → {c['verdict']} ({c['source'] or 'no source'})")
+        if data.get('error'): print(f"  error: {data['error']}")
+        print(f"\nWould send: {data['wouldSend']}")
+        if data['draft'] and data['draft'] != data['wouldSend']: print(f"Draft for the owner: {data['draft']}")
         return
 
     t = target(args)

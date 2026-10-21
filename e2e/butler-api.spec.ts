@@ -154,3 +154,10 @@ test('chat-search: a run token that ended sees nothing; not signed in is said pl
   const owner = await (await call('/feishu/chat-search?q=roaming')).json()
   expect(owner).toEqual({ ok: true, hits: [], note: 'Feishu not signed in' })
 })
+
+test('feishu-try: owner only, needs text, not signed in is said plainly', async () => {
+  expect((await post('/feishu/try', { text: ' ' })).status).toBe(400)
+  const inRun = await call('/feishu/try', { method: 'POST', body: JSON.stringify({ text: 'hi' }), headers: { 'X-Hive-Run': 'r1' } })
+  expect(inRun.status).toBe(403)
+  expect(await (await post('/feishu/try', { text: 'FAE-1 上线了吗？' })).json()).toEqual({ ok: false, error: 'signed_out' })
+})
