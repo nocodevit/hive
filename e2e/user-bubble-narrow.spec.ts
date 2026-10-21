@@ -4,7 +4,7 @@
 import { test, expect, ElectronApplication, Page } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import { join } from 'path'
-import { mkdtempSync, rmSync, existsSync } from 'fs'
+import { mkdtempSync, rmSync, existsSync, realpathSync } from 'fs'
 import { tmpdir, homedir } from 'os'
 import { execSync } from 'child_process'
 
@@ -19,7 +19,7 @@ let projectFolder: string
 test.beforeAll(async () => {
   execSync('claude --version', { stdio: 'pipe', timeout: 5000 })
   dataDir = mkdtempSync(join(tmpdir(), 'hive-e2e-bubble-'))
-  projectFolder = mkdtempSync(join(tmpdir(), 'hive-e2e-bubble-proj-'))
+  projectFolder = realpathSync(mkdtempSync(join(tmpdir(), 'hive-e2e-bubble-proj-')))
   execSync('npx electron-vite build', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 90000 })
   app = await electron.launch({
     args: [join(PROJECT_ROOT, 'out', 'main', 'index.js')],
@@ -50,7 +50,7 @@ test.afterAll(async () => {
   if (dataDir) rmSync(dataDir, { recursive: true, force: true })
   if (projectFolder) {
     rmSync(projectFolder, { recursive: true, force: true })
-    const sessions = join(homedir(), '.claude', 'projects', projectFolder.replace(/[/.]/g, '-'))
+    const sessions = join(homedir(), '.claude', 'projects', projectFolder.replace(/[^a-zA-Z0-9]/g, '-'))
     if (existsSync(sessions)) rmSync(sessions, { recursive: true, force: true })
   }
 })
