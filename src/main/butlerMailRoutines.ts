@@ -5,10 +5,11 @@
 
 import { execFile, execFileSync } from 'child_process'
 import { readJiraConfig, runHandleJira } from './handleJira'
+import { discoverPrompt, parseDiscovery, readJiraSettings, writeJiraSettings, readJiraMd } from './butlerJiraSettings'
 import { butlerDayText, waitingLines } from './butlerDay'
 import { createCaseLog } from './feishuCases'
 import { jiraCaller } from './butlerJira'
-import { claudeJsonPath } from './butlerTools'
+import { claudeJsonPath, jiraTools } from './butlerTools'
 import { homedir } from 'os'
 import { join } from 'path'
 import type { App, IpcMain, SafeStorage } from 'electron'
@@ -91,7 +92,7 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
       if (!cfg) return null
       const call = jiraCaller(folder, claudeJsonPath(homedir()))
       if (!call) throw new Error('Jira not connected')
-      return (await runHandleJira({ folder, call, write: p => runClaude(p), approvals: d.approvals }, cfg)).text
+      return (await runHandleJira({ folder, call, write: p => runClaude(`${p}\n\n# The owner's Jira (settings)\n${readJiraMd(folder)}`), approvals: d.approvals }, cfg)).text
     },
     onRun: d.onRoutineRun,
     // State and journal live at the plain path; only a claude run (runClaude's
@@ -124,6 +125,21 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
   { const rs = readRoutineSettings(folder); if (rs.saved) void scheduler.sync(rs) }
 
   registerButlerMailIpc({ ipcMain: d.ipcMain, mail, openExternal: d.openExternal })
+
+  // Settings › Jira: the owner's company specifics (not a skill), and "Set up from Jira".
+  d.ipcMain.handle('jira:get', () => ({ settings: readJiraSettings(folder), connected: !!jiraTools(folder, claudeJsonPath(homedir())) }))
+  d.ipcMain.handle('jira:save', (_e, raw: unknown) => {
+    const s = writeJiraSettings(folder, raw)
+    return s ? { ok: true, settings: s } : { ok: false, error: 'Pick the product project first' }
+  })
+  d.ipcMain.handle('jira:discover', async () => {
+    const tools = jiraTools(folder, claudeJsonPath(homedir()))
+    if (!tools) return { ok: false, error: 'Jira is not connected (no Jira tools in your Claude setup)' }
+    try {
+      const draft = parseDiscovery(await runClaude(discoverPrompt(), { allowedTools: tools.read }))
+      return draft ? { ok: true, draft } : { ok: false, error: 'Could not work it out — fill it in by hand' }
+    } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+  })
   // Settings and journal reads/writes use the plain path: opening Settings
   // must not install the Butler folder (only running a routine does).
   registerButlerRoutinesIpc({ ipcMain: d.ipcMain, folder: () => folder, scheduler, runner })

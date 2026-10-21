@@ -341,6 +341,11 @@ const api = {
     answer: (id: string, text: string) => ipcRenderer.invoke('mail:answer', id, text),
     openHelp: (presetId: string) => ipcRenderer.invoke('mail:openHelp', presetId)
   },
+  jira: {
+    get: () => ipcRenderer.invoke('jira:get'),
+    save: (settings: unknown) => ipcRenderer.invoke('jira:save', settings),
+    discover: () => ipcRenderer.invoke('jira:discover')
+  },
   routines: {
     get: () => ipcRenderer.invoke('routines:get'),
     save: (settings: unknown) => ipcRenderer.invoke('routines:save', settings),
