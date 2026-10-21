@@ -48,10 +48,12 @@ Owner: "fixed"
 Email: "When will the export button work again?"
 Owner: (nothing)
 
-> Ask the owner: "Lin asks when export works again — what date can I give?"
+> {"about": "Lin asks when export works again", "decision": "ask", "reply": "", "question": "What date can I give Lin for export?"}
 
 ## Output
 
-- The draft only: first line `To: <address>`, second line `Subject: Re: <subject>`, a blank line, then the body.
-- If something in "Ask me first" is needed, output only the question for the owner instead.
-- Never send. Hive puts the draft in the Approve queue.
+- JSON only: `{"about": "…", "decision": "draft" | "ask", "reply": "…", "question": "…"}`.
+- `about`: one line, what the sender wants, in the owner's language. Always filled.
+- `draft`: `reply` is exactly the email body (greeting to sign-off) — no To / Subject lines, no quoted original, no notes to the owner.
+- `ask`: something in "Ask me first" is needed. `question` is what the owner must decide, one line; `reply` is empty.
+- Never send. Hive shows `about` and the reply (or the question) in Approve.

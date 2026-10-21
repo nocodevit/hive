@@ -138,6 +138,7 @@ declare global {
         save: (input: import('../shared/butler-mail').MailAccountInput) => Promise<{ ok: true; account: import('../shared/butler-mail').MailAccountView } | { ok: false; error: string }>
         remove: (id: string) => Promise<boolean>
         sortNow: () => Promise<Array<{ accountId: string; fetched: number; sorted: number; drafted: number; error?: string }>>
+        answer: (id: string, text: string) => Promise<{ ok: true; replyId: string } | { ok: false; error: string; question?: string }>
         openHelp: (presetId: string) => Promise<boolean>
       }
       routines: {

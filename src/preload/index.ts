@@ -336,6 +336,7 @@ const api = {
     save: (input: unknown) => ipcRenderer.invoke('mail:save', input),
     remove: (id: string) => ipcRenderer.invoke('mail:remove', id),
     sortNow: () => ipcRenderer.invoke('mail:sortNow'),
+    answer: (id: string, text: string) => ipcRenderer.invoke('mail:answer', id, text),
     openHelp: (presetId: string) => ipcRenderer.invoke('mail:openHelp', presetId)
   },
   routines: {
