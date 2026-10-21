@@ -50,10 +50,14 @@ describe('checkButlerAuth', () => {
 describe('listAgents', () => {
   it('joins project names and derives activity from liveness', () => {
     expect(rows()).toEqual([
-      { agentId: 'agent-1', agent: 'Missy', projectId: 'p1', project: 'Cube v2', role: 'Engineering', note: '250+heatmap', chatLive: true, activity: 'working' },
-      { agentId: 'agent-2', agent: 'Wendy', projectId: 'p1', project: 'Cube v2', role: 'Engineering', note: '', chatLive: true, activity: 'waiting' },
-      { agentId: 'agent-3', agent: 'Missy', projectId: 'p2', project: 'Cube Support', role: 'QA', note: '', chatLive: false, activity: 'off' }
+      { agentId: 'agent-1', agent: 'Missy', projectId: 'p1', project: 'Cube v2', role: 'Engineering', note: '250+heatmap', chatLive: true, activity: 'working', updatedAt: 0 },
+      { agentId: 'agent-2', agent: 'Wendy', projectId: 'p1', project: 'Cube v2', role: 'Engineering', note: '', chatLive: true, activity: 'waiting', updatedAt: 0 },
+      { agentId: 'agent-3', agent: 'Missy', projectId: 'p2', project: 'Cube Support', role: 'QA', note: '', chatLive: false, activity: 'off', updatedAt: 0 }
     ])
+  })
+  it('carries the last chat-log write per agent', () => {
+    const r = listAgents(DATA, [], () => undefined, id => (id === 'agent-2' ? 1234 : 0))
+    expect(r.map(x => x.updatedAt)).toEqual([0, 1234, 0])
   })
   it('never reports a non-live chat as working, whatever the stale status says', () => {
     const r = listAgents(DATA, [], () => 'working')

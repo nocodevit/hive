@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import HiveChat from '../hive-chat'
-import { orderSessions, sessionCounts, type SessionRow } from '../../lib/butler-sessions'
+import { orderSessions, sessionCounts, sinceLabel, type SessionRow } from '../../lib/butler-sessions'
 import { setupProgress, type SetupMark } from '../../lib/butler-setup'
 import { ApprovalHistory, ApprovalsList, type ApprovalCard } from './ApprovalsList'
 import { openSkill } from '../../lib/butler-skills'
@@ -193,7 +193,7 @@ export function ButlerPanel(p: Props) {
               <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${DOT[r.activity]}`} />
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-text-primary truncate">{r.agent}</div>
-                <div className="text-[11px] text-text-muted truncate">{r.project} · {r.activity}</div>
+                <div className="text-[11px] text-text-muted truncate">{[r.project, r.activity, sinceLabel(r.updatedAt)].filter(Boolean).join(' · ')}</div>
               </div>
               {r.activity === 'off' ? (
                 <button onClick={() => p.onResumeAgent(r)} aria-label={`Resume ${r.agent}`} className="px-2.5 py-1 rounded-lg bg-bg-secondary border border-border text-text-primary text-[12px] font-semibold cursor-pointer">Resume</button>

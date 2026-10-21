@@ -9,7 +9,7 @@ export type FeishuStatus =
 
 export type ButlerAgentRow = {
   agentId: string; agent: string; projectId: string; project: string
-  role: string; note: string; chatLive: boolean; activity: 'working' | 'waiting' | 'off'
+  role: string; note: string; chatLive: boolean; activity: 'working' | 'waiting' | 'off'; updatedAt: number
 }
 
 export type ApprovalItem = {

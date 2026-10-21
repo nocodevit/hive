@@ -1,4 +1,4 @@
-// Header quick toggles next to the Butler button: 📱 Mobile Butler, 💬 Feishu answer-for-me.
+// Header quick toggles next to the Butler button: 📱 Mobile Butler, 💬 Feishu answer-for-me, 🎙 wake word.
 
 export type MobileState = { enabled: boolean; status: 'off' | 'starting' | 'needs_trust' | 'connected' | 'error' }
 export type FeishuToggleView = { settings: { enabled: boolean }; connected: boolean }
@@ -25,4 +25,14 @@ export function feishuToggle(v: FeishuToggleView | null) {
     disabled: !v || signedOut,
     title: signedOut ? 'Sign in to Feishu first' : `Feishu answer-for-me · ${checked ? 'On' : 'Off'}`
   }
+}
+
+export type WakeView = { enabled: boolean; status: 'off' | 'starting' | 'listening' | 'error'; error?: string }
+
+const WAKE_STATUS: Record<WakeView['status'], string> = { off: 'Off', starting: 'Starting…', listening: 'Listening', error: 'Not running' }
+
+export function wakeToggle(v: WakeView | null) {
+  const checked = !!v?.enabled
+  const status = checked && v ? WAKE_STATUS[v.status] + (v.status === 'error' && v.error ? ` (${v.error})` : '') : 'Off'
+  return { checked, disabled: !v, title: `Listen for “Hola Butler” · ${status}` }
 }

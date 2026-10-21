@@ -43,12 +43,15 @@ export interface AgentRow {
   note: string
   chatLive: boolean
   activity: 'working' | 'waiting' | 'off'
+  /** When the agent's chat log was last written (ms), 0 if never. */
+  updatedAt: number
 }
 
 export function listAgents(
   data: { projects?: unknown; agents?: unknown },
   liveAgentIds: Iterable<string>,
-  activityOf: (agentId: string) => string | undefined
+  activityOf: (agentId: string) => string | undefined,
+  updatedOf: (agentId: string) => number = () => 0
 ): AgentRow[] {
   const projects = (Array.isArray(data.projects) ? data.projects : []) as ProjectRec[]
   const agents = (Array.isArray(data.agents) ? data.agents : []) as AgentRec[]
@@ -64,7 +67,8 @@ export function listAgents(
       role: a.role || a.department || '',
       note: a.note || '',
       chatLive,
-      activity: !chatLive ? 'off' : activityOf(a.id) === 'working' ? 'working' : 'waiting'
+      activity: !chatLive ? 'off' : activityOf(a.id) === 'working' ? 'working' : 'waiting',
+      updatedAt: updatedOf(a.id)
     }
   })
 }

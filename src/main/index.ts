@@ -841,8 +841,23 @@ function butlerToken(): string {
   return t
 }
 
+/** Newest chat-log write per agent: ~/.hive/chat-logs/chat-<agentId>-<ts>.jsonl. */
+function chatLogUpdated(): Map<string, number> {
+  const out = new Map<string, number>()
+  const dir = join(DATA_DIR, 'chat-logs')
+  let names: string[] = []
+  try { names = readdirSync(dir) } catch { return out }
+  for (const n of names) {
+    const m = /^chat-(.+)-\d+\.jsonl$/.exec(n)
+    if (!m) continue
+    try { const t = statSync(join(dir, n)).mtimeMs; if (t > (out.get(m[1]) ?? 0)) out.set(m[1], t) } catch { /* gone */ }
+  }
+  return out
+}
+
 function butlerRows() {
-  return listAgents(loadData(), listLiveChatAgentIds(), id => getChatSessionInfo(`chat-${id}`)?.activity)
+  const updated = chatLogUpdated()
+  return listAgents(loadData(), listLiveChatAgentIds(), id => getChatSessionInfo(`chat-${id}`)?.activity, id => updated.get(id) ?? 0)
 }
 
 /** Last ~2MB of a log, dropping the (probably cut) first line. */
