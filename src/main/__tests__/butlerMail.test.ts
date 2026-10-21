@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readFileSync } from 'fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { MAIL_PRESETS, mailPreset, presetForAddress } from '../../shared/butler-mail'
+import { MAIL_PRESETS, mailAccessLine, mailPreset, presetForAddress } from '../../shared/butler-mail'
 import { createAccountStore, createPasswordStore, mailDir, normalizeAccount } from '../butlerMailStore'
 import { createApprovals } from '../approvals'
 import {
@@ -50,7 +50,7 @@ function setup(opts: { inbox?: RawMail[]; uidValidity?: number; classify?: (uids
     return opts.reply ? opts.reply(prompt) : DRAFT
   }
   const m = createButlerMail({ folder, accounts, passwords, clients, runClaude, approvals, now: () => 1_700_000_000_000 })
-  const saved = m.save({ address: 'mei@corp.com', preset: 'exmail', password: 'pw', label: 'Work' })
+  const saved = m.save({ address: 'mei@corp.com', preset: 'exmail', password: 'pw', label: 'Work', consent: true })
   if (!saved.ok) throw new Error(saved.error)
   return { folder, m, box, approvals, sent, fetchCalls, prompts, accounts, passwords, id: saved.account.id }
 }
@@ -91,7 +91,48 @@ describe('mail accounts', () => {
   it('refuses a new account without a password and a duplicate address', () => {
     const t = setup()
     expect(t.m.save({ address: 'x@corp.com', preset: 'exmail' })).toEqual({ ok: false, error: 'no_password' })
-    expect(t.m.save({ address: 'MEI@corp.com', preset: 'exmail', password: 'p' })).toEqual({ ok: false, error: 'already_added' })
+    expect(t.m.save({ address: 'MEI@corp.com', preset: 'exmail', password: 'p', consent: true })).toEqual({ ok: false, error: 'already_added' })
+  })
+  it('a new account needs consent; it is stored with the time', () => {
+    const t = setup()
+    expect(t.m.save({ address: 'x@corp.com', preset: 'exmail', password: 'p' })).toEqual({ ok: false, error: 'no_consent' })
+    expect(t.m.save({ address: 'x@corp.com', preset: 'exmail', password: 'p', consent: false })).toEqual({ ok: false, error: 'no_consent' })
+    expect(t.m.list().map(a => a.address)).toEqual(['mei@corp.com'])
+    expect(t.m.list()[0].consentAt).toBe(1_700_000_000_000)
+    expect(JSON.parse(readFileSync(join(t.folder, 'mail', 'accounts.json'), 'utf8')).accounts[0].consentAt).toBe(1_700_000_000_000)
+  })
+  it('edits keep the first consent time', () => {
+    const t = setup()
+    const later = createButlerMail({ folder: t.folder, accounts: t.accounts, passwords: t.passwords, approvals: createApprovals({ dir: t.folder }), runClaude: async () => '', clients: { openInbox: async () => { throw new Error('x') }, send: async () => ({}) }, now: () => 2_000_000_000_000 })
+    expect(later.save({ id: t.id, address: 'mei@corp.com', preset: 'exmail', paused: true, consent: true }).ok).toBe(true)
+    expect(t.m.list()[0].consentAt).toBe(1_700_000_000_000)
+  })
+  it('accounts added before the consent question are migrated to "to confirm", and Confirm records it', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'hive-mail-'))
+    const dir = mailDir(folder)
+    mkdirSync(dir, { recursive: true })
+    const old = { id: 'acc-bbbbbbbb', address: 'old@corp.com', label: '', preset: 'exmail', imap: mailPreset('exmail')!.imap, smtp: mailPreset('exmail')!.smtp, sort: true, drafts: true, paused: false }
+    writeFileSync(join(dir, 'accounts.json'), JSON.stringify({ accounts: [old], status: { 'acc-bbbbbbbb': { ok: true, unread: 3, at: 1 } } }))
+    const accounts = createAccountStore(dir)
+    expect(accounts.list()).toEqual([{ ...old, consentAt: null }])
+    const file = JSON.parse(readFileSync(join(dir, 'accounts.json'), 'utf8'))
+    expect(file.accounts[0]).toEqual({ ...old, consentAt: null })
+    expect(file.status['acc-bbbbbbbb']).toEqual({ ok: true, unread: 3, at: 1 })
+    const passwords = createPasswordStore(dir, fakeCrypto)
+    passwords.save('acc-bbbbbbbb', 'pw')
+    const m = createButlerMail({ folder, accounts, passwords, approvals: createApprovals({ dir: folder }), runClaude: async () => '', clients: { openInbox: async () => { throw new Error('x') }, send: async () => ({}) }, now: () => 1_800_000_000_000 })
+    // Still editable (and still sorted) before confirming.
+    expect(m.save({ id: 'acc-bbbbbbbb', address: 'old@corp.com', preset: 'exmail', paused: true }).ok).toBe(true)
+    expect(m.list()[0]).toMatchObject({ paused: true, consentAt: null })
+    expect(m.save({ id: 'acc-bbbbbbbb', address: 'old@corp.com', preset: 'exmail', consent: true }).ok).toBe(true)
+    expect(m.list()[0]).toMatchObject({ paused: true, consentAt: 1_800_000_000_000 })
+  })
+  it('access line says what Butler does with the mailbox', () => {
+    expect(mailAccessLine({ sort: true, drafts: true, paused: false })).toBe('Reads · drafts · sends after your OK')
+    expect(mailAccessLine({ sort: true, drafts: false, paused: false })).toBe('Reads')
+    expect(mailAccessLine({ sort: false, drafts: true, paused: false })).toBe('Drafts · sends after your OK')
+    expect(mailAccessLine({ sort: false, drafts: false, paused: false })).toBe('Off')
+    expect(mailAccessLine({ sort: true, drafts: true, paused: true })).toBe('Paused')
   })
   it('edits keep the stored password; remove drops password and state', async () => {
     const t = setup()

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import type { MailAccountView } from '../../../../shared/butler-mail'
+import { mailAccessLine, type MailAccountView } from '../../../../shared/butler-mail'
 import { MailAccountForm } from './MailAccountForm'
+import { ConsentNotice } from './ConsentNotice'
 
 function dot(a: MailAccountView): string {
   if (a.paused) return 'bg-status-done'
@@ -36,9 +37,13 @@ export function EmailAccounts() {
         {list?.map(a => editing === a.id ? (
           <MailAccountForm key={a.id} account={a} onSaved={() => { setEditing(null); void load() }} onCancel={() => setEditing(null)} />
         ) : (
-          <div key={a.id} className="relative flex items-center gap-2.5 text-[13px]">
+          <div key={a.id} className="relative flex flex-col gap-1">
+          <div className="relative flex items-center gap-2.5 text-[13px]">
             <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${dot(a)}`} title={a.status?.error || ''} />
-            <span className="flex-1 min-w-0 truncate text-text-primary">{a.address}{a.label && <span className="text-text-muted"> · {a.label}</span>}</span>
+            <span className="flex-1 min-w-0 flex flex-col">
+              <span className="truncate text-text-primary">{a.address}{a.label && <span className="text-text-muted"> · {a.label}</span>}</span>
+              <span className="text-[11px] text-text-muted" aria-label={`Access for ${a.address}`}>{mailAccessLine(a)}</span>
+            </span>
             <span className="text-[11px] font-mono text-text-muted">
               {a.paused ? 'paused' : a.status?.ok ? `${a.status.unread ?? 0} unread` : a.status?.error ? 'error' : ''}
             </span>
@@ -54,6 +59,8 @@ export function EmailAccounts() {
                 )}
               </div>
             )}
+          </div>
+          {a.consentAt === null && <ConsentNotice account={a} onDone={load} />}
           </div>
         ))}
         {list && !list.length && editing !== 'new' && <div className="text-[13px] text-text-muted">No accounts</div>}
