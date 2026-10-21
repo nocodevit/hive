@@ -87,6 +87,11 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     if (runToken && !runs.has(runToken)) return Promise.resolve({ hits: [], note: 'run ended' })
     return search(q, runToken ? runs.get(runToken)! : null)
   }
+  const lookup = createRelationLookup({
+    get: (url, token) => feishuHttp('GET', url, token),
+    token: async () => { const t = await d.feishu.accessToken(); return t.ok && t.token ? t.token : null },
+    selfOpenId: () => { const s = d.feishu.getStatus(); return s.state === 'signed_in' && s.openId ? s.openId : null }
+  })
   const agent = createFeishuAgent({
     dir: d.butlerDir,
     http: feishuHttp,
@@ -95,11 +100,8 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     profile: () => d.readProfile(d.butlerDir),
     profileMd: () => { try { return readFileSync(join(d.butlerDir, 'profile.md'), 'utf8') } catch { return '' } },
     runClaude,
-    relation: createRelationLookup({
-      get: (url, token) => feishuHttp('GET', url, token),
-      token: async () => { const t = await d.feishu.accessToken(); return t.ok && t.token ? t.token : null },
-      selfOpenId: () => { const s = d.feishu.getStatus(); return s.state === 'signed_in' && s.openId ? s.openId : null }
-    }),
+    relation: lookup,
+    senderName: lookup.nameOf,
     freeBusy: d.freeBusy,
     approvals: d.approvals,
     notify: d.notify ?? ((title, body) => { try { new Notification({ title, body }).show() } catch { /* no notification center */ } }),
