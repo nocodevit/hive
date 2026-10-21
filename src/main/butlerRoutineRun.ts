@@ -3,6 +3,8 @@
 // the skill), and writes the answer into today's journal.
 
 import { mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'fs'
+import { homedir } from 'os'
+import { claudeJsonPath, jiraTools, type ToolSet } from './butlerTools'
 import { join } from 'path'
 import type { RoutineId, RoutineRunRecord, RoutineSettings } from '../shared/butler-routines'
 import { journalDir, localDate, previousWithSection, readJournalText, setJournalSection, splitSections, toChecklist } from './butlerJournal'
@@ -33,6 +35,8 @@ export interface RoutineRunDeps {
   feishu: FeishuDeps
   /** Phase 5 hook: today's meetings as text, '' when none / not connected. */
   calendar?: (date: string) => Promise<string>
+  /** Read-only Jira tools (butlerTools.jiraTools); null = Jira not connected. */
+  jira?: () => ToolSet | null
   now?: () => number
 }
 
@@ -103,14 +107,6 @@ export function feishuText(content: unknown): string {
   } catch { return content }
 }
 
-/** Is a Jira MCP server configured for the Butler folder (.mcp.json key "jira" or "atlassian")? */
-export function jiraServer(folder: string): string | null {
-  try {
-    const j = JSON.parse(readFileSync(join(folder, '.mcp.json'), 'utf8'))
-    for (const k of ['jira', 'atlassian']) if (j?.mcpServers?.[k]) return k
-  } catch { /* none */ }
-  return null
-}
 
 interface RunState { lastRuns: Partial<Record<RoutineId, RoutineRunRecord>>; feishuSince?: number }
 
@@ -214,9 +210,9 @@ export function createRoutineRunner(deps: RoutineRunDeps) {
   }
 
   async function jiraCheck(t: number) {
-    const server = jiraServer(deps.folder())
-    if (!server) throw new Error('Jira not connected')
-    const text = (await deps.runClaude('Use the jira-check skill. List my open tickets that need me today, one line each: "KEY · title · what to do".', { allowedTools: [`mcp__${server}`] })).trim()
+    const tools = (deps.jira ?? (() => jiraTools(deps.folder(), claudeJsonPath(homedir()))))()
+    if (!tools) throw new Error('Jira not connected')
+    const text = (await deps.runClaude('Use the jira-check skill (read jira-knowledge first). List my open tickets that need me today, one line each: "KEY · title · what to do".', { allowedTools: tools.read })).trim()
     setJournalSection(journalDir(deps.folder()), localDate(t), 'Jira', text || 'Nothing open')
   }
 

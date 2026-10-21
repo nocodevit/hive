@@ -6,7 +6,8 @@ import {
   listJournalDates, parseChecklist, previousWithSection, readJournalDay, readJournalText, setJournalSection, splitSections,
   toChecklist, toggleJournalItem
 } from '../butlerJournal'
-import { agentDays, createRoutineRunner, feishuText, jiraServer, type RoutineRunDeps } from '../butlerRoutineRun'
+import { agentDays, createRoutineRunner, feishuText, type RoutineRunDeps } from '../butlerRoutineRun'
+import { jiraTools, STARGATE_READ } from '../butlerTools'
 import { defaultRoutineSettings } from '../../shared/butler-routines'
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'hive-journal-'))
@@ -64,10 +65,13 @@ describe('routine runner', () => {
   function setup(over: Partial<RoutineRunDeps> = {}, answer = '- [ ] Review Missy\n- [ ] Reply Lin #draft') {
     const folder = tmp()
     const prompts: string[] = []
+    const tools: string[][] = []
     let clock = new Date(2026, 9, 20, 8, 31).getTime()
     const deps: RoutineRunDeps = {
       folder: () => folder,
-      runClaude: async p => { prompts.push(p); return answer },
+      // Never the developer's real ~/.claude.json.
+      jira: () => jiraTools(folder, join(folder, 'no-claude.json')),
+      runClaude: async (p, o) => { prompts.push(p); tools.push(o?.allowedTools ?? []); return answer },
       settings: () => defaultRoutineSettings(),
       mail: {
         sortInbox: async () => [],
@@ -80,7 +84,7 @@ describe('routine runner', () => {
       now: () => clock,
       ...over
     }
-    return { folder, prompts, r: createRoutineRunner(deps), set: (t: number) => { clock = t } }
+    return { folder, prompts, tools, r: createRoutineRunner(deps), set: (t: number) => { clock = t } }
   }
 
   it('morning plan: names the skill, feeds yesterday + mail + agents, writes the Plan', async () => {
@@ -132,9 +136,18 @@ describe('routine runner', () => {
   it('jira-check uses the skill when .mcp.json has jira', async () => {
     const t = setup({}, 'CUBE-1 · x · review')
     writeFileSync(join(t.folder, '.mcp.json'), JSON.stringify({ mcpServers: { jira: { command: 'x' } } }))
-    expect(jiraServer(t.folder)).toBe('jira')
     expect((await t.r.run('jira-check')).ok).toBe(true)
+    expect(t.tools[0]).toEqual(['mcp__jira'])
     expect(readJournalDay(join(t.folder, 'journal'), '2026-10-20').jira).toBe('CUBE-1 · x · review')
+  })
+  it('jira-check through stargate (user ~/.claude.json) gets read-only tools only', async () => {
+    const folder = tmp()
+    const cj = join(folder, 'claude.json')
+    writeFileSync(cj, JSON.stringify({ mcpServers: { stargate: { type: 'http', url: 'https://x/mcp' } } }))
+    const t = setup({ folder: () => folder, jira: () => jiraTools(folder, cj) }, 'P4-1 · x · review')
+    expect((await t.r.run('jira-check')).ok).toBe(true)
+    expect(t.tools[0]).toEqual(STARGATE_READ)
+    expect(t.tools[0].some(x => /create|update|transition_issue|add_comment|delete|assign/.test(x))).toBe(false)
   })
   it('feishu digest: needs sign-in', async () => {
     const t = setup()
