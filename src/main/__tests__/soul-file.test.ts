@@ -1,40 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { join } from 'path'
 import { mkdirSync, rmSync, existsSync, readFileSync } from 'fs'
-import { generateHookSettings, writeSoulFile, deleteSoulFile } from '../utils'
-
-describe('generateHookSettings', () => {
-  it('returns hooks object with Stop, PreToolUse, Notification', () => {
-    const settings = generateHookSettings('agent-42', 17710)
-    expect(settings.hooks).toBeDefined()
-    const hooks = settings.hooks as Record<string, any>
-    expect(hooks.Stop).toBeDefined()
-    expect(hooks.PreToolUse).toBeDefined()
-    expect(hooks.Notification).toBeDefined()
-  })
-
-  it('embeds agent ID in curl commands', () => {
-    const settings = generateHookSettings('my-agent', 17710)
-    const hooks = settings.hooks as Record<string, any>
-    const stopCmd = hooks.Stop[0].hooks[0].command
-    expect(stopCmd).toContain('my-agent')
-    expect(stopCmd).toContain('waiting')
-  })
-
-  it('uses correct port', () => {
-    const settings = generateHookSettings('agent', 9999)
-    const hooks = settings.hooks as Record<string, any>
-    const cmd = hooks.PreToolUse[0].hooks[0].command
-    expect(cmd).toContain('9999')
-  })
-
-  it('PreToolUse reports working status', () => {
-    const settings = generateHookSettings('a1', 17710)
-    const hooks = settings.hooks as Record<string, any>
-    const cmd = hooks.PreToolUse[0].hooks[0].command
-    expect(cmd).toContain('"status":"working"')
-  })
-})
+import { writeSoulFile, deleteSoulFile } from '../utils'
 
 const TEST_DIR = join(__dirname, '__test_souls__')
 
