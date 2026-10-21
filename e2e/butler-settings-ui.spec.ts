@@ -2,7 +2,7 @@ import { test, expect, ElectronApplication, Page } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import { join } from 'path'
 import { execSync } from 'child_process'
-import { mkdirSync, rmSync, existsSync, writeFileSync, chmodSync } from 'fs'
+import { mkdirSync, rmSync, existsSync, writeFileSync, chmodSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 
 /**
@@ -72,11 +72,35 @@ test('every routine says what it does; time boxes are not clipped', async () => 
   await page.screenshot({ path: test.info().outputPath('daily-routine.png') })
 })
 
-test('answer-for-me "Always asks you" lists the six guardrail topics', async () => {
-  const label = page.getByText('Always asks you', { exact: true })
-  await label.scrollIntoViewIfNeeded()
-  const chips = label.locator('..').getByTitle('Locked')
-  await expect(chips).toHaveText(['🔒 prices', '🔒 approvals', '🔒 private chats', '🔒 personal info', '🔒 sensitive info', '🔒 confidential'])
+test('answer-for-me "Always asks you": six guardrails, each with an example', async () => {
+  const box = page.getByRole('group', { name: 'Always asks you' })
+  await box.scrollIntoViewIfNeeded()
+  await expect(box.getByTitle('Locked')).toHaveText(['🔒 prices', '🔒 approvals', '🔒 private chats', '🔒 personal info', '🔒 sensitive info', '🔒 confidential'])
+  await expect(box.getByLabel('private chats details')).toHaveCount(0)
+  await box.getByRole('button', { name: '🔒 private chats' }).click()
+  await expect(box.getByLabel('private chats details')).toContainText('Mei 和 Lin 刚才在聊什么？')
+  await box.screenshot({ path: test.info().outputPath('always-asks.png') })
+  await box.getByRole('button', { name: '🔒 private chats' }).click()
+  await expect(box.getByLabel('private chats details')).toHaveCount(0)
+})
+
+test('an added topic needs name, keywords and description', async () => {
+  const box = page.getByRole('group', { name: 'Always asks you' })
+  await box.getByRole('button', { name: 'Add topic' }).click()
+  const add = box.getByRole('button', { name: 'Add', exact: true })
+  await box.getByLabel('Topic name').fill('hiring')
+  await box.getByLabel('Topic keywords').fill('招人, hire')
+  await expect(add).toBeDisabled()
+  await box.getByLabel('Topic description').fill('hiring plans, headcount')
+  await expect(add).toBeEnabled()
+  await box.screenshot({ path: test.info().outputPath('add-topic.png') })
+  await add.click()
+  await box.getByRole('button', { name: 'hiring', exact: true }).click()
+  await expect(box.getByLabel('hiring details')).toContainText('hiring plans, headcount · keywords: 招人, hire')
+  await expect.poll(() => JSON.parse(readFileSync(join(HIVE_DATA_DIR, 'butler', 'feishu-agent.json'), 'utf8')).askFirstTopics)
+    .toEqual([{ name: 'hiring', words: ['招人', 'hire'], hint: 'hiring plans, headcount' }])
+  await box.getByRole('button', { name: 'Remove hiring' }).click()
+  await expect(box.getByRole('button', { name: 'hiring', exact: true })).toHaveCount(0)
 })
 
 test('"Skill ›" opens that skill in the Skills section', async () => {

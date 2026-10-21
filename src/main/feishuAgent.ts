@@ -28,6 +28,9 @@ export type AgentScope = 'everyone' | 'picked'
 
 export interface QuietHours { start: string; end: string }
 
+/** An owner-added "Always asks you" topic: keywords gate in code, the description guides the model. */
+export interface AskTopic { name: string; words: string[]; hint: string }
+
 export interface FeishuAgentSettings {
   enabled: boolean
   scope: AgentScope
@@ -37,7 +40,7 @@ export interface FeishuAgentSettings {
   remindAfterMs: number
   /** '' = default (profile prefix, else 【<name> 的 AI 代理】). */
   prefix: string
-  extraAskFirst: string[]
+  askFirstTopics: AskTopic[]
   pollMs: number
   maxRepliesPerChatPerHour: number
   quietHours: QuietHours | null
@@ -50,27 +53,27 @@ export const DEFAULT_AGENT_SETTINGS: FeishuAgentSettings = {
   waitBeforeReplyMs: 2 * 60_000,
   remindAfterMs: 30 * 60_000,
   prefix: '',
-  extraAskFirst: [],
+  askFirstTopics: [],
   pollMs: 60_000,
   maxRepliesPerChatPerHour: 10,
   quietHours: null
 }
 
-export const LOCKED_TOPICS: Array<{ id: string; hint: string; words: string[] }> = [
-  { id: 'prices', hint: 'prices, quotes, costs, discounts',
+export const LOCKED_TOPICS: Array<{ id: string; label: string; hint: string; example: string; words: string[] }> = [
+  { id: 'prices', label: 'prices', example: '这个套餐给客户报价多少？', hint: 'prices, quotes, costs, discounts',
     words: ['价格', '报价', '多少钱', '费用', '折扣', '优惠', 'price', 'pricing', 'cost', 'quote', 'discount'] },
-  { id: 'approvals', hint: 'approving, signing off, agreeing on the owner\'s behalf',
+  { id: 'approvals', label: 'approvals', example: '这个折扣你帮 Mei 批一下吧', hint: 'approving, signing off, agreeing on the owner\'s behalf',
     words: ['审批', '批准', '批一下', '同意吗', '签字', 'approve', 'approval', 'sign off'] },
   // Someone asking the agent what the owner said to, or talks about with, other people.
-  { id: 'private-chats', hint: 'what the owner talks about with other people, other chats, chat history',
+  { id: 'private-chats', label: 'private chats', example: 'Mei 和 Lin 刚才在聊什么？', hint: 'what the owner talks about with other people, other chats, chat history',
     words: ['聊什么', '聊了什么', '聊啥', '在聊', '和谁聊', '跟谁聊', '说了什么', '说了啥', '聊天记录', '私聊', '私信', '你们俩', '他们俩',
       'talk about', 'talked about', 'talking about', 'chat history', 'conversation with', 'what did he say', 'what did she say', 'what did they say', 'private chat'] },
-  { id: 'personal-info', hint: 'personal details of the owner or anyone: phone, ID, address, salary, family, health',
+  { id: 'personal-info', label: 'personal info', example: '把 Lin 的手机号发我', hint: 'personal details of the owner or anyone: phone, ID, address, salary, family, health',
     words: ['手机号', '电话号码', '身份证', '住址', '家庭地址', '住在哪', '工资', '薪资', '薪水', '年龄', '生日', '家人', '病假', '身体',
       'phone number', 'home address', 'salary', 'id number', 'passport', 'birthday', 'personal info'] },
-  { id: 'sensitive-info', hint: 'passwords, accounts, keys, codes, bank details, contracts',
+  { id: 'sensitive-info', label: 'sensitive info', example: 'UAT 数据库密码是多少？', hint: 'passwords, accounts, keys, codes, bank details, contracts',
     words: ['密码', '账号', '账户', '密钥', '验证码', '银行卡', '卡号', '合同', 'password', 'credential', 'api key', 'secret key', 'token', 'bank account', 'contract'] },
-  { id: 'confidential', hint: 'confidential, internal-only or unreleased matters',
+  { id: 'confidential', label: 'confidential', example: '下个版本还没公布的功能有哪些？', hint: 'confidential, internal-only or unreleased matters',
     words: ['机密', '保密', '内部', '未公开', '不公开', '秘密', '泄露', 'confidential', 'internal only', 'not public', 'unreleased', 'nda'] }
 ]
 
@@ -86,6 +89,23 @@ const strList = (v: unknown, max = 50) =>
   Array.isArray(v) ? Array.from(new Set(v.filter((x): x is string => typeof x === 'string').map(s => s.trim()).filter(Boolean))).slice(0, max) : []
 const hhmm = (v: unknown) => typeof v === 'string' && /^([01]\d|2[0-3]):[0-5]\d$/.test(v)
 
+/** Owner topics, complete ones only (name + keywords + description). A pre-2.33.7
+ *  settings file kept bare words in `extraAskFirst`: each becomes a topic whose
+ *  keyword and description are the word (migrated on load, see createFeishuAgent). */
+function askTopics(s: Record<string, any>): AskTopic[] {
+  const src: unknown[] = Array.isArray(s.askFirstTopics) ? s.askFirstTopics
+    : strList(s.extraAskFirst).map(w => ({ name: w, words: [w], hint: w }))
+  const out: AskTopic[] = []
+  for (const t of src) {
+    const o = (t && typeof t === 'object' ? t : {}) as Record<string, unknown>
+    const name = typeof o.name === 'string' ? o.name.trim().slice(0, 40) : ''
+    const words = strList(o.words, 20).map(w => w.slice(0, 40))
+    const hint = typeof o.hint === 'string' ? o.hint.trim().slice(0, 200) : ''
+    if (name && words.length && hint && !out.some(x => x.name === name)) out.push({ name, words, hint })
+  }
+  return out.slice(0, 30)
+}
+
 export function normalizeAgentSettings(raw: unknown): FeishuAgentSettings {
   const s = (raw && typeof raw === 'object' ? raw : {}) as Record<string, any>
   const d = DEFAULT_AGENT_SETTINGS
@@ -97,7 +117,7 @@ export function normalizeAgentSettings(raw: unknown): FeishuAgentSettings {
     waitBeforeReplyMs: clampInt(s.waitBeforeReplyMs, 0, 60 * 60_000, d.waitBeforeReplyMs),
     remindAfterMs: clampInt(s.remindAfterMs, 60_000, DAY, d.remindAfterMs),
     prefix: typeof s.prefix === 'string' ? s.prefix.trim().slice(0, 60) : '',
-    extraAskFirst: strList(s.extraAskFirst).map(x => x.slice(0, 40)),
+    askFirstTopics: askTopics(s),
     pollMs: clampInt(s.pollMs, 15_000, 30 * 60_000, d.pollMs),
     maxRepliesPerChatPerHour: clampInt(s.maxRepliesPerChatPerHour, 1, 100, d.maxRepliesPerChatPerHour),
     quietHours: q && hhmm(q.start) && hhmm(q.end) && q.start !== q.end ? { start: q.start, end: q.end } : null
@@ -147,10 +167,10 @@ function wordIn(text: string, w: string): boolean {
 }
 
 /** First locked topic (or owner-added word) the text touches, else null. */
-export function lockedTopicHit(text: string, extra: string[]): string | null {
+export function lockedTopicHit(text: string, custom: AskTopic[]): string | null {
   const t = text.toLowerCase()
   for (const topic of LOCKED_TOPICS) if (topic.words.some(w => wordIn(t, w))) return topic.id
-  for (const w of extra) if (w && t.includes(w.toLowerCase())) return w
+  for (const topic of custom) if (topic.words.some(w => wordIn(t, w.toLowerCase()))) return topic.name
   return null
 }
 
@@ -262,7 +282,10 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     renameSync(f + '.tmp', f)
   }
 
-  let settings = normalizeAgentSettings(readJson(settingsFile))
+  const rawSettings = readJson(settingsFile)
+  let settings = normalizeAgentSettings(rawSettings)
+  // One-time migration of the old bare-word list to topics.
+  if (rawSettings && typeof rawSettings === 'object' && 'extraAskFirst' in rawSettings) writeJson(settingsFile, settings)
   const loadState = (): AgentState => {
     const j = readJson(stateFile) ?? {}
     return {
@@ -388,7 +411,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const p = deps.profile()
     const name = p.name || 'the owner'
     const lines = history.map(m => `${m?.sender?.id === self ? name : 'them'}: ${clip(messageText(m), 500)}`)
-    const locked = [...LOCKED_TOPICS.map(t => `${t.id} (${t.hint})`), ...settings.extraAskFirst].join('; ')
+    const locked = [...LOCKED_TOPICS, ...settings.askFirstTopics.map(t => ({ id: t.name, hint: t.hint }))].map(t => `${t.id} (${t.hint})`).join('; ')
     return [
       `Use the answer-feishu skill (.claude/skills/answer-feishu/SKILL.md) to answer a Feishu message sent to ${name}.`,
       '',
@@ -430,7 +453,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     try { d = parseDecision(await deps.runClaude(buildPrompt(job, history, self))) } catch (e) {
       d = { decision: 'escalate', reply: '', reason: `claude: ${e instanceof Error ? e.message : String(e)}`.slice(0, 200) }
     }
-    const topic = lockedTopicHit(job.text, settings.extraAskFirst) ?? lockedTopicHit(d.reply, settings.extraAskFirst)
+    const topic = lockedTopicHit(job.text, settings.askFirstTopics) ?? lockedTopicHit(d.reply, settings.askFirstTopics)
       ?? (d.decision === 'escalate' ? d.reason || 'unsure' : null)
 
     if (topic === null) {
