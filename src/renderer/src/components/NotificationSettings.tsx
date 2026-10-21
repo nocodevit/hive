@@ -4,7 +4,7 @@ import { Switch } from './butler/Switch'
 import { TimeBox } from './butler/DailyRoutine'
 
 const sectionLabel = 'block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2'
-const btn = 'px-2.5 py-1 rounded-lg bg-bg-primary border border-border text-[12px] font-semibold text-text-primary cursor-pointer disabled:opacity-50'
+const btn = 'whitespace-nowrap shrink-0 px-2.5 py-1 rounded-lg bg-bg-primary border border-border text-[12px] font-semibold text-text-primary cursor-pointer disabled:opacity-50'
 const row = 'flex items-center justify-between gap-3 px-4 py-2.5 border-b border-border last:border-0'
 
 const TG_ERROR: Record<string, string> = {
@@ -88,7 +88,7 @@ function TelegramSetup({ status, onStatus }: { status: TelegramStatus; onStatus:
 
   if (!open) return <button onClick={() => setOpen(true)} className={btn}>Set up</button>
   return (
-    <div className="flex flex-col items-stretch gap-1.5 w-[300px] text-[12px]">
+    <div className="flex flex-col items-stretch gap-1.5 w-[340px] text-[12px]">
       <div className="flex items-center gap-2">
         <span className="w-4 text-text-muted font-bold">1</span>
         <button onClick={() => void window.api.telegram.openBotFather()} className={btn}>Open BotFather</button>
