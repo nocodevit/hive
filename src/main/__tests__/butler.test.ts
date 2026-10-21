@@ -191,9 +191,17 @@ describe('bundled rules', () => {
     ['only the named agent', /Only the agent the owner named/],
     ['truthful reporting', /Never claim something was\s+sent or started unless/],
     ['no agent work', /You do not do the agents' work/],
-    ['reply language + short', /language the owner writes in[\s\S]*short/]
+    ['reply language + short', /language the owner writes in[\s\S]*short/],
+    ['pending first', /opens a conversation, first run `\.\/hive pending`/]
   ])('keeps the %s rule', (_name, re) => {
     expect(rules).toMatch(re)
+  })
+})
+
+describe('bundled settings', () => {
+  it('allows ./hive pending', () => {
+    const allow: string[] = JSON.parse(readFileSync(join(RESOURCES, 'settings.json'), 'utf8')).permissions.allow
+    expect(allow).toContain('Bash(./hive pending:*)')
   })
 })
 

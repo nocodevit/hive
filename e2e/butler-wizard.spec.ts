@@ -117,6 +117,19 @@ test('Daily routine step fits: every row readable, times not clipped', async () 
   await page.screenshot({ path: test.info().outputPath('wizard-routine.png') })
 })
 
+test('Notifications step: Mac on, a test button, Telegram, quiet hours saved', async () => {
+  await steps().getByRole('button', { name: /Notifications/ }).click()
+  await expect(wizard().getByRole('heading', { name: 'Notifications' })).toBeVisible()
+  await expect(wizard().getByRole('switch', { name: 'Mac notifications' })).toHaveAttribute('aria-checked', 'true')
+  await expect(wizard().getByRole('button', { name: 'Send a test' })).toBeVisible()
+  await expect(wizard().getByText('Away push · Telegram')).toBeVisible()
+  await expect(wizard().getByRole('switch', { name: 'Task done' })).toBeHidden()
+  await wizard().getByRole('switch', { name: 'Quiet hours' }).click()
+  await expect(wizard().getByLabel('Quiet from')).toHaveValue('22:00')
+  await expect.poll(() => JSON.parse(readFileSync(join(HIVE_DATA_DIR, 'notifications.json'), 'utf8')).quiet.on).toBe(true)
+  await page.screenshot({ path: test.info().outputPath('wizard-notify.png') })
+})
+
 test('the Butler panel shows what is left and reopens the wizard there', async () => {
   await page.keyboard.press('Escape')
   await expect(wizard()).toBeHidden()
