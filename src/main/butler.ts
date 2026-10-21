@@ -52,12 +52,14 @@ export function installButlerFiles(srcDir: string, destDir: string): void {
 }
 
 /**
- * How to bring the session up, tried in this order: the session Hive
- * connected last time (by id, so the phone keeps one "Hive Butler" with its
- * history however long Hive was closed), the last one recorded here
- * (`--continue`, only within about 4 hours), a new one.
+ * How to bring the session up: the phone's own session from last time (by
+ * id, so the phone keeps one "Hive Butler" with its history however long
+ * Hive was closed), else a new one. Never `--continue`: that grabs the newest
+ * session in the folder — the desk Butler chat or a routine run — and the
+ * phone's worker then rewrites that file from its cloud copy on every start,
+ * wiping the desk chat's turns.
  */
-export type LaunchMode = { sessionId: string } | 'continue' | 'fresh'
+export type LaunchMode = { sessionId: string } | 'fresh'
 
 /**
  * New sessions refuse anything not allow-listed (`dontAsk`) rather than
@@ -66,12 +68,7 @@ export type LaunchMode = { sessionId: string } | 'continue' | 'fresh'
  */
 export function butlerArgs(mode: LaunchMode): string[] {
   if (typeof mode === 'object') return ['remote-control', '--session-id', mode.sessionId]
-  return [
-    'remote-control',
-    '--name', BUTLER_SESSION_NAME,
-    '--permission-mode', 'dontAsk',
-    ...(mode === 'continue' ? ['--continue'] : [])
-  ]
+  return ['remote-control', '--name', BUTLER_SESSION_NAME, '--permission-mode', 'dontAsk']
 }
 
 /**
@@ -176,7 +173,9 @@ export interface ButlerDeps {
 
 const SETTINGS_FILE = 'butler.json'
 const PID_FILE = '.pid'
-const SESSION_FILE = '.session-id'
+/** The phone's own session. (The old `.session-id` could name the desk chat's session: dropped.) */
+const SESSION_FILE = '.phone-session-id'
+const OLD_SESSION_FILE = '.session-id'
 /** Restart delays after a connected session exits on its own. */
 export const RESTART_DELAYS_MS = [2_000, 10_000, 30_000, 120_000]
 /** A session that stayed up this long resets the restart count. */
@@ -275,13 +274,14 @@ export function createButler(deps: ButlerDeps) {
   const pidPath = join(dir, PID_FILE)
   const sessionPath = join(dir, SESSION_FILE)
 
+  try { unlinkSync(join(dir, OLD_SESSION_FILE)) } catch { /* not there */ }
   const savedSession = (): string | null => {
     try { return readFileSync(sessionPath, 'utf8').trim() || null } catch { return null }
   }
   /** The best way back to the session, falling through to a new one. */
   const resumeMode = (): LaunchMode => {
     const id = savedSession()
-    return id ? { sessionId: id } : 'continue'
+    return id ? { sessionId: id } : 'fresh'
   }
 
   function sweepStale() {
@@ -337,13 +337,8 @@ export function createButler(deps: ButlerDeps) {
       if (!state.enabled) return
       const wasConnected = connectedAt > 0
       if (!wasConnected && typeof mode === 'object') {
-        // That session is gone: forget it and try the next way back.
+        // That session is gone: forget it and start a new one.
         try { unlinkSync(sessionPath) } catch { /* already gone */ }
-        launch('continue')
-        return
-      }
-      if (!wasConnected && mode === 'continue') {
-        // Nothing recorded here recently: start a new session.
         launch('fresh')
         return
       }

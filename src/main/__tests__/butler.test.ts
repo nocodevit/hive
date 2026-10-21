@@ -63,9 +63,6 @@ describe('butlerArgs', () => {
   it('a new session is named and refuses unlisted tools', () => {
     expect(butlerArgs('fresh')).toEqual(['remote-control', '--name', 'Hive Butler', '--permission-mode', 'dontAsk'])
   })
-  it('--continue reattaches the last one recorded here', () => {
-    expect(butlerArgs('continue')).toEqual(['remote-control', '--name', 'Hive Butler', '--permission-mode', 'dontAsk', '--continue'])
-  })
   it('a saved session is reattached by id, without spawn flags', () => {
     expect(butlerArgs({ sessionId: 'session_01ABC' })).toEqual(['remote-control', '--session-id', 'session_01ABC'])
   })
@@ -226,36 +223,37 @@ describe('createButler', () => {
     expect(readFileSync(join(t.dataDir, 'butler', '.pid'), 'utf8')).toBe(String(t.last().pid))
   })
 
-  it('falls back to a fresh session when --continue has nothing to reattach', () => {
+  it('never --continue: with nothing saved the phone gets a new session of its own', () => {
     t.butler.setEnabled(true)
-    expect(t.last().args).toContain('--continue')
-    t.last().emit('No session recorded for this directory')
-    t.last().exit(1)
-    expect(t.ptys).toHaveLength(2)
-    expect(t.last().args).not.toContain('--continue')
+    expect(t.last().args).toEqual(['remote-control', '--name', 'Hive Butler', '--permission-mode', 'dontAsk'])
+  })
+
+  it('the old .session-id (it could name the desk chat\'s session) is never reattached', () => {
+    mkdirSync(join(t.dataDir, 'butler'), { recursive: true })
+    writeFileSync(join(t.dataDir, 'butler', '.session-id'), 'session_DESK')
+    t.butler.setEnabled(true)
+    expect(t.last().args).not.toContain('--session-id')
   })
 
   it('remembers the connected session and reattaches it by id next time', () => {
     t.butler.setEnabled(true)
     t.record('session_01KEEP')
     t.last().emit('Ready: https://claude.ai/code?environment=env_1\r\n')
-    expect(readFileSync(join(t.dataDir, 'butler', '.session-id'), 'utf8')).toBe('session_01KEEP')
+    expect(readFileSync(join(t.dataDir, 'butler', '.phone-session-id'), 'utf8')).toBe('session_01KEEP')
     t.butler.shutdown()
     t.butler.restore()
     expect(t.last().args).toEqual(['remote-control', '--session-id', 'session_01KEEP'])
   })
 
-  it('a saved session that cannot be reattached is forgotten: --continue, then new', () => {
+  it('a saved session that cannot be reattached is forgotten, then a new one', () => {
     mkdirSync(join(t.dataDir, 'butler'), { recursive: true })
-    writeFileSync(join(t.dataDir, 'butler', '.session-id'), 'session_GONE')
+    writeFileSync(join(t.dataDir, 'butler', '.phone-session-id'), 'session_GONE')
     t.butler.setEnabled(true)
     expect(t.last().args).toContain('--session-id')
     t.last().exit(1)
-    expect(existsSync(join(t.dataDir, 'butler', '.session-id'))).toBe(false)
-    expect(t.last().args).toContain('--continue')
-    t.last().exit(1)
+    expect(existsSync(join(t.dataDir, 'butler', '.phone-session-id'))).toBe(false)
     expect(t.last().args).toEqual(['remote-control', '--name', 'Hive Butler', '--permission-mode', 'dontAsk'])
-    expect(t.ptys).toHaveLength(3)
+    expect(t.ptys).toHaveLength(2)
   })
 
   it('a restart after a crash reattaches the same session by id', () => {
@@ -269,10 +267,9 @@ describe('createButler', () => {
 
   it('a fresh session that dies before connecting is an error with its output, no restart loop', () => {
     t.butler.setEnabled(true)
-    t.last().exit(1)
     t.last().emit('Error: You must be logged in with a Claude account that has a subscription')
     t.last().exit(1)
-    expect(t.ptys).toHaveLength(2)
+    expect(t.ptys).toHaveLength(1)
     expect(t.butler.getState()).toMatchObject({ status: 'error', error: expect.stringContaining('logged in') })
     expect(t.timers).toHaveLength(0)
   })
@@ -354,7 +351,7 @@ describe('createButler', () => {
       t.last().exit(1)
       expect(t.timers[i].ms).toBe(RESTART_DELAYS_MS[i])
       t.timers[i].fn()
-      expect(t.last().args).toContain('--continue')
+      expect(t.last().args).not.toContain('--continue')
     }
     t.last().emit('https://claude.ai/code/s')
     t.last().exit(1)
@@ -460,7 +457,7 @@ describe('createButler at launch', () => {
     t.butler.restore()
     expect(t.stale).toEqual([4242])
     expect(t.ptys).toHaveLength(1)
-    expect(t.last().args).toContain('--continue')
+    expect(t.last().args).not.toContain('--continue')
     t.butler.restore()
     expect(t.ptys).toHaveLength(1)
   })
@@ -469,10 +466,9 @@ describe('createButler at launch', () => {
     const t = setup({ enabled: true })
     t.butler.restore()
     t.last().exit(1)
-    t.last().exit(1)
     expect(t.butler.getState().status).toBe('error')
     t.butler.retry()
-    expect(t.ptys).toHaveLength(3)
+    expect(t.ptys).toHaveLength(2)
     expect(t.butler.getState().status).toBe('starting')
   })
 })
