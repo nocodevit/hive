@@ -79,6 +79,7 @@
 | Body | DM Sans | 400-500 | 12-14px |
 | Data/Stats | JetBrains Mono | 400-500 | 10-13px |
 | Labels | DM Sans | 600-700 | 9-10px, uppercase, tracking 0.08em |
+| List items & tabs | DM Sans | 400 normal, 600 only when selected | 12-13px |
 | Terminal | Noto Mono / MesloLGS NF / Menlo | 400 | 13px |
 
 ### Scale (all sizes bumped +1px from original)

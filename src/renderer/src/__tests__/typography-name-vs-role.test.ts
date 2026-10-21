@@ -33,8 +33,9 @@ describe('typography — agent name vs role visual distinction', () => {
     // selected-agent-row-layout.spec.ts).
     // v2.21.0 (unified card layout): plain font-semibold, family comes
     // from body (Inter Tight).
-    expect(APP_TSX).toMatch(
-      /className="flex items-center gap-1\.5 min-w-0 whitespace-nowrap overflow-hidden text-\[13px\] font-semibold text-text-primary"/
+    // v2.34: normal weight; semibold only for the selected agent (13px primary vs the 11px muted role).
+    expect(APP_TSX).toContain(
+      "text-[13px] ${selectedAgentId === agent.id ? 'font-semibold' : 'font-normal'} text-text-primary`}"
     )
     // Kanban card — v2.8.0 relaxed to font-medium (Inter Tight body weight)
     expect(APP_TSX).toMatch(
