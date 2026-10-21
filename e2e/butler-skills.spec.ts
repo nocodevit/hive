@@ -89,7 +89,9 @@ test('Skills: tone + ask-first chip save as the form overlay', async () => {
 test('Try runs the skill and shows the output', async () => {
   await page.getByRole('button', { name: 'Try' }).click()
   await page.getByRole('button', { name: 'Run', exact: true }).click()
-  await expect(page.getByLabel('Try result')).toHaveText('FAKE TRY OUTPUT')
+  // Not signed in to Feishu here, so answer-feishu's Try is the dry run — and says so first.
+  await expect(page.getByLabel('Try result')).toContainText('Dry run · no tools ran — any ticket keys, dates or facts below are made up')
+  await expect(page.getByLabel('Try result')).toContainText('FAKE TRY OUTPUT')
 })
 
 test('Describe a change → chips + example → Accept saves an override; Reset removes it', async () => {

@@ -462,13 +462,46 @@ export function parseEditReply(out: string): { md: string; example: string } {
   return { md: md + '\n', example: example ? example[1].trim() : '' }
 }
 
+/** A dry run has no tools: anything specific in it is invented. Said first, every time. */
+export const DRY_RUN_NOTE = 'Dry run · no tools ran — any ticket keys, dates or facts below are made up'
+
+const jsonOf = (out: string): any => {
+  const a = out.indexOf('{')
+  const b = out.lastIndexOf('}')
+  if (a < 0 || b <= a) return null
+  try { return JSON.parse(out.slice(a, b + 1)) } catch { return null }
+}
+const list = (v: unknown) => (Array.isArray(v) ? v.filter(x => typeof x === 'string' && x) : []) as string[]
+
+/** Skills that answer in JSON for the code are shown as what they mean, not as JSON. */
+export function readableOutput(id: string, out: string): string {
+  const j = jsonOf(out)
+  if (!j) return out
+  if (id === 'answer-feishu') {
+    const claims = (Array.isArray(j.claims) ? j.claims : []).map((c: any) => `- ${c?.claim} → ${c?.verdict}${c?.source ? ` (${c.source})` : ''}`)
+    return [
+      `Reply: ${j.reply ?? ''}`,
+      `${String(j.level ?? '').toUpperCase()} · ${j.category ?? ''} · confidence ${j.confidence ?? ''}`,
+      list(j.sources).length ? `Sources: ${list(j.sources).join(', ')}` : '',
+      claims.length ? `Claims:\n${claims.join('\n')}` : '',
+      j.proposal?.summary ? `Proposes: ${j.proposal.summary}` : ''
+    ].filter(Boolean).join('\n')
+  }
+  if (id === 'reply-email') {
+    return j.decision === 'draft'
+      ? [`About: ${j.about ?? ''}`, '', String(j.reply ?? '')].join('\n')
+      : [`About: ${j.about ?? ''}`, `Needs you: ${j.question ?? ''}`].join('\n')
+  }
+  return out
+}
+
 export async function tryIt(s: SkillStore, id: string, sample: unknown, run: Runner, opts: { md?: unknown; profileMd?: string } = {}): Promise<{ ok: boolean; output?: string; error?: string }> {
   assertId(s, id)
   if (typeof sample !== 'string' || !sample.trim()) return { ok: false, error: 'empty_input' }
   const md = typeof opts.md === 'string' && opts.md.trim() ? opts.md : effectiveSkill(s, id).md
   try {
     const output = (await run(tryPrompt(md, sample.slice(0, 8000), opts.profileMd ?? ''))).trim()
-    return output ? { ok: true, output } : { ok: false, error: 'empty_output' }
+    return output ? { ok: true, output: `${DRY_RUN_NOTE}\n\n${readableOutput(id, output)}` } : { ok: false, error: 'empty_output' }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
