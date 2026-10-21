@@ -103,4 +103,16 @@ describe('TodayTab', () => {
     expect(screen.queryByText('Reply Lin')).toBeNull()
     expect(screen.getByText('1/1')).toBeInTheDocument()
   })
+  it('Routines: Run starts that routine now and shows Running… until it ends', async () => {
+    let finish: () => void = () => {}
+    ;(window as any).api.routines.run = vi.fn(() => new Promise(r => { finish = () => r({ ok: true }) }))
+    render(<TodayTab visible />)
+    const btn = await screen.findByRole('button', { name: 'Run Jira now' })
+    fireEvent.click(btn)
+    expect((window as any).api.routines.run).toHaveBeenCalledWith('jira-check')
+    await waitFor(() => expect(btn).toHaveTextContent('Running…'))
+    expect(screen.getByRole('button', { name: 'Run Sort inbox now' })).toBeDisabled()
+    finish()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Run Jira now' })).toHaveTextContent('Run'))
+  })
 })
