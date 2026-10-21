@@ -14,6 +14,7 @@ import { isHeadlessMode } from './headless'
 import { claudeJsonPath, discoverTools } from './butlerTools'
 import { createMcpClient } from './mcpHttp'
 import { freeBusyText, workingDays } from './feishuAnswer'
+import { slotIsFree } from './calendar'
 import { setupButlerMailRoutines } from './butlerMailRoutines' // [butler:mail-routines]
 import { agendaText } from './calendar'
 
@@ -682,6 +683,12 @@ registerButlerFeishuAgentIpc({
     const s = butlerCalendar.getSettings()
     const days = await Promise.all(workingDays(new Date(), 5).map(d => butlerCalendar.getDayAgenda(d)))
     return freeBusyText(days, s.feishu || s.mac)
+  },
+  slotFree: async (start, end) => {
+    const s = butlerCalendar.getSettings()
+    if (!s.feishu && !s.mac) return false
+    const day = await butlerCalendar.getDayAgenda(new Date(start))
+    return !day.errors.feishu && !day.errors.mac && slotIsFree([day], start, end)
   },
   agents: () => butlerRows(),
   tail: agentId => {

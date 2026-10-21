@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
-  createFeishuAgent, ensurePrefix, quoteBlock, lockedTopicHit, inQuietHours, messageText, normalizeAgentSettings,
+  createFeishuAgent, ensurePrefix, quoteBlock, POLL_CHATS, lockedTopicHit, inQuietHours, messageText, normalizeAgentSettings,
   defaultPrefix, FOLLOWUP_KIND, RECALL_WINDOW_MS
 } from '../feishuAgent'
 import { createApprovals } from '../approvals'
@@ -438,6 +438,48 @@ describe('feishu agent', () => {
     expect(t.fs.reactions.at(-1)).toBe(`${again.message_id}:THUMBSUP`)
   })
 
+  it('"ok" to a proposed meeting: created (slot re-checked) with the invitee, and the reply says so', async () => {
+    const day = new Date(T0); day.setDate(day.getDate() + 1)
+    const ymd = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+    const proposal = { type: 'create_meeting', summary: '明天 16:00 和 Lin 开会', title: 'Lin sync', start: `${ymd}T16:00`, end: `${ymd}T16:30` }
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => JSON.stringify({ category: 'meeting', level: 'auto', confidence: 'high', reply: '16:00 可以，需要我来建飞书会议吗？', sources: [], claims: [], proposal }) })
+    const made: any[] = []
+    t.deps.freeBusy = async () => ({ known: true, text: 'free' })
+    t.deps.slotFree = async () => true
+    t.deps.createMeeting = async m => { made.push(m); return { ok: true as const, link: 'https://applink/ev1' } }
+    const agent = createFeishuAgent(t.deps)
+    agent.setSettings({ enabled: true, waitBeforeReplyMs: 0 })
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', '明天开个会？')
+    await agent.tick()
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', '好的')
+    await agent.tick()
+    expect(made).toEqual([{ title: 'Lin sync', start: new Date(`${ymd}T16:00:00`).getTime(), end: new Date(`${ymd}T16:30:00`).getTime(), invite: ['ou_lin'] }])
+    expect(t.fs.sent.at(-1)!.text).toContain('会议已创建：Lin sync')
+    expect(t.fs.sent.at(-1)!.text).toContain('已设 15 分钟提醒')
+    expect(t.approvals.pending()).toEqual([])
+  })
+
+  it('a proposed meeting whose slot is taken by now goes to the owner instead', async () => {
+    const day = new Date(T0); day.setDate(day.getDate() + 1)
+    const ymd = `${day.getFullYear()}-${String(day.getMonth() + 1).padStart(2, '0')}-${String(day.getDate()).padStart(2, '0')}`
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => JSON.stringify({ category: 'meeting', level: 'auto', confidence: 'high', reply: '16:00 可以，要我建会吗？', sources: [], claims: [], proposal: { type: 'create_meeting', summary: 's', start: `${ymd}T16:00`, end: `${ymd}T16:30` } }) })
+    t.deps.freeBusy = async () => ({ known: true, text: 'free' })
+    t.deps.slotFree = async () => false
+    t.deps.createMeeting = async () => { throw new Error('must not create') }
+    const agent = createFeishuAgent(t.deps)
+    agent.setSettings({ enabled: true, waitBeforeReplyMs: 0 })
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', '明天开个会？')
+    await agent.tick()
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', 'ok')
+    await agent.tick()
+    expect(t.fs.sent.at(-1)!.text).toContain('我会转给 Mei 确认和批准')
+    expect(t.approvals.pending()).toHaveLength(1)
+  })
+
   it('a proposal older than a day is not consent', async () => {
     const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"chitchat-work","level":"auto","confidence":"high","reply":"要我转给 Mei 吗？","sources":[],"claims":[],"proposal":{"type":"forward_owner","summary":"把 Lin 的问题转给 Mei"}}' })
     t.advance(1000)
@@ -456,6 +498,7 @@ describe('feishu agent', () => {
     const q = new URLSearchParams(t.fs.listQueries[0])
     expect(q.get('types')).toBe('p2p,group')
     expect(q.get('sort_type')).toBe('ByActiveTimeDesc')
+    expect(POLL_CHATS).toBe(50)
   })
 
   it('reminds once when a follow-up is still pending after remindAfterMs', async () => {

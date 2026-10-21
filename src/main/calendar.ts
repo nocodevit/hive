@@ -213,3 +213,44 @@ export function createCalendar(deps: CalendarDeps) {
 }
 
 export type ButlerCalendar = ReturnType<typeof createCalendar>
+
+// ── Create a meeting (answer-for-me, after the other person said ok) ─────
+
+type Http = (method: 'GET' | 'POST', url: string, token: string, body?: unknown) => Promise<{ status: number; body: any }>
+export const MEETING_REMINDER_MIN = 15
+
+/** On the owner's primary calendar, with a Feishu video link, a reminder, and the
+ *  invitees asked by open_id. Returns the event's link for the reply. */
+export async function createFeishuMeeting(http: Http, token: string, m: { title: string; start: number; end: number; invite: string[] }): Promise<{ ok: true; link: string } | { ok: false; error: string }> {
+  const err = (r: { status: number; body: any }) => `feishu ${r.body?.code ?? r.status}: ${String(r.body?.msg ?? '').slice(0, 120)}`
+  const cals = await http('GET', `${API}/calendar/v4/calendars?page_size=50`, token)
+  if (!ok(cals)) return { ok: false, error: err(cals) }
+  const list: any[] = cals.body.data?.calendar_list ?? cals.body.data?.items ?? []
+  const primary = list.find(c => c?.type === 'primary') ?? list.find(c => c?.role === 'owner')
+  if (!primary?.calendar_id) return { ok: false, error: 'no primary calendar' }
+  const cal = encodeURIComponent(primary.calendar_id)
+  const ev = await http('POST', `${API}/calendar/v4/calendars/${cal}/events`, token, {
+    summary: m.title,
+    start_time: { timestamp: String(Math.floor(m.start / 1000)) },
+    end_time: { timestamp: String(Math.floor(m.end / 1000)) },
+    vchat: { vc_type: 'vc' },
+    reminders: [{ minutes: MEETING_REMINDER_MIN }],
+    attendee_ability: 'can_see_others'
+  })
+  if (!ok(ev)) return { ok: false, error: err(ev) }
+  const event = ev.body.data?.event ?? {}
+  if (m.invite.length && event.event_id) {
+    const at = await http('POST', `${API}/calendar/v4/calendars/${cal}/events/${encodeURIComponent(event.event_id)}/attendees?user_id_type=open_id`, token, {
+      attendees: m.invite.map(user_id => ({ type: 'user', user_id })), need_notification: true
+    })
+    if (!ok(at)) return { ok: false, error: `created, but inviting failed: ${err(at)}` }
+  }
+  return { ok: true, link: String(event.app_link ?? event.vchat?.meeting_url ?? '') }
+}
+
+/** Is [start, end) clear of every event (all-day included) in these agendas? */
+export function slotIsFree(days: Array<{ events: Array<{ start: number; end: number; allDay: boolean }> }>, start: number, end: number): boolean {
+  const clash = (e: { start: number; end: number; allDay: boolean }) => (e.allDay ? sameDay(e.start, start) : e.start < end && e.end > start)
+  return !days.some(d => d.events.some(clash))
+}
+const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Date(b).toDateString()
