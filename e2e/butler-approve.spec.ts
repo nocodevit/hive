@@ -86,6 +86,13 @@ test('a dismissed card leaves the queue and shows in History with its reply', as
   await expect(row).toContainText('Hi Lin, UAT is back. Thanks. — Mei')
 })
 
+test('a past card goes to the Butler chat with its context', async () => {
+  const row = page.getByRole('group', { name: 'Approve history' }).getByRole('group').filter({ hasText: 'Lin · UAT down?' })
+  await row.getByRole('button', { name: 'Discuss Lin · UAT down?' }).click()
+  await expect(page.getByRole('tab', { name: /Chat/ })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: /Approve/ }).click()
+})
+
 test('needs-you card: what it wants + question; Discuss opens the Butler chat', async () => {
   const ana = page.getByLabel('Needs you: Ana · Price list')
   await expect(ana.getByLabel('What it wants')).toHaveText('Ana wants the 2027 price list')
