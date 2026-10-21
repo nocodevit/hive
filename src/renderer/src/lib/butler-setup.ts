@@ -29,6 +29,7 @@ export const SETUP_STEPS: SetupStep[] = [
   { id: 'calendar', group: 'Connect', name: 'Calendar' },
 
   { id: 'routine', group: 'Automate', name: 'Daily routine' }, // [butler:mail-routines]
+  { id: 'notify', group: 'Automate', name: 'Notifications' },
   { id: 'done', group: 'Automate', name: 'Done', framing: true }
 ]
 

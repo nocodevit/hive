@@ -14,6 +14,9 @@ import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { reconcileLiveStatus } from './lib/live-status'
 import { OPEN_SKILL_EVENT } from './lib/butler-skills'
 import { FeishuConnection } from './components/FeishuConnection'
+import { NotificationSettings } from './components/NotificationSettings'
+import { SettingsNav, SettingsSection } from './components/SettingsNav'
+import { openSettingsSection } from './lib/settings-nav'
 import { FeishuExpiredBanner } from './components/butler/FeishuExpiredBanner'
 import { AboutMeSettings, SkillsSettings } from './components/butler/SkillsSettings' // [butler:skills]
 import { FeishuAgentSettings } from './components/butler/FeishuAgent' // [butler:feishu-agent-calendar]
@@ -108,6 +111,8 @@ export default function App() {
   const [unclosedAgents, setUnclosedAgents] = useState<UnclosedAgent[]>([])
   const [butlerOffer, setButlerOffer] = useState(false)
   const [butlerOpen, setButlerOpen] = useState(false)
+  const [butlerTab, setButlerTab] = useState('chat')
+  const [butlerTabRequest, setButlerTabRequest] = useState<{ tab: 'approve'; n: number } | null>(null)
   const [butlerMode, setButlerMode] = useState<ButlerMode>('drawer')
   // Pinned = Butler stays at the top of the project list (butler.json).
   const [butlerPinned, setButlerPinnedState] = useState(false)
@@ -184,6 +189,7 @@ export default function App() {
   const [editingTemplate, setEditingTemplate] = useState<any>(null)
   const [customTemplates, setCustomTemplates] = useState<any[]>([])
   const [showAppSettings, setShowAppSettings] = useState(false)
+  const settingsScrollRef = useRef<HTMLDivElement | null>(null)
   const [showProjectSettings, setShowProjectSettings] = useState(false)
   const [previewFilePath, setPreviewFilePath] = useState<string | null>(null)
   const [teamPrompt, setTeamPrompt] = useState<{ dept: string } | null>(null)
@@ -398,6 +404,37 @@ export default function App() {
 
   const selectedProject = projects.find((p) => p.id === selectedProjectId) || null
   const selectedAgent = displayAgents.find((a) => a.id === selectedAgentId) || null
+
+  // Notifications: tell main where the owner is looking (no popup for that
+  // place while Hive is focused), and open the right place on a click.
+  useEffect(() => {
+    const place = butlerOpen && butlerTab === 'approve' ? 'approvals'
+      : showAppSettings ? 'routines'
+      : mainScreen === 'projects' && mainView === 'terminal' && selectedAgentId ? `agent:${selectedAgentId}` : ''
+    window.api.notify.setPlace(place)
+  }, [butlerOpen, butlerTab, showAppSettings, mainScreen, mainView, selectedAgentId])
+  const agentsRef = useRef(agents)
+  agentsRef.current = agents
+  useEffect(() => window.api.notify.onOpen((t) => {
+    if (t.kind === 'agent') {
+      const a = agentsRef.current.find(x => x.id === t.agentId)
+      if (!a) return
+      setShowAppSettings(false)
+      setButlerOpen(false)
+      setMainScreen('projects')
+      setSelectedProjectId(a.projectId)
+      setSelectedAgentId(a.id)
+      setMainView('terminal')
+    } else if (t.kind === 'approvals') {
+      setShowAppSettings(false)
+      setButlerOpen(true)
+      setButlerTabRequest(r => ({ tab: 'approve', n: (r?.n ?? 0) + 1 }))
+    } else {
+      setWizardAt(null)
+      setShowAppSettings(true)
+      openSettingsSection('Daily routine')
+    }
+  }), [])
   const projectScan = selectedProjectId ? projectScans[selectedProjectId] || null : null
   const projectAgents = displayAgents.filter((a) => a.projectId === selectedProjectId).sort((a, b) => (a.order || 0) - (b.order || 0))
   const departments = [...new Set(projectAgents.map((a) => a.department))]
@@ -3160,6 +3197,8 @@ export default function App() {
         onClose={() => setButlerOpen(false)}
         onMode={setButlerMode}
         onPin={setButlerPinned}
+        tabRequest={butlerTabRequest}
+        onTab={setButlerTab}
         onOpenAgent={(r) => {
           setButlerOpen(false)
           setSelectedProjectId(r.projectId)
@@ -3336,7 +3375,7 @@ export default function App() {
       {showAppSettings && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowAppSettings(false)} />
-          <div className="relative bg-bg-secondary border border-border rounded-2xl shadow-e3 w-[680px] max-h-[85vh] overflow-hidden flex flex-col">
+          <div role="dialog" aria-label="App Settings" className="relative bg-bg-secondary border border-border rounded-2xl shadow-e3 w-[860px] max-w-[94vw] h-[85vh] overflow-hidden flex flex-col">
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="font-heading font-semibold text-base text-text-primary">App Settings</h2>
               <button onClick={() => setShowAppSettings(false)}
@@ -3345,31 +3384,35 @@ export default function App() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6">
-          <div className="space-y-5 max-h-[70vh] overflow-y-auto">
-            <ButlerSettings />
-            <FeishuConnection />
+            <div className="flex-1 min-h-0 flex">
+            <SettingsNav scrollRef={settingsScrollRef} />
+            <div ref={settingsScrollRef} className="flex-1 min-w-0 overflow-y-auto p-6">
+          <div className="space-y-5">
+            <SettingsSection label="Remote Control"><ButlerSettings /></SettingsSection>
+            <SettingsSection label="Feishu"><FeishuConnection /></SettingsSection>
             {/* [butler:skills] About me + Skills sections */}
-            <AboutMeSettings />
-            <SkillsSettings />
+            <SettingsSection label="About me"><AboutMeSettings /></SettingsSection>
+            <SettingsSection label="Skills"><SkillsSettings /></SettingsSection>
 
             {/* [butler:mail-routines] Email accounts + Daily routine sections */}
-            <EmailAccounts />
-            <DailyRoutine />
+            <SettingsSection label="Email"><EmailAccounts /></SettingsSection>
+            <SettingsSection label="Daily routine"><DailyRoutine /></SettingsSection>
 
             {/* [butler:feishu-agent-calendar] Answer-for-me + Calendar sections */}
-            <FeishuAgentSettings />
-            <CalendarSettings />
+            <SettingsSection label="Answer for me"><FeishuAgentSettings /></SettingsSection>
+            <SettingsSection label="Calendar"><CalendarSettings /></SettingsSection>
 
             {/* [butler:wake] Wake word section */}
-            <WakeSettings />
+            <SettingsSection label="Wake word"><WakeSettings /></SettingsSection>
+
+            <SettingsSection label="Notifications"><NotificationSettings /></SettingsSection>
 
 
             {/* v2.9.0: STYLE picker (Accent | Prime). Prime is a full
                 visual-language swap (mono font, glow, scanlines, hex
                 avatars). Available palettes reconcile automatically —
                 Prime narrows to purple + blue, pink stays Accent-only. */}
-            <div>
+            <div data-settings-section="Style" aria-label="Style section" className="scroll-mt-2">
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Visual style</label>
               <div className="grid grid-cols-2 gap-2.5">
                 {STYLES.map((id) => {
@@ -3403,7 +3446,7 @@ export default function App() {
                 instantly (no confirmation — reversible). Live-preview
                 because the CSS vars update immediately on data-palette
                 attribute change. */}
-            <div>
+            <div data-settings-section="Palette" aria-label="Palette section" className="scroll-mt-2">
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Theme palette</label>
               <div className="grid grid-cols-3 gap-2.5">
                 {PALETTES.map((id) => {
@@ -3445,7 +3488,7 @@ export default function App() {
             </div>
 
             {/* Toggles */}
-            <div>
+            <div data-settings-section="General" aria-label="General section" className="scroll-mt-2">
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">General</label>
               <div className="space-y-2 rounded-xl bg-bg-secondary border border-border overflow-hidden">
                 {[
@@ -3504,10 +3547,10 @@ export default function App() {
             </div>
 
             {/* Storage — Claude Code logs cleanup */}
-            <ClaudeLogsCleanup />
+            <SettingsSection label="Storage"><ClaudeLogsCleanup /></SettingsSection>
 
             {/* Git Tokens */}
-            <div>
+            <div data-settings-section="Git tokens" aria-label="Git tokens section" className="scroll-mt-2">
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Git Tokens</label>
               <div className="space-y-2 rounded-xl bg-bg-secondary border border-border overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-border">
@@ -3540,7 +3583,7 @@ export default function App() {
             </div>
 
             {/* Voice input */}
-            <div>
+            <div data-settings-section="Voice" aria-label="Voice section" className="scroll-mt-2">
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Voice Input</label>
               <div className="rounded-xl bg-bg-secondary border border-border overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-border">
@@ -3604,7 +3647,7 @@ export default function App() {
             </div>
 
             {/* Default Skills */}
-            <div>
+            <div data-settings-section="Agent defaults" aria-label="Agent defaults section" className="scroll-mt-2">
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Default Skills</label>
               <div className="space-y-3">
                 <div className="p-3 rounded-xl bg-bg-secondary border border-border">
@@ -3639,7 +3682,7 @@ export default function App() {
             </div>
 
             {/* Templates */}
-            <div>
+            <div data-settings-section="Templates" aria-label="Templates section" className="scroll-mt-2">
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Agent Templates</label>
               <div className="space-y-1.5">
                 {[...BUILTIN_TEMPLATES, ...customTemplates].map((t: any) => {
@@ -3674,7 +3717,7 @@ export default function App() {
               </div>
             </div>
           </div>
-        </div></div></div>
+        </div></div></div></div>
       )}
 
       <EditTemplateModal
