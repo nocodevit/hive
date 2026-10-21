@@ -77,6 +77,9 @@ export interface MailAccount {
   /** Draft replies for needs-reply and customer mail. */
   drafts: boolean
   paused: boolean
+  /** When the owner agreed Butler may read this mailbox and draft replies;
+   *  null = added before that question existed, still to be confirmed. */
+  consentAt: number | null
 }
 
 export interface MailAccountStatus {
@@ -101,8 +104,19 @@ export interface MailAccountInput {
   sort?: boolean
   drafts?: boolean
   paused?: boolean
+  /** The owner ticked "Butler may read this mailbox and draft replies". */
+  consent?: boolean
   /** New password; omitted keeps the stored one. */
   password?: string
 }
 
 export type MailTestResult = { ok: true; unread: number } | { ok: false; error: string }
+
+/** One compact line for an account row: what Butler does with it. */
+export function mailAccessLine(a: Pick<MailAccount, 'sort' | 'drafts' | 'paused'>): string {
+  if (a.paused) return 'Paused'
+  const parts = [a.sort && 'reads', a.drafts && 'drafts', a.drafts && 'sends after your OK'].filter(Boolean) as string[]
+  if (!parts.length) return 'Off'
+  const line = parts.join(' · ')
+  return line[0].toUpperCase() + line.slice(1)
+}

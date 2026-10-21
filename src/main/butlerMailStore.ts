@@ -60,7 +60,7 @@ function server(v: unknown, fallback: MailServer): MailServer {
 }
 
 /** Settings for one account from raw input; preset servers unless "Other". */
-export function normalizeAccount(input: MailAccountInput, id: string, prev?: MailAccount): MailAccount {
+export function normalizeAccount(input: MailAccountInput, id: string, prev?: MailAccount, now: number = Date.now()): MailAccount {
   const preset = mailPreset(input.preset) ?? mailPreset('other')!
   const address = String(input.address || '').trim()
   const custom = preset.id === 'other'
@@ -73,7 +73,8 @@ export function normalizeAccount(input: MailAccountInput, id: string, prev?: Mai
     smtp: custom ? server(input.smtp, prev?.smtp ?? preset.smtp) : { ...preset.smtp },
     sort: typeof input.sort === 'boolean' ? input.sort : prev?.sort ?? true,
     drafts: typeof input.drafts === 'boolean' ? input.drafts : prev?.drafts ?? true,
-    paused: typeof input.paused === 'boolean' ? input.paused : prev?.paused ?? false
+    paused: typeof input.paused === 'boolean' ? input.paused : prev?.paused ?? false,
+    consentAt: prev?.consentAt ?? (input.consent === true ? now : null)
   }
 }
 
@@ -87,16 +88,23 @@ interface FileShape { accounts: MailAccount[]; status: Record<string, MailAccoun
 
 export function createAccountStore(dir: string, newId: () => string = () => 'acc-' + randomUUID().replace(/-/g, '').slice(0, 12)) {
   const file = join(dir, 'accounts.json')
+  const save = (s: FileShape) => {
+    mkdirSync(dir, { recursive: true })
+    writeAtomic(file, JSON.stringify(s, null, 2))
+  }
   const load = (): FileShape => {
     try {
       const j = JSON.parse(readFileSync(file, 'utf8'))
       const accounts = Array.isArray(j?.accounts) ? (j.accounts as MailAccount[]).filter(a => isAccountId(a?.id)) : []
-      return { accounts, status: j?.status && typeof j.status === 'object' ? j.status : {} }
+      const s: FileShape = { accounts, status: j?.status && typeof j.status === 'object' ? j.status : {} }
+      // Accounts added before the consent question: mark them as still to confirm.
+      const old = accounts.filter(a => typeof a.consentAt !== 'number' && a.consentAt !== null)
+      if (old.length) {
+        for (const a of old) a.consentAt = null
+        save(s)
+      }
+      return s
     } catch { return { accounts: [], status: {} } }
-  }
-  const save = (s: FileShape) => {
-    mkdirSync(dir, { recursive: true })
-    writeAtomic(file, JSON.stringify(s, null, 2))
   }
   return {
     list: () => load().accounts,

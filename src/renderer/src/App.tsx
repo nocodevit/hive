@@ -3,6 +3,7 @@ import Terminal from './components/Terminal'
 import { ButlerSettings } from './components/ButlerSettings'
 import { ButlerOfferCard } from './components/butler/ButlerOfferCard'
 import { ButlerButton } from './components/butler/ButlerButton'
+import { QuickToggles } from './components/butler/QuickToggles'
 import { ButlerPanel, type ButlerMode } from './components/butler/ButlerPanel'
 import { ButlerWizard } from './components/butler/ButlerWizard'
 import { WakeToast, useWakeListening } from './components/butler/WakeToast' // [butler:wake]
@@ -925,13 +926,19 @@ export default function App() {
 
   const filesVisible = !!(showFiles && selectedProject && selectedAgent)
   const butlerButton = (
-    <ButlerButton
-      open={butlerOpen}
-      phoneConnected={butlerPhone}
-      waiting={butlerWaiting}
-      listening={wakeListening}
-      onClick={() => setButlerOpen(o => !o)}
-    />
+    <div className="no-drag inline-flex items-center gap-1.5 flex-shrink-0">
+      <QuickToggles
+        setupMarks={butlerSetup.marks}
+        onSetupMobile={() => setWizardAt(SETUP_STEPS.findIndex(s => s.id === 'phone'))}
+      />
+      <ButlerButton
+        open={butlerOpen}
+        phoneConnected={butlerPhone}
+        waiting={butlerWaiting}
+        listening={wakeListening}
+        onClick={() => setButlerOpen(o => !o)}
+      />
+    </div>
   )
   const butlerInList = butlerPinned || (butlerOpen && butlerMode === 'page')
 

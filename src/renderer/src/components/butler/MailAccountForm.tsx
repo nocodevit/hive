@@ -13,7 +13,7 @@ interface Props {
 const input = 'px-2.5 py-1.5 rounded-lg bg-bg-secondary border border-border text-[13px] font-medium text-text-primary focus:outline-none focus:border-accent'
 const ERR: Record<string, string> = {
   bad_address: 'Check the email address', missing_server: 'Server missing', no_password: 'Password needed',
-  already_added: 'Already added', not_found: 'Account was removed', bad_input: 'Check the fields'
+  already_added: 'Already added', no_consent: 'Tick the box first', not_found: 'Account was removed', bad_input: 'Check the fields'
 }
 
 function ServerFields({ label, value, onChange }: { label: string; value: MailServer; onChange: (s: MailServer) => void }) {
@@ -41,9 +41,10 @@ export function MailAccountForm({ account, minimal, onSaved, onCancel }: Props) 
   const [smtp, setSmtp] = useState<MailServer>(account?.smtp ?? mailPreset('other')!.smtp)
   const [test, setTest] = useState<{ ok: boolean; text: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const [consent, setConsent] = useState(false)
   const p = mailPreset(preset)!
 
-  const data = () => ({ id: account?.id, address: address.trim(), preset, label, sort, drafts, imap, smtp, password: password || undefined })
+  const data = () => ({ id: account?.id, address: address.trim(), preset, label, sort, drafts, imap, smtp, password: password || undefined, consent: account ? undefined : consent })
   const onAddress = (v: string) => {
     setAddress(v)
     const guess = presetForAddress(v)
@@ -112,10 +113,20 @@ export function MailAccountForm({ account, minimal, onSaved, onCancel }: Props) 
           </div>
         </details>
       )}
+      {!account && (
+        <div className="flex items-start gap-2 text-[12px]">
+          <input id="mail-consent" type="checkbox" checked={consent} onChange={e => setConsent(e.target.checked)}
+            aria-describedby="mail-consent-note" className="mt-0.5 accent-accent cursor-pointer" />
+          <div className="flex flex-col">
+            <label htmlFor="mail-consent" className="font-semibold text-text-primary cursor-pointer">Butler may read this mailbox and draft replies</label>
+            <span id="mail-consent-note" className="text-text-muted">Sent only when you press Send in Approve</span>
+          </div>
+        </div>
+      )}
       <div className="flex justify-end gap-1.5">
         {onCancel && <button onClick={onCancel} className="px-3 py-1.5 rounded-lg bg-bg-primary text-[12px] font-semibold text-text-primary cursor-pointer">Cancel</button>}
         <button onClick={runTest} disabled={busy || !address} className="px-3 py-1.5 rounded-lg bg-bg-primary border border-border text-[12px] font-semibold text-text-primary cursor-pointer disabled:opacity-50">{busy ? '…' : 'Test'}</button>
-        <button onClick={save} disabled={busy || !address || (!account && !password)} className="px-3 py-1.5 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold cursor-pointer disabled:opacity-50">Save</button>
+        <button onClick={save} disabled={busy || !address || (!account && (!password || !consent))} className="px-3 py-1.5 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold cursor-pointer disabled:opacity-50">Save</button>
       </div>
     </div>
   )
