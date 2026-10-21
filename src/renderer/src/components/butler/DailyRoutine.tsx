@@ -11,7 +11,7 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/
  * 24-hour "HH:MM" text box. The native time input renders AM/PM by locale
  * and clipped it ("08:30 A"); this one is fixed-width and always fits.
  */
-function TimeBox({ value, label, onCommit }: { value: string; label: string; onCommit: (v: string) => void }) {
+export function TimeBox({ value, label, onCommit }: { value: string; label: string; onCommit: (v: string) => void }) {
   const [text, setText] = useState(value)
   useEffect(() => setText(value), [value])
   const bad = !HHMM.test(text)
