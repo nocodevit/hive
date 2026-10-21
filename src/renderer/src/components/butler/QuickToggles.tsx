@@ -1,23 +1,25 @@
 import { useEffect, useState } from 'react'
-import { feishuToggle, mobileToggle, type FeishuToggleView, type MobileState } from '../../lib/quick-toggles'
+import { feishuToggle, mobileToggle, wakeToggle, type FeishuToggleView, type MobileState, type WakeView } from '../../lib/quick-toggles'
 
 function Toggle({ icon, label, title, checked, disabled, onClick }: { icon: string; label: string; title: string; checked: boolean; disabled?: boolean; onClick: () => void }) {
   return (
     <span title={title} className="inline-flex">
       <button role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={onClick}
-        className={`relative w-[30px] h-[30px] rounded-full inline-flex items-center justify-center text-[14px] shadow-sm transition-colors cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${
-          checked ? 'bg-accent-subtle ring-1 ring-accent' : 'bg-bg-secondary hover:bg-bg-hover'}`}>
-        <span className={checked ? '' : 'grayscale opacity-50'} aria-hidden>{icon}</span>
-        {checked && <span className="absolute -right-px -bottom-px w-2 h-2 rounded-full bg-status-working border-2 border-bg-secondary" aria-hidden />}
+        className="h-[30px] pl-2 pr-1.5 rounded-full inline-flex items-center gap-1.5 bg-bg-secondary shadow-sm hover:bg-bg-hover cursor-pointer disabled:cursor-not-allowed disabled:opacity-40">
+        <span className={`text-[13px] ${checked ? '' : 'grayscale opacity-50'}`} aria-hidden>{icon}</span>
+        <span className={`relative w-7 h-4 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-bg-hover'}`} aria-hidden>
+          <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-[left] ${checked ? 'left-[14px]' : 'left-0.5'}`} />
+        </span>
       </button>
     </span>
   )
 }
 
-/** 📱 Mobile Butler + 💬 Feishu answer-for-me, right next to the Butler button. Take effect at once. */
+/** 📱 Mobile Butler, 💬 Feishu answer-for-me and 🎙 “Hola Butler” listening, as switches next to the Butler button. Take effect at once. */
 export function QuickToggles({ setupMarks, onSetupMobile }: { setupMarks: Record<string, unknown>; onSetupMobile: () => void }) {
   const [mobile, setMobile] = useState<MobileState | null>(null)
   const [feishu, setFeishu] = useState<FeishuToggleView | null>(null)
+  const [wake, setWake] = useState<WakeView | null>(null)
   const [busy, setBusy] = useState(false)
 
   useEffect(() => {
@@ -28,7 +30,9 @@ export function QuickToggles({ setupMarks, onSetupMobile }: { setupMarks: Record
     loadF()
     const offA = window.api.feishuAgent.onChange(loadF)
     const offF = window.api.feishu.onStatus(loadF)
-    return () => { alive = false; off(); offA(); offF() }
+    window.api.wake.state().then(w => { if (alive) setWake(w) }).catch(() => {})
+    const offW = window.api.wake.onEvent(ev => { if (ev.type === 'state') setWake(ev.state) })
+    return () => { alive = false; off(); offA(); offF(); offW() }
   }, [])
 
   const m = mobileToggle(mobile, setupMarks)
@@ -40,11 +44,14 @@ export function QuickToggles({ setupMarks, onSetupMobile }: { setupMarks: Record
     try { setMobile(await window.api.butler.setEnabled(m.action === 'on')) } finally { setBusy(false) }
   }
   const flipFeishu = async () => setFeishu(await window.api.feishuAgent.set({ enabled: !f.checked }))
+  const w = wakeToggle(wake)
+  const flipWake = async () => setWake(await window.api.wake.setEnabled(!w.checked))
 
   return (
     <div className="no-drag inline-flex items-center gap-1 flex-shrink-0">
       <Toggle icon="📱" label="Mobile Butler" title={m.title} checked={m.checked} disabled={m.disabled || busy} onClick={flipMobile} />
       <Toggle icon="💬" label="Feishu answer-for-me" title={f.title} checked={f.checked} disabled={f.disabled} onClick={flipFeishu} />
+      <Toggle icon="🎙" label="Listen for Hola Butler" title={w.title} checked={w.checked} disabled={w.disabled} onClick={flipWake} />
     </div>
   )
 }

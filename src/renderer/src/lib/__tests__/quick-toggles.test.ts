@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { feishuToggle, mobileToggle } from '../quick-toggles'
+import { feishuToggle, mobileToggle, wakeToggle } from '../quick-toggles'
 
 describe('mobileToggle', () => {
   it('opens the wizard when off and setup never started', () => {
@@ -27,5 +27,14 @@ describe('feishuToggle', () => {
   })
   it('loading: disabled', () => {
     expect(feishuToggle(null).disabled).toBe(true)
+  })
+})
+
+describe('wakeToggle', () => {
+  it('shows listening state and errors in the hint', () => {
+    expect(wakeToggle(null)).toMatchObject({ checked: false, disabled: true })
+    expect(wakeToggle({ enabled: false, status: 'off' })).toEqual({ checked: false, disabled: false, title: 'Listen for “Hola Butler” · Off' })
+    expect(wakeToggle({ enabled: true, status: 'listening' }).title).toBe('Listen for “Hola Butler” · Listening')
+    expect(wakeToggle({ enabled: true, status: 'error', error: 'mic denied' }).title).toBe('Listen for “Hola Butler” · Not running (mic denied)')
   })
 })
