@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assistantHolding, createRelationLookup, declineReply, DECLINE_TOPICS, freeBusyText, gateAnswer, isAck, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
+import { assistantHolding, createRelationLookup, declineReply, DECLINE_TOPICS, freeBusyText, gateAnswer, isAck, meetingCreatedReply, meetingSlot, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
 
 const ans = (o: Partial<Answer> = {}): Answer => ({ category: 'product-status', level: 'auto', confidence: 'high', reply: 'ok', sources: [], claims: [], ...o })
 
@@ -111,5 +111,22 @@ describe('small talk and polite declines', () => {
   it('private / personal / sensitive / confidential are declined, prices and approvals wait for the owner', () => {
     expect([...DECLINE_TOPICS].sort()).toEqual(['confidential', 'personal-info', 'private-chats', 'sensitive-info'])
     expect(declineReply('Megan')).toBe('这个我不方便透露。有具体的事可以告诉我，我转给 Megan。')
+  })
+})
+
+describe('meetings Butler may create', () => {
+  const at = new Date(2026, 9, 21, 10, 0).getTime() // Wed 10/21 10:00
+  const p = (start: string, end: string) => ({ type: 'create_meeting' as const, summary: 's', title: 'Sync', start, end })
+  it('well-formed, ahead, 15 min – 3 h, a working day 09:00–19:00, within two weeks', () => {
+    expect(meetingSlot(p('2026-10-22T16:00', '2026-10-22T16:30'), at)).toEqual({ start: new Date(2026, 9, 22, 16).getTime(), end: new Date(2026, 9, 22, 16, 30).getTime(), title: 'Sync' })
+    for (const [s, e] of [['2026-10-20T16:00', '2026-10-20T16:30'], ['2026-10-22T16:00', '2026-10-22T16:05'], ['2026-10-22T08:00', '2026-10-22T08:30'],
+      ['2026-10-24T10:00', '2026-10-24T11:00'], ['2026-11-20T10:00', '2026-11-20T11:00'], ['2026-10-22T18:30', '2026-10-22T19:30'], ['tomorrow', 'later']]) {
+      expect(meetingSlot(p(s, e), at)).toBeNull()
+    }
+    expect(meetingSlot({ type: 'notify', summary: 'x', start: '2026-10-22T16:00', end: '2026-10-22T16:30' }, at)).toBeNull()
+  })
+  it('the reply says what, when and the reminder', () => {
+    expect(meetingCreatedReply({ start: new Date(2026, 9, 22, 16).getTime(), end: new Date(2026, 9, 22, 16, 30).getTime(), title: 'Sync' }, 'https://applink/x', 15))
+      .toBe('好的，会议已创建：Sync，10/22 16:00–16:30，已设 15 分钟提醒。 https://applink/x')
   })
 })

@@ -11,7 +11,7 @@ import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { Notification, type IpcMain } from 'electron'
 import { createFeishuAgent, LOCKED_TOPICS, defaultPrefix, holdingReply, type FeishuAgentSettings } from './feishuAgent'
-import { createCalendar, type Exec } from './calendar'
+import { createCalendar, createFeishuMeeting, type Exec } from './calendar'
 import type { ButlerProfile } from './butlerProfile'
 import type { Approvals } from './approvals'
 import type { AgentRow, TailItem } from './butlerApi'
@@ -56,6 +56,8 @@ export interface FeishuAgentIpcDeps {
   notify?: (title: string, body: string) => void
   /** The owner's busy blocks (see feishuAnswer.freeBusyText). */
   freeBusy?: () => Promise<{ known: boolean; text: string }>
+  /** Re-check a slot on the owner's calendars right before creating a meeting. */
+  slotFree?: (start: number, end: number) => Promise<boolean>
   broadcast: (channel: string, payload: unknown) => void
 }
 
@@ -108,6 +110,12 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     relation: lookup,
     senderName: lookup.nameOf,
     freeBusy: d.freeBusy,
+    slotFree: d.slotFree,
+    createMeeting: async m => {
+      const t = await d.feishu.accessToken()
+      if (!t.ok || !t.token) return { ok: false, error: t.error || 'signed_out' }
+      return createFeishuMeeting((method, url, token, body) => feishuHttp(method, url, token, body), t.token, m)
+    },
     approvals: d.approvals,
     notify: d.notify ?? ((title, body) => { try { new Notification({ title, body }).show() } catch { /* no notification center */ } }),
     context: () => agentsContext(d.agents(), d.tail),

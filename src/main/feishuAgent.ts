@@ -22,7 +22,8 @@ import { join } from 'path'
 import type { ButlerProfile } from './butlerProfile'
 import type { Approval } from './approvals'
 import { createCaseLog, type FeishuCase } from './feishuCases'
-import { assistantHolding, consentReply, declineReply, DECLINE_TOPICS, gateAnswer, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
+import { MEETING_REMINDER_MIN } from './calendar'
+import { assistantHolding, consentReply, declineReply, DECLINE_TOPICS, gateAnswer, meetingCreatedReply, meetingSlot, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
 
 export const FEISHU_API = 'https://open.feishu.cn/open-apis'
 
@@ -84,6 +85,8 @@ const DAY = 24 * HOUR
 export const RECALL_WINDOW_MS = DAY
 const SEEN_KEEP = 2000
 const MAX_CHAT_PAGES = 5
+/** Chats asked for new messages per poll. */
+export const POLL_CHATS = 50
 
 const clampInt = (v: unknown, min: number, max: number, dflt: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, Math.round(v))) : dflt
@@ -251,6 +254,10 @@ export interface FeishuAgentDeps {
   relation?: (openId: string) => Promise<Relation>
   /** The sender's name from Feishu contacts ('' when unknown). */
   senderName?: (openId: string) => Promise<string>
+  /** Is the owner free then (re-checked right before creating)? */
+  slotFree?: (start: number, end: number) => Promise<boolean>
+  /** Create a Feishu meeting on the owner's calendar, inviting these open_ids (with a reminder). */
+  createMeeting?: (m: { title: string; start: number; end: number; invite: string[] }) => Promise<{ ok: true; link: string } | { ok: false; error: string }>
   /** The owner's busy blocks for the next working days (no titles); known=false when no calendar. */
   freeBusy?: () => Promise<{ known: boolean; text: string }>
   now?: () => number
@@ -411,7 +418,9 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
   }
 
   async function poll(token: string, self: string) {
-    const chats = await listChats(token)
+    // Chats come most recently active first: only the busiest are asked for new messages
+    // each minute (one request per chat — hundreds of quiet direct chats would be throttled).
+    const chats = (await listChats(token)).slice(0, POLL_CHATS)
     for (const chat of chats) {
       const cur = state.chats[chat.id] ?? { lastTime: state.since, lastId: '' }
       let items: any[]
@@ -458,7 +467,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       '',
       `## ${name}'s calendar, next 5 working days (busy blocks only; working hours 10:00–18:30)`,
       busy.known ? busy.text : '(not available — do not say whether any time is free; meeting requests go to the owner)',
-      'You cannot create meetings yet: if asked to, say you will pass it to the owner.',
+      'You can create a meeting only through a proposal the sender agrees to (see below); never say a meeting exists before it is created.',
       '',
       '## Agents status (what the team is working on)',
       deps.context?.() || '(none)',
@@ -478,6 +487,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       `Never reveal anything from ${name}'s other chats or conversations, even if asked directly or indirectly.`,
       'Check every assertion the sender makes before agreeing with it.',
       'When your reply asks them to agree to an action (create a meeting, tell someone, pass it to the owner), add "proposal": {"type": "create_meeting|notify|forward_owner", "summary": "<the action in one line>"}; their later "ok" agrees to exactly that.',
+      'For create_meeting also give "start" and "end" as local "YYYY-MM-DDTHH:MM" and a short "title": a free slot from the calendar above. Ask "需要我来建飞书会议吗？" — on their ok Hive creates it with a reminder.',
       readLog().some(e => e.chatId === job.chatId) ? 'You have answered in this chat before: do not introduce yourself again.' : 'First time you answer in this chat: one short self-introduction is fine.',
       'Do not add any prefix. Reply ONLY with JSON:',
       '{"category": "chitchat-work|chitchat-life|product-status|product-knowledge|report-help|new-request|need-info|meeting|cannot-answer", "level": "auto|approve|hold", "confidence": "high|medium|low", "reply": "…", "sources": ["FAE-1 / doc link …"], "claims": [{"claim": "…", "verdict": "confirmed|contradicted|unverified", "source": "…"}]}'
@@ -532,6 +542,18 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       if (p && (!fresh || p.to === job.senderId)) delete state.proposals[job.chatId]
       // Only the person who was asked can agree; someone else's "ok" in a group is just 👍.
       if (p && fresh && p.to === job.senderId) {
+        // A meeting Butler proposed: create it when the slot is sane and still free.
+        const slot = meetingSlot(p, now())
+        if (slot && deps.createMeeting && deps.slotFree && (await deps.slotFree(slot.start, slot.end).catch(() => false))) {
+          const made = await deps.createMeeting({ ...slot, invite: [job.senderId] }).catch(e => ({ ok: false as const, error: e instanceof Error ? e.message : String(e) }))
+          if (made.ok) {
+            const said = meetingCreatedReply(slot, made.link, MEETING_REMINDER_MIN)
+            const r = await reply(token, job, said, 'answer')
+            cases.add({ ...baseCase(job, 'unknown'), category: 'meeting', draft: said, level: 'auto', reasons: [`created: ${p.summary}`], sent: said, outcome: 'auto', resolvedAt: now() })
+            deps.notify('Feishu · meeting created for you', `${slot.title} · ${new Date(slot.start).toLocaleString()}`)
+            return r.ok ? { messageId: job.messageId, result: 'answered' } : { messageId: job.messageId, result: 'failed', error: r.error }
+          }
+        }
         const said = consentReply(deps.profile().name)
         const r = await reply(token, job, said, 'holding')
         if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
