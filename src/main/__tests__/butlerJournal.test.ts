@@ -7,7 +7,7 @@ import {
   toChecklist, toggleJournalItem
 } from '../butlerJournal'
 import { agentDays, createRoutineRunner, feishuText, type RoutineRunDeps } from '../butlerRoutineRun'
-import { jiraTools, GATEWAY_READ } from '../butlerTools'
+import { jiraTools } from '../butlerTools'
 import { defaultRoutineSettings } from '../../shared/butler-routines'
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'hive-journal-'))
@@ -140,14 +140,12 @@ describe('routine runner', () => {
     expect(t.tools[0]).toEqual(['mcp__jira'])
     expect(readJournalDay(join(t.folder, 'journal'), '2026-10-20').jira).toBe('APP-1 · x · review')
   })
-  it('jira-check through gateway (user ~/.claude.json) gets read-only tools only', async () => {
+  it('jira-check through a discovered server gets its read tools only', async () => {
     const folder = tmp()
-    const cj = join(folder, 'claude.json')
-    writeFileSync(cj, JSON.stringify({ mcpServers: { gateway: { type: 'http', url: 'https://x/mcp' } } }))
-    const t = setup({ folder: () => folder, jira: () => jiraTools(folder, cj) }, 'DEV-1 · x · review')
+    writeFileSync(join(folder, 'tools-cache.json'), JSON.stringify({ at: 1, servers: { gateway: ['jira_search', 'jira_get_issue', 'jira_add_comment'] } }))
+    const t = setup({ folder: () => folder, jira: () => jiraTools(folder, join(folder, 'none.json')) }, 'DEV-1 · x · review')
     expect((await t.r.run('jira-check')).ok).toBe(true)
-    expect(t.tools[0]).toEqual(GATEWAY_READ)
-    expect(t.tools[0].some(x => /create|update|transition_issue|add_comment|delete|assign/.test(x))).toBe(false)
+    expect(t.tools[0]).toEqual(['mcp__gateway__jira_search', 'mcp__gateway__jira_get_issue'])
   })
   it('feishu digest: needs sign-in', async () => {
     const t = setup()
