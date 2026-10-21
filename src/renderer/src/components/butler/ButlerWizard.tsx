@@ -8,6 +8,7 @@ import { PALETTES, PALETTE_META, STYLES, STYLE_META, type Palette, type Style } 
 import { SETUP_STEPS, groupStarts, type SetupMark } from '../../lib/butler-setup'
 import { WizardEmail } from './WizardEmail'
 import { DailyRoutine } from './DailyRoutine'
+import { NotificationSettings } from '../NotificationSettings'
 
 interface Props {
   startAt: number
@@ -37,6 +38,8 @@ const TITLE: Record<string, string> = {
 // [butler:mail-routines]
 Object.assign(SAY, { email: 'Sort & draft', routine: 'Every day, even with Hive closed' })
 Object.assign(TITLE, { email: 'Email', routine: 'Daily routine' })
+Object.assign(SAY, { notify: 'Only when it matters' })
+Object.assign(TITLE, { notify: 'Notifications' })
 const STYLE_OPTS = [['direct', 'Direct'], ['warm', 'Warm'], ['formal', 'Formal']] as const
 
 function Row({ children }: { children: React.ReactNode }) {
@@ -170,6 +173,7 @@ export function ButlerWizard(p: Props) {
   else if (step.id === 'calendar') body = <CalendarConnect />
   else if (step.id === 'email') body = <WizardEmail />
   else if (step.id === 'routine') body = <DailyRoutine framed={false} commitRef={routineCommit} />
+  else if (step.id === 'notify') body = <NotificationSettings framed={false} />
   else if (step.id === 'done') body = (
     <>
       {SETUP_STEPS.filter(s => !s.framing).map(s => (
