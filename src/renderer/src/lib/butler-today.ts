@@ -19,6 +19,13 @@ export function headline(summary: string): string {
   return summary.split('\n').map(l => l.trim()).find(l => l && !l.startsWith('>')) ?? ''
 }
 
+/** The summary without its headline line, which the folded row already shows. */
+export function summaryBody(summary: string): string {
+  const lines = summary.split('\n')
+  const i = lines.findIndex(l => l.trim() && !l.trim().startsWith('>'))
+  return i < 0 ? summary : [...lines.slice(0, i), ...lines.slice(i + 1)].join('\n').trim()
+}
+
 /** The newest day before `today` in a newest-first list. */
 export function previousDay(dates: string[], today: string): string | null {
   return dates.find(d => d < today) ?? null

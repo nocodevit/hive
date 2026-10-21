@@ -188,7 +188,12 @@ export function createRoutineRunner(deps: RoutineRunDeps) {
         ...d.last.map(l => `> ${l.replace(/\n/g, ' ')}`)
       ]) : ['(no activity)']),
       '', '# Output',
-      'First line: one-line headline (what shipped / the big thing). Then at most 6 short lines: done, stuck, next. Plain text.'
+      'Line 1: a headline of at most 12 words (what shipped / the big thing). No heading, no bold.',
+      'Then these markdown sections, in this order, leaving out an empty one:',
+      '**Needs you** — numbered "1. <project> — <action>", the owner\'s to-dos for tomorrow, the most urgent first.',
+      '**Open** — "- <project> — <status>", running or blocked work.',
+      '**Done** — "- <project> — <result>", finished work only.',
+      'Each item is one short label (at most ~10 words), not a sentence: no "was", no "and", no explanations. Numbers as numbers (14/14, PR #90). At most 14 items in total.'
     ].join('\n')
     const text = (await deps.runClaude(prompt)).trim()
     if (!text) throw new Error('evening-report: empty answer')

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { ROUTINE_IDS, ROUTINE_NAME, type JournalDay, type RoutinesView } from '../../../../shared/butler-routines'
-import { dayTitle, headline, meetingLines, nextMeeting, previousDay, routineToday, shiftDate, type RoutineState } from '../../lib/butler-today'
+import { dayTitle, headline, meetingLines, nextMeeting, previousDay, routineToday, shiftDate, summaryBody, type RoutineState } from '../../lib/butler-today'
 
 const TAG: Record<'draft' | 'jira' | 'mail', { text: string; cls: string }> = {
   draft: { text: 'draft', cls: 'bg-accent-subtle text-accent' },
@@ -13,6 +15,15 @@ const STATE_CLS: Record<RoutineState, string> = {
 }
 
 const NO_MENTIONS = /^\s*(\*\*[^*]+\*\*\s*)?no new mentions\s*$/i
+
+/** The evening report: **Needs you** / **Open** / **Done** with one short item per line. */
+function Summary({ text }: { text: string }) {
+  return (
+    <div className="whitespace-normal [&_p]:my-1 [&_p:first-child]:mt-0 [&_strong]:text-text-primary [&_ol]:list-decimal [&_ul]:list-disc [&_ol]:pl-4 [&_ul]:pl-4 [&_li]:my-0.5 [&_blockquote]:text-text-muted">
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>{summaryBody(text).replace(/([^\n])\n(?=[^\n])/g, '$1  \n')}</ReactMarkdown>
+    </div>
+  )
+}
 
 /** One folded line: icon · label · headline; opens to the full text. */
 function Row({ icon, label, line, children }: { icon: string; label: string; line: string; children: React.ReactNode }) {
@@ -172,7 +183,7 @@ export function TodayTab({ visible }: { visible: boolean }) {
 
       {(day.summary || day.butler || feishu || day.jira || states.length > 0 || (isToday && prev?.summary)) && (
         <div className="rounded-xl bg-bg-primary px-3" aria-label="Updates">
-          {day.summary && <Row icon="✨" label="Summary" line={headline(day.summary)}>{day.summary}</Row>}
+          {day.summary && <Row icon="✨" label="Summary" line={headline(day.summary)}><Summary text={day.summary} /></Row>}
           {day.butler && <Row icon="🎩" label="Butler" line={headline(day.butler).replace(/^-\s*/, '')}>{day.butler}</Row>}
           {feishu && <Row icon="💬" label="@ you" line={headline(feishu)}>{feishu}</Row>}
           {day.jira && <Row icon="🎫" label="Jira" line={headline(day.jira)}>{day.jira}</Row>}
@@ -188,7 +199,7 @@ export function TodayTab({ visible }: { visible: boolean }) {
               </span>
             </Row>
           )}
-          {isToday && prev?.summary && <Row icon="🌙" label={prevLabel} line={headline(prev.summary)}>{prev.summary}</Row>}
+          {isToday && prev?.summary && <Row icon="🌙" label={prevLabel} line={headline(prev.summary)}><Summary text={prev.summary} /></Row>}
         </div>
       )}
     </div>

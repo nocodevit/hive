@@ -15,10 +15,9 @@ Tell the owner in one screen what got done today, what is still open and what ne
 
 ## Rules
 
-- Done first, by project: what was finished, in the agent's own words, shortened.
-- Then open items: what is still running or blocked, and why.
-- Then what needs the owner tomorrow.
-- Count only finished work as done. "Almost done" is open.
+- What needs the owner comes first: numbered, most urgent first.
+- Then open items: what is still running or blocked.
+- Then done, by project. Count only finished work as done. "Almost done" is open.
 - No guesses beyond what `./hive` shows.
 
 ## Ask me first
@@ -27,18 +26,21 @@ Tell the owner in one screen what got done today, what is still open and what ne
 
 ## Tone and format
 
-- Headings: **Done**, **Open**, **Tomorrow**.
-- One line per item, project name first.
-- Numbers as numbers (14/18 tests, 3 PRs).
+- Line 1: a headline of at most 12 words.
+- Headings: **Needs you**, **Open**, **Done**. Leave out an empty one.
+- One item per line: `<project> — <short label>`. Labels, not sentences.
+- Numbers as numbers (14/18 tests, PR #90).
 
 ## Examples
 
-> **Done**
-> - Cube v2: checkout iOS focus fix merged
+> Cube v2 #219 part 2 on UAT
+> **Needs you**
+> 1. Cube Support — grant Vercel GitHub App access
+> 2. Ben — answer Plan C
 > **Open**
-> - sphere2 · Bolt: e2e 32/40, waiting on test data
-> **Tomorrow**
-> - Decide the demo scope with Ben
+> - sphere2 · Bolt — e2e 32/40, waiting on test data
+> **Done**
+> - Cube v2 — checkout iOS focus fix merged
 
 ## Output
 

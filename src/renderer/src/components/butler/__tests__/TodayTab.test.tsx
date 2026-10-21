@@ -70,6 +70,20 @@ describe('TodayTab', () => {
     expect(routines).toHaveTextContent('Evening reportnext 23:59')
   })
 
+  it('the evening report opens as Needs you / Open / Done lists, without repeating the headline', async () => {
+    ;(window as any).api.journal.day = vi.fn(async () => day('2026-10-20', {
+      summary: 'Cube v2 on UAT\n**Needs you**\n1. Cube Support — grant GitHub access\n2. Ben — answer Plan C\n**Done**\n- Cube v2 — MR !1066 merged'
+    }))
+    render(<TodayTab visible />)
+    const row = await screen.findByLabelText('Summary')
+    expect(row.querySelector('summary')).toHaveTextContent('Cube v2 on UAT')
+    const body = row.querySelector('summary + div')!
+    expect(body).not.toHaveTextContent('Cube v2 on UAT')
+    expect(body.querySelector('ol')!.children).toHaveLength(2)
+    expect(body.querySelector('ol')).toHaveTextContent('Cube Support — grant GitHub access')
+    expect(body.querySelector('ul')).toHaveTextContent('Cube v2 — MR !1066 merged')
+    expect(body.querySelectorAll('strong')[0]).toHaveTextContent('Needs you')
+  })
   it('‹ opens the previous day with its summary; Today comes back', async () => {
     render(<TodayTab visible />)
     fireEvent.click(await screen.findByRole('button', { name: 'Previous day' }))

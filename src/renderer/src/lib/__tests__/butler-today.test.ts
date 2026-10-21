@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dayTitle, headline, meetingLines, nextMeeting, previousDay, routineToday, shiftDate, toggleWeekday } from '../butler-today'
+import { dayTitle, headline, meetingLines, nextMeeting, previousDay, routineToday, shiftDate, summaryBody, toggleWeekday } from '../butler-today'
 
 describe('butler-today', () => {
   it('formats a day title', () => {
@@ -8,6 +8,11 @@ describe('butler-today', () => {
   })
   it('shifts dates across months', () => {
     expect(shiftDate('2026-11-01', -1)).toBe('2026-10-31')
+  })
+  it('summaryBody drops the headline line and keeps the late note', () => {
+    expect(summaryBody('> ran late\nShipped v2\n**Done**\n- Cube — merged')).toBe('> ran late\n**Done**\n- Cube — merged')
+    expect(summaryBody('Only a headline')).toBe('')
+    expect(summaryBody('')).toBe('')
   })
   it('headline skips the late note', () => {
     expect(headline('> late · ran 20:10\n\nShipped v2.28.3\nmore')).toBe('Shipped v2.28.3')
