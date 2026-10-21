@@ -4,8 +4,9 @@
 // headless (no window, no dock icon) and quit.
 //
 // A normal launch takes the lock too, so a routine can find it. A normal
-// launch that does not get the lock keeps running as before (Hive never
-// refused a second window before, and dev builds share the lock).
+// launch that does not get the lock quits and the running Hive shows its
+// window: Electron never makes such a second instance ready, so it used to
+// hang on as an invisible process.
 
 import { isRoutineId, type RoutineId } from '../shared/butler-routines'
 import { parseRoutineArg } from './butlerRoutines'
@@ -20,7 +21,7 @@ export interface AppLike {
 
 export type RunRoutine = (id: RoutineId, opts: { scheduled: boolean }) => Promise<unknown>
 
-export type RoutineMode = { headless: false } | { headless: true; routine: RoutineId; forwarded: boolean }
+export type RoutineMode = { headless: false } | { headless: true; routine: RoutineId; forwarded: boolean } | { headless: true; duplicate: true }
 
 /** The routine another Hive launch asked for (argv first, then the lock's additionalData). */
 export function forwardedRoutine(argv: readonly string[], additionalData: unknown): RoutineId | null {
@@ -30,13 +31,17 @@ export function forwardedRoutine(argv: readonly string[], additionalData: unknow
   return isRoutineId(v) ? v : null
 }
 
-export function startRoutineMode(app: AppLike, argv: readonly string[], run: RunRoutine, log: (msg: string) => void = () => {}): RoutineMode {
+export function startRoutineMode(app: AppLike, argv: readonly string[], run: RunRoutine, log: (msg: string) => void = () => {}, reopen: () => void = () => {}): RoutineMode {
   const routine = parseRoutineArg(argv)
   if (!routine) {
-    app.requestSingleInstanceLock()
+    if (!app.requestSingleInstanceLock()) {
+      // Hive is running: it shows its window through 'second-instance'.
+      app.quit()
+      return { headless: true, duplicate: true }
+    }
     app.on('second-instance', (_e, otherArgv, _cwd, data) => {
       const id = forwardedRoutine(otherArgv, data)
-      if (!id) return
+      if (!id) { reopen(); return }
       log(`routine ${id}: forwarded`)
       void app.whenReady().then(() => run(id, { scheduled: true })).catch(e => log(`routine ${id}: ${e}`))
     })
