@@ -5,6 +5,7 @@ import { execFile } from 'child_process'
 import { DISALLOWED_TOOLS } from './butlerClaude'
 import { discoveredWrites } from './butlerTools'
 import { createRelationLookup } from './feishuAnswer'
+import { readJiraConfig } from './handleJira'
 import { createHistorySearch, type Hit, type RunScope } from './feishuHistory'
 import { randomUUID } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
@@ -108,6 +109,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     profileMd: () => { try { return readFileSync(join(d.butlerDir, 'profile.md'), 'utf8') } catch { return '' } },
     runClaude,
     relation: lookup,
+    neverQuote: () => { const c = readJiraConfig(d.butlerDir); return c?.dev ? [c.dev.key] : [] },
     senderName: lookup.nameOf,
     freeBusy: d.freeBusy,
     slotFree: d.slotFree,
