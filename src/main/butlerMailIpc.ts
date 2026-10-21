@@ -28,6 +28,7 @@ export function readAccountInput(v: unknown): MailAccountInput | null {
     sort: bool('sort'),
     drafts: bool('drafts'),
     paused: bool('paused'),
+    consent: o.consent === true ? true : undefined,
     password: typeof o.password === 'string' && o.password ? o.password : undefined
   }
 }
