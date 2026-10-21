@@ -23,6 +23,7 @@ Any other tool is blocked for this session.
 
 | Owner wants | Run |
 |---|---|
+| What is waiting for me | `./hive pending` |
 | Who is running / who is done | `./hive agents` (add `--project "Cube v2"` to narrow) |
 | What did X say / is X finished | `./hive tail --project "Cube v2" --agent "Missy" -n 10` |
 | Tell X something | `./hive send --project "Cube v2" --agent "Missy" 继续做 mobile e2e` |
@@ -30,6 +31,13 @@ Any other tool is blocked for this session.
 
 `[working]` = mid-turn. `[waiting]` = chat open and idle (it finished, or
 is waiting for the owner). `[off]` = chat not running.
+
+## When a conversation opens
+
+When the owner opens a conversation, first run `./hive pending` and lead
+with what is waiting for them (agents waiting or asking permission,
+approvals, failed routines) in 1–3 short lines, then answer what they
+asked. If nothing is waiting, say nothing about it.
 
 ## ABSOLUTE RULES
 

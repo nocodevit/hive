@@ -42,6 +42,8 @@ export type WakeEvent =
   | { type: 'proposal'; proposal: WakeProposal }
 export type WakeSendResult = { ok: true; to: string } | { ok: false; error: string }
 
+type TelegramStep = { ok: true; status: import('../shared/notify').TelegramStatus } | { ok: false; error: string }
+
 const api = {
   pty: {
     create: (id: string, cwd?: string) => ipcRenderer.invoke('pty:create', { id, cwd }),
@@ -381,6 +383,27 @@ const api = {
       ipcRenderer.on('wake:event', handler)
       return () => ipcRenderer.removeListener('wake:event', handler)
     }
+  },
+
+  notify: {
+    get: () => ipcRenderer.invoke('notify:get') as Promise<import('../shared/notify').NotifyView>,
+    save: (settings: import('../shared/notify').NotifySettings) => ipcRenderer.invoke('notify:save', settings) as Promise<import('../shared/notify').NotifyView>,
+    test: () => ipcRenderer.invoke('notify:test') as Promise<{ ok: boolean; shown: boolean }>,
+    openSystemSettings: () => ipcRenderer.invoke('notify:openSystemSettings') as Promise<{ ok: boolean }>,
+    /** Where the owner is looking ('agent:<id>', 'approvals', 'routines', ''): no popup for that place while focused. */
+    setPlace: (place: string) => ipcRenderer.send('notify:place', place),
+    onOpen: (cb: (target: import('../shared/notify').NotifyTarget) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, t: import('../shared/notify').NotifyTarget) => cb(t)
+      ipcRenderer.on('notify:open', handler)
+      return () => ipcRenderer.removeListener('notify:open', handler)
+    }
+  },
+  telegram: {
+    openBotFather: () => ipcRenderer.invoke('telegram:openBotFather') as Promise<{ ok: boolean }>,
+    setToken: (token: string) => ipcRenderer.invoke('telegram:setToken', token) as Promise<TelegramStep>,
+    findChat: () => ipcRenderer.invoke('telegram:findChat') as Promise<TelegramStep>,
+    test: () => ipcRenderer.invoke('telegram:test') as Promise<{ ok: boolean; error?: string }>,
+    disconnect: () => ipcRenderer.invoke('telegram:disconnect') as Promise<TelegramStep>
   },
 
   feishu: {
