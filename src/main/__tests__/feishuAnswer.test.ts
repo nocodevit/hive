@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assistantHolding, createRelationLookup, gateAnswer, parseAnswer, relationOf, type Answer } from '../feishuAnswer'
+import { assistantHolding, createRelationLookup, freeBusyText, gateAnswer, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
 
 const ans = (o: Partial<Answer> = {}): Answer => ({ category: 'product-status', level: 'auto', confidence: 'high', reply: 'ok', sources: [], claims: [], ...o })
 
@@ -63,5 +63,28 @@ describe('relation', () => {
     expect(calls).toHaveLength(2)
     expect(await look('ou_stranger')).toBe('unknown')
     expect(await createRelationLookup({ get, token: async () => null, selfOpenId: () => 'ou_me' })('ou_boss')).toBe('unknown')
+  })
+})
+
+describe('free / busy', () => {
+  const at = (d: string, h: number, m = 0) => new Date(`${d}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`).getTime()
+  it('next working days skip the weekend', () => {
+    expect(workingDays(new Date(2026, 9, 23), 3).map(d => d.getDate())).toEqual([23, 26, 27])
+  })
+  it('busy blocks only, never titles; unknown without a calendar or when a source failed', () => {
+    const days = [
+      { date: '2026-10-22', events: [{ start: at('2026-10-22', 14), end: at('2026-10-22', 15, 30), allDay: false, title: 'Secret 1:1' }, { start: at('2026-10-22', 10), end: at('2026-10-22', 11), allDay: false, title: 'x' }], errors: {} },
+      { date: '2026-10-23', events: [], errors: {} },
+      { date: '2026-10-26', events: [{ start: 0, end: 0, allDay: true, title: 'Offsite' }], errors: {} }
+    ]
+    const r = freeBusyText(days, true)
+    expect(r).toEqual({ known: true, text: '周四 10/22: busy 10:00–11:00, 14:00–15:30\n周五 10/23: free\n周一 10/26: busy all day' })
+    expect(r.text).not.toContain('Secret')
+    expect(freeBusyText(days, false).known).toBe(false)
+    expect(freeBusyText([{ date: '2026-10-22', events: [], errors: { feishu: 'signed_out' } }], true).known).toBe(false)
+  })
+  it('a meeting answer without the calendar is held', () => {
+    expect(gateAnswer({ answer: ans({ category: 'meeting' }), relation: 'peer' })).toMatchObject({ level: 'hold', reasons: ['calendar not available'] })
+    expect(gateAnswer({ answer: ans({ category: 'meeting' }), relation: 'peer', calendarKnown: true }).level).toBe('auto')
   })
 })

@@ -49,7 +49,7 @@ export function parseAnswer(output: string): Answer | null {
   return { category, level, confidence, reply: str(j.reply, 2000), sources, claims }
 }
 
-export interface GateInput { answer: Answer | null; relation: Relation }
+export interface GateInput { answer: Answer | null; relation: Relation; calendarKnown?: boolean }
 export interface GateResult {
   level: Level
   /** Why the level is lower than the model asked for (shown to the owner). */
@@ -59,7 +59,7 @@ export interface GateResult {
 }
 
 /** Decide what goes out. Only ever lowers the model's level. */
-export function gateAnswer({ answer, relation }: GateInput): GateResult {
+export function gateAnswer({ answer, relation, calendarKnown = false }: GateInput): GateResult {
   if (!answer) return { level: 'hold', reasons: ['unreadable answer'], notify: true }
   let level: Level = answer.level
   const reasons: string[] = []
@@ -81,6 +81,8 @@ export function gateAnswer({ answer, relation }: GateInput): GateResult {
   else if (answer.confidence === 'medium') lower('approve', 'medium confidence')
   if (answer.category === 'cannot-answer') lower('hold', 'cannot answer')
   if (answer.category === 'new-request') notify = true
+  // Without the owner's calendar a meeting answer would be a guess.
+  if (answer.category === 'meeting' && !calendarKnown) lower('hold', 'calendar not available')
   if (relation === 'boss') lower('hold', 'from your manager')
   if (level !== 'auto') notify = true
   return { level, reasons, notify }
@@ -138,4 +140,31 @@ export function createRelationLookup(deps: { get: Get; token: () => Promise<stri
     const [owner, sender] = await Promise.all([person(self, token), person(senderId, token)])
     return owner && sender ? relationOf(owner, sender) : 'unknown'
   }
+}
+
+// ── The owner's free / busy (meeting requests) ───────────────────────────
+
+export interface AgendaLike { date: string; events: Array<{ start: number; end: number; allDay: boolean }>; errors: { feishu?: string; mac?: string } }
+const WEEKDAY = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const hhmm = (ms: number) => { const d = new Date(ms); return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` }
+
+/** The next n working days (Mon–Fri) from `from`, today included. */
+export function workingDays(from: Date, n: number): Date[] {
+  const out: Date[] = []
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate(), 12)
+  while (out.length < n) { if (d.getDay() !== 0 && d.getDay() !== 6) out.push(new Date(d)); d.setDate(d.getDate() + 1) }
+  return out
+}
+
+/** Busy blocks only — never a title. Unknown when no calendar is on or a source failed. */
+export function freeBusyText(days: AgendaLike[], sourcesOn: boolean): { known: boolean; text: string } {
+  if (!sourcesOn || !days.length || days.some(d => d.errors.feishu || d.errors.mac)) return { known: false, text: '' }
+  const lines = days.map(d => {
+    const day = new Date(`${d.date}T12:00:00`)
+    const label = `${WEEKDAY[day.getDay()]} ${day.getMonth() + 1}/${day.getDate()}`
+    if (d.events.some(e => e.allDay)) return `${label}: busy all day`
+    const blocks = d.events.filter(e => !e.allDay).sort((a, b) => a.start - b.start).map(e => `${hhmm(e.start)}–${hhmm(e.end)}`)
+    return `${label}: ${blocks.length ? `busy ${blocks.join(', ')}` : 'free'}`
+  })
+  return { known: true, text: lines.join('\n') }
 }
