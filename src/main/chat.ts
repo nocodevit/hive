@@ -9,7 +9,8 @@ import * as pty from 'node-pty'
 import { queryUsageViaCcusage, queryUsagePctViaPty } from './chat-usage-query'
 import { UsageCache, usageCacheFilename } from './usage-cache'
 import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
-import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
+import { RecentSession, PrevSessionInfo } from './chat-recent-sessions'
+import { scanPrevSessionInfo, scanRecentSessions } from './session-scan-host'
 import { shouldAutoAllow } from './session-permissions'
 import { perRequestContextTokens, contextTokensFromResultUsage } from '../shared/context-size'
 import { addOpenChat, removeOpenChat } from './openChats'
@@ -1692,8 +1693,8 @@ export function registerChatIpc() {
     }
     return smartStartChat(id, { cwd, agent, name, continueSession, rebaseOnStart, resumeSid, forkSession })
   })
-  ipcMain.handle('chat:getPrevSessionInfo', (_e, { cwd, chatId }) => getPrevSessionInfo(cwd, chatId))
-  ipcMain.handle('chat:getRecentSessions', (_e, { cwd, limit }) => getRecentSessions(cwd, limit ?? 5))
+  ipcMain.handle('chat:getPrevSessionInfo', (_e, { cwd, chatId }) => scanPrevSessionInfo(cwd, chatId))
+  ipcMain.handle('chat:getRecentSessions', (_e, { cwd, limit }) => scanRecentSessions(cwd, limit ?? 5))
   ipcMain.handle('chat:scrapeContext', (_e, { id, force }) => scrapeContextLive(id, !!force))
   ipcMain.handle('chat:send', (_e, { id, text }) => sendUserMessage(id, text))
   ipcMain.handle('chat:respondPermission', (_e, { id, requestId, decision, input, denyMessage }) =>

@@ -75,6 +75,7 @@ export function getRecentSessions(cwd: string, limit = 5): RecentSession[] {
         outer: for (const hf of hiveFiles.slice(0, 50)) {
           const txt = readFileSync(join(hiveLogs, hf.f), 'utf8').split('\n').filter(Boolean)
           for (const line of txt) {
+            if (!line.includes('"init"')) continue // only system/init lines matter; skip the parse
             try {
               const ev = JSON.parse(line)
               if (ev.type === 'system' && ev.subtype === 'init' && ev.cwd === cwd && typeof ev.model === 'string') {
@@ -249,6 +250,7 @@ export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInf
         outer: for (const hf of hiveFiles.slice(0, 50)) {
           const txt = readFileSync(join(hiveLogs, hf.f), 'utf8').split('\n').filter(Boolean)
           for (const line of txt) {
+            if (!line.includes('"init"')) continue // only system/init lines matter; skip the parse
             try {
               const ev = JSON.parse(line)
               if (ev.type === 'system' && ev.subtype === 'init' && ev.cwd === effectiveCwd && typeof ev.model === 'string') {
