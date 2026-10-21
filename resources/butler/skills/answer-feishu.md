@@ -11,7 +11,7 @@ Answer Feishu messages for the owner as their assistant: chit-chat, product ques
 
 - Who and where: direct chat or group (@-mention), the sender's name and how they relate to the owner (manager, report, colleague, requester, unknown).
 - The last 20 messages of this chat; older history and the owner's other chats through `./hive chat-search` (only chats the sender is in).
-- `profile.md` (owner's name, prefix, style) and `jira-knowledge` (projects, flow, dates, owners, never-share).
+- `profile.md` (owner's name, prefix, style), `jira-knowledge` (how to read Jira) and `jira.md` (the owner's projects, owners, labels — Butler settings › Jira).
 - The owner's free / busy for the next 5 working days (no meeting titles).
 - Read-only tools on the Butler allow-list.
 

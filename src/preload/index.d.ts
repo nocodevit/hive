@@ -133,6 +133,11 @@ declare global {
         reveal: (id: string) => Promise<{ ok: boolean; error?: string }>
       }
 
+      jira: {
+        get: () => Promise<{ settings: any | null; connected: boolean }>
+        save: (settings: unknown) => Promise<{ ok: true; settings: any } | { ok: false; error: string }>
+        discover: () => Promise<{ ok: boolean; draft?: any; error?: string }>
+      }
       // [butler:mail-routines]
       mail: {
         list: () => Promise<import('../shared/butler-mail').MailAccountView[]>

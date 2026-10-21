@@ -3,7 +3,7 @@
 // Settings may not be mounted yet, so the request waits until it is.
 
 export const SETTINGS_SECTIONS = [
-  'Remote Control', 'Feishu', 'About me', 'Skills', 'Email', 'Daily routine', 'Answer for me', 'Calendar',
+  'Remote Control', 'Feishu', 'About me', 'Skills', 'Email', 'Daily routine', 'Jira', 'Answer for me', 'Calendar',
   'Wake word', 'Notifications', 'Style', 'Palette', 'General', 'Storage', 'Git tokens', 'Voice', 'Agent defaults', 'Templates'
 ] as const
 

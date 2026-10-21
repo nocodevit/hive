@@ -10,7 +10,7 @@ Keep the owner's tickets moving with as little of their time as possible: do the
 ## Input
 
 - The owner's open tickets (assigned to them), with status, last update, labels, links, sprint and fixVersion.
-- `jira-knowledge`: the projects, how a request becomes a product issue, final statuses, owners, the dev lead and what is never quoted.
+- `jira-knowledge` (how to read Jira) and `jira.md` (the owner's projects, final statuses, owners, dev lead, labels — Butler settings › Jira).
 - For a draft: the one ticket it is about.
 
 ## Rules

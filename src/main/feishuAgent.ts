@@ -251,6 +251,8 @@ export interface FeishuAgentDeps {
   context?: () => string
   /** The owner profile as the Butler session reads it (profile.md). */
   profileMd?: () => string
+  /** The owner's Jira specifics (Butler settings › Jira, jira.md). */
+  jiraMd?: () => string
   /** How the sender relates to the owner (Feishu contacts; 'unknown' when it cannot tell). */
   relation?: (openId: string) => Promise<Relation>
   /** Jira projects whose keys never go out in a reply (the owner's jira-config dev project). */
@@ -472,6 +474,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       busy.known ? busy.text : '(not available — do not say whether any time is free; meeting requests go to the owner)',
       'You can create a meeting only through a proposal the sender agrees to (see below); never say a meeting exists before it is created.',
       '',
+      ...(deps.jiraMd?.() ? ['## The owner\'s Jira (from their settings)', deps.jiraMd!(), ''] : []),
       '## Agents status (what the team is working on)',
       deps.context?.() || '(none)',
       '',
