@@ -51,6 +51,8 @@ export interface OutgoingMail {
 export interface MailClients {
   openInbox(account: MailAccount, password: string): Promise<MailSession>
   send(account: MailAccount, password: string, msg: OutgoingMail): Promise<{ messageId?: string }>
+  /** Set \\Seen on one INBOX message; false when the mailbox was rebuilt (UIDVALIDITY changed). */
+  markSeen(account: MailAccount, password: string, uidValidity: number, uid: number): Promise<boolean>
 }
 
 export type ClaudeRunner = (prompt: string) => Promise<string>
@@ -495,6 +497,21 @@ export function createButlerMail(deps: ButlerMailDeps) {
         return out
       })().finally(() => { running = null })
       return running
+    },
+
+    /** Mark one sorted email read in its mailbox, by its exact key (account:uidValidity:uid). */
+    async markRead(key: string): Promise<{ ok: boolean; error?: string }> {
+      const entry = processed().find(p => p.key === key)
+      if (!entry) return { ok: false, error: 'unknown_email' }
+      const account = deps.accounts.get(entry.accountId)
+      if (!account) return { ok: false, error: 'no_account' }
+      const pw = deps.passwords.load(account.id)
+      if (!pw) return { ok: false, error: 'no_password' }
+      try {
+        return (await deps.clients.markSeen(account, pw, entry.uidValidity, entry.uid)) ? { ok: true } : { ok: false, error: 'mailbox_changed' }
+      } catch (e) {
+        return { ok: false, error: errorText(e) }
+      }
     },
 
     /** Sorted mail since `since` (noise left out), for the morning plan. */

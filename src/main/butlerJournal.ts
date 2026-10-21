@@ -70,8 +70,12 @@ export function setJournalSection(dir: string, date: string, section: JournalSec
   writeJournalText(dir, date, renderJournal(date, sections))
 }
 
-const ITEM_RE = /^\s*[-*] \[( |x|X)\] (.*)$/
-const SOURCE_RE = /\s#(draft|jira)\s*$/i
+/** "- [ ]" open, "- [x]" done, "- [-]" ignored (kept for the record, hidden in Today). */
+const ITEM_RE = /^\s*[-*] \[( |x|X|-)\] (.*)$/
+/** Trailing tag: #draft / #jira / #mail, with the exact email key when it is about an email. */
+const SOURCE_RE = /\s#(draft|jira|mail)(?::([A-Za-z0-9_.@:-]+))?\s*$/i
+
+const itemText = (rest: string) => { const src = rest.match(SOURCE_RE); return (src ? rest.slice(0, src.index) : rest).trim() }
 
 export function parseChecklist(body: string): JournalItem[] {
   const items: JournalItem[] = []
@@ -81,9 +85,11 @@ export function parseChecklist(body: string): JournalItem[] {
     const src = m[2].match(SOURCE_RE)
     items.push({
       index: items.length,
-      text: (src ? m[2].slice(0, src.index) : m[2]).trim(),
-      done: m[1] !== ' ',
-      source: src ? (src[1].toLowerCase() as 'draft' | 'jira') : null
+      text: itemText(m[2]),
+      done: m[1] === 'x' || m[1] === 'X',
+      ignored: m[1] === '-',
+      source: src ? (src[1].toLowerCase() as JournalItem['source']) : null,
+      ref: src?.[2] ?? null
     })
   }
   return items
@@ -133,16 +139,47 @@ export function toggleJournalItem(dir: string, date: string, index: number, text
     if (!m) return line
     n++
     if (n !== index) return line
-    const src = m[2].match(SOURCE_RE)
-    const t = (src ? m[2].slice(0, src.index) : m[2]).trim()
-    if (t !== text) return line
+    if (itemText(m[2]) !== text) return line
     hit = true
-    return line.replace(/\[( |x|X)\]/, done ? '[x]' : '[ ]')
+    return line.replace(/\[( |x|X|-)\]/, done ? '[x]' : '[ ]')
   })
   if (!hit) return { ok: false, error: 'changed' }
   sections.set('Plan', lines.join('\n'))
   writeJournalText(dir, date, renderJournal(date, sections))
   return { ok: true }
+}
+
+/**
+ * Ignore one plan item (same exact index + text check as ticking): it becomes
+ * "- [-]" and leaves Today. Returns its tag so the caller can act on it
+ * (an email gets marked read).
+ */
+export function ignoreJournalItem(dir: string, date: string, index: number, text: string): { ok: true; item: JournalItem } | { ok: false; error: string } {
+  const sections = splitSections(readJournalText(dir, date))
+  const plan = sections.get('Plan')
+  if (plan === undefined) return { ok: false, error: 'no_plan' }
+  const item = parseChecklist(plan).find(i => i.index === index)
+  if (!item || item.text !== text) return { ok: false, error: 'changed' }
+  let n = -1
+  const lines = plan.split('\n').map(line => {
+    if (!ITEM_RE.test(line)) return line
+    n++
+    return n === index ? line.replace(/\[( |x|X|-)\]/, '[-]') : line
+  })
+  sections.set('Plan', lines.join('\n'))
+  writeJournalText(dir, date, renderJournal(date, sections))
+  return { ok: true, item: { ...item, ignored: true } }
+}
+
+/**
+ * The plan model tags email tasks with the short ref it was shown ("#mail:m2");
+ * swap it for that email's exact key. A ref that was not in the input is dropped.
+ */
+export function resolveMailRefs(checklist: string, refs: Map<string, string>): string {
+  return checklist.split('\n').map(line => line.replace(/\s#(draft|mail):(\S+)\s*$/i, (_all, tag: string, ref: string) => {
+    const key = refs.get(ref)
+    return key ? ` #${tag.toLowerCase()}:${key}` : tag.toLowerCase() === 'draft' ? ' #draft' : ''
+  })).join('\n')
 }
 
 /** Days that have a journal, newest first. */

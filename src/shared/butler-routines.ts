@@ -85,7 +85,11 @@ export interface JournalItem {
   index: number
   text: string
   done: boolean
-  source: 'draft' | 'jira' | null
+  /** Ignored by the owner: kept in the journal, hidden in Today. */
+  ignored: boolean
+  source: 'draft' | 'jira' | 'mail' | null
+  /** The exact email key (account:uidValidity:uid) for an email task. */
+  ref: string | null
 }
 
 export interface JournalDay {

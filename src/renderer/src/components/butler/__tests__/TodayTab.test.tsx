@@ -11,7 +11,8 @@ beforeEach(() => {
   const days: Record<string, any> = {
     '2026-10-20': day('2026-10-20', { plan: [
       { index: 0, text: 'Review fix', done: true, source: null },
-      { index: 1, text: 'Reply Lin', done: false, source: 'draft' }
+      { index: 1, text: 'Reply Lin', done: false, ignored: false, source: 'draft', ref: 'acc-1:7:43' },
+      { index: 2, text: 'Old idea', done: false, ignored: true, source: null, ref: null }
     ] }),
     '2026-10-19': day('2026-10-19', { summary: 'Shipped v2.28.3\nmore' })
   }
@@ -19,7 +20,8 @@ beforeEach(() => {
     journal: {
       day: vi.fn(async (d?: string) => days[d ?? '2026-10-20']),
       dates: vi.fn(async () => ['2026-10-20', '2026-10-19']),
-      toggle: vi.fn(async () => ({ ok: true }))
+      toggle: vi.fn(async () => ({ ok: true })),
+      ignore: vi.fn(async () => ({ ok: true, markedRead: true }))
     },
     approvals: { list: vi.fn(async () => [{ id: 'a' }, { id: 'b' }]) },
     routines: {
@@ -75,5 +77,16 @@ describe('TodayTab', () => {
     expect(screen.getByLabelText('Summary')).toHaveTextContent('Shipped v2.28.3')
     fireEvent.click(screen.getByRole('button', { name: 'Today' }))
     expect(await screen.findByText('Tue 20 Oct')).toBeInTheDocument()
+  })
+  it('ignore hides the item and tells main (which marks the email read); ignored items never show', async () => {
+    render(<TodayTab visible />)
+    await screen.findByText('Reply Lin')
+    expect(screen.queryByText('Old idea')).toBeNull()
+    expect(screen.getByText('1/2')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Ignore Reply Lin' })).toHaveAttribute('title', 'Ignore · marks the email read')
+    fireEvent.click(screen.getByRole('button', { name: 'Ignore Reply Lin' }))
+    await waitFor(() => expect((window as any).api.journal.ignore).toHaveBeenCalledWith('2026-10-20', 1, 'Reply Lin'))
+    expect(screen.queryByText('Reply Lin')).toBeNull()
+    expect(screen.getByText('1/1')).toBeInTheDocument()
   })
 })

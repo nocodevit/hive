@@ -80,6 +80,25 @@ export function createMailClients(): MailClients {
       }
     },
 
+    async markSeen(account, password, uidValidity, uid) {
+      const ImapFlow = pick(await load('imapflow'), 'ImapFlow')
+      const client = new ImapFlow({
+        host: account.imap.host, port: account.imap.port, secure: account.imap.secure,
+        auth: { user: account.address, pass: password },
+        logger: false,
+        clientInfo: { name: 'Hive', vendor: 'Hive' }
+      })
+      await client.connect()
+      try {
+        await client.mailboxOpen('INBOX')
+        if (Number(client.mailbox?.uidValidity ?? 0) !== uidValidity) return false
+        await client.messageFlagsAdd(String(uid), ['\\Seen'], { uid: true })
+        return true
+      } finally {
+        await client.logout().catch(() => client.close?.())
+      }
+    },
+
     async send(account, password, msg) {
       const nodemailer = await load('nodemailer')
       const createTransport = nodemailer.createTransport ?? nodemailer.default?.createTransport
