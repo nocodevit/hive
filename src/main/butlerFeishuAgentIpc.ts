@@ -6,6 +6,7 @@ import { DISALLOWED_TOOLS } from './butlerClaude'
 import { discoveredWrites } from './butlerTools'
 import { createRelationLookup, readPeople, setPerson } from './feishuAnswer'
 import { readJiraConfig } from './handleJira'
+import { readJiraMd } from './butlerJiraSettings'
 import { createHistorySearch, type Hit, type RunScope } from './feishuHistory'
 import { randomUUID } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
@@ -107,6 +108,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     selfOpenId: () => { const s = d.feishu.getStatus(); return s.state === 'signed_in' && s.openId ? s.openId : null },
     profile: () => d.readProfile(d.butlerDir),
     profileMd: () => { try { return readFileSync(join(d.butlerDir, 'profile.md'), 'utf8') } catch { return '' } },
+    jiraMd: () => readJiraMd(d.butlerDir),
     runClaude,
     // Contacts first; without the contact scope, the owner's own people list.
     relation: async id => { const r = await lookup(id); return r !== 'unknown' ? r : readPeople(d.butlerDir)[id] ?? 'unknown' },

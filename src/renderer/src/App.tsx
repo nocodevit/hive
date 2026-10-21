@@ -9,6 +9,7 @@ import { ButlerWizard } from './components/butler/ButlerWizard'
 import { WakeToast, useWakeListening } from './components/butler/WakeToast' // [butler:wake]
 import { WakeSettings } from './components/butler/WakeSettings' // [butler:wake]
 import { EmailAccounts } from './components/butler/EmailAccounts' // [butler:mail-routines]
+import { JiraSettings } from './components/butler/JiraSettings'
 import { DailyRoutine } from './components/butler/DailyRoutine' // [butler:mail-routines]
 import { SETUP_STEPS, firstOpenStep, type SetupMark } from './lib/butler-setup'
 import { reconcileLiveStatus } from './lib/live-status'
@@ -3397,6 +3398,7 @@ export default function App() {
             {/* [butler:mail-routines] Email accounts + Daily routine sections */}
             <SettingsSection label="Email"><EmailAccounts /></SettingsSection>
             <SettingsSection label="Daily routine"><DailyRoutine /></SettingsSection>
+            <SettingsSection label="Jira"><JiraSettings /></SettingsSection>
 
             {/* [butler:feishu-agent-calendar] Answer-for-me + Calendar sections */}
             <SettingsSection label="Answer for me"><FeishuAgentSettings /></SettingsSection>

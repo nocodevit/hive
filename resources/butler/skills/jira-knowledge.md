@@ -1,50 +1,45 @@
 ---
 name: jira-knowledge
-description: How the owner's Jira is organised — projects, how a request becomes a delivered story, statuses, dates, labels and who owns what. Read it before answering or acting on any Jira question.
+description: How to read a Jira the way a product team uses it — requests, product issues, engineering tasks, statuses, sprints and versions, links, what is safe to quote. Read it with the owner's own Jira settings (jira.md) before answering or acting on any Jira question.
 kind: reference
 ---
 
 ## Purpose
 
-Facts about the owner's Jira that answer-feishu, jira-check and handle-jira read. No actions here. Fill it in once (App Settings → Skills → Jira knowledge → Advanced); the shipped version is a blank template.
+General knowledge for every Jira-aware skill (answer-feishu, handle-jira). The owner's company specifics — which project is which, final statuses, owners, the dev lead, what labels mean — are not here: they are in Butler settings › Jira and reach you as `jira.md`. When the two disagree, `jira.md` wins.
 
-## Projects
+## Three kinds of project
 
-| Key | What it holds | First owner | Final status |
-|---|---|---|---|
-| <REQ> | Requests from sales / field engineers | <PM> | <done status> |
-| <PRODUCT> | Product pool: stories and bugs that go into sprints | PM | <Released / Done> |
-| <DEV> | Engineering tasks that deliver a product story (progress only, never quoted) | dev lead | Done |
-| <SUPPORT> | Technical issues and bugs from customers | <test lead> | <Resolved> |
+- Request projects: what sales, field engineers or customers ask for (requirements, support tickets, supplier requests). They are where questions come from.
+- The product project: stories and bugs the team plans into sprints and releases with versions. Its status is the product's status.
+- An engineering project (if any): the tasks that deliver a product issue. Progress only — its keys, titles and comments are never quoted to anyone.
 
-## Flow
+## Following a request
 
-- A request is accepted into the product pool when a <PRODUCT> issue is created and linked to it.
-- A <PRODUCT> issue's progress is its linked <DEV> tasks; its status is its own.
-- When the <PRODUCT> issue is released, the request it came from should move to its final status.
+- A request is accepted when a product issue is linked to it (often "created by", sometimes Blocks or Relates). No product issue yet → not scheduled.
+- Answer "how is X going" from the product issue: its own status first; its engineering tasks only tell you how far along it is.
+- When the product issue has shipped, the request should be closed; if it is not, it was forgotten.
 
 ## Statuses
 
-One line per project: `KEY: status → status → … (final)`.
+- Each project has its own workflow. Use the status names exactly as Jira shows them.
+- A done-category status is not always final (e.g. "ready to release"); the final ones are in `jira.md`.
+- A "waiting for the reporter to verify" status is the reporter's move, not a stuck ticket.
+- Jira often will not skip steps: moving to a later status may need the steps in between.
 
 ## Dates
 
-- An exact date comes only from the fixVersion release date. `released = true` means it is live.
-- A sprint gives a window (start – end), never a date.
-- No fixVersion and no sprint: not scheduled yet.
+- The only date you may give is a fixVersion's release date (`released = true` means it is live).
+- A sprint gives a window (start – end), never a date: "in sprint <name>, <start>–<end>; exact date once a version is set".
+- No version and no sprint: "已登记，尚未排期" / "logged, not scheduled yet". Never invent a date.
 
-## Labels
+## Reading a ticket
 
-| Label | Means |
-|---|---|
-| <label> | requester / product line / area |
+- Description detailed or a PRD link → the design is ready; engineering should have a task.
+- Labels usually say who asked (business unit, region), the product line and the area — see `jira.md` for this owner's.
+- Comments: the latest ones say what is happening; summarize, do not paste.
 
-## Owners
+## Safe to quote
 
-| Area (labels or project) | Owner (Jira user) |
-|---|---|
-| everything else | the owner |
-
-## Never share
-
-- <DEV> project content (keys, titles, comments).
+- Request and product keys, titles, statuses, versions and dates.
+- Never: engineering-project content, prices, anything confidential, other people's private remarks in comments.

@@ -398,7 +398,27 @@ export function compareSkill(s: SkillStore, id: string): { defaultMd: string; mi
 }
 
 /** Write every effective skill to <butler>/.claude/skills/<id>/SKILL.md. */
+/** Skills renamed between versions: the owner's form / markdown follow the new id. */
+export const RENAMED_SKILLS: Record<string, string> = { 'jira-check': 'handle-jira' }
+
+export function migrateRenamedSkills(s: SkillStore): void {
+  for (const [from, to] of Object.entries(RENAMED_SKILLS)) {
+    for (const ext of ['json', 'md']) {
+      const a = join(userDir(s), `${from}.${ext}`)
+      const b = join(userDir(s), `${to}.${ext}`)
+      if (!existsSync(a)) continue
+      if (!existsSync(b)) {
+        let text = readFileSync(a, 'utf8')
+        if (ext === 'md') text = text.replace(new RegExp(`^name: ${from}$`, 'm'), `name: ${to}`)
+        writeFileSync(b, text)
+      }
+      unlinkSync(a)
+    }
+  }
+}
+
 export function composeSkills(s: SkillStore): string[] {
+  migrateRenamedSkills(s)
   const ids = defaultIds(s)
   // A skill Hive no longer ships (e.g. jira-check → handle-jira) leaves its composed copy behind.
   const root = join(s.butlerDir, '.claude', 'skills')

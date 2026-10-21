@@ -146,6 +146,13 @@ describe('lint', () => {
 })
 
 describe('store', () => {
+  it('a renamed skill keeps the owner\'s choices (jira-check → handle-jira)', () => {
+    mkdirSync(join(store.butlerDir, 'skills'), { recursive: true })
+    writeFileSync(join(store.butlerDir, 'skills', 'jira-check.json'), '{"tone":"formal"}')
+    composeSkills(store)
+    expect(readFileSync(join(store.butlerDir, 'skills', 'handle-jira.json'), 'utf8')).toBe('{"tone":"formal"}')
+    expect(existsSync(join(store.butlerDir, 'skills', 'jira-check.json'))).toBe(false)
+  })
   it('composes every effective skill into .claude/skills/<id>/SKILL.md', () => {
     saveOverlay(store, 'answer-feishu', { tone: 'friendly' })
     expect(composeSkills(store)).toEqual(ALL_IDS)
