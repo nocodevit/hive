@@ -107,7 +107,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   )
 }
 
-export type HistoryCard = { id: string; kind: string; title: string; subtitle: string; draft: string; status: string; createdAt: number; resolvedAt?: number; error?: string }
+export type HistoryCard = { id: string; kind: string; title: string; subtitle: string; draft: string; payload?: Record<string, unknown>; status: string; createdAt: number; resolvedAt?: number; error?: string }
 
 const OUTCOME: Record<string, { text: string; cls: string }> = {
   approved: { text: 'Done', cls: 'text-status-working' },
@@ -122,8 +122,26 @@ export function whenLabel(ms: number, now = new Date()): string {
   return d.toDateString() === now.toDateString() ? t : `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${t}`
 }
 
+/** What Butler's chat gets when the owner takes a past card to chat for a follow-up. */
+export function historyDiscussText(it: HistoryCard): string {
+  const p = it.payload
+  const o = OUTCOME[it.status]?.text ?? it.status
+  const sent = it.status === 'approved' ? (it.kind.startsWith('jira') ? 'What was applied' : 'What was sent') : 'What Butler proposed'
+  return [
+    'Follow up on this Butler item with me. Do not send or change anything until I confirm.',
+    `${it.title} · ${it.subtitle}`,
+    `Outcome: ${o} · ${new Date(it.resolvedAt ?? it.createdAt).toLocaleString('en-GB')}${it.error ? ` · error: ${it.error}` : ''}`,
+    str(p, 'key') ? `Jira: ${str(p, 'key')}` : '',
+    str(p, 'chatName') ? `Feishu chat: ${str(p, 'chatName')}` : '',
+    str(p, 'about') ? `What it wanted: ${str(p, 'about')}` : '',
+    str(p, 'question') ? `--- their message ---\n${str(p, 'question')}` : '',
+    str(p, 'original') ? `--- email from ${str(p, 'from')} ---\n${str(p, 'original')}` : '',
+    it.draft ? `--- ${sent.toLowerCase()} ---\n${it.draft}` : ''
+  ].filter(Boolean).join('\n')
+}
+
 /** Butler → Approve, below the queue: what was approved, dismissed or failed this week. */
-export function ApprovalHistory() {
+export function ApprovalHistory({ onDiscuss }: { onDiscuss?: (text: string) => void }) {
   const [items, setItems] = useState<HistoryCard[]>([])
   useEffect(() => {
     const load = () => { window.api.approvals.history().then(setItems).catch(() => {}) }
@@ -148,6 +166,10 @@ export function ApprovalHistory() {
               <div className="mt-1 text-[11px] text-text-muted truncate">{it.subtitle}</div>
               <div className="mt-1 rounded-lg bg-bg-secondary px-2.5 py-2 text-[12px] text-text-primary whitespace-pre-wrap">{it.draft}</div>
               {it.error && <div className="mt-1 text-[11px] text-red-400 font-mono">{it.error}</div>}
+              {onDiscuss && (
+                <button onClick={() => onDiscuss(historyDiscussText(it))} aria-label={`Discuss ${it.title}`}
+                  className="mt-1.5 px-2.5 py-1 rounded-lg bg-bg-secondary border border-border text-[12px] font-semibold text-text-primary cursor-pointer">Discuss in chat</button>
+              )}
             </details>
           )
         })}

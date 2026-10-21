@@ -43,6 +43,10 @@ const DOT = { working: 'bg-status-working', waiting: 'bg-status-waiting', off: '
  */
 export function ButlerPanel(p: Props) {
   const [tab, setTab] = useState<Tab>('chat')
+  const discuss = (text: string) => {
+    setTab('chat')
+    window.api.chat.send('chat-butler', text).catch(() => {})
+  }
   useEffect(() => { if (p.tabRequest) setTab(p.tabRequest.tab) }, [p.tabRequest])
   useEffect(() => { p.onTab?.(tab) }, [tab, p.onTab])
   const [approvals, setApprovals] = useState<ApprovalCard[]>([])
@@ -166,11 +170,8 @@ export function ButlerPanel(p: Props) {
 
       {tab === 'approve' && (
         <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-2">
-          <ApprovalsList items={approvals} onDiscuss={text => {
-            setTab('chat')
-            window.api.chat.send('chat-butler', text).catch(() => {})
-          }} />
-          <ApprovalHistory />
+          <ApprovalsList items={approvals} onDiscuss={discuss} />
+          <ApprovalHistory onDiscuss={discuss} />
         </div>
       )}
 
