@@ -37,6 +37,8 @@ export interface ButlerMailRoutinesDeps {
   }
   /** Today's meetings as text for the morning plan ('' when none). */
   calendar?: (date: string) => Promise<string>
+  /** Another normal Hive launch: show (or reopen) the window. */
+  reopen?: () => void
 }
 
 export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode {
@@ -109,5 +111,5 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode 
   // must not install the Butler folder (only running a routine does).
   registerButlerRoutinesIpc({ ipcMain: d.ipcMain, folder: () => folder, scheduler, runner })
 
-  return startRoutineMode(d.app, process.argv, (id, opts) => runner.run(id, opts), msg => console.log(`[butler] ${msg}`))
+  return startRoutineMode(d.app, process.argv, (id, opts) => runner.run(id, opts), msg => console.log(`[butler] ${msg}`), d.reopen)
 }

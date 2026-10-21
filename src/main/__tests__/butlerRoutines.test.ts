@@ -229,6 +229,18 @@ describe('routine launch mode', () => {
     expect(runs).toEqual(['sort-inbox'])
     expect(app.quits).toBe(0)
   })
+  it('normal launch while Hive runs: quits; the running Hive reopens its window', async () => {
+    const second = fakeApp(false)
+    expect(startRoutineMode(second, ['Hive'], async () => {})).toEqual({ headless: true, duplicate: true })
+    expect(second.quits).toBe(1)
+    const first = fakeApp(true)
+    let reopened = 0
+    startRoutineMode(first, ['Hive'], async () => {}, () => {}, () => { reopened++ })
+    first.emit(['Hive'])
+    first.emit(['Hive', '--butler-routine=sort-inbox'])
+    await tick()
+    expect(reopened).toBe(1)
+  })
   it('Hive already running: forwards and quits without running', async () => {
     const app = fakeApp(false)
     const runs: string[] = []

@@ -658,7 +658,14 @@ const butlerRoutineMode = setupButlerMailRoutines({
   agents: () => butlerRows(),
   agentCwd: id => findAgentWorktree(id),
   // butlerCalendar is created below; this only runs when a routine does.
-  calendar: async date => agendaText(await butlerCalendar.getDayAgenda(new Date(`${date}T12:00:00`)))
+  calendar: async date => agendaText(await butlerCalendar.getDayAgenda(new Date(`${date}T12:00:00`))),
+  reopen: () => {
+    const win = BrowserWindow.getAllWindows().find(w => !w.isDestroyed())
+    if (!win) { createWindow(); return }
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+  }
 })
 // [butler:feishu-agent-calendar]
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc } from './butlerFeishuAgentIpc'
@@ -2235,6 +2242,7 @@ ipcMain.handle('skills:scan', () => {
 
 app.whenReady().then(() => {
   if (butlerRoutineMode.headless) {
+    if ('duplicate' in butlerRoutineMode) return
     // A scheduled run also keeps the Feishu session alive while Hive is closed.
     feishu.init()
     void feishu.keepAlive()
