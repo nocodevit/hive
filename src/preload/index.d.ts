@@ -12,7 +12,7 @@ type ButlerAgentRow = {
 
 type ApprovalItem = {
   id: string; kind: string; title: string; subtitle: string; draft: string
-  payload: Record<string, unknown>; action: string; status: string; createdAt: number; error?: string
+  payload: Record<string, unknown>; action: string; status: string; createdAt: number; resolvedAt?: number; error?: string
 }
 
 type TelegramStep = { ok: true; status: import('../shared/notify').TelegramStatus } | { ok: false; error: string }
@@ -114,6 +114,7 @@ declare global {
       }
       approvals: {
         list: () => Promise<ApprovalItem[]>
+        history: () => Promise<ApprovalItem[]>
         approve: (id: string, draft?: string) => Promise<{ ok: boolean; error?: string }>
         reject: (id: string) => Promise<boolean>
         onChange: (cb: (pending: ApprovalItem[]) => void) => () => void

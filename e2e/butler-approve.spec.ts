@@ -75,6 +75,17 @@ test('a reply card shows what the email wants and edits exactly the reply', asyn
   await expect(lin.getByLabel('Reply', { exact: true })).toHaveValue('Hi Lin, UAT is back. Thanks. — Mei')
 })
 
+test('a dismissed card leaves the queue and shows in History with its reply', async () => {
+  await page.getByLabel('Send: Lin · UAT down?').getByRole('button', { name: /^Reject/ }).click()
+  await expect(page.getByLabel('Send: Lin · UAT down?')).toHaveCount(0)
+  const history = page.getByRole('group', { name: 'Approve history' })
+  await history.getByText(/^History · 1 this week/).click()
+  const row = history.getByRole('group').filter({ hasText: 'Lin · UAT down?' })
+  await expect(row).toContainText('Dismissed')
+  await row.getByText('Lin · UAT down?').click()
+  await expect(row).toContainText('Hi Lin, UAT is back. Thanks. — Mei')
+})
+
 test('needs-you card: what it wants + question; Discuss opens the Butler chat', async () => {
   const ana = page.getByLabel('Needs you: Ana · Price list')
   await expect(ana.getByLabel('What it wants')).toHaveText('Ana wants the 2027 price list')

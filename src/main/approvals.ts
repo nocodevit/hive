@@ -81,6 +81,8 @@ export function createApprovals(deps: ApprovalsDeps) {
     },
 
     pending,
+    /** Resolved in the last week (approved, rejected, failed), newest first. */
+    history: () => items.filter(i => i.status !== 'pending').sort((a, b) => (b.resolvedAt ?? b.createdAt) - (a.resolvedAt ?? a.createdAt)),
     all: () => [...items],
     get: (id: string) => items.find(i => i.id === id),
 
