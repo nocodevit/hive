@@ -106,7 +106,7 @@ export const PROFILE_MORE: ReadonlyArray<[ProfileKey, string, string]> = [
   ['oftenSays', 'Often says', '先说结论'],
   ['neverSays', 'Never says', '您好、亲'],
   ['language', 'Language', '跟对方'],
-  ['prefix', 'Prefix', '【Mei 的 AI 代理】'],
+  ['prefix', 'Prefix', '[Mei 的 AI 代理]'],
   ['intro', 'Intro', '我是 Mei 的 AI 代理'],
   ['extra', 'Extra', '涉及客户的回复先抄送 PMO；周五下午不约会']
 ]

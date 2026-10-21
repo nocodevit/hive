@@ -89,10 +89,12 @@ describe('pure helpers', () => {
   it('ensurePrefix prepends once', () => {
     expect(ensurePrefix('hi', '【Mei 的 AI 代理】')).toBe('【Mei 的 AI 代理】hi')
     expect(ensurePrefix(' 【Mei 的 AI 代理】hi', '【Mei 的 AI 代理】')).toBe('【Mei 的 AI 代理】hi')
+    expect(ensurePrefix('[Alice · Megan 的 AI 助手]收到', '[Alice · Megan 的 AI 助手]')).toBe('[Alice · Megan 的 AI 助手] 收到')
+    expect(ensurePrefix('收到', '[Alice · Megan 的 AI 助手]')).toBe('[Alice · Megan 的 AI 助手] 收到')
   })
 
   it('defaultPrefix: profile prefix, else name', () => {
-    expect(defaultPrefix({ name: 'Mei', prefix: '' })).toBe('【Mei 的 AI 代理】')
+    expect(defaultPrefix({ name: 'Mei', prefix: '' })).toBe('[Mei 的 AI 代理]')
     expect(defaultPrefix({ name: 'Mei', prefix: '[Mei bot]' })).toBe('[Mei bot]')
   })
 
@@ -199,7 +201,7 @@ describe('feishu agent', () => {
     t.advance(1 * MIN)
     const out = await t.agent.tick()
     expect(out).toEqual([{ messageId: q.message_id, result: 'answered' }])
-    expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '【Mei 的 AI 代理】Missy 在修 iOS 失焦' })])
+    expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '[Mei 的 AI 代理] Missy 在修 iOS 失焦' })])
     expect(t.prompts[0]).toContain('answer-feishu')
     expect(t.prompts[0]).toContain('build 状态?')
   })
@@ -284,7 +286,7 @@ describe('feishu agent', () => {
     t.advance(1000)
     t.fs.add('p1', 'ou_lin', 'build?')
     await t.agent.tick()
-    expect(t.fs.sent[0].text).toBe('[bot]已在修')
+    expect(t.fs.sent[0].text).toBe('[bot] 已在修')
   })
 
   it('a draft that leaks another chat is held back even when the question looked harmless', async () => {
@@ -293,7 +295,7 @@ describe('feishu agent', () => {
     const q = t.fs.add('p1', 'ou_lin', '最近怎么样？')
     const out = await t.agent.tick()
     expect(out[0]).toEqual({ messageId: q.message_id, result: 'escalated' })
-    expect(t.fs.sent.map((m: { text: string }) => m.text)).toEqual(['【Mei 的 AI 代理】我需要和 Mei 确认，稍后回复你'])
+    expect(t.fs.sent.map((m: { text: string }) => m.text)).toEqual(['[Mei 的 AI 代理] 我需要和 Mei 确认，稍后回复你'])
   })
 
   it('locked topic overrides an "answer": holding reply + follow-up approval; approving replies to the original', async () => {
@@ -302,13 +304,13 @@ describe('feishu agent', () => {
     const q = t.fs.add('p1', 'ou_lin', 'checkout 报价多少？')
     const out = await t.agent.tick()
     expect(out[0]).toEqual({ messageId: q.message_id, result: 'escalated' })
-    expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '【Mei 的 AI 代理】我需要和 Mei 确认，稍后回复你' })])
+    expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '[Mei 的 AI 代理] 我需要和 Mei 确认，稍后回复你' })])
     const [item] = t.approvals.pending()
     expect(item).toMatchObject({ kind: FOLLOWUP_KIND, draft: '周五上线', action: 'Reply' })
     expect(item.payload).toMatchObject({ messageId: q.message_id, chatId: 'p1', question: 'checkout 报价多少？', topic: 'prices' })
     const r = await t.approvals.approve(item.id, '下周一上线')
     expect(r.ok).toBe(true)
-    expect(t.fs.sent[1]).toEqual(expect.objectContaining({ replyTo: q.message_id, text: '【Mei 的 AI 代理】下周一上线' }))
+    expect(t.fs.sent[1]).toEqual(expect.objectContaining({ replyTo: q.message_id, text: '[Mei 的 AI 代理] 下周一上线' }))
     expect(t.agent.log(5)[0]).toMatchObject({ kind: 'followup', inReplyTo: q.message_id })
   })
 
@@ -452,7 +454,7 @@ describe('feishu agent', () => {
     t.advance(1000)
     t.fs.add('p1', 'ou_lin', 'ok')
     await agent.tick()
-    expect(t.fs.sent.at(-1)!.text).toBe('【Mei 的 AI 代理】好的，我会转给 Mei 确认和批准。')
+    expect(t.fs.sent.at(-1)!.text).toBe('[Mei 的 AI 代理] 好的，我会转给 Mei 确认和批准。')
     expect(t.approvals.pending()[0]).toMatchObject({ draft: '已确认：明天 16:00 和 Lin 开会', payload: { topic: 'consent · create_meeting' } })
     // Consent is used once.
     t.advance(1000)
@@ -614,8 +616,8 @@ describe('feishu agent', () => {
 describe('defaultPrefix with an assistant name', () => {
   it('adds the name; an explicit prefix still wins', async () => {
     const { defaultPrefix } = await import('../feishuAgent')
-    expect(defaultPrefix({ name: 'Mei', prefix: '', assistantName: 'Mimi' })).toBe('【Mei 的 AI 代理 · Mimi】')
-    expect(defaultPrefix({ name: 'Mei', prefix: '', assistantName: '' })).toBe('【Mei 的 AI 代理】')
+    expect(defaultPrefix({ name: 'Mei', prefix: '', assistantName: 'Mimi' })).toBe('[Mimi · Mei 的 AI 代理]')
+    expect(defaultPrefix({ name: 'Mei', prefix: '', assistantName: '' })).toBe('[Mei 的 AI 代理]')
     expect(defaultPrefix({ name: 'Mei', prefix: '[Mei’s AI agent]', assistantName: 'Mimi' })).toBe('[Mei’s AI agent]')
   })
 })

@@ -42,7 +42,7 @@ export interface FeishuAgentSettings {
   picked: string[]
   waitBeforeReplyMs: number
   remindAfterMs: number
-  /** '' = default (profile prefix, else 【<name> 的 AI 代理】). */
+  /** '' = default (profile prefix, else [<assistant> · <name> 的 AI 代理]). */
   prefix: string
   askFirstTopics: AskTopic[]
   pollMs: number
@@ -132,7 +132,7 @@ export function normalizeAgentSettings(raw: unknown): FeishuAgentSettings {
 
 export function defaultPrefix(profile: Pick<ButlerProfile, 'name' | 'prefix'> & { assistantName?: string }): string {
   const named = profile.assistantName?.trim()
-  return profile.prefix.trim() || `【${profile.name.trim() || '我'} 的 AI 代理${named ? ` · ${named}` : ''}】`
+  return profile.prefix.trim() || `[${named ? `${named} · ` : ''}${profile.name.trim() || '我'} 的 AI 代理]`
 }
 
 export function effectivePrefix(settings: FeishuAgentSettings, profile: Pick<ButlerProfile, 'name' | 'prefix'>): string {
@@ -140,9 +140,13 @@ export function effectivePrefix(settings: FeishuAgentSettings, profile: Pick<But
 }
 
 /** The prefix is enforced here, never left to the model. */
+/** Exactly one prefix in front; a half-width "]" is followed by a space. */
 export function ensurePrefix(text: string, prefix: string): string {
-  const t = text.trim()
-  return t.startsWith(prefix) ? t : prefix + t
+  const p = prefix.trim()
+  let t = text.trim()
+  if (!p) return t
+  if (t.startsWith(p)) t = t.slice(p.length).trimStart()
+  return p + (p.endsWith(']') ? ' ' : '') + t
 }
 
 export function holdingReply(name: string): string {
