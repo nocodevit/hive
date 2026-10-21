@@ -175,7 +175,9 @@ describe('answer-feishu run', () => {
     expect(a.slice(0, 2)).toEqual(['-p', 'hi'])
     expect(a[a.indexOf('--permission-mode') + 1]).toBe('dontAsk')
     const off = a[a.indexOf('--disallowedTools') + 1].split(',')
-    expect(off).toEqual(expect.arrayContaining(['Bash', 'Edit', 'Write', 'mcp__stargate__jira_add_comment']))
+    expect(off).toEqual(expect.arrayContaining(['Edit', 'Write', 'WebFetch', 'Bash(./hive send:*)', 'Bash(./hive start:*)', 'mcp__stargate__jira_add_comment']))
+    // Bash as such follows the allow-list (./hive agents / tail run, anything else is refused by dontAsk).
+    expect(off).not.toContain('Bash')
   })
 })
 

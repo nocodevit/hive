@@ -267,7 +267,7 @@ describe('routine launch mode', () => {
 })
 
 describe('claude -p runner', () => {
-  it('fresh session, prompt on stdin, no Bash / write / web tools', async () => {
+  it('fresh session, prompt on stdin, allow-list only; no writes, web or ./hive send / start', async () => {
     const seen: { bin?: string; args?: string[]; cwd?: string; stdin?: string } = {}
     const spawn = ((bin: string, args: string[], o: { cwd: string }) => {
       const child = new EventEmitter() as any
@@ -280,7 +280,7 @@ describe('claude -p runner', () => {
     const run = createClaudeRunner({ bin: () => '/bin/claude', cwd: () => '/b', spawn })
     expect(await run('Use the morning-plan skill.')).toBe('plan')
     expect(seen).toEqual({ bin: '/bin/claude', cwd: '/b', stdin: 'Use the morning-plan skill.', args: claudePrintArgs() })
-    expect(claudePrintArgs()).toEqual(['-p', '--output-format', 'text', '--permission-mode', 'dontAsk', '--disallowedTools', 'Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch'])
+    expect(claudePrintArgs()).toEqual(['-p', '--output-format', 'text', '--permission-mode', 'dontAsk', '--disallowedTools', 'Edit,Write,NotebookEdit,WebFetch,WebSearch,Bash(./hive send:*),Bash(./hive start:*)'])
     expect(claudePrintArgs()).not.toContain('--continue')
     expect(claudePrintArgs(['mcp__jira'])).toContain('mcp__jira')
   })
