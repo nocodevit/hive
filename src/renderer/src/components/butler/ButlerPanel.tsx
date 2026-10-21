@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import HiveChat from '../hive-chat'
 import { orderSessions, sessionCounts, type SessionRow } from '../../lib/butler-sessions'
 import { setupProgress, type SetupMark } from '../../lib/butler-setup'
-import { ApprovalsList, type ApprovalCard } from './ApprovalsList'
+import { ApprovalHistory, ApprovalsList, type ApprovalCard } from './ApprovalsList'
 import { openSkill } from '../../lib/butler-skills'
 import { TodayTab } from './TodayTab' // [butler:mail-routines]
 
@@ -170,6 +170,7 @@ export function ButlerPanel(p: Props) {
             setTab('chat')
             window.api.chat.send('chat-butler', text).catch(() => {})
           }} />
+          <ApprovalHistory />
         </div>
       )}
 

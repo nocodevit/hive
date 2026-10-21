@@ -106,3 +106,52 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
     </>
   )
 }
+
+export type HistoryCard = { id: string; kind: string; title: string; subtitle: string; draft: string; status: string; createdAt: number; resolvedAt?: number; error?: string }
+
+const OUTCOME: Record<string, { text: string; cls: string }> = {
+  approved: { text: 'Done', cls: 'text-status-working' },
+  rejected: { text: 'Dismissed', cls: 'text-text-muted' },
+  failed: { text: 'Failed', cls: 'text-status-waiting' }
+}
+
+/** "14:30" today, else "Tue 14:30". */
+export function whenLabel(ms: number, now = new Date()): string {
+  const d = new Date(ms)
+  const t = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+  return d.toDateString() === now.toDateString() ? t : `${d.toLocaleDateString('en-GB', { weekday: 'short' })} ${t}`
+}
+
+/** Butler → Approve, below the queue: what was approved, dismissed or failed this week. */
+export function ApprovalHistory() {
+  const [items, setItems] = useState<HistoryCard[]>([])
+  useEffect(() => {
+    const load = () => { window.api.approvals.history().then(setItems).catch(() => {}) }
+    load()
+    return window.api.approvals.onChange(load)
+  }, [])
+  if (!items.length) return null
+  return (
+    <details className="rounded-xl bg-bg-primary px-3 py-2" aria-label="Approve history">
+      <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">History · {items.length} this week</summary>
+      <div className="mt-1 flex flex-col">
+        {items.map(it => {
+          const o = OUTCOME[it.status] ?? { text: it.status, cls: 'text-text-muted' }
+          return (
+            <details key={it.id} className="py-1 border-t border-border first:border-t-0">
+              <summary className="flex items-center gap-2 cursor-pointer text-[12px] list-none">
+                <span aria-hidden>{iconOf(it.kind)}</span>
+                <span className="flex-1 min-w-0 truncate text-text-primary">{it.title}</span>
+                <span className={o.cls}>{o.text}</span>
+                <span className="text-text-muted">{whenLabel(it.resolvedAt ?? it.createdAt)}</span>
+              </summary>
+              <div className="mt-1 text-[11px] text-text-muted truncate">{it.subtitle}</div>
+              <div className="mt-1 rounded-lg bg-bg-secondary px-2.5 py-2 text-[12px] text-text-primary whitespace-pre-wrap">{it.draft}</div>
+              {it.error && <div className="mt-1 text-[11px] text-red-400 font-mono">{it.error}</div>}
+            </details>
+          )
+        })}
+      </div>
+    </details>
+  )
+}
