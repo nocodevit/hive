@@ -439,10 +439,11 @@ export function createButlerMail(deps: ButlerMailDeps) {
     save(input: MailAccountInput): { ok: true; account: MailAccountView } | { ok: false; error: string } {
       const prev = input.id ? deps.accounts.get(input.id) : undefined
       if (input.id && !prev) return { ok: false, error: 'not_found' }
-      const account = normalizeAccount(input, prev?.id ?? deps.accounts.newId(), prev)
+      const account = normalizeAccount(input, prev?.id ?? deps.accounts.newId(), prev, now())
       const bad = validateAccount(account)
       if (bad) return { ok: false, error: bad }
       if (!prev && !input.password) return { ok: false, error: 'no_password' }
+      if (!prev && input.consent !== true) return { ok: false, error: 'no_consent' }
       if (deps.accounts.list().some(a => a.id !== account.id && a.address.toLowerCase() === account.address.toLowerCase())) return { ok: false, error: 'already_added' }
       if (input.password) deps.passwords.save(account.id, input.password)
       deps.accounts.upsert(account)
