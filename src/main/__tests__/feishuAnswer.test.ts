@@ -19,6 +19,11 @@ describe('parseAnswer', () => {
 })
 
 describe('gateAnswer', () => {
+  it('a reply that hands it to the owner is held, so a card reaches the owner', () => {
+    for (const reply of ['收到。报告已转给 Megan 查阅，执行通过率和计划完成时间由 Megan 看过后回复您。', 'Thanks — I will pass it on to Megan.', '我会反馈给 Megan，稍后回复'])
+      expect(gateAnswer({ answer: ans({ reply }), relation: 'peer' })).toMatchObject({ level: 'hold', notify: true })
+    expect(gateAnswer({ answer: ans({ reply: 'Build 正常，测试都过了。' }), relation: 'peer' }).level).toBe('auto')
+  })
   it('a clear, sourced answer goes out', () => {
     expect(gateAnswer({ answer: ans({ reply: 'FAE-1076 已上线', sources: ['FAE-1076'] }), relation: 'requester' })).toEqual({ level: 'auto', reasons: [], notify: false })
   })

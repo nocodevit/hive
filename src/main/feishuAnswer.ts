@@ -117,6 +117,10 @@ export interface GateResult {
 }
 
 /** Decide what goes out. Only ever lowers the model's level. */
+/** A reply that hands the question to the owner ("已转给 Megan", "will get back to you") is a promise:
+ *  only the hold path keeps it, by putting a card in front of the owner. */
+export const DEFERS_TO_OWNER = /转给|转交|反馈给|已告知|会告诉|看过后|确认后|稍后回复|回头回复|晚点回复|pass(?:ed)? (?:it |this )?(?:on )?to|forward(?:ed)? (?:it |this )?to|get back to you|will (?:reply|respond|follow up)/i
+
 export function gateAnswer({ answer, relation, calendarKnown = false, neverQuote = [] }: GateInput): GateResult {
   if (!answer) return { level: 'hold', reasons: ['unreadable answer'], notify: true }
   let level: Level = answer.level
@@ -146,6 +150,8 @@ export function gateAnswer({ answer, relation, calendarKnown = false, neverQuote
   // Without the owner's calendar a meeting answer would be a guess.
   if (answer.category === 'meeting' && !calendarKnown) lower('hold', 'calendar not available')
   if (relation === 'boss') lower('hold', 'from your manager')
+  // An offer waiting for their yes (a proposal) is not a promise yet.
+  if (!answer.proposal && DEFERS_TO_OWNER.test(answer.reply)) lower('hold', 'reply hands it to you')
   if (level !== 'auto') notify = true
   return { level, reasons, notify }
 }
