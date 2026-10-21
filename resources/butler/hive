@@ -5,6 +5,7 @@
   ./hive tail  (--id AGENT_ID | [--project NAME] --agent NAME) [-n 10]
   ./hive send  (--id AGENT_ID | [--project NAME] --agent NAME) TEXT...
   ./hive start (--id AGENT_ID | [--project NAME] --agent NAME) [--mode resume|new]
+  ./hive chat-search --q "words"
 """
 import argparse, json, os, subprocess, sys, urllib.error, urllib.request
 
@@ -39,7 +40,9 @@ def call(method, path, body=None, timeout=200):
     req = urllib.request.Request(
         f'http://127.0.0.1:{port}{path}', method=method,
         data=json.dumps(body).encode() if body is not None else None,
-        headers={'Content-Type': 'application/json', 'X-Hive-Token': read('api-token')})
+        headers={'Content-Type': 'application/json', 'X-Hive-Token': read('api-token'),
+                 # Set by Hive for a run answering someone: limits chat-search to chats they are in.
+                 **({'X-Hive-Run': os.environ['HIVE_RUN_TOKEN']} if os.environ.get('HIVE_RUN_TOKEN') else {})})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, json.loads(r.read() or b'{}')
@@ -93,6 +96,7 @@ def main():
     p = argparse.ArgumentParser(prog='hive')
     sub = p.add_subparsers(dest='cmd', required=True)
     a = sub.add_parser('agents'); a.add_argument('--project')
+    c = sub.add_parser('chat-search'); c.add_argument('--q', required=True)
     for name in ('tail', 'send', 'start'):
         s = sub.add_parser(name)
         s.add_argument('--id'); s.add_argument('--project'); s.add_argument('--agent')
@@ -110,6 +114,16 @@ def main():
             print(row(x))
         n = {k: sum(1 for x in rows if x['activity'] == k) for k in order}
         print(f"-- {len(rows)} agents: {n['working']} working, {n['waiting']} waiting (chat open, idle), {n['off']} off")
+        return
+
+    if args.cmd == 'chat-search':
+        from urllib.parse import urlencode
+        status, data = call('GET', '/feishu/chat-search?' + urlencode({'q': args.q}))
+        if status != 200: fail(status, data)
+        if data.get('note'): print(f"({data['note']})")
+        if not data['hits']: print('No messages found.')
+        for h in data['hits']:
+            print(f"[{h['chatName'] or h['chatId']} · {h['time']}] {h['text']}")
         return
 
     t = target(args)
