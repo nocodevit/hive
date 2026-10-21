@@ -11,7 +11,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from 'path'
 import type { Claim, Relation } from './feishuAnswer'
 
-export type Outcome = 'auto' | 'approved' | 'edited' | 'rejected' | 'recalled' | 'owner_replied' | 'pending'
+export type Outcome = 'auto' | 'acknowledged' | 'approved' | 'edited' | 'rejected' | 'recalled' | 'owner_replied' | 'pending'
 
 export interface FeishuCase {
   id: string

@@ -20,6 +20,7 @@ function fakeFeishu(clock: () => number) {
   const msgs: Record<string, Msg[]> = { p1: [], g1: [] }
   const sent: Array<{ replyTo: string; text: string; id: string }> = []
   const deleted: string[] = []
+  const reactions: string[] = []
   let n = 0
   const add = (chat: string, from: string, text: string, at = clock(), mentions?: any[]) => {
     const m: Msg = {
@@ -50,11 +51,13 @@ function fakeFeishu(clock: () => number) {
       sent.push({ replyTo: orig.message_id, text, id: m.message_id })
       return { status: 200, body: { code: 0, data: { message_id: m.message_id } } }
     }
+    const re = path.match(/^\/im\/v1\/messages\/([^/]+)\/reactions$/)
+    if (method === 'POST' && re) { reactions.push(`${decodeURIComponent(re[1])}:${body.reaction_type.emoji_type}`); return { status: 200, body: { code: 0, data: {} } } }
     const del = path.match(/^\/im\/v1\/messages\/([^/]+)$/)
     if (method === 'DELETE' && del) { deleted.push(decodeURIComponent(del[1])); return { status: 200, body: { code: 0 } } }
     return { status: 404, body: { code: 404 } }
   }
-  return { msgs, sent, deleted, add, http }
+  return { msgs, sent, deleted, reactions, add, http }
 }
 
 function setup(opts: { claude?: (p: string) => string | Promise<string>; settings?: any; profile?: Partial<typeof EMPTY_PROFILE> } = {}) {
@@ -393,6 +396,54 @@ describe('feishu agent', () => {
     expect(held).toMatchObject({ ok: true, gate: { level: 'hold' }, wouldSend: '我需要和 Mei 确认，稍后回复你' })
     expect(t.fs.sent).toEqual([])
     expect(t.agent.cases()).toEqual([])
+    expect(t.approvals.pending()).toEqual([])
+  })
+
+  it('"ok" with nothing proposed: a 👍 on their message, no reply, no model', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 } })
+    t.advance(1000)
+    const ok = t.fs.add('p1', 'ou_lin', '好的，谢谢')
+    expect((await t.agent.tick())[0]).toEqual({ messageId: ok.message_id, result: 'skipped', why: 'acknowledged' })
+    expect(t.fs.reactions).toEqual([`${ok.message_id}:THUMBSUP`])
+    expect(t.fs.sent).toEqual([])
+    expect(t.prompts).toEqual([])
+    expect(t.agent.cases()[0]).toMatchObject({ outcome: 'acknowledged', sent: '👍' })
+  })
+
+  it('"ok" to what Butler proposed: passed to the owner with the consent line; someone else\'s "ok" is just 👍', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"meeting","level":"auto","confidence":"high","reply":"明天 15:00 不方便，16:00 可以吗？需要我建会吗？","sources":[],"claims":[],"proposal":{"type":"create_meeting","summary":"明天 16:00 和 Lin 开会"}}' })
+    t.deps.freeBusy = async () => ({ known: true, text: '周四 10/22: busy 15:00–16:00' })
+    const agent = createFeishuAgent(t.deps)
+    agent.setSettings({ enabled: true, waitBeforeReplyMs: 0 })
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', '明天 3 点开个会？')
+    await agent.tick()
+    expect(t.fs.sent).toHaveLength(1)
+    t.advance(1000)
+    const other = t.fs.add('p1', 'ou_ben', 'ok')
+    await agent.tick()
+    expect(t.fs.reactions).toEqual([`${other.message_id}:THUMBSUP`])
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', 'ok')
+    await agent.tick()
+    expect(t.fs.sent.at(-1)!.text).toBe('【Mei 的 AI 代理】好的，我会转给 Mei 确认和批准。')
+    expect(t.approvals.pending()[0]).toMatchObject({ draft: '已确认：明天 16:00 和 Lin 开会', payload: { topic: 'consent · create_meeting' } })
+    // Consent is used once.
+    t.advance(1000)
+    const again = t.fs.add('p1', 'ou_lin', 'ok')
+    await agent.tick()
+    expect(t.fs.reactions.at(-1)).toBe(`${again.message_id}:THUMBSUP`)
+  })
+
+  it('a proposal older than a day is not consent', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"chitchat-work","level":"auto","confidence":"high","reply":"要我转给 Mei 吗？","sources":[],"claims":[],"proposal":{"type":"forward_owner","summary":"把 Lin 的问题转给 Mei"}}' })
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', '这个谁负责？')
+    await t.agent.tick()
+    t.advance(25 * 3600_000)
+    const late = t.fs.add('p1', 'ou_lin', 'ok')
+    await t.agent.tick()
+    expect(t.fs.reactions).toEqual([`${late.message_id}:THUMBSUP`])
     expect(t.approvals.pending()).toEqual([])
   })
 

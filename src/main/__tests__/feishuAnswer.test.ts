@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assistantHolding, createRelationLookup, freeBusyText, gateAnswer, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
+import { assistantHolding, createRelationLookup, freeBusyText, gateAnswer, isAck, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
 
 const ans = (o: Partial<Answer> = {}): Answer => ({ category: 'product-status', level: 'auto', confidence: 'high', reply: 'ok', sources: [], claims: [], ...o })
 
@@ -89,5 +89,16 @@ describe('free / busy', () => {
   it('a meeting answer without the calendar is held', () => {
     expect(gateAnswer({ answer: ans({ category: 'meeting' }), relation: 'peer' })).toMatchObject({ level: 'hold', reasons: ['calendar not available'] })
     expect(gateAnswer({ answer: ans({ category: 'meeting' }), relation: 'peer', calendarKnown: true }).level).toBe('auto')
+  })
+})
+
+describe('acknowledgements', () => {
+  it('ok / 好的 / 收到 / 👍 / stickers are acknowledgements; questions and real lines are not', () => {
+    for (const t of ['ok', 'OK!', '好的', '好的。', '收到', '嗯嗯', '明白了', '谢谢~', 'Thanks!', 'got it', '👍', '👍🏻', '🙏👌', '[sticker]', '好的谢谢']) expect(isAck(t)).toBe(true)
+    for (const t of ['ok?', '好的，那周五可以吗', '收到，但是 FAE-1 还没好', 'ok 我明天看', '', '为什么']) expect(isAck(t)).toBe(false)
+  })
+  it('a proposal is read from the answer; unknown types are dropped', () => {
+    expect(parseAnswer('{"category":"meeting","level":"auto","confidence":"high","reply":"r","proposal":{"type":"create_meeting","summary":"明天 16:00 会议"}}')!.proposal).toEqual({ type: 'create_meeting', summary: '明天 16:00 会议' })
+    expect(parseAnswer('{"category":"meeting","level":"auto","confidence":"high","reply":"r","proposal":{"type":"delete_repo","summary":"x"}}')!.proposal).toBeUndefined()
   })
 })

@@ -11,6 +11,8 @@ export type Level = 'auto' | 'approve' | 'hold'
 export type Verdict = 'confirmed' | 'contradicted' | 'unverified'
 
 export interface Claim { claim: string; verdict: Verdict; source: string }
+/** An action the reply asks the sender to agree to; a later "ok" from them consents to exactly this. */
+export interface Proposal { type: 'create_meeting' | 'notify' | 'forward_owner'; summary: string }
 export interface Answer {
   category: Category
   level: Level
@@ -18,6 +20,17 @@ export interface Answer {
   reply: string
   sources: string[]
   claims: Claim[]
+  proposal?: Proposal
+}
+
+/** "ok", "好的", "收到", 👍, a sticker … — an acknowledgement, nothing to answer. */
+export function isAck(text: string): boolean {
+  const t = text.trim().toLowerCase()
+  if (!t || /[?？]/.test(t)) return false
+  if (/^\[(sticker|表情)\]$/.test(t)) return true
+  if (/^(\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200d|\ufe0f|\s)+$/u.test(t)) return true
+  const w = t.replace(/[\s!！。.,，、~～…:：;；]+/gu, '')
+  return /^(ok|okay|okk|k|好|好的|好滴|好嘞|好哒|行|可以|没问题|收到|收到了|嗯|嗯嗯|嗯呢|明白|明白了|了解|知道了|谢谢|谢了|多谢|感谢|thx|thanks|thank you|ty|got it|noted|sure|cool|great|好的谢谢|ok谢谢|收到谢谢|好的收到|thankyou|gotit)$/.test(w)
 }
 
 export const CATEGORIES: Category[] = ['chitchat-work', 'chitchat-life', 'product-status', 'product-knowledge', 'report-help', 'new-request', 'need-info', 'meeting', 'cannot-answer']
@@ -46,7 +59,15 @@ export function parseAnswer(output: string): Answer | null {
   const claims: Claim[] = Array.isArray(j.claims) ? j.claims.slice(0, 10).map((c: any) => ({
     claim: str(c?.claim, 300), verdict: VERDICTS.includes(c?.verdict) ? c.verdict : 'unverified', source: str(c?.source, 300)
   })).filter((c: Claim) => c.claim) : []
-  return { category, level, confidence, reply: str(j.reply, 2000), sources, claims }
+  const pt = j.proposal?.type
+  const proposal = (pt === 'create_meeting' || pt === 'notify' || pt === 'forward_owner') && str(j.proposal?.summary, 300)
+    ? { type: pt as Proposal['type'], summary: str(j.proposal.summary, 300) } : undefined
+  return { category, level, confidence, reply: str(j.reply, 2000), sources, claims, ...(proposal ? { proposal } : {}) }
+}
+
+/** What Butler says when the sender's "ok" agrees to a proposal the owner must approve. */
+export function consentReply(ownerName: string): string {
+  return `好的，我会转给 ${ownerName.trim() || '主人'} 确认和批准。`
 }
 
 export interface GateInput { answer: Answer | null; relation: Relation; calendarKnown?: boolean }

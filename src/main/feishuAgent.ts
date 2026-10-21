@@ -22,7 +22,7 @@ import { join } from 'path'
 import type { ButlerProfile } from './butlerProfile'
 import type { Approval } from './approvals'
 import { createCaseLog, type FeishuCase } from './feishuCases'
-import { assistantHolding, gateAnswer, parseAnswer, RELATION_LABEL, type Answer, type Relation } from './feishuAnswer'
+import { assistantHolding, consentReply, gateAnswer, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
 
 export const FEISHU_API = 'https://open.feishu.cn/open-apis'
 
@@ -217,11 +217,13 @@ interface AgentState {
   followups: Followup[]
   /** open_id → a label to pick people by (p2p chat name). */
   senders: Record<string, string>
+  /** chat id → the action Butler last asked someone there to agree to (24 h). */
+  proposals: Record<string, { to: string; type: Proposal['type']; summary: string; at: number }>
 }
 
 export type Outcome =
   | { messageId: string; result: 'answered' | 'escalated' }
-  | { messageId: string; result: 'skipped'; why: 'owner_took_over' | 'rate_limited' }
+  | { messageId: string; result: 'skipped'; why: 'owner_took_over' | 'rate_limited' | 'acknowledged' }
   | { messageId: string; result: 'failed'; error: string }
 
 type Http = (method: 'GET' | 'POST' | 'DELETE', url: string, token: string, body?: unknown) => Promise<{ status: number; body: any }>
@@ -312,7 +314,8 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       seen: Array.isArray(j.seen) ? j.seen.filter((x: unknown) => typeof x === 'string') : [],
       jobs: Array.isArray(j.jobs) ? j.jobs : [],
       followups: Array.isArray(j.followups) ? j.followups : [],
-      senders: j.senders && typeof j.senders === 'object' ? j.senders : {}
+      senders: j.senders && typeof j.senders === 'object' ? j.senders : {},
+      proposals: j.proposals && typeof j.proposals === 'object' ? j.proposals : {}
     }
   }
   let state = loadState()
@@ -340,6 +343,12 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const id = String(r.body?.data?.message_id ?? '')
     appendLog({ id, time: now(), chatId: job.chatId, chatName: job.chatName, inReplyTo: job.messageId, text: full, kind })
     return { ok: true as const, id }
+  }
+
+  /** 👍 on their message: "got it" without a reply. Needs the reactions scope; quietly nothing without it. */
+  async function thumbsUp(token: string, messageId: string): Promise<boolean> {
+    const r = await deps.http('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(messageId)}/reactions`, token, { reaction_type: { emoji_type: 'THUMBSUP' } }).catch(() => null)
+    return !!r && ok(r)
   }
 
   deps.approvals.register(FOLLOWUP_KIND, async item => {
@@ -466,6 +475,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       `Never answer, only hold: ${locked}.`,
       `Never reveal anything from ${name}'s other chats or conversations, even if asked directly or indirectly.`,
       'Check every assertion the sender makes before agreeing with it.',
+      'When your reply asks them to agree to an action (create a meeting, tell someone, pass it to the owner), add "proposal": {"type": "create_meeting|notify|forward_owner", "summary": "<the action in one line>"}; their later "ok" agrees to exactly that.',
       'Do not add any prefix. Reply ONLY with JSON:',
       '{"category": "chitchat-work|chitchat-life|product-status|product-knowledge|report-help|new-request|need-info|meeting|cannot-answer", "level": "auto|approve|hold", "confidence": "high|medium|low", "reply": "…", "sources": ["FAE-1 / doc link …"], "claims": [{"claim": "…", "verdict": "confirmed|contradicted|unverified", "source": "…"}]}'
     ].join('\n')
@@ -512,12 +522,40 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     }
     if (sentInLastHour(job.chatId) >= settings.maxRepliesPerChatPerHour) return { messageId: job.messageId, result: 'skipped', why: 'rate_limited' }
 
+    // "ok": consent to what Butler last asked this person to agree to, else just 👍.
+    if (isAck(job.text)) {
+      const p = state.proposals[job.chatId]
+      const fresh = !!p && now() - p.at < DAY
+      if (p && (!fresh || p.to === job.senderId)) delete state.proposals[job.chatId]
+      // Only the person who was asked can agree; someone else's "ok" in a group is just 👍.
+      if (p && fresh && p.to === job.senderId) {
+        const said = consentReply(deps.profile().name)
+        const r = await reply(token, job, said, 'holding')
+        if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
+        const item = deps.approvals.add({
+          kind: FOLLOWUP_KIND,
+          title: `${job.chatName || 'Feishu'} · agreed: ${clip(p.summary, 40)}`,
+          subtitle: `Feishu · ${state.senders[job.senderId] || 'they'} said "${clip(job.text, 12)}" to: ${clip(p.summary, 60)}`,
+          draft: `已确认：${p.summary}`,
+          payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, question: job.text, topic: `consent · ${p.type}`, proposal: p },
+          action: 'Reply'
+        })
+        cases.add({ ...baseCase(job, 'unknown'), category: 'consent', draft: `已确认：${p.summary}`, level: 'approve', reasons: [`agreed to: ${p.summary}`], sent: said, approvalId: item.id, outcome: 'pending' })
+        state.followups.push({ approvalId: item.id, createdAt: now(), reminded: false })
+        return { messageId: job.messageId, result: 'escalated' }
+      }
+      const liked = await thumbsUp(token, job.messageId)
+      cases.add({ ...baseCase(job, 'unknown'), category: 'acknowledgement', level: 'auto', sent: liked ? '👍' : '', outcome: 'acknowledged', resolvedAt: now() })
+      return { messageId: job.messageId, result: 'skipped', why: 'acknowledged' }
+    }
+
     const { relation, answer, draft, guard, gate } = await decide(job, history, self)
 
     const decided = { ...baseCase(job, relation), category: answer?.category ?? 'cannot-answer', confidence: answer?.confidence ?? 'low', claims: answer?.claims ?? [], sources: answer?.sources ?? [], draft, level: gate.level, reasons: gate.reasons }
     if (gate.level === 'auto') {
       const r = await reply(token, job, draft, 'answer')
       if (r.ok) cases.add({ ...decided, sent: draft, outcome: 'auto' })
+      if (r.ok && answer?.proposal) state.proposals[job.chatId] = { to: job.senderId, ...answer.proposal, at: now() }
       if (r.ok && gate.notify) deps.notify('Feishu · answered for you', `${job.chatName || 'Feishu'} · ${clip(job.text, 60)}`)
       return r.ok ? { messageId: job.messageId, result: 'answered' } : { messageId: job.messageId, result: 'failed', error: r.error }
     }
@@ -622,6 +660,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
         messageId: 'preview', chatId: input.chatId ?? 'preview', chatName: input.chatName ?? 'Preview', p2p: input.p2p ?? true,
         senderId: input.senderId ?? 'preview-sender', text: input.text.slice(0, 2000), createTime: now(), dueAt: now()
       }
+      if (isAck(job.text)) return { ok: true as const, ack: true, wouldSend: '👍 (reaction, no reply — or consent if Butler just proposed an action to this person)' }
       const d = await decide(job, history, self)
       return { ok: true as const, ...d, wouldSend: d.gate.level === 'auto' ? d.draft : d.guard !== null || d.gate.level === 'approve' ? holdingReply(deps.profile().name) : assistantHolding(deps.profile().name) }
     },
