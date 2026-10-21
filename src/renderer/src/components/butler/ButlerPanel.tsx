@@ -33,6 +33,7 @@ interface Props {
   onTab?: (tab: Tab) => void
 }
 
+const RESUME_TIMEOUT_MS = 60_000
 const DOT = { working: 'bg-status-working', waiting: 'bg-status-waiting', off: 'bg-status-done' } as const
 
 /**
@@ -52,6 +53,8 @@ export function ButlerPanel(p: Props) {
   const [approvals, setApprovals] = useState<ApprovalCard[]>([])
   const [folder, setFolder] = useState<string | null>(null)
   const [rows, setRows] = useState<SessionRow[]>([])
+  /** Resume pressed: agentId → when. Cleared once the row is live, or after a minute. */
+  const [resuming, setResuming] = useState<Record<string, number>>({})
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => { if (p.visible) setMounted(true) }, [p.visible])
@@ -69,9 +72,17 @@ export function ButlerPanel(p: Props) {
     let alive = true
     const load = () => window.api.butler.agents().then(r => { if (alive) setRows(orderSessions(r)) }).catch(() => {})
     load()
-    const t = setInterval(load, 5000)
+    const t = setInterval(load, 2000)
     return () => { alive = false; clearInterval(t) }
   }, [p.visible])
+
+  useEffect(() => {
+    const live = new Set(rows.filter(r => r.activity !== 'off').map(r => r.agentId))
+    setResuming(m => {
+      const keep = Object.fromEntries(Object.entries(m).filter(([id, at]) => !live.has(id) && Date.now() - at < RESUME_TIMEOUT_MS))
+      return Object.keys(keep).length === Object.keys(m).length ? m : keep
+    })
+  }, [rows])
 
   if (!mounted) return null
   const setup = setupProgress(p.setupMarks)
@@ -196,7 +207,11 @@ export function ButlerPanel(p: Props) {
                 <div className="text-[11px] text-text-muted truncate">{[r.project, r.activity, sinceLabel(r.updatedAt)].filter(Boolean).join(' · ')}</div>
               </div>
               {r.activity === 'off' ? (
-                <button onClick={() => p.onResumeAgent(r)} aria-label={`Resume ${r.agent}`} className="px-2.5 py-1 rounded-lg bg-bg-secondary border border-border text-text-primary text-[12px] font-semibold cursor-pointer">Resume</button>
+                <button onClick={() => { setResuming(m => ({ ...m, [r.agentId]: Date.now() })); p.onResumeAgent(r) }} disabled={!!resuming[r.agentId]} aria-label={`Resume ${r.agent}`}
+                  className="px-2.5 py-1 rounded-lg bg-bg-secondary border border-border text-text-primary text-[12px] font-semibold cursor-pointer disabled:cursor-default disabled:opacity-60 inline-flex items-center gap-1.5">
+                  {resuming[r.agentId] && <span className="w-3 h-3 rounded-full border-2 border-text-muted border-t-transparent animate-spin" aria-hidden />}
+                  {resuming[r.agentId] ? 'Resuming…' : 'Resume'}
+                </button>
               ) : (
                 <button onClick={() => p.onOpenAgent(r)} aria-label={`${r.activity === 'waiting' ? 'Answer' : 'Open'} ${r.agent}`} className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer ${r.activity === 'waiting' ? 'bg-accent text-text-on-purple' : 'bg-bg-secondary border border-border text-text-primary'}`}>{r.activity === 'waiting' ? 'Answer' : 'Open'}</button>
               )}
