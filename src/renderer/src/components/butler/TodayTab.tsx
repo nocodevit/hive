@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { JournalDay } from '../../../../shared/butler-routines'
-import { dayTitle, headline, previousDay, shiftDate } from '../../lib/butler-today'
+import { ROUTINE_DESC, ROUTINE_IDS, ROUTINE_NAME, type JournalDay, type RoutinesView } from '../../../../shared/butler-routines'
+import { dayTitle, headline, previousDay, routineToday, shiftDate, type RoutineState } from '../../lib/butler-today'
+
+const STATE_CLS: Record<RoutineState, string> = {
+  ran: 'text-status-working', failed: 'text-status-waiting', missed: 'text-status-waiting', next: 'text-text-muted', off: 'text-text-muted'
+}
 
 const PILL: Record<'draft' | 'jira', { text: string; cls: string }> = {
   draft: { text: 'draft', cls: 'bg-accent-subtle text-accent' },
@@ -16,11 +20,13 @@ export function TodayTab({ visible }: { visible: boolean }) {
   const [dates, setDates] = useState<string[]>([])
   const [picking, setPicking] = useState(false)
   const [running, setRunning] = useState(false)
+  const [routines, setRoutines] = useState<RoutinesView | null>(null)
 
   const load = async (d?: string) => {
     const j = await window.api.journal.day(d)
     const all = await window.api.journal.dates()
     if (!d) setToday(j.date)
+    window.api.routines.get().then((v: RoutinesView) => setRoutines(v)).catch(() => {})
     setDate(j.date); setDay(j); setDates(all)
     const p = previousDay(all, j.date)
     setPrev(p ? await window.api.journal.day(p) : null)
@@ -48,6 +54,20 @@ export function TodayTab({ visible }: { visible: boolean }) {
         <div className="rounded-xl bg-bg-primary px-3 py-2" aria-label="Meetings">
           <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Meetings · {dayTitle(date)}</div>
           <div className="mt-1 text-[12px] text-text-primary whitespace-pre-wrap">{day.meetings}</div>
+        </div>
+      )}
+      {routines && date === today && (
+        <div className="rounded-xl bg-bg-primary px-3 py-2" aria-label="Routines">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Routines</div>
+          {ROUTINE_IDS.map(id => {
+            const r = routineToday(routines.settings.routines[id], routines.settings.weekdays, routines.lastRuns[id], new Date())
+            return (
+              <div key={id} className="mt-1 flex items-center gap-2 text-[12px]" title={ROUTINE_DESC[id]}>
+                <span className="flex-1 min-w-0 truncate text-text-primary">{ROUTINE_NAME[id]}</span>
+                <span className={STATE_CLS[r.state]} title={r.state === 'failed' ? routines.lastRuns[id]?.error : undefined}>{r.label}</span>
+              </div>
+            )
+          })}
         </div>
       )}
       <div className="flex items-center gap-2 px-1 pt-1">
