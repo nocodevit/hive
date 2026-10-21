@@ -202,7 +202,18 @@ export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInf
 
     const slug = claudeProjectSlug(cwd)
     const dir = join(homedir(), '.claude', 'projects', slug)
-    if (existsSync(dir)) {
+    // Butler's folder also holds the phone Butler's session and every routine run:
+    // its chat resumes the session it ran last (its own chat-log), never just the newest file.
+    if (chatId === 'chat-butler') {
+      const own = resolveAgentSession(join(homedir(), '.claude', 'projects'), hiveChatLogsDir(), chatId)
+      if (own) {
+        sessionFile = own.file
+        sid = own.sid
+        effectiveCwd = own.cwd
+        try { lastActiveMs = statSync(own.file).mtimeMs } catch {}
+      }
+    }
+    if (!sessionFile && existsSync(dir)) {
       const files = readdirSync(dir)
         .filter(f => f.endsWith('.jsonl'))
         .map(f => ({ f, m: statSync(join(dir, f)).mtimeMs }))
