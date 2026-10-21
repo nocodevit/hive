@@ -35,7 +35,11 @@ export function FeishuConnection() {
         <div className="flex items-center justify-between gap-3">
           <span role="status" aria-label="Feishu sign-in" className={`text-sm ${s?.state === 'signed_in' ? 'text-accent' : s?.state === 'error' || s?.state === 'expired' ? 'text-red-400' : 'text-text-primary'}`}>{line}</span>
           {s?.state === 'signed_in' ? (
-            <button onClick={logout} className="px-3 py-1 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] cursor-pointer">Sign out</button>
+            <div className="flex gap-2">
+              <button onClick={login} title="Sign in again to grant newly added permissions"
+                className="px-3 py-1 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] cursor-pointer">Re-authorize</button>
+              <button onClick={logout} className="px-3 py-1 rounded-lg bg-bg-primary border border-border text-text-primary text-[13px] cursor-pointer">Sign out</button>
+            </div>
           ) : (
             <button onClick={login} disabled={!s || s.state === 'signing_in'}
               className="px-3 py-1 rounded-lg bg-accent text-text-on-purple text-[13px] cursor-pointer disabled:opacity-50">

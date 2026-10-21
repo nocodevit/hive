@@ -100,6 +100,16 @@ test('the session survives a restart', async () => {
   await expect(page.getByRole('status', { name: 'Feishu sign-in' })).toHaveText('Signed in · Mei Test')
 })
 
+test('re-authorize signs in again and keeps the session', async () => {
+  const before = (await opened()).length
+  await page.getByRole('button', { name: 'Re-authorize' }).click()
+  await expect.poll(async () => (await opened()).length).toBe(before + 1)
+  const start = new URL((await opened())[before])
+  await fetch(`http://127.0.0.1:${start.searchParams.get('port')}/callback?code=C3&state=${encodeURIComponent(start.searchParams.get('state')!)}`)
+  await expect(page.getByRole('status', { name: 'Feishu sign-in' })).toHaveText('Signed in · Mei Test')
+  expect(relayCalls.some(c => c.path === '/api/hive/oauth/token' && c.body.code === 'C3')).toBe(true)
+})
+
 test('sign out clears it', async () => {
   await page.getByRole('button', { name: 'Sign out' }).click()
   await expect(page.getByRole('status', { name: 'Feishu sign-in' })).toHaveText('Not connected')
