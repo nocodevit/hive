@@ -78,6 +78,19 @@ describe('approvals', () => {
     expect(await t.q.approve(b.id)).toEqual({ ok: false, error: 'not_pending' })
   })
 
+  it('history lists what was resolved, newest first, with the text that went out', async () => {
+    const t = setup()
+    t.q.register('email.reply', async () => ({ ok: true }))
+    const a = t.q.add(input({ title: 'sent' }))
+    const b = t.q.add(input({ title: 'dismissed' }))
+    t.q.add(input({ title: 'waiting' }))
+    await t.q.approve(a.id, 'Edited reply')
+    t.advance(1000)
+    t.q.reject(b.id)
+    expect(t.q.history().map(i => [i.title, i.status])).toEqual([['dismissed', 'rejected'], ['sent', 'approved']])
+    expect(t.q.history()[1].draft).toBe('Edited reply')
+  })
+
   it('drops resolved items after a week, keeps pending ones', () => {
     const t = setup()
     const a = t.q.add(input({ title: 'old' }))

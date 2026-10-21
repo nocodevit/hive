@@ -14,7 +14,7 @@ export type ButlerAgentRow = {
 
 export type ApprovalItem = {
   id: string; kind: string; title: string; subtitle: string; draft: string
-  payload: Record<string, unknown>; action: string; status: string; createdAt: number; error?: string
+  payload: Record<string, unknown>; action: string; status: string; createdAt: number; resolvedAt?: number; error?: string
 }
 
 export type ButlerSetup = { marks: Record<string, 'done' | 'skipped'>; cardHidden: boolean }
@@ -308,6 +308,7 @@ const api = {
   },
   approvals: {
     list: () => ipcRenderer.invoke('approvals:list') as Promise<ApprovalItem[]>,
+    history: () => ipcRenderer.invoke('approvals:history') as Promise<ApprovalItem[]>,
     approve: (id: string, draft?: string) => ipcRenderer.invoke('approvals:approve', id, draft) as Promise<{ ok: boolean; error?: string }>,
     reject: (id: string) => ipcRenderer.invoke('approvals:reject', id) as Promise<boolean>,
     onChange: (cb: (pending: ApprovalItem[]) => void) => {

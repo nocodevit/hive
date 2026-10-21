@@ -697,6 +697,7 @@ const approvals = createApprovals({
 })
 for (const a of approvals.pending()) knownApprovals.add(a.id)
 ipcMain.handle('approvals:list', () => approvals.pending())
+ipcMain.handle('approvals:history', () => approvals.history())
 ipcMain.handle('approvals:approve', (_e, id: unknown, draft: unknown) =>
   typeof id === 'string' ? approvals.approve(id, typeof draft === 'string' ? draft : undefined) : { ok: false, error: 'bad_id' })
 ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' && approvals.reject(id))
