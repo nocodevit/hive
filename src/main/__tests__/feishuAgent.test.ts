@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   createFeishuAgent, ensurePrefix, quoteBlock, POLL_CHATS, lockedTopicHit, inQuietHours, messageText, normalizeAgentSettings,
-  defaultPrefix, FOLLOWUP_KIND, RECALL_WINDOW_MS, START_SCAN_MS
+  defaultPrefix, FOLLOWUP_KIND, RECALL_WINDOW_MS, START_SCAN_MS, calendarText
 } from '../feishuAgent'
 import { createApprovals } from '../approvals'
 import { EMPTY_PROFILE } from '../butlerProfile'
@@ -142,6 +142,16 @@ describe('pure helpers', () => {
   it('normalizeAgentSettings applies defaults and bounds', () => {
     const s = normalizeAgentSettings({ scope: 'x', waitBeforeReplyMs: -5, quietHours: { start: '25:00', end: '1' } })
     expect(s).toMatchObject({ enabled: false, scope: 'everyone', waitBeforeReplyMs: 0, quietHours: null, maxRepliesPerChatPerHour: 10 })
+  })
+})
+
+describe('calendar messages', () => {
+  it('a shared event or invitation carries its title and time, not a placeholder', () => {
+    const start = new Date(2026, 9, 22, 14, 0).getTime(), end = new Date(2026, 9, 22, 15, 0).getTime()
+    const msg = (type: string) => ({ msg_type: type, body: { content: JSON.stringify({ summary: 'P4 sprint review', start_time: String(start), end_time: String(end) }) } })
+    expect(messageText(msg('share_calendar_event'))).toBe('[Calendar event] P4 sprint review · 10-22 14:00–15:00')
+    expect(messageText(msg('calendar'))).toBe('[Calendar event] P4 sprint review · 10-22 14:00–15:00')
+    expect(calendarText({ summary: '' })).toBe('[Calendar event] (untitled)')
   })
 })
 
