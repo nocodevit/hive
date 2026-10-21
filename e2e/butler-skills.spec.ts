@@ -80,7 +80,7 @@ test('Skills: tone + ask-first chip save as the form overlay', async () => {
   await page.getByRole('button', { name: 'Add ask-first item' }).click()
   await page.getByLabel('New ask-first item').fill('hiring')
   await page.getByLabel('New ask-first item').press('Enter')
-  await page.getByRole('button', { name: 'Save', exact: true }).last().click()
+  await page.getByLabel('Skills section').getByRole('button', { name: 'Save', exact: true }).click()
   await expect(page.getByText('customized', { exact: true })).toBeVisible()
   expect(JSON.parse(readFileSync(join(BUTLER_DIR, 'skills', 'answer-feishu.json'), 'utf8'))).toEqual({ tone: 'friendly', extraAskFirst: ['hiring'] })
   await expect.poll(() => readFileSync(join(BUTLER_DIR, '.claude', 'skills', 'answer-feishu', 'SKILL.md'), 'utf8')).toContain('- hiring')
