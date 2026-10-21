@@ -7,6 +7,14 @@ This log was back-filled from git history at v1.7.28.
 
 ---
 
+## [2.36.0](https://github.com/nocodevit/hive/compare/v2.35.5...v2.36.0) (2026-10-21)
+
+
+### Features
+
+* **butler:** evening report as Needs you / Open / Done labels, rendered as lists without the repeated headline; fix(chat): user bubble wraps long words when the panel is narrow ([c0cd95d](https://github.com/nocodevit/hive/commit/c0cd95d88812d6a3e1f616d1d15bc329d4865185))
+* **butler:** run a routine now — Run in Today › Routines, and ./hive run jira from the Butler chat or phone ([a519094](https://github.com/nocodevit/hive/commit/a5190945d7b828f59e7cf058004681f1dcc63628))
+
 ## [Unreleased]
 
 - *nothing yet*
