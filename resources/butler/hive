@@ -6,7 +6,7 @@
   ./hive send  (--id AGENT_ID | [--project NAME] --agent NAME) TEXT...
   ./hive start (--id AGENT_ID | [--project NAME] --agent NAME) [--mode resume|new]
 """
-import argparse, json, os, sys, urllib.error, urllib.request
+import argparse, json, os, subprocess, sys, urllib.error, urllib.request
 
 HIVE_DIR = os.environ.get('HIVE_DATA_DIR') or os.path.expanduser('~/.hive')
 
@@ -19,10 +19,23 @@ def read(name):
         return ''
 
 
+def not_running():
+    """No port.lock: say whether the Hive app is in fact open (a lock bug) or closed."""
+    try:
+        pids = subprocess.run(['pgrep', '-x', 'Hive'], capture_output=True, text=True, timeout=5).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        pids = []
+    log = os.path.join(HIVE_DIR, 'port-lock.log')
+    if pids:
+        return (f'Hive is open (pid {", ".join(pids)}) but ~/.hive/port.lock is missing, so Butler cannot reach it. '
+                f'Quit Hive (Cmd+Q) and open it again; please send {log} to the Hive team.')
+    return 'Hive is not running (no ~/.hive/port.lock): the Hive app is closed on this Mac. Open Hive and try again.'
+
+
 def call(method, path, body=None, timeout=200):
     port = read('port.lock')
     if not port:
-        sys.exit('Hive is not running (no ~/.hive/port.lock).')
+        sys.exit(not_running())
     req = urllib.request.Request(
         f'http://127.0.0.1:{port}{path}', method=method,
         data=json.dumps(body).encode() if body is not None else None,

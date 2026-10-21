@@ -843,14 +843,24 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       const mode = parseStartMode(body.mode)
       if (!mode) return reply(400, { ok: false, error: 'bad_mode' })
       if (found.row.chatLive) return reply(200, { ok: true, alreadyRunning: true, agent: found.row })
-      const win = BrowserWindow.getAllWindows()[0]
-      if (!win || win.isDestroyed()) return reply(503, { ok: false, error: 'no_window' })
       // The renderer owns chat startup (cwd, agent definition, resume vs
-      // compact choice), so ask it to do exactly what a click would do.
-      win.webContents.send('butler:startAgent', { agentId: found.row.agentId, mode })
+      // compact choice), so ask it to do exactly what a click would do. On
+      // macOS the window may have been closed with Hive still running (the
+      // usual "left the desk" case): reopen it first.
+      let win = BrowserWindow.getAllWindows()[0]
+      if (!win || win.isDestroyed()) {
+        createWindow()
+        win = BrowserWindow.getAllWindows()[0]
+        if (!win) return reply(503, { ok: false, error: 'no_window' })
+        await new Promise<void>(r => { if (!win!.webContents.isLoading()) r(); else win!.webContents.once('did-finish-load', () => r()) })
+      }
       const deadline = Date.now() + BUTLER_START_TIMEOUT_MS
+      let lastAsk = 0
       while (Date.now() < deadline) {
         if (getChatSessionInfo(chatId)?.live) return reply(200, { ok: true, started: true, agent: { ...found.row, chatLive: true, activity: 'waiting' } })
+        // A just-opened window may not have its agents loaded yet: ask again
+        // until the chat is up (a duplicate ask for a starting chat is a no-op).
+        if (Date.now() - lastAsk > 5000 && !win.isDestroyed()) { win.webContents.send('butler:startAgent', { agentId: found.row.agentId, mode }); lastAsk = Date.now() }
         await new Promise(r => setTimeout(r, 500))
       }
       return reply(504, { ok: false, error: 'start_timeout', agent: found.row })
@@ -2439,11 +2449,18 @@ app.whenReady().then(() => {
   // Write port lock file — single source of truth for hive-report.sh
   const portLockFile = join(DATA_DIR, 'port.lock')
   const existingLock = existsSync(portLockFile) ? readFileSync(portLockFile, 'utf-8').trim().split('\n') : []
-  if (existingLock.length >= 2) {
-    const oldPid = parseInt(existingLock[1])
-    try { process.kill(oldPid, 0); console.log(`[Hive] Warning: PID ${oldPid} still alive, overriding lock`) } catch {}
+  const holder = existingLock.length >= 2 ? parseInt(existingLock[1]) : 0
+  // A second Hive (another copy, a double launch) must not take the lock from
+  // a running one: it cannot bind the port, and removing "its" lock at quit
+  // left the first Hive unreachable to Butler.
+  if (holder > 0 && holder !== process.pid && isHiveProcess(holder)) {
+    console.log(`[Hive] PID ${holder} already holds port.lock, keeping it`)
+    portLockLog(`kept pid ${holder}'s lock (second launch)`)
+  } else {
+    writeFileSync(portLockFile, `${HIVE_PORT}\n${process.pid}`)
+    portLockLog(`wrote port ${HIVE_PORT}`)
   }
-  writeFileSync(portLockFile, `${HIVE_PORT}\n${process.pid}`)
+  statusServer.on('error', e => console.log(`[Hive] Status server: ${e.message}`))
 
   statusServer.listen(HIVE_PORT, '127.0.0.1', () => {
     // Create the butler token now so a client's very first call can read it.
@@ -2573,11 +2590,34 @@ app.on('window-all-closed', () => {
     killProcessTree(term)
   }
   terminals.clear()
-  // Remove port lock
-  const portLockFile = join(DATA_DIR, 'port.lock')
-  try { unlinkSync(portLockFile) } catch {}
+  // port.lock stays: on macOS closing the window leaves Hive running in the
+  // Dock (its API, chats and Butler too), and the lock is how Butler finds it.
+  // Removing it here made a phone Butler report "Hive is not running" for a
+  // user who had only closed the window. It goes at quit (below).
   if (process.platform !== 'darwin') app.quit()
 })
+
+/** pid is a live Hive (packaged or dev Electron), not a reused pid. */
+function isHiveProcess(pid: number): boolean {
+  try {
+    process.kill(pid, 0)
+    const cmd = execFileSync('ps', ['-o', 'command=', '-p', String(pid)], { encoding: 'utf-8', timeout: 3000 })
+    return /Hive|Electron/.test(cmd)
+  } catch { return false }
+}
+/** Only the instance that wrote port.lock removes it (a forwarded second launch must not). */
+function removeOwnPortLock(reason: string) {
+  const portLockFile = join(DATA_DIR, 'port.lock')
+  try {
+    const pid = Number(readFileSync(portLockFile, 'utf-8').trim().split('\n')[1])
+    if (pid === process.pid) { unlinkSync(portLockFile); portLockLog(`removed (${reason})`) }
+  } catch { /* none */ }
+}
+/** ~/.hive/port-lock.log: when a user's Butler says "Hive is not running", this says why. */
+function portLockLog(msg: string) {
+  try { appendFileSync(join(DATA_DIR, 'port-lock.log'), `${new Date().toISOString()} pid ${process.pid} v${app.getVersion()} ${msg}\n`) } catch { /* diagnostics only */ }
+}
+app.on('will-quit', () => removeOwnPortLock('quit'))
 
 // Kill every chat `claude --print` child when Hive quits, so none orphan to
 // launchd. before-quit covers Cmd-Q / app.quit / auto-update relaunch; the
@@ -2586,6 +2626,7 @@ app.on('window-all-closed', () => {
 // can't run any of this — that case is swept on the NEXT launch by
 // reapOrphanedClaudeChildren().
 app.on('before-quit', () => {
+  removeOwnPortLock('quit')
   try { killAllChatChildren() } catch { /* best-effort */ }
   try { butler.shutdown() } catch { /* best-effort */ }
   // Never leave the voice helper behind holding the microphone.
@@ -2593,6 +2634,7 @@ app.on('before-quit', () => {
 })
 for (const sig of ['SIGTERM', 'SIGINT'] as const) {
   process.on(sig, () => {
+    removeOwnPortLock(sig)
     try { killAllChatChildren() } catch { /* best-effort */ }
     try { butler.shutdown() } catch { /* best-effort */ }
     try { speechProcess?.kill() } catch { /* best-effort */ }
