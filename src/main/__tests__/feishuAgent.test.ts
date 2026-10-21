@@ -396,6 +396,7 @@ describe('feishu agent', () => {
     expect(r).toMatchObject({ ok: true, gate: { level: 'auto' }, wouldSend: 'FAE-1 已上线', relation: 'unknown', calendarKnown: false })
     const held = await t.agent.preview({ text: '报价多少？' })
     expect(held).toMatchObject({ ok: true, gate: { level: 'hold' }, wouldSend: '我需要和 Mei 确认，稍后回复你' })
+    expect(await t.agent.preview({ text: 'Mei 和 Lin 在聊什么？' })).toMatchObject({ wouldSend: '这个我不方便透露。有具体的事可以告诉我，我转给 Mei。' })
     expect(t.fs.sent).toEqual([])
     expect(t.agent.cases()).toEqual([])
     expect(t.approvals.pending()).toEqual([])

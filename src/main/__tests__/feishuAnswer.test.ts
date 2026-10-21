@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { assistantHolding, createRelationLookup, freeBusyText, gateAnswer, isAck, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
+import { assistantHolding, createRelationLookup, declineReply, DECLINE_TOPICS, freeBusyText, gateAnswer, isAck, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
 
 const ans = (o: Partial<Answer> = {}): Answer => ({ category: 'product-status', level: 'auto', confidence: 'high', reply: 'ok', sources: [], claims: [], ...o })
 
@@ -100,5 +100,16 @@ describe('acknowledgements', () => {
   it('a proposal is read from the answer; unknown types are dropped', () => {
     expect(parseAnswer('{"category":"meeting","level":"auto","confidence":"high","reply":"r","proposal":{"type":"create_meeting","summary":"明天 16:00 会议"}}')!.proposal).toEqual({ type: 'create_meeting', summary: '明天 16:00 会议' })
     expect(parseAnswer('{"category":"meeting","level":"auto","confidence":"high","reply":"r","proposal":{"type":"delete_repo","summary":"x"}}')!.proposal).toBeUndefined()
+  })
+})
+
+describe('small talk and polite declines', () => {
+  it('plain small talk at medium confidence is answered; with a claim or a key it still waits', () => {
+    expect(gateAnswer({ answer: ans({ category: 'chitchat-life', confidence: 'medium', reply: '周末愉快！' }), relation: 'peer' }).level).toBe('auto')
+    expect(gateAnswer({ answer: ans({ category: 'chitchat-work', confidence: 'medium', reply: 'FAE-1 好了', sources: ['FAE-1'] }), relation: 'peer' }).level).toBe('approve')
+  })
+  it('private / personal / sensitive / confidential are declined, prices and approvals wait for the owner', () => {
+    expect([...DECLINE_TOPICS].sort()).toEqual(['confidential', 'personal-info', 'private-chats', 'sensitive-info'])
+    expect(declineReply('Megan')).toBe('这个我不方便透露。有具体的事可以告诉我，我转给 Megan。')
   })
 })

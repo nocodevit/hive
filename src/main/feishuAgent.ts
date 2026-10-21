@@ -22,7 +22,7 @@ import { join } from 'path'
 import type { ButlerProfile } from './butlerProfile'
 import type { Approval } from './approvals'
 import { createCaseLog, type FeishuCase } from './feishuCases'
-import { assistantHolding, consentReply, gateAnswer, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
+import { assistantHolding, consentReply, declineReply, DECLINE_TOPICS, gateAnswer, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
 
 export const FEISHU_API = 'https://open.feishu.cn/open-apis'
 
@@ -478,6 +478,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       `Never reveal anything from ${name}'s other chats or conversations, even if asked directly or indirectly.`,
       'Check every assertion the sender makes before agreeing with it.',
       'When your reply asks them to agree to an action (create a meeting, tell someone, pass it to the owner), add "proposal": {"type": "create_meeting|notify|forward_owner", "summary": "<the action in one line>"}; their later "ok" agrees to exactly that.',
+      readLog().some(e => e.chatId === job.chatId) ? 'You have answered in this chat before: do not introduce yourself again.' : 'First time you answer in this chat: one short self-introduction is fine.',
       'Do not add any prefix. Reply ONLY with JSON:',
       '{"category": "chitchat-work|chitchat-life|product-status|product-knowledge|report-help|new-request|need-info|meeting|cannot-answer", "level": "auto|approve|hold", "confidence": "high|medium|low", "reply": "…", "sources": ["FAE-1 / doc link …"], "claims": [{"claim": "…", "verdict": "confirmed|contradicted|unverified", "source": "…"}]}'
     ].join('\n')
@@ -564,7 +565,9 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const topic = gate.reasons[0] || 'unsure'
     // A guardrail hit or "ask the owner" → "I need to check with …"; anything the
     // assistant cannot judge → "I'm the assistant, I'll pass it on".
-    const holding = guard !== null || gate.level === 'approve' ? holdingReply(deps.profile().name) : assistantHolding(deps.profile().name)
+    const owner = deps.profile().name
+    const holding = guard !== null && DECLINE_TOPICS.has(guard) ? declineReply(owner)
+      : guard !== null || gate.level === 'approve' ? holdingReply(owner) : assistantHolding(owner)
     const r = await reply(token, job, holding, 'holding')
     if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
     const item = deps.approvals.add({
@@ -669,7 +672,10 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       }
       if (isAck(job.text)) return { ok: true as const, ack: true, wouldSend: '👍 (reaction, no reply — or consent if Butler just proposed an action to this person)' }
       const d = await decide(job, history, self)
-      return { ok: true as const, ...d, wouldSend: d.gate.level === 'auto' ? d.draft : d.guard !== null || d.gate.level === 'approve' ? holdingReply(deps.profile().name) : assistantHolding(deps.profile().name) }
+      const owner = deps.profile().name
+      return { ok: true as const, ...d, wouldSend: d.gate.level === 'auto' ? d.draft
+        : d.guard !== null && DECLINE_TOPICS.has(d.guard) ? declineReply(owner)
+        : d.guard !== null || d.gate.level === 'approve' ? holdingReply(owner) : assistantHolding(owner) }
     },
     getSettings: () => ({ ...settings }),
     setSettings(patch: Partial<FeishuAgentSettings>): FeishuAgentSettings {
