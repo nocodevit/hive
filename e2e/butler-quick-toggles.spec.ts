@@ -59,6 +59,8 @@ test('both toggles sit next to Butler and start off', async () => {
   await expect(feishu()).toBeEnabled()
   await expect(page.getByTitle('Mobile Butler · Off')).toBeVisible()
   await expect(page.getByTitle('Feishu answer-for-me · Off')).toBeVisible()
+  await expect(page.getByRole('switch', { name: 'Listen for Hola Butler' })).toHaveAttribute('aria-checked', 'false')
+  await expect(page.getByTitle('Listen for “Hola Butler” · Off')).toBeVisible()
 })
 
 test('flip both on from the header: immediate, and settings agree', async () => {
