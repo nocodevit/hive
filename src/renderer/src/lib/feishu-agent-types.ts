@@ -25,6 +25,8 @@ export type FeishuAgentView = {
   holding: string
   connected: boolean
   locked: LockedTopic[]
+  /** open_id → how the owner said this person relates to them. */
+  people: Record<string, 'boss' | 'report' | 'peer' | 'requester'>
   senders: Record<string, string>
   lastError: string
   capabilities: { realtime: boolean }

@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { mkdtempSync, writeFileSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
+import { readPeople, setPerson } from '../feishuAnswer'
 import { assistantHolding, createRelationLookup, declineReply, DECLINE_TOPICS, freeBusyText, gateAnswer, isAck, meetingCreatedReply, meetingSlot, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
 
 const ans = (o: Partial<Answer> = {}): Answer => ({ category: 'product-status', level: 'auto', confidence: 'high', reply: 'ok', sources: [], claims: [], jiraFixes: [], ...o })
@@ -136,5 +140,20 @@ describe('jira fixes from an answer', () => {
   it('any Jira key with a status and a reason', () => {
     const a = parseAnswer('{"category":"product-status","level":"auto","confidence":"high","reply":"r","jira_fixes":[{"key":"FAE-1076","to":"完成","why":"P4-5317 released"},{"key":"PR-1","to":"Done","why":"x"},{"key":"P4-1","to":"","why":"x"}]}')!
     expect(a.jiraFixes).toEqual([{ key: 'FAE-1076', to: '完成', why: 'P4-5317 released' }, { key: 'PR-1', to: 'Done', why: 'x' }])
+  })
+})
+
+describe("the owner's people list", () => {
+  it('exact open_ids only; unknown removes; bad values dropped', () => {
+    const d = mkdtempSync(join(tmpdir(), 'hive-people-'))
+    expect(readPeople(d)).toEqual({})
+    setPerson(d, 'ou_boss', 'boss')
+    setPerson(d, 'ou_r', 'report')
+    setPerson(d, 'Lin', 'peer')
+    expect(readPeople(d)).toEqual({ ou_boss: 'boss', ou_r: 'report' })
+    setPerson(d, 'ou_r', 'unknown')
+    expect(readPeople(d)).toEqual({ ou_boss: 'boss' })
+    writeFileSync(join(d, 'feishu-people.json'), JSON.stringify({ ou_x: 'king', ou_y: 'peer' }))
+    expect(readPeople(d)).toEqual({ ou_y: 'peer' })
   })
 })

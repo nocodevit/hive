@@ -1,3 +1,6 @@
+import { readFileSync, writeFileSync } from 'fs'
+import { join } from 'path'
+
 // answer-feishu v2: what the model returns and the code-side gate that decides
 // what is actually sent. The model classifies and drafts; this file never
 // trusts it — PR content, unchecked Jira keys, a reply to the owner's boss, low
@@ -246,4 +249,25 @@ export function meetingCreatedReply(m: { start: number; end: number; title: stri
   const d = new Date(m.start)
   const hm = (x: number) => { const t = new Date(x); return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}` }
   return `好的，会议已创建：${m.title}，${d.getMonth() + 1}/${d.getDate()} ${hm(m.start)}–${hm(m.end)}，已设 ${reminder} 分钟提醒。${link ? ` ${link}` : ''}`
+}
+
+// ── The owner's own people list (when contacts cannot be read) ───────────
+
+const RELATIONS: Relation[] = ['boss', 'report', 'peer', 'requester']
+/** <butler>/feishu-people.json: open_id → relation, set by the owner (exact ids, no name matching). */
+export function readPeople(folder: string): Record<string, Relation> {
+  try {
+    const j = JSON.parse(readFileSync(join(folder, 'feishu-people.json'), 'utf8'))
+    const out: Record<string, Relation> = {}
+    for (const [k, v] of Object.entries(j ?? {})) if (/^ou_/.test(k) && RELATIONS.includes(v as Relation)) out[k] = v as Relation
+    return out
+  } catch { return {} }
+}
+export function setPerson(folder: string, openId: string, relation: Relation | 'unknown'): Record<string, Relation> {
+  const all = readPeople(folder)
+  if (!/^ou_/.test(openId)) return all
+  if (relation === 'unknown' || !RELATIONS.includes(relation)) delete all[openId]
+  else all[openId] = relation
+  writeFileSync(join(folder, 'feishu-people.json'), JSON.stringify(all, null, 2) + '\n')
+  return all
 }
