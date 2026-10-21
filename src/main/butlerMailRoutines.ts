@@ -142,7 +142,7 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
   })
   // Settings and journal reads/writes use the plain path: opening Settings
   // must not install the Butler folder (only running a routine does).
-  registerButlerRoutinesIpc({ ipcMain: d.ipcMain, folder: () => folder, scheduler, runner })
+  registerButlerRoutinesIpc({ ipcMain: d.ipcMain, folder: () => folder, scheduler, runner, markMailRead: key => mail.markRead(key) })
 
   return { runner, mode: startRoutineMode(d.app, process.argv, (id, opts) => runner.run(id, opts), msg => console.log(`[butler] ${msg}`), d.reopen) }
 }

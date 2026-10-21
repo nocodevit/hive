@@ -355,7 +355,8 @@ const api = {
   journal: {
     day: (date?: string) => ipcRenderer.invoke('journal:day', date),
     dates: () => ipcRenderer.invoke('journal:dates'),
-    toggle: (date: string, index: number, text: string, done: boolean) => ipcRenderer.invoke('journal:toggle', date, index, text, done)
+    toggle: (date: string, index: number, text: string, done: boolean) => ipcRenderer.invoke('journal:toggle', date, index, text, done),
+    ignore: (date: string, index: number, text: string) => ipcRenderer.invoke('journal:ignore', date, index, text)
   },
 
   // [butler:feishu-agent-calendar]

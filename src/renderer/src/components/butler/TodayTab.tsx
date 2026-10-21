@@ -2,9 +2,10 @@ import { useEffect, useState } from 'react'
 import { ROUTINE_IDS, ROUTINE_NAME, type JournalDay, type RoutinesView } from '../../../../shared/butler-routines'
 import { dayTitle, headline, meetingLines, nextMeeting, previousDay, routineToday, shiftDate, type RoutineState } from '../../lib/butler-today'
 
-const TAG: Record<'draft' | 'jira', { text: string; cls: string }> = {
+const TAG: Record<'draft' | 'jira' | 'mail', { text: string; cls: string }> = {
   draft: { text: 'draft', cls: 'bg-accent-subtle text-accent' },
-  jira: { text: 'Jira', cls: 'bg-bg-secondary text-text-muted' }
+  jira: { text: 'Jira', cls: 'bg-bg-secondary text-text-muted' },
+  mail: { text: 'mail', cls: 'bg-bg-secondary text-text-muted' }
 }
 
 const STATE_CLS: Record<RoutineState, string> = {
@@ -59,6 +60,12 @@ export function TodayTab({ visible }: { visible: boolean }) {
     const r = await window.api.journal.toggle(date, index, text, done)
     if (!r.ok) void load(date)
   }
+  // Ignore: the item leaves Today (kept in the journal as "- [-]"); an email task's email is marked read.
+  const ignore = async (index: number, text: string) => {
+    setDay({ ...day, plan: day.plan.map(i => i.index === index ? { ...i, ignored: true } : i) })
+    const r = await window.api.journal.ignore(date, index, text)
+    if (!r.ok) void load(date)
+  }
   const makePlan = async () => {
     setRunning(true)
     await window.api.routines.run('morning-plan').catch(() => {})
@@ -80,7 +87,8 @@ export function TodayTab({ visible }: { visible: boolean }) {
 
   const meetings = meetingLines(day.meetings)
   const next = isToday ? nextMeeting(meetings, now) : null
-  const done = day.plan.filter(i => i.done).length
+  const plan = day.plan.filter(i => !i.ignored)
+  const done = plan.filter(i => i.done).length
   const feishu = day.feishu && !NO_MENTIONS.test(day.feishu.replace(/\n+/g, ' ')) ? day.feishu : ''
   const prevLabel = prev && prev.date === shiftDate(date, -1) ? 'Yesterday' : prev ? dayTitle(prev.date) : ''
 
@@ -138,16 +146,23 @@ export function TodayTab({ visible }: { visible: boolean }) {
         <div className="flex items-baseline gap-2 pb-0.5">
           <span className="flex-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">Plan</span>
           {day.planLate && <span className="text-[10px] font-semibold text-status-waiting" title={day.planLate}>late</span>}
-          {day.plan.length > 0 && <span className="font-mono text-[11px] text-text-muted">{done}/{day.plan.length}</span>}
+          {plan.length > 0 && <span className="font-mono text-[11px] text-text-muted">{done}/{plan.length}</span>}
         </div>
-        {day.plan.map(it => (
-          <label key={`${it.index}-${it.text}`} className="flex items-center gap-2.5 py-2 border-b border-border last:border-b-0 text-[13px] cursor-pointer">
-            <input type="checkbox" checked={it.done} onChange={e => toggle(it.index, it.text, e.target.checked)} className="accent-accent cursor-pointer" />
-            <span className={`flex-1 min-w-0 ${it.done ? 'line-through text-text-muted' : 'text-text-primary'}`}>{it.text}</span>
+        {plan.map(it => (
+          <div key={`${it.index}-${it.text}`} className="group flex items-center gap-2.5 py-2 border-b border-border last:border-b-0 text-[13px]">
+            <label className="flex flex-1 min-w-0 items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" checked={it.done} onChange={e => toggle(it.index, it.text, e.target.checked)} className="accent-accent cursor-pointer" />
+              <span className={`flex-1 min-w-0 ${it.done ? 'line-through text-text-muted' : 'text-text-primary'}`}>{it.text}</span>
+            </label>
             {it.source && <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${TAG[it.source].cls}`}>{TAG[it.source].text}</span>}
-          </label>
+            {!it.done && (
+              <button onClick={() => ignore(it.index, it.text)} aria-label={`Ignore ${it.text}`}
+                title={(it.source === 'mail' || it.source === 'draft') && it.ref ? 'Ignore · marks the email read' : 'Ignore'}
+                className="w-6 h-6 rounded-md text-[12px] text-text-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-bg-hover hover:text-text-primary cursor-pointer">✕</button>
+            )}
+          </div>
         ))}
-        {!day.plan.length && (
+        {!plan.length && (
           <div className="flex items-center gap-2 py-2 text-[13px]">
             <span className="flex-1 text-text-muted">No plan</span>
             {isToday && <button onClick={makePlan} disabled={running} className="px-2.5 py-1 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold cursor-pointer disabled:opacity-50">{running ? '…' : 'Make plan'}</button>}

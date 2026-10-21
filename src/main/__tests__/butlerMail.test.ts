@@ -29,6 +29,7 @@ function setup(opts: { inbox?: RawMail[]; uidValidity?: number; classify?: (uids
   const sent: OutgoingMail[] = []
   const fetchCalls: number[] = []
   const prompts: string[] = []
+  const seenMarked: number[] = []
   const clients: MailClients = {
     async openInbox() {
       const uidNext = Math.max(0, ...box.inbox.map(m => m.uid)) + 1
@@ -38,7 +39,8 @@ function setup(opts: { inbox?: RawMail[]; uidValidity?: number; classify?: (uids
         async close() {}
       }
     },
-    async send(_a, _p, msg) { sent.push(msg); return { messageId: '<sent@x>' } }
+    async send(_a, _p, msg) { sent.push(msg); return { messageId: '<sent@x>' } },
+    async markSeen(_a, _p, uidValidity, uid) { if (uidValidity !== box.uidValidity) return false; seenMarked.push(uid); return true }
   }
   const classify = opts.classify ?? ((uids: number[]) => JSON.stringify(uids.map(u => ({ uid: u, category: u % 2 ? 'needs-reply' : 'noise', summary: `s${u}` }))))
   const runClaude = async (prompt: string) => {
@@ -52,7 +54,7 @@ function setup(opts: { inbox?: RawMail[]; uidValidity?: number; classify?: (uids
   const m = createButlerMail({ folder, accounts, passwords, clients, runClaude, approvals, now: () => 1_700_000_000_000 })
   const saved = m.save({ address: 'mei@corp.com', preset: 'exmail', password: 'pw', label: 'Work', consent: true })
   if (!saved.ok) throw new Error(saved.error)
-  return { folder, m, box, approvals, sent, fetchCalls, prompts, accounts, passwords, id: saved.account.id }
+  return { folder, m, box, approvals, sent, fetchCalls, prompts, accounts, passwords, seenMarked, id: saved.account.id }
 }
 
 describe('mail presets', () => {
@@ -156,6 +158,16 @@ describe('mail accounts', () => {
 })
 
 describe('sortInbox: UID tracking', () => {
+  it('marks one sorted email read by its exact key; an unknown key or a rebuilt mailbox does nothing', async () => {
+    const t = setup({ inbox: [mail(1), mail(3)] })
+    await t.m.sortInbox()
+    expect(await t.m.markRead(`${t.id}:7:3`)).toEqual({ ok: true })
+    expect(t.seenMarked).toEqual([3])
+    expect(await t.m.markRead(`${t.id}:7:99`)).toEqual({ ok: false, error: 'unknown_email' })
+    t.box.uidValidity = 8
+    expect(await t.m.markRead(`${t.id}:7:1`)).toEqual({ ok: false, error: 'mailbox_changed' })
+    expect(t.seenMarked).toEqual([3])
+  })
   it('first run looks back only at unread mail, then resumes after the last UID', async () => {
     const t = setup({ inbox: [mail(1), mail(2, { seen: true }), mail(3)] })
     const r1 = await t.m.sortInbox()

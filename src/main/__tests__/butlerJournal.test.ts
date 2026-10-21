@@ -4,8 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   listJournalDates, parseChecklist, previousWithSection, readJournalDay, readJournalText, setJournalSection, splitSections,
-  toChecklist, toggleJournalItem
-} from '../butlerJournal'
+  toChecklist, toggleJournalItem, ignoreJournalItem, resolveMailRefs } from '../butlerJournal'
 import { agentDays, createRoutineRunner, feishuText, type RoutineRunDeps } from '../butlerRoutineRun'
 import { jiraTools } from '../butlerTools'
 import { defaultRoutineSettings } from '../../shared/butler-routines'
@@ -28,10 +27,30 @@ describe('journal', () => {
   })
   it('parses checklist items with source pills', () => {
     expect(parseChecklist('> late · ran 10:42 · due 08:30\n- [x] Review fix\n- [ ] Reply Lin · UAT #draft\n* [ ] CUBE-1432 → In Review #Jira\nnot an item')).toEqual([
-      { index: 0, text: 'Review fix', done: true, source: null },
-      { index: 1, text: 'Reply Lin · UAT', done: false, source: 'draft' },
-      { index: 2, text: 'CUBE-1432 → In Review', done: false, source: 'jira' }
+      { index: 0, text: 'Review fix', done: true, ignored: false, source: null, ref: null },
+      { index: 1, text: 'Reply Lin · UAT', done: false, ignored: false, source: 'draft', ref: null },
+      { index: 2, text: 'CUBE-1432 → In Review', done: false, ignored: false, source: 'jira', ref: null }
     ])
+  })
+  it('reads ignored items and exact email keys', () => {
+    expect(parseChecklist('- [-] Read the newsletter #mail:acc-1:7:42\n- [ ] Reply Gary #draft:acc-1:7:43')).toEqual([
+      { index: 0, text: 'Read the newsletter', done: false, ignored: true, source: 'mail', ref: 'acc-1:7:42' },
+      { index: 1, text: 'Reply Gary', done: false, ignored: false, source: 'draft', ref: 'acc-1:7:43' }
+    ])
+  })
+  it('swaps the model\'s m-refs for exact email keys; an unknown ref is dropped', () => {
+    const refs = new Map([['m1', 'acc-1:7:42'], ['m2', 'acc-1:7:43']])
+    expect(resolveMailRefs('- [ ] Read it #mail:m1\n- [ ] Reply Gary #draft:m2\n- [ ] Made up #mail:m9\n- [ ] Odd #draft:m9\n- [ ] Ticket #jira', refs))
+      .toBe('- [ ] Read it #mail:acc-1:7:42\n- [ ] Reply Gary #draft:acc-1:7:43\n- [ ] Made up\n- [ ] Odd #draft\n- [ ] Ticket #jira')
+  })
+  it('ignore: exact index + text, becomes "- [-]", returns the tag', () => {
+    const dir = tmp()
+    setJournalSection(dir, '2026-10-21', 'Plan', '- [ ] A\n- [ ] Read it #mail:acc-1:7:42')
+    expect(ignoreJournalItem(dir, '2026-10-21', 1, 'Wrong')).toEqual({ ok: false, error: 'changed' })
+    const r = ignoreJournalItem(dir, '2026-10-21', 1, 'Read it')
+    expect(r).toMatchObject({ ok: true, item: { source: 'mail', ref: 'acc-1:7:42', ignored: true } })
+    expect(readJournalText(dir, '2026-10-21')).toContain('- [-] Read it #mail:acc-1:7:42')
+    expect(readJournalText(dir, '2026-10-21')).toContain('- [ ] A')
   })
   it('turns model output into unchecked items', () => {
     expect(toChecklist('Here is your plan:\n- [x] A\n- B\n2. C\n\nThanks')).toBe('- [ ] A\n- [ ] B\n- [ ] C')

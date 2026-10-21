@@ -3,7 +3,7 @@
 
 import type { IpcMain } from 'electron'
 import { isRoutineId, type RoutinesView } from '../shared/butler-routines'
-import { isJournalDate, journalDir, listJournalDates, localDate, readJournalDay, toggleJournalItem } from './butlerJournal'
+import { ignoreJournalItem, isJournalDate, journalDir, listJournalDates, localDate, readJournalDay, toggleJournalItem } from './butlerJournal'
 import { normalizeRoutineSettings, readRoutineSettings, writeRoutineSettings, type RoutineScheduler } from './butlerRoutines'
 import type { RoutineRunner } from './butlerRoutineRun'
 
@@ -12,6 +12,8 @@ export interface ButlerRoutinesIpcDeps {
   folder: () => string
   scheduler: RoutineScheduler
   runner: RoutineRunner
+  /** Ignoring an email task marks that email read. */
+  markMailRead?: (key: string) => Promise<{ ok: boolean; error?: string }>
   now?: () => number
 }
 
@@ -36,5 +38,14 @@ export function registerButlerRoutinesIpc(deps: ButlerRoutinesIpcDeps): void {
   ipcMain.handle('journal:toggle', (_e, date: unknown, index: unknown, text: unknown, done: unknown) => {
     if (!isJournalDate(date) || !Number.isInteger(index) || typeof text !== 'string') return { ok: false, error: 'bad_input' }
     return toggleJournalItem(dir(), date, index as number, text, done === true)
+  })
+  ipcMain.handle('journal:ignore', async (_e, date: unknown, index: unknown, text: unknown) => {
+    if (!isJournalDate(date) || !Number.isInteger(index) || typeof text !== 'string') return { ok: false, error: 'bad_input' }
+    const r = ignoreJournalItem(dir(), date, index as number, text)
+    if (!r.ok) return r
+    const isMail = (r.item.source === 'mail' || r.item.source === 'draft') && r.item.ref
+    if (!isMail || !deps.markMailRead) return { ok: true }
+    const m = await deps.markMailRead(r.item.ref!)
+    return m.ok ? { ok: true, markedRead: true } : { ok: true, markedRead: false, error: m.error }
   })
 }
