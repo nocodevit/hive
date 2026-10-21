@@ -98,8 +98,11 @@ export function gateAnswer({ answer, relation, calendarKnown = false }: GateInpu
     if (c.verdict === 'contradicted') lower('approve', `corrects "${c.claim.slice(0, 40)}"`)
     if (c.verdict === 'unverified') notify = true
   }
+  const chitchat = answer.category === 'chitchat-work' || answer.category === 'chitchat-life'
+  // Small talk with nothing checkable in it never waits for the owner over "medium".
+  const plainChat = chitchat && !answer.claims.length && !answer.sources.length && !named.length
   if (answer.confidence === 'low') lower('hold', 'low confidence')
-  else if (answer.confidence === 'medium') lower('approve', 'medium confidence')
+  else if (answer.confidence === 'medium' && !plainChat) lower('approve', 'medium confidence')
   if (answer.category === 'cannot-answer') lower('hold', 'cannot answer')
   if (answer.category === 'new-request') notify = true
   // Without the owner's calendar a meeting answer would be a guess.
@@ -194,4 +197,12 @@ export function freeBusyText(days: AgendaLike[], sourcesOn: boolean): { known: b
     return `${label}: ${blocks.length ? `busy ${blocks.join(', ')}` : 'free'}`
   })
   return { known: true, text: lines.join('\n') }
+}
+
+/** Guardrail topics where the answer is simply "not mine to share" — said politely,
+ *  instead of "I'll check with <owner>" (which would suggest the owner might tell). */
+export const DECLINE_TOPICS = new Set(['private-chats', 'personal-info', 'sensitive-info', 'confidential'])
+
+export function declineReply(ownerName: string): string {
+  return `这个我不方便透露。有具体的事可以告诉我，我转给 ${ownerName.trim() || '主人'}。`
 }
