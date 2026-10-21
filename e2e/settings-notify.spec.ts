@@ -50,11 +50,12 @@ test('the nav lists the sections; nothing is cut off', async () => {
   for (const l of ['Daily routine', 'Skills', 'Notifications', 'General', 'Templates']) {
     await expect(nav().getByRole('button', { name: l, exact: true })).toBeVisible()
   }
-  const box = (await dialog().boundingBox())!
-  const vp = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }))
-  expect(box.x).toBeGreaterThanOrEqual(0)
-  expect(box.x + box.width).toBeLessThanOrEqual(vp.width)
-  expect(box.y + box.height).toBeLessThanOrEqual(vp.height)
+  // Inside the window on every side (polled: the window may still be settling).
+  await expect.poll(async () => {
+    const b = (await dialog().boundingBox())!
+    const vp = await page.evaluate(() => ({ w: innerWidth, h: innerHeight }))
+    return b.x >= 0 && b.y >= 0 && b.x + b.width <= vp.w && b.y + b.height <= vp.h
+  }).toBe(true)
   // No sideways overflow in the content column.
   const overflow = await dialog().getByLabel('General section').evaluate(el => {
     const scroller = el.parentElement!.parentElement!
