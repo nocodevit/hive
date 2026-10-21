@@ -150,7 +150,7 @@ describe('scheduler (fake launchctl)', () => {
     const t = setup()
     const errors = await t.s.apply(defaultRoutineSettings())
     expect(errors).toEqual({})
-    expect(t.s.installed()).toEqual({ 'morning-plan': true, 'sort-inbox': true, 'feishu-digest': false, 'jira-check': false, 'evening-report': true })
+    expect(t.s.installed()).toEqual({ 'morning-plan': true, 'sort-inbox': true, 'jira-check': false, 'evening-report': true })
     expect(t.calls).toEqual([
       ['bootout', 'gui/501/com.hive.butler.morning-plan'],
       ['bootstrap', 'gui/501', join(t.root, 'LaunchAgents', 'com.hive.butler.morning-plan.plist')],
@@ -172,6 +172,16 @@ describe('scheduler (fake launchctl)', () => {
     expect(t.calls.map(c => c[0])).toEqual(['bootout', 'bootstrap'])
     expect(readFileSync(t.s.plistPath('morning-plan'), 'utf8')).toContain('--butler-routine=morning-plan')
     expect(existsSync(t.s.plistPath('jira-check'))).toBe(false)
+  })
+  it('sync: a retired routine (the old @mention digest) is booted out and its plist removed', async () => {
+    const t = setup()
+    await t.s.apply(defaultRoutineSettings())
+    const old = join(t.root, 'LaunchAgents', 'com.hive.butler.feishu-digest.plist')
+    writeFileSync(old, '<plist/>')
+    t.calls.length = 0
+    await t.s.sync(defaultRoutineSettings())
+    expect(existsSync(old)).toBe(false)
+    expect(t.calls).toEqual([['bootout', 'gui/501/com.hive.butler.feishu-digest']])
   })
   it('turning one off boots it out and removes its plist', async () => {
     const t = setup()

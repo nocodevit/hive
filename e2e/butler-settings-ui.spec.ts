@@ -46,11 +46,11 @@ test('email password guide is in English', async () => {
 })
 
 test('every routine says what it does; time boxes are not clipped', async () => {
-  for (const line of ['Plan for the day from mail, calendar, agents → Today', 'Sorts new mail, drafts replies → Approve',
-    'Messages that @mention you, summarized → Today', 'What every agent did today → Today']) {
+  for (const line of ["Today's meetings and a plan from mail, Jira, agents → Today", 'Sorts new mail, drafts replies → Approve',
+    'Closes, nudges and lists your tickets → Today, Approve', 'What agents and Butler did, @mentions of you → Today']) {
     await expect(page.getByText(line)).toBeVisible()
   }
-  await expect(page.getByText('Feishu @mentions')).toBeVisible()
+  await expect(page.getByText('Feishu @mentions')).toHaveCount(0)
   const times = page.getByLabel(/ time \d$/)
   const n = await times.count()
   expect(n).toBeGreaterThan(0)
@@ -68,7 +68,7 @@ test('every routine says what it does; time boxes are not clipped', async () => 
   await evening.fill('18:45')
   await evening.press('Enter')
   await expect(evening).toHaveValue('18:45')
-  await page.getByText('Feishu @mentions').scrollIntoViewIfNeeded()
+  await page.getByLabel('Evening report time 1').scrollIntoViewIfNeeded()
   await page.screenshot({ path: test.info().outputPath('daily-routine.png') })
 })
 

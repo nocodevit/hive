@@ -9,7 +9,7 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import {
-  ROUTINE_IDS, defaultRoutineSettings, isRoutineId,
+  ROUTINE_IDS, RETIRED_ROUTINE_IDS, defaultRoutineSettings, isRoutineId,
   type RoutineConfig, type RoutineId, type RoutineSchedule, type RoutineSettings
 } from '../shared/butler-routines'
 
@@ -219,6 +219,13 @@ export function createRoutineScheduler(deps: SchedulerDeps) {
         await unload(id)
         await deps.launchctl(['bootstrap', domain, path]).catch(() => ({ code: 1, stderr: '' }))
         changed.push(id)
+      }
+      // A retired routine's job would launch Hive with an id it no longer knows: remove it.
+      for (const old of RETIRED_ROUTINE_IDS) {
+        const path = join(deps.agentsDir, `${LABEL_PREFIX}${old}.plist`)
+        if (!existsSync(path)) continue
+        await deps.launchctl(['bootout', `${domain}/${LABEL_PREFIX}${old}`]).catch(() => ({ code: 1, stderr: '' }))
+        try { unlinkSync(path) } catch { /* gone */ }
       }
       return changed
     },

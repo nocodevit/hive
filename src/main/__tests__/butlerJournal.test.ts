@@ -108,6 +108,16 @@ describe('routine runner', () => {
     expect(rec.late).toBe(true)
     expect(readJournalDay(join(t.folder, 'journal'), '2026-10-20').planLate).toBe('late · ran 10:42 · due 08:30')
   })
+  it('morning plan: today\'s meetings (code) and what waits for the owner', async () => {
+    const t = setup({ calendar: async () => '- 10:00–11:00 Sprint review', waiting: () => ['Gary · Claro roaming (email.decide)'] })
+    await t.r.run('morning-plan')
+    const day = readJournalDay(join(t.folder, 'journal'), '2026-10-20')
+    expect(day.meetings).toBe('- 10:00–11:00 Sprint review')
+    expect(t.prompts[0]).toContain('## Waiting for the owner (Approve)\n- Gary · Claro roaming (email.decide)')
+    const none = setup({ calendar: async () => '' })
+    await none.r.run('morning-plan')
+    expect(readJournalDay(join(none.folder, 'journal'), '2026-10-20').meetings).toBe('No meetings today')
+  })
   it('a manual run is never late', async () => {
     const t = setup()
     t.set(new Date(2026, 9, 20, 10, 42).getTime())
@@ -147,11 +157,16 @@ describe('routine runner', () => {
     expect((await t.r.run('jira-check')).ok).toBe(true)
     expect(t.tools[0]).toEqual(['mcp__stargate__jira_search', 'mcp__stargate__jira_get_issue'])
   })
-  it('feishu digest: needs sign-in', async () => {
-    const t = setup()
-    expect((await t.r.run('feishu-digest')).error).toMatch(/Feishu not connected/)
+  it('the evening report runs without Feishu (no @mention section) and adds what Butler did', async () => {
+    const t = setup({ butlerToday: () => '- Feishu: answered 3 · passed to you 1' }, 'Shipped checkout')
+    t.set(new Date(2026, 9, 20, 19, 2).getTime())
+    expect((await t.r.run('evening-report')).ok).toBe(true)
+    const day = readJournalDay(join(t.folder, 'journal'), '2026-10-20')
+    expect(day.feishu).toBe('')
+    expect(day.butler).toBe('- Feishu: answered 3 · passed to you 1')
+    expect(t.prompts.at(-1)).toContain('## What Butler did today\n- Feishu: answered 3 · passed to you 1')
   })
-  it('feishu digest: only messages that mention the owner, then summarized', async () => {
+  it('the evening report carries the @mentions of the owner, summarized', async () => {
     const urls: string[] = []
     const t = setup({
       feishu: {
@@ -168,12 +183,12 @@ describe('routine runner', () => {
         }
       }
     }, 'Cube: Lin asks if UAT is back')
-    t.set(new Date(2026, 9, 20, 11, 0).getTime())
-    expect((await t.r.run('feishu-digest', { scheduled: true })).ok).toBe(true)
+    t.set(new Date(2026, 9, 20, 19, 0).getTime())
+    expect((await t.r.run('evening-report', { scheduled: true })).ok).toBe(true)
     expect(t.prompts[0]).toContain('[Cube] @_user_1 UAT 好了吗')
     expect(t.prompts[0]).not.toContain('not me')
     expect(urls[1]).toContain('container_id=oc_1')
-    expect(readJournalDay(join(t.folder, 'journal'), '2026-10-20').feishu).toBe('**11:00**\nCube: Lin asks if UAT is back')
+    expect(readJournalDay(join(t.folder, 'journal'), '2026-10-20').feishu).toBe('**19:00**\nCube: Lin asks if UAT is back')
   })
   it('feishuText reads text and post bodies', () => {
     expect(feishuText('{"text":"hi"}')).toBe('hi')

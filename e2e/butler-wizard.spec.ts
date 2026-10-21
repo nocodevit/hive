@@ -109,7 +109,7 @@ test('About you writes profile.md; Skip leaves Voice open', async () => {
 
 test('Daily routine step fits: every row readable, times not clipped', async () => {
   await steps().getByRole('button', { name: /Daily routine/ }).click()
-  await expect(wizard().getByText('What every agent did today → Today')).toBeVisible()
+  await expect(wizard().getByText('What agents and Butler did, @mentions of you → Today')).toBeVisible()
   const times = wizard().getByLabel(/ time \d$/)
   for (let i = 0; i < await times.count(); i++) {
     expect(await times.nth(i).evaluate(el => el.scrollWidth > el.clientWidth + 1)).toBe(false)

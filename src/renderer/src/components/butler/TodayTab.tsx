@@ -44,6 +44,12 @@ export function TodayTab({ visible }: { visible: boolean }) {
 
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-1.5">
+      {day.meetings && (
+        <div className="rounded-xl bg-bg-primary px-3 py-2" aria-label="Meetings">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Meetings · {dayTitle(date)}</div>
+          <div className="mt-1 text-[12px] text-text-primary whitespace-pre-wrap">{day.meetings}</div>
+        </div>
+      )}
       <div className="flex items-center gap-2 px-1 pt-1">
         <span className="flex-1 text-[11px] font-bold uppercase tracking-wider text-text-muted">Plan · {dayTitle(date)}</span>
         {day.planLate && <span className="px-1.5 py-0.5 rounded-md bg-bg-primary text-[10px] font-semibold text-status-waiting" title={day.planLate}>late</span>}
@@ -62,9 +68,21 @@ export function TodayTab({ visible }: { visible: boolean }) {
           {date === today && <button onClick={makePlan} disabled={running} className="px-2.5 py-1 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold cursor-pointer disabled:opacity-50">{running ? '…' : 'Make plan'}</button>}
         </div>
       )}
+      {day.jira && (
+        <details className="rounded-xl bg-bg-primary px-3 py-2" aria-label="Jira">
+          <summary className="cursor-pointer text-[12px] font-semibold text-text-muted truncate">Jira · {headline(day.jira)}</summary>
+          <div className="mt-1.5 text-[12px] text-text-primary whitespace-pre-wrap">{day.jira}</div>
+        </details>
+      )}
+      {day.butler && (
+        <details className="rounded-xl bg-bg-primary px-3 py-2" aria-label="Butler today">
+          <summary className="cursor-pointer text-[12px] font-semibold text-text-muted truncate">Butler today · {headline(day.butler)}</summary>
+          <div className="mt-1.5 text-[12px] text-text-primary whitespace-pre-wrap">{day.butler}</div>
+        </details>
+      )}
       {day.feishu && (
         <details className="rounded-xl bg-bg-primary px-3 py-2">
-          <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">Feishu</summary>
+          <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">@ you on Feishu</summary>
           <div className="mt-1.5 text-[12px] text-text-primary whitespace-pre-wrap">{day.feishu}</div>
         </details>
       )}
