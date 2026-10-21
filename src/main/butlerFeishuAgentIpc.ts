@@ -69,6 +69,10 @@ const runs = new Map<string, RunScope>()
 let chatSearch: (q: string, runToken: string | null) => Promise<{ hits: Hit[]; note: string }> = async () => ({ hits: [], note: 'Feishu agent not ready' })
 /** `./hive chat-search`: with a run token only what that run may see; without, the owner's own search. */
 export const searchChatHistory = (q: string, runToken: string | null) => chatSearch(q, runToken)
+let previewer: ((input: { text: string; senderId?: string; chatId?: string; chatName?: string; p2p?: boolean }) => Promise<unknown>) | null = null
+/** ./hive feishu-try: the whole decision for a made-up message, nothing sent. */
+export const previewFeishuAnswer = (input: { text: string; senderId?: string; chatId?: string; chatName?: string; p2p?: boolean }) =>
+  previewer ? previewer(input) : Promise.resolve({ ok: false, error: 'not_ready' })
 
 export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
   const runClaude = (prompt: string, scope?: RunScope) => new Promise<string>((resolve, reject) => {
@@ -133,6 +137,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
   })
   d.ipcMain.handle('feishuAgent:log', () => agent.log(20))
   d.ipcMain.handle('feishuAgent:recall', (_e, id: unknown) => typeof id === 'string' ? agent.recall(id) : { ok: false, error: 'bad_id' })
+  previewer = input => agent.preview(input)
   return agent
 }
 

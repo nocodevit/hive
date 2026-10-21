@@ -674,7 +674,7 @@ const butlerRoutineMode = setupButlerMailRoutines({
   }
 })
 // [butler:feishu-agent-calendar]
-import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory } from './butlerFeishuAgentIpc'
+import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory, previewFeishuAnswer } from './butlerFeishuAgentIpc'
 registerButlerFeishuAgentIpc({
   ipcMain, butlerDir: butlerDir(DATA_DIR), feishu, approvals, claudeBin, readProfile,
   // butlerCalendar is created below; this only runs when a message is answered.
@@ -835,6 +835,15 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       const q = (url.searchParams.get('q') || '').slice(0, 200)
       const run = typeof req.headers['x-hive-run'] === 'string' ? req.headers['x-hive-run'] : null
       return reply(200, { ok: true, ...(await searchChatHistory(q, run)) })
+    }
+
+    // ./hive feishu-try: answer-for-me's whole decision for a made-up message. Nothing is
+    // sent or recorded; only the owner's own session may call it (no run token).
+    if (req.method === 'POST' && url.pathname === '/feishu/try') {
+      if (req.headers['x-hive-run']) return reply(403, { ok: false, error: 'not_in_a_run' })
+      const body = await readJsonBody(req)
+      if (typeof body.text !== 'string' || !body.text.trim()) return reply(400, { ok: false, error: 'empty_text' })
+      return reply(200, await previewFeishuAnswer({ text: body.text, senderId: body.senderId, chatId: body.chatId, chatName: body.chatName, p2p: body.p2p }))
     }
 
     if (req.method === 'GET' && url.pathname === '/chat/tail') {
