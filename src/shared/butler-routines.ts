@@ -1,9 +1,11 @@
 // Butler daily routines: ids, default schedules and the shapes main and
 // renderer share. Weekdays use launchd numbering: 1 = Monday … 7 = Sunday.
 
-export type RoutineId = 'morning-plan' | 'sort-inbox' | 'feishu-digest' | 'jira-check' | 'evening-report'
+export type RoutineId = 'morning-plan' | 'sort-inbox' | 'jira-check' | 'evening-report'
 
-export const ROUTINE_IDS: RoutineId[] = ['morning-plan', 'sort-inbox', 'feishu-digest', 'jira-check', 'evening-report']
+export const ROUTINE_IDS: RoutineId[] = ['morning-plan', 'sort-inbox', 'jira-check', 'evening-report']
+/** Routines Hive no longer has: their LaunchAgents are removed (the @mention digest is part of the evening report now). */
+export const RETIRED_ROUTINE_IDS = ['feishu-digest'] as const
 
 export type RoutineSchedule =
   | { kind: 'times'; times: string[] }
@@ -22,25 +24,22 @@ export interface RoutineSettings {
 export const ROUTINE_NAME: Record<RoutineId, string> = {
   'morning-plan': 'Morning plan',
   'sort-inbox': 'Sort inbox',
-  'feishu-digest': 'Feishu @mentions',
   'jira-check': 'Jira',
   'evening-report': 'Evening report'
 }
 
 /** One line each: what it does → where the result goes. */
 export const ROUTINE_DESC: Record<RoutineId, string> = {
-  'morning-plan': 'Plan for the day from mail, calendar, agents → Today',
+  'morning-plan': "Today's meetings and a plan from mail, Jira, agents → Today",
   'sort-inbox': 'Sorts new mail, drafts replies → Approve',
-  'feishu-digest': 'Messages that @mention you, summarized → Today',
   'jira-check': 'Closes, nudges and lists your tickets → Today, Approve',
-  'evening-report': 'What every agent did today → Today'
+  'evening-report': 'What agents and Butler did, @mentions of you → Today'
 }
 
 /** The skill that decides how each routine works (Settings → Skills). */
 export const ROUTINE_SKILL: Record<RoutineId, string | null> = {
   'morning-plan': 'morning-plan',
   'sort-inbox': 'sort-inbox',
-  'feishu-digest': null,
   'jira-check': 'handle-jira',
   'evening-report': 'evening-report'
 }
@@ -51,7 +50,6 @@ export function defaultRoutineSettings(): RoutineSettings {
     routines: {
       'morning-plan': { enabled: true, schedule: { kind: 'times', times: ['08:30'] } },
       'sort-inbox': { enabled: true, schedule: { kind: 'interval', everyMin: 30, fromHour: 9, toHour: 19 } },
-      'feishu-digest': { enabled: false, schedule: { kind: 'times', times: ['11:00', '16:00'] } },
       'jira-check': { enabled: false, schedule: { kind: 'times', times: ['09:00'] } },
       'evening-report': { enabled: true, schedule: { kind: 'times', times: ['19:00'] } }
     }
@@ -97,4 +95,8 @@ export interface JournalDay {
   summary: string
   feishu: string
   jira: string
+  /** Today's meetings, written by code from the calendars. */
+  meetings: string
+  /** What Butler did for the owner today, written by code. */
+  butler: string
 }

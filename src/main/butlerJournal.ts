@@ -112,7 +112,9 @@ export function readJournalDay(dir: string, date: string): JournalDay {
     planLate: late ? late.slice(2).trim() : null,
     summary: s.get('Summary') ?? '',
     feishu: s.get('Feishu') ?? '',
-    jira: s.get('Jira') ?? ''
+    jira: s.get('Jira') ?? '',
+    meetings: s.get('Meetings') ?? '',
+    butler: s.get('Butler') ?? ''
   }
 }
 
