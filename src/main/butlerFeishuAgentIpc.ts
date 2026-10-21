@@ -5,6 +5,8 @@ import { execFile } from 'child_process'
 import { DISALLOWED_TOOLS } from './butlerClaude'
 import { discoveredWrites } from './butlerTools'
 import { createRelationLookup } from './feishuAnswer'
+import { createHistorySearch, type Hit, type RunScope } from './feishuHistory'
+import { randomUUID } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { Notification, type IpcMain } from 'electron'
@@ -63,12 +65,28 @@ export function feishuAnswerArgs(prompt: string, writes: string[]): string[] {
   return ['-p', prompt, '--output-format', 'text', '--permission-mode', 'dontAsk', '--disallowedTools', [...DISALLOWED_TOOLS, ...writes].join(',')]
 }
 
+const runs = new Map<string, RunScope>()
+let chatSearch: (q: string, runToken: string | null) => Promise<{ hits: Hit[]; note: string }> = async () => ({ hits: [], note: 'Feishu agent not ready' })
+/** `./hive chat-search`: with a run token only what that run may see; without, the owner's own search. */
+export const searchChatHistory = (q: string, runToken: string | null) => chatSearch(q, runToken)
+
 export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
-  const runClaude = (prompt: string) => new Promise<string>((resolve, reject) => {
+  const runClaude = (prompt: string, scope?: RunScope) => new Promise<string>((resolve, reject) => {
+    // The run token ties `./hive chat-search` in this run to the person being answered.
+    const run = randomUUID()
+    if (scope) runs.set(run, scope)
     execFile(d.claudeBin(), feishuAnswerArgs(prompt, discoveredWrites(d.butlerDir)),
-      { cwd: d.butlerDir, timeout: CLAUDE_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, env: process.env },
-      (err, stdout) => (err && !stdout ? reject(err) : resolve(String(stdout))))
+      { cwd: d.butlerDir, timeout: CLAUDE_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, HIVE_RUN_TOKEN: run } },
+      (err, stdout) => { runs.delete(run); if (err && !stdout) reject(err); else resolve(String(stdout)) })
   })
+  const search = createHistorySearch({
+    http: feishuHttp,
+    token: async () => { const t = await d.feishu.accessToken(); return t.ok && t.token ? t.token : null }
+  })
+  chatSearch = (q, runToken) => {
+    if (runToken && !runs.has(runToken)) return Promise.resolve({ hits: [], note: 'run ended' })
+    return search(q, runToken ? runs.get(runToken)! : null)
+  }
   const agent = createFeishuAgent({
     dir: d.butlerDir,
     http: feishuHttp,

@@ -231,8 +231,9 @@ export interface FeishuAgentDeps {
   token: () => Promise<{ ok: boolean; token?: string; error?: string }>
   selfOpenId: () => string | null
   profile: () => ButlerProfile
-  /** Runs `claude -p <prompt>` in the Butler folder; resolves with stdout. */
-  runClaude: (prompt: string) => Promise<string>
+  /** Runs `claude -p <prompt>` in the Butler folder; resolves with stdout. `scope` says who is
+   *  being answered, so `./hive chat-search` in that run only sees chats the sender is in. */
+  runClaude: (prompt: string, scope?: { senderId: string; chatId: string; chatName: string }) => Promise<string>
   approvals: {
     add: (i: Pick<Approval, 'kind' | 'title' | 'subtitle' | 'draft' | 'payload' | 'action'>) => Approval
     register: (kind: string, exec: (item: Approval) => Promise<{ ok: boolean; error?: string }>) => void
@@ -462,7 +463,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const relation: Relation = await (deps.relation?.(job.senderId) ?? Promise.resolve('unknown' as Relation)).catch(() => 'unknown' as Relation)
     const busy = await (deps.freeBusy?.() ?? Promise.resolve({ known: false, text: '' })).catch(() => ({ known: false, text: '' }))
     let answer: Answer | null = null
-    try { answer = parseAnswer(await deps.runClaude(buildPrompt(job, history, self, relation, busy))) } catch { answer = null }
+    try { answer = parseAnswer(await deps.runClaude(buildPrompt(job, history, self, relation, busy), { senderId: job.senderId, chatId: job.chatId, chatName: job.chatName })) } catch { answer = null }
     const draft = answer?.reply ?? ''
     // The guardrail is code: a hit on the question or the draft never goes out.
     const guard = lockedTopicHit(job.text, settings.askFirstTopics) ?? lockedTopicHit(draft, settings.askFirstTopics)

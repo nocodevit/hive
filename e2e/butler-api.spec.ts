@@ -146,3 +146,11 @@ test('butler API: auth → list → refused while off → start → send → tai
     (await (await call('/agents')).json()).agents.find((a: any) => a.agent === 'Robin').activity
   , { timeout: 15000 }).toBe('waiting')
 })
+
+test('chat-search: a run token that ended sees nothing; not signed in is said plainly', async () => {
+  const ended = await call('/feishu/chat-search?q=roaming', { headers: { 'X-Hive-Run': 'no-such-run' } })
+  expect(ended.status).toBe(200)
+  expect(await ended.json()).toEqual({ ok: true, hits: [], note: 'run ended' })
+  const owner = await (await call('/feishu/chat-search?q=roaming')).json()
+  expect(owner).toEqual({ ok: true, hits: [], note: 'Feishu not signed in' })
+})

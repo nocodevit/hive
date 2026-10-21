@@ -674,7 +674,7 @@ const butlerRoutineMode = setupButlerMailRoutines({
   }
 })
 // [butler:feishu-agent-calendar]
-import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc } from './butlerFeishuAgentIpc'
+import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory } from './butlerFeishuAgentIpc'
 registerButlerFeishuAgentIpc({
   ipcMain, butlerDir: butlerDir(DATA_DIR), feishu, approvals, claudeBin, readProfile,
   // butlerCalendar is created below; this only runs when a message is answered.
@@ -827,6 +827,14 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
         return { status: r.status, body: await r.json().catch(() => ({})) }
       })
       return reply(200, { ok: true, report })
+    }
+
+    // ./hive chat-search: a Butler run answering someone carries its run token
+    // and sees only chats that person is in; the owner's own session sees all.
+    if (req.method === 'GET' && url.pathname === '/feishu/chat-search') {
+      const q = (url.searchParams.get('q') || '').slice(0, 200)
+      const run = typeof req.headers['x-hive-run'] === 'string' ? req.headers['x-hive-run'] : null
+      return reply(200, { ok: true, ...(await searchChatHistory(q, run)) })
     }
 
     if (req.method === 'GET' && url.pathname === '/chat/tail') {
