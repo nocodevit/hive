@@ -13,6 +13,8 @@ import { registerButlerSkillsIpc } from '../butlerSkillsIpc'
 const RESOURCES = join(__dirname, '..', '..', '..', 'resources', 'butler')
 const SHIPPED = join(RESOURCES, 'skills')
 const IDS = ['answer-feishu', 'evening-report', 'jira-check', 'morning-plan', 'reply-email', 'sort-inbox']
+/** Every shipped skill: the task skills above + references. */
+const ALL_IDS = [...IDS, 'jira-knowledge'].sort()
 
 let store: SkillStore
 beforeEach(() => {
@@ -34,6 +36,19 @@ describe('shipped defaults', () => {
     expect(p.sections.map(s => s.title)).toEqual([...SECTIONS])
     expect(p.description.length).toBeGreaterThan(20)
     expect(lockedLines(md).length).toBeGreaterThan(0)
+  })
+  it('jira-knowledge is a reference: own sections, no company data shipped', () => {
+    const md = def('jira-knowledge')
+    expect(parseSkill(md).kind).toBe('reference')
+    expect(lintSkill('jira-knowledge', md, md)).toEqual([])
+    expect(md).not.toMatch(/linksfield|@[a-z]+\.[a-z]+|P4-\d|FAE-\d/i)
+  })
+  it('a reference override keeps its kind and starts with Purpose; its other sections are free', () => {
+    const md = def('jira-knowledge')
+    const mine = md.replace('## Labels', '## Labels we use').replace('## Owners', '## Owners\n\n| x | y |')
+    expect(lintSkill('jira-knowledge', mine, md)).toEqual([])
+    expect(lintSkill('jira-knowledge', mine.replace('kind: reference\n', ''), md).map(p => p.rule)).toContain('frontmatter')
+    expect(lintSkill('jira-knowledge', mine.replace('## Purpose', '## Intro'), md).map(p => p.rule)).toContain('sections')
   })
   it('reply-email encodes the 3-sentence rule and never sends', () => {
     const md = def('reply-email')
@@ -133,8 +148,8 @@ describe('lint', () => {
 describe('store', () => {
   it('composes every effective skill into .claude/skills/<id>/SKILL.md', () => {
     saveOverlay(store, 'answer-feishu', { tone: 'friendly' })
-    expect(composeSkills(store)).toEqual(IDS)
-    for (const id of IDS) expect(existsSync(join(store.butlerDir, '.claude', 'skills', id, 'SKILL.md'))).toBe(true)
+    expect(composeSkills(store)).toEqual(ALL_IDS)
+    for (const id of ALL_IDS) expect(existsSync(join(store.butlerDir, '.claude', 'skills', id, 'SKILL.md'))).toBe(true)
     expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'answer-feishu', 'SKILL.md'), 'utf8')).toMatch(/Friendly/)
     expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'jira-check', 'SKILL.md'), 'utf8')).toBe(def('jira-check'))
   })
@@ -176,7 +191,7 @@ describe('store', () => {
   it('lists customized state', () => {
     saveOverlay(store, 'jira-check', { maxLength: '5 lines' })
     const l = listSkills(store)
-    expect(l.map(s => s.id)).toEqual(IDS)
+    expect(l.map(s => s.id)).toEqual(ALL_IDS)
     expect(l.find(s => s.id === 'jira-check')!.customized).toBe('form')
     expect(l.find(s => s.id === 'sort-inbox')!.customized).toBe('none')
   })
@@ -324,7 +339,7 @@ describe('ipc', () => {
   it('reading never creates the Butler folder', async () => {
     const handlers = new Map<string, (e: unknown, ...a: any[]) => any>()
     registerButlerSkillsIpc({ ipcMain: { handle: (c, fn) => { handlers.set(c, fn) } }, butlerDir: () => store.butlerDir, defaultsDir: store.defaultsDir })
-    expect((await handlers.get('butlerSkills:list')!(null)).map((s: any) => s.id)).toEqual(IDS)
+    expect((await handlers.get('butlerSkills:list')!(null)).map((s: any) => s.id)).toEqual(ALL_IDS)
     expect((await handlers.get('butlerSkills:get')!(null, 'reply-email')).effective).toBe(def('reply-email'))
     expect(existsSync(store.butlerDir)).toBe(false)
   })
