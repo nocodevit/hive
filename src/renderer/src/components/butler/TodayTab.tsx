@@ -51,6 +51,7 @@ export function TodayTab({ visible }: { visible: boolean }) {
   const [routines, setRoutines] = useState<RoutinesView | null>(null)
   const [toApprove, setToApprove] = useState(0)
   const [allMeetings, setAllMeetings] = useState(false)
+  const [runningId, setRunningId] = useState<string | null>(null)
 
   const load = async (d?: string) => {
     const j = await window.api.journal.day(d)
@@ -76,6 +77,13 @@ export function TodayTab({ visible }: { visible: boolean }) {
     setDay({ ...day, plan: day.plan.map(i => i.index === index ? { ...i, ignored: true } : i) })
     const r = await window.api.journal.ignore(date, index, text)
     if (!r.ok) void load(date)
+  }
+  // Run one routine now (same as its scheduled run), then show what it wrote.
+  const runNow = async (id: (typeof ROUTINE_IDS)[number]) => {
+    setRunningId(id)
+    await window.api.routines.run(id).catch(() => {})
+    setRunningId(null)
+    void load()
   }
   const makePlan = async () => {
     setRunning(true)
@@ -189,11 +197,18 @@ export function TodayTab({ visible }: { visible: boolean }) {
           {day.jira && <Row icon="🎫" label="Jira" line={headline(day.jira)}>{day.jira}</Row>}
           {states.length > 0 && (
             <Row icon="📋" label="Routines" line={trouble.length ? trouble.map(t => `${ROUTINE_NAME[t.id]} ${t.label}`).join(' · ') : ran === active.length && active.length ? 'all ran' : `${ran}/${active.length} ran`}>
-              <span className="grid grid-cols-[1fr_auto] gap-x-2.5 gap-y-1">
+              <span className="grid grid-cols-[1fr_auto_auto] items-center gap-x-2.5 gap-y-1">
                 {states.map(s => (
                   <span key={s.id} className="contents">
                     <span className="text-text-primary">{ROUTINE_NAME[s.id]}</span>
-                    <span className={`font-mono text-[11px] ${STATE_CLS[s.state]}`} title={s.state === 'failed' ? routines?.lastRuns[s.id]?.error : undefined}>{s.label}</span>
+                    <span className={`font-mono text-[11px] ${STATE_CLS[s.state]}`} title={s.state === 'failed' ? routines?.lastRuns[s.id]?.error : undefined}>
+                      {s.state === 'failed' && routines?.lastRuns[s.id]?.error ? `${s.label} · ${routines.lastRuns[s.id]!.error}` : s.label}
+                    </span>
+                    <button onClick={() => runNow(s.id)} disabled={runningId !== null} aria-label={`Run ${ROUTINE_NAME[s.id]} now`}
+                      className="px-2 py-0.5 rounded-md bg-bg-secondary border border-border text-[11px] font-semibold text-text-primary cursor-pointer disabled:opacity-50 disabled:cursor-default inline-flex items-center gap-1">
+                      {runningId === s.id && <span className="w-2.5 h-2.5 rounded-full border-2 border-text-muted border-t-transparent animate-spin" aria-hidden />}
+                      {runningId === s.id ? 'Running…' : 'Run'}
+                    </button>
                   </span>
                 ))}
               </span>

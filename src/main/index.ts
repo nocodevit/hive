@@ -1,4 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, Menu, safeStorage, Notification, powerMonitor } from 'electron'
+import { journalDir, localDate, readJournalDay } from './butlerJournal'
 import { join } from 'path'
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync, fstatSync } from 'fs'
 import { createServer } from 'http'
@@ -905,6 +906,17 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
         routineName: id => (isRoutineId(id) ? ROUTINE_NAME[id] : id),
         dayStart: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
       }))
+    }
+
+    // ./hive run jira: one routine now, as if its time had come; the Jira run's result comes back.
+    if (req.method === 'POST' && url.pathname === '/routines/run') {
+      const body = await readJsonBody(req).catch(() => null)
+      const id = body?.id === 'jira' ? 'jira-check' : body?.id
+      if (!isRoutineId(id)) return reply(400, { ok: false, error: 'bad_routine' })
+      const run = await butlerRoutines.runner.run(id)
+      const day = readJournalDay(journalDir(butlerDir(DATA_DIR)), localDate(Date.now()))
+      const text = id === 'jira-check' ? day.jira : id === 'morning-plan' ? day.plan.filter(i => !i.ignored).map(i => `- [${i.done ? 'x' : ' '}] ${i.text}`).join('\n') : id === 'evening-report' ? day.summary : ''
+      return reply(200, { ok: run.ok, run, name: ROUTINE_NAME[id], text })
     }
 
     // What the signed-in user's Feishu token can do (feishuProbe.ts):
