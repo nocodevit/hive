@@ -5,7 +5,7 @@ import { join } from 'path'
 import {
   SECTIONS, ackDefault, applyOverlay, changeChips, composeSkills, compareSkill, editPrompt, effectiveSkill, isSkillId,
   lineDiff, lintSkill, listSkills, lockedLines, normalizeOverlay, parseEditReply, parseSkill, proposeEdit, readOverlay,
-  renderSkill, resetSkill, saveOverlay, saveOverride, skillDetail, tryIt, type SkillStore
+  renderSkill, resetSkill, saveOverlay, saveOverride, skillDetail, tryIt, DRY_RUN_NOTE, readableOutput, type SkillStore
 } from '../butlerSkills'
 import { installButlerFiles } from '../butler'
 import { registerButlerSkillsIpc } from '../butlerSkillsIpc'
@@ -316,11 +316,18 @@ describe('try it', () => {
     saveOverlay(store, 'reply-email', { tone: 'friendly' })
     const prompts: string[] = []
     const r = await tryIt(store, 'reply-email', 'Lin: export broken', async p => { prompts.push(p); return '  Hi Lin…  ' }, { profileMd: '# About the owner\nMei' })
-    expect(r).toEqual({ ok: true, output: 'Hi Lin…' })
+    expect(r).toEqual({ ok: true, output: `${DRY_RUN_NOTE}\n\nHi Lin…` })
     expect(prompts[0]).toMatch(/dry run/)
     expect(prompts[0]).toMatch(/<profile>\n# About the owner\nMei\n<\/profile>/)
     expect(prompts[0]).toMatch(/Friendly —/)
     expect(prompts[0]).toMatch(/<input>\nLin: export broken\n<\/input>/)
+  })
+  it('JSON skills read as what they mean, not as JSON', () => {
+    expect(readableOutput('answer-feishu', '{"category":"product-status","level":"auto","confidence":"medium","reply":"哪一项？","sources":["P4-1"],"claims":[{"claim":"c","verdict":"unverified","source":""}]}'))
+      .toBe('Reply: 哪一项？\nAUTO · product-status · confidence medium\nSources: P4-1\nClaims:\n- c → unverified')
+    expect(readableOutput('reply-email', '{"about":"Lin asks","decision":"draft","reply":"Hi Lin"}')).toBe('About: Lin asks\n\nHi Lin')
+    expect(readableOutput('reply-email', '{"about":"Gary asks","decision":"ask","question":"Take it on?"}')).toBe('About: Gary asks\nNeeds you: Take it on?')
+    expect(readableOutput('morning-plan', 'plain text')).toBe('plain text')
   })
   it('can try a pending (unsaved) version', async () => {
     const prompts: string[] = []
@@ -351,7 +358,11 @@ describe('ipc', () => {
       butlerDir: () => { mkdirSync(store.butlerDir, { recursive: true }); return store.butlerDir },
       defaultsDir: store.defaultsDir,
       run: async () => 'out',
-      reveal: p => revealed.push(p)
+      reveal: p => revealed.push(p),
+      previewFeishu: async (text: string) => (text === 'offline' ? { ok: false, error: 'signed_out' } : {
+        ok: true, wouldSend: '你说的是 FAE-1 还是 FAE-2？', draft: '你说的是 FAE-1 还是 FAE-2？', relation: 'unknown', calendarKnown: false, ms: 4200,
+        gate: { level: 'auto', reasons: [] }, answer: { category: 'product-status', confidence: 'high', sources: ['FAE-1', 'FAE-2'], claims: [] }
+      })
     })
     const call = (c: string, ...a: unknown[]) => handlers.get(c)!(null, ...a)
     return { call, revealed }
@@ -364,7 +375,13 @@ describe('ipc', () => {
     expect(readFileSync(join(store.butlerDir, '.claude', 'skills', 'answer-feishu', 'SKILL.md'), 'utf8')).toBe(def('answer-feishu'))
     expect(await call('butlerSkills:get', '../../etc')).toEqual({ ok: false, error: 'bad_id' })
     expect(await call('butlerSkills:try', '../x', 'y')).toEqual({ ok: false, error: 'bad_id' })
-    expect(await call('butlerSkills:try', 'reply-email', 'y')).toEqual({ ok: true, output: 'out' })
+    expect(await call('butlerSkills:try', 'reply-email', 'y')).toEqual({ ok: true, output: `${DRY_RUN_NOTE}\n\nout` })
+    // answer-feishu: the real check, read as the owner reads it.
+    expect((await call('butlerSkills:try', 'answer-feishu', 'checkout 好了吗？')).output).toBe(
+      'Real check · tools ran, nothing was sent\n\nWould send: 你说的是 FAE-1 还是 FAE-2？\nAUTO · product-status · confidence high · 4.2s\nSources: FAE-1, FAE-2\nSender: unknown · calendar no')
+    // An unsaved version, or no check available: the labelled dry run.
+    expect((await call('butlerSkills:try', 'answer-feishu', 'x', '---\nname: answer-feishu\n---')).output.startsWith(DRY_RUN_NOTE)).toBe(true)
+    expect((await call('butlerSkills:try', 'answer-feishu', 'offline')).output.startsWith(DRY_RUN_NOTE)).toBe(true)
     await call('butlerSkills:reveal', 'reply-email')
     expect(revealed).toEqual([join(store.butlerDir, 'skills')])
     expect(await call('butler:profilePreview', { name: 'Mei', prefix: '【Mei 的 AI 代理】' })).toMatch(/Start every message you send for them with: 【Mei 的 AI 代理】/)

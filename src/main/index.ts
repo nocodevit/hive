@@ -655,7 +655,7 @@ ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' &
 // ── Butler features: each phase registers itself at its own marker ────
 // [butler:skills]
 import { registerButlerSkillsIpc } from './butlerSkillsIpc'
-registerButlerSkillsIpc({ ipcMain, butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
+registerButlerSkillsIpc({ ipcMain, previewFeishu: text => previewFeishuAnswer({ text }), butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
 const butlerRoutineMode = setupButlerMailRoutines({
   app, ipcMain, safeStorage, dataDir: DATA_DIR, approvals, claudeBin, feishu,
