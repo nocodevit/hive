@@ -12,7 +12,32 @@ export type Verdict = 'confirmed' | 'contradicted' | 'unverified'
 
 export interface Claim { claim: string; verdict: Verdict; source: string }
 /** An action the reply asks the sender to agree to; a later "ok" from them consents to exactly this. */
-export interface Proposal { type: 'create_meeting' | 'notify' | 'forward_owner'; summary: string }
+export interface Proposal {
+  type: 'create_meeting' | 'notify' | 'forward_owner'
+  summary: string
+  /** create_meeting: local "YYYY-MM-DDTHH:MM" start / end and a title. */
+  start?: string
+  end?: string
+  title?: string
+}
+
+/** A meeting Butler may create on its own: well-formed, ahead, 15 min – 3 h, within the
+ *  next two weeks, on a working day between 09:00 and 19:00. Anything else → the owner. */
+export function meetingSlot(p: Proposal, at: number): { start: number; end: number; title: string } | null {
+  if (p.type !== 'create_meeting' || !p.start || !p.end) return null
+  const re = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/
+  if (!re.test(p.start) || !re.test(p.end)) return null
+  const start = new Date(`${p.start}:00`).getTime()
+  const end = new Date(`${p.end}:00`).getTime()
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return null
+  const min = (end - start) / 60_000
+  const d = new Date(start)
+  const h = d.getHours() + d.getMinutes() / 60
+  const he = new Date(end).getHours() + new Date(end).getMinutes() / 60
+  if (start <= at || start - at > 14 * 24 * 3600_000 || min < 15 || min > 180) return null
+  if (d.getDay() === 0 || d.getDay() === 6 || h < 9 || he > 19 || new Date(end).toDateString() !== d.toDateString()) return null
+  return { start, end, title: (p.title || p.summary).slice(0, 100) }
+}
 export interface Answer {
   category: Category
   level: Level
@@ -60,8 +85,13 @@ export function parseAnswer(output: string): Answer | null {
     claim: str(c?.claim, 300), verdict: VERDICTS.includes(c?.verdict) ? c.verdict : 'unverified', source: str(c?.source, 300)
   })).filter((c: Claim) => c.claim) : []
   const pt = j.proposal?.type
-  const proposal = (pt === 'create_meeting' || pt === 'notify' || pt === 'forward_owner') && str(j.proposal?.summary, 300)
-    ? { type: pt as Proposal['type'], summary: str(j.proposal.summary, 300) } : undefined
+  const proposal: Proposal | undefined = (pt === 'create_meeting' || pt === 'notify' || pt === 'forward_owner') && str(j.proposal?.summary, 300)
+    ? {
+        type: pt as Proposal['type'], summary: str(j.proposal.summary, 300),
+        ...(str(j.proposal.start, 16) ? { start: str(j.proposal.start, 16) } : {}),
+        ...(str(j.proposal.end, 16) ? { end: str(j.proposal.end, 16) } : {}),
+        ...(str(j.proposal.title, 100) ? { title: str(j.proposal.title, 100) } : {})
+      } : undefined
   return { category, level, confidence, reply: str(j.reply, 2000), sources, claims, ...(proposal ? { proposal } : {}) }
 }
 
@@ -205,4 +235,10 @@ export const DECLINE_TOPICS = new Set(['private-chats', 'personal-info', 'sensit
 
 export function declineReply(ownerName: string): string {
   return `这个我不方便透露。有具体的事可以告诉我，我转给 ${ownerName.trim() || '主人'}。`
+}
+
+export function meetingCreatedReply(m: { start: number; end: number; title: string }, link: string, reminder: number): string {
+  const d = new Date(m.start)
+  const hm = (x: number) => { const t = new Date(x); return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}` }
+  return `好的，会议已创建：${m.title}，${d.getMonth() + 1}/${d.getDate()} ${hm(m.start)}–${hm(m.end)}，已设 ${reminder} 分钟提醒。${link ? ` ${link}` : ''}`
 }

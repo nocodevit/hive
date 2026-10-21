@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { createCalendar, mergeAgenda, parseCalendarLines, parseFeishuEvents, feishuDayEvents, dayRange, type AgendaEvent } from '../calendar'
+import { createCalendar, mergeAgenda, parseCalendarLines, parseFeishuEvents, feishuDayEvents, dayRange, type AgendaEvent, createFeishuMeeting, slotIsFree } from '../calendar'
 
 const day = new Date(2026, 9, 20)
 const at = (h: number, m = 0) => new Date(2026, 9, 20, h, m).getTime()
@@ -121,5 +121,28 @@ describe('agendaText', () => {
   it('nothing → empty string', async () => {
     const { agendaText } = await import('../calendar')
     expect(agendaText({ date: 'x', errors: {}, events: [] })).toBe('')
+  })
+})
+
+describe('creating a meeting', () => {
+  it('primary calendar, video link, 15-minute reminder, the invitee asked by open_id', async () => {
+    const calls: Array<{ method: string; url: string; body?: any }> = []
+    const http = async (method: string, url: string, _t: string, body?: unknown) => {
+      calls.push({ method, url, body })
+      if (url.includes('/calendars?')) return { status: 200, body: { code: 0, data: { calendar_list: [{ calendar_id: 'shared', type: 'shared' }, { calendar_id: 'mine', type: 'primary' }] } } }
+      if (url.endsWith('/calendars/mine/events')) return { status: 200, body: { code: 0, data: { event: { event_id: 'ev1', app_link: 'https://applink/ev1' } } } }
+      return { status: 200, body: { code: 0, data: {} } }
+    }
+    const r = await createFeishuMeeting(http as any, 't', { title: 'Sync', start: 1_800_000_000_000, end: 1_800_001_800_000, invite: ['ou_lin'] })
+    expect(r).toEqual({ ok: true, link: 'https://applink/ev1' })
+    expect(calls[1].body).toMatchObject({ summary: 'Sync', start_time: { timestamp: '1800000000' }, end_time: { timestamp: '1800001800' }, vchat: { vc_type: 'vc' }, reminders: [{ minutes: 15 }] })
+    expect(calls[2]).toMatchObject({ method: 'POST', body: { attendees: [{ type: 'user', user_id: 'ou_lin' }], need_notification: true } })
+    expect(calls[2].url).toContain('/events/ev1/attendees?user_id_type=open_id')
+  })
+  it('free means no timed event overlaps and no all-day event that day', () => {
+    const h = (x: number) => new Date(2026, 9, 22, x).getTime()
+    expect(slotIsFree([{ events: [{ start: h(14), end: h(15), allDay: false }] }], h(15), h(16))).toBe(true)
+    expect(slotIsFree([{ events: [{ start: h(14), end: h(16), allDay: false }] }], h(15), h(16))).toBe(false)
+    expect(slotIsFree([{ events: [{ start: h(0), end: h(0), allDay: true }] }], h(15), h(16))).toBe(false)
   })
 })
