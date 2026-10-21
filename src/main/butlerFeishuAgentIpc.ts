@@ -4,7 +4,7 @@
 import { execFile } from 'child_process'
 import { DISALLOWED_TOOLS } from './butlerClaude'
 import { discoveredWrites } from './butlerTools'
-import { createRelationLookup } from './feishuAnswer'
+import { createRelationLookup, readPeople, setPerson } from './feishuAnswer'
 import { readJiraConfig } from './handleJira'
 import { createHistorySearch, type Hit, type RunScope } from './feishuHistory'
 import { randomUUID } from 'crypto'
@@ -108,7 +108,8 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     profile: () => d.readProfile(d.butlerDir),
     profileMd: () => { try { return readFileSync(join(d.butlerDir, 'profile.md'), 'utf8') } catch { return '' } },
     runClaude,
-    relation: lookup,
+    // Contacts first; without the contact scope, the owner's own people list.
+    relation: async id => { const r = await lookup(id); return r !== 'unknown' ? r : readPeople(d.butlerDir)[id] ?? 'unknown' },
     neverQuote: () => { const c = readJiraConfig(d.butlerDir); return c?.dev ? [c.dev.key] : [] },
     senderName: lookup.nameOf,
     freeBusy: d.freeBusy,
@@ -135,6 +136,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
       holding: holdingReply(profile.name),
       connected: st.state === 'signed_in',
       locked: LOCKED_TOPICS.map(({ id, label, hint, example }) => ({ id, label, hint, example })),
+      people: readPeople(d.butlerDir),
       senders: agent.senders(),
       lastError: agent.lastError(),
       capabilities: { realtime: false }
@@ -147,6 +149,10 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     return view()
   })
   d.ipcMain.handle('feishuAgent:log', () => agent.log(20))
+  d.ipcMain.handle('feishuAgent:setPerson', (_e, id: unknown, relation: unknown) => {
+    if (typeof id === 'string' && typeof relation === 'string') setPerson(d.butlerDir, id, relation as any)
+    return view()
+  })
   d.ipcMain.handle('feishuAgent:recall', (_e, id: unknown) => typeof id === 'string' ? agent.recall(id) : { ok: false, error: 'bad_id' })
   previewer = input => agent.preview(input)
   return agent

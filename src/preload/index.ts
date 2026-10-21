@@ -354,7 +354,8 @@ const api = {
   feishuAgent: {
     get: () => ipcRenderer.invoke('feishuAgent:get') as Promise<import('./feishuAgentTypes').FeishuAgentView>,
     set: (patch: Partial<import('./feishuAgentTypes').FeishuAgentSettings>) => ipcRenderer.invoke('feishuAgent:set', patch) as Promise<import('./feishuAgentTypes').FeishuAgentView>,
-    log: () => ipcRenderer.invoke('feishuAgent:log') as Promise<import('./feishuAgentTypes').FeishuLogEntry[]>,
+    log: () => ipcRenderer.invoke('feishuAgent:log'),
+    setPerson: (id: string, relation: string) => ipcRenderer.invoke('feishuAgent:setPerson', id, relation) as Promise<import('./feishuAgentTypes').FeishuLogEntry[]>,
     recall: (id: string) => ipcRenderer.invoke('feishuAgent:recall', id) as Promise<{ ok: boolean; error?: string }>,
     onChange: (cb: () => void) => {
       const handler = () => cb()
