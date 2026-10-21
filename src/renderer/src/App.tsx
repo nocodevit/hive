@@ -1514,7 +1514,7 @@ export default function App() {
                                     Back to natural inline flow: tag right
                                     after name; name truncates first when
                                     space is tight, tag never spills. */}
-                                <span className="flex items-center gap-1.5 min-w-0 whitespace-nowrap overflow-hidden text-[13px] font-semibold text-text-primary">
+                                <span className={`flex items-center gap-1.5 min-w-0 whitespace-nowrap overflow-hidden text-[13px] ${selectedAgentId === agent.id ? 'font-semibold' : 'font-normal'} text-text-primary`}>
                                   {agent.tagColor && (
                                     <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
                                   )}
@@ -1647,30 +1647,30 @@ export default function App() {
               <div className="inline-flex gap-0.5 p-[3px] rounded-[10px] bg-sidebar-bg">
               <button
                 onClick={() => setMainView('terminal')}
-                className={`px-3 py-[5px] rounded-lg text-[12px] font-semibold transition-colors cursor-pointer ${
+                className={`px-3 py-[5px] rounded-lg text-[12px] transition-colors cursor-pointer ${
                   mainView === 'terminal'
-                    ? 'bg-bg-secondary text-text-primary shadow-sm'
-                    : 'text-text-muted hover:text-text-primary'
+                    ? 'bg-bg-secondary text-text-primary font-semibold shadow-sm'
+                    : 'font-normal text-text-muted hover:text-text-primary'
                 }`}
               >
                 Chat
               </button>
               <button
                 onClick={() => setMainView('editor')}
-                className={`px-3 py-[5px] rounded-lg text-[12px] font-semibold transition-colors cursor-pointer ${
+                className={`px-3 py-[5px] rounded-lg text-[12px] transition-colors cursor-pointer ${
                   mainView === 'editor'
-                    ? 'bg-bg-secondary text-text-primary shadow-sm'
-                    : 'text-text-muted hover:text-text-primary'
+                    ? 'bg-bg-secondary text-text-primary font-semibold shadow-sm'
+                    : 'font-normal text-text-muted hover:text-text-primary'
                 }`}
               >
                 Editor
               </button>
               <button
                 onClick={() => setMainView('logs')}
-                className={`px-3 py-[5px] rounded-lg text-[12px] font-semibold transition-colors cursor-pointer ${
+                className={`px-3 py-[5px] rounded-lg text-[12px] transition-colors cursor-pointer ${
                   mainView === 'logs'
-                    ? 'bg-bg-secondary text-text-primary shadow-sm'
-                    : 'text-text-muted hover:text-text-primary'
+                    ? 'bg-bg-secondary text-text-primary font-semibold shadow-sm'
+                    : 'font-normal text-text-muted hover:text-text-primary'
                 }`}
               >
                 Logs
