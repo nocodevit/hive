@@ -44,6 +44,8 @@ export interface RoutineRunDeps {
   /** "Butler today" lines since a time ('' when nothing). */
   butlerToday?: (since: number) => string
   now?: () => number
+  /** Every finished run (the notifier tells the owner about failures). */
+  onRun?: (rec: RoutineRunRecord) => void
 }
 
 const FEISHU = 'https://open.feishu.cn/open-apis'
@@ -257,6 +259,7 @@ export function createRoutineRunner(deps: RoutineRunDeps) {
     }
     state.lastRuns[id] = rec
     saveState(state)
+    try { deps.onRun?.(rec) } catch { /* a listener never fails the run */ }
     return rec
   }
 

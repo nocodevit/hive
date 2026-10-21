@@ -7,7 +7,7 @@
 import { existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 
-export const BUTLER_ROUTES = ['/agents', '/chat/tail', '/chat/send', '/chat/start', '/feishu/probe', '/feishu/chat-search', '/feishu/try'] as const
+export const BUTLER_ROUTES = ['/agents', '/chat/tail', '/chat/send', '/chat/start', '/feishu/probe', '/feishu/chat-search', '/feishu/try', '/pending'] as const
 
 export function isButlerRoute(url: string): boolean {
   const path = url.split('?')[0]
@@ -156,4 +156,42 @@ export type StartMode = 'resume' | 'new'
 export function parseStartMode(v: unknown): StartMode | null {
   if (v === undefined || v === null || v === 'resume') return 'resume'
   return v === 'new' ? 'new' : null
+}
+
+export interface PendingAgent { agentId: string; agent: string; project: string; state: 'waiting' | 'question' | 'permission'; since: number; text: string }
+export interface PendingReport {
+  ok: true
+  agents: PendingAgent[]
+  approvals: { count: number; titles: string[] }
+  routinesFailed: { id: string; name: string; at: number; error: string }[]
+}
+
+/**
+ * What waits for the owner (./hive pending): agents waiting on them or asking
+ * permission, pending approvals, routines that failed today. Waits of agents
+ * that are no longer listed are dropped (exact agentId only).
+ */
+export function buildPending(input: {
+  waits: { agentId: string; state: PendingAgent['state']; since: number; text: string }[]
+  rows: AgentRow[]
+  approvals: { title: string }[]
+  lastRuns: Record<string, { at: number; ok: boolean; error?: string } | undefined>
+  routineName: (id: string) => string
+  dayStart: number
+}): PendingReport {
+  const byId = new Map(input.rows.map(r => [r.agentId, r]))
+  const agents: PendingAgent[] = []
+  for (const w of input.waits) {
+    const r = byId.get(w.agentId)
+    if (r) agents.push({ agentId: w.agentId, agent: r.agent, project: r.project, state: w.state, since: w.since, text: w.text })
+  }
+  const routinesFailed = Object.entries(input.lastRuns)
+    .filter(([, rec]) => rec && !rec.ok && rec.at >= input.dayStart)
+    .map(([id, rec]) => ({ id, name: input.routineName(id), at: rec!.at, error: rec!.error || 'failed' }))
+  return {
+    ok: true,
+    agents,
+    approvals: { count: input.approvals.length, titles: input.approvals.map(a => a.title) },
+    routinesFailed
+  }
 }

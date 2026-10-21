@@ -115,7 +115,7 @@ export function SkillsSettings() {
   }
 
   return (
-    <div ref={rootRef} aria-label="Skills section">
+    <div ref={rootRef}>
       <label className={sectionLabel}>Skills</label>
       <div className="rounded-xl bg-bg-secondary border border-border flex min-h-[300px] overflow-hidden">
         <div className="w-40 shrink-0 border-r border-border p-1.5 flex flex-col gap-0.5" role="listbox" aria-label="Skills">

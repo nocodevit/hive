@@ -28,6 +28,9 @@ interface Props {
   setupCardHidden: boolean
   onContinueSetup: (stepId: string) => void
   onHideSetup: () => void
+  /** Switch to a tab from outside (a notification click); n changes per request. */
+  tabRequest?: { tab: Tab; n: number } | null
+  onTab?: (tab: Tab) => void
 }
 
 const DOT = { working: 'bg-status-working', waiting: 'bg-status-waiting', off: 'bg-status-done' } as const
@@ -40,6 +43,8 @@ const DOT = { working: 'bg-status-working', waiting: 'bg-status-waiting', off: '
  */
 export function ButlerPanel(p: Props) {
   const [tab, setTab] = useState<Tab>('chat')
+  useEffect(() => { if (p.tabRequest) setTab(p.tabRequest.tab) }, [p.tabRequest])
+  useEffect(() => { p.onTab?.(tab) }, [tab, p.onTab])
   const [approvals, setApprovals] = useState<ApprovalCard[]>([])
   const [folder, setFolder] = useState<string | null>(null)
   const [rows, setRows] = useState<SessionRow[]>([])

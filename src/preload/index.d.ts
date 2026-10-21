@@ -15,6 +15,8 @@ type ApprovalItem = {
   payload: Record<string, unknown>; action: string; status: string; createdAt: number; error?: string
 }
 
+type TelegramStep = { ok: true; status: import('../shared/notify').TelegramStatus } | { ok: false; error: string }
+
 type ButlerSetup = { marks: Record<string, 'done' | 'skipped'>; cardHidden: boolean }
 
 type ButlerState = {
@@ -175,6 +177,22 @@ declare global {
         send: (id: string, agentId?: string) => Promise<WakeSendResult>
         dismiss: (id: string) => Promise<{ ok: boolean }>
         onEvent: (cb: (ev: WakeEvent) => void) => () => void
+      }
+
+      notify: {
+        get: () => Promise<import('../shared/notify').NotifyView>
+        save: (settings: import('../shared/notify').NotifySettings) => Promise<import('../shared/notify').NotifyView>
+        test: () => Promise<{ ok: boolean; shown: boolean }>
+        openSystemSettings: () => Promise<{ ok: boolean }>
+        setPlace: (place: string) => void
+        onOpen: (cb: (target: import('../shared/notify').NotifyTarget) => void) => () => void
+      }
+      telegram: {
+        openBotFather: () => Promise<{ ok: boolean }>
+        setToken: (token: string) => Promise<TelegramStep>
+        findChat: () => Promise<TelegramStep>
+        test: () => Promise<{ ok: boolean; error?: string }>
+        disconnect: () => Promise<TelegramStep>
       }
 
       feishu: {
