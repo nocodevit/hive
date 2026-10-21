@@ -99,6 +99,8 @@ def main():
     sub = p.add_subparsers(dest='cmd', required=True)
     a = sub.add_parser('agents'); a.add_argument('--project')
     sub.add_parser('pending')
+    j = sub.add_parser('jira'); j.add_argument('what', choices=['search', 'get', 'transitions', 'me']); j.add_argument('arg', nargs='?', default='')
+    j.add_argument('--fields', default='summary,status,assignee,updated,labels,fixVersions,issuelinks'); j.add_argument('--max', type=int, default=20)
     r = sub.add_parser('run'); r.add_argument('routine', choices=['jira', 'jira-check', 'sort-inbox', 'morning-plan', 'evening-report'])
     c = sub.add_parser('chat-search'); c.add_argument('--q', required=True)
     f = sub.add_parser('feishu-try'); f.add_argument('--text', required=True); f.add_argument('--sender'); f.add_argument('--chat')
@@ -119,6 +121,18 @@ def main():
             print(row(x))
         n = {k: sum(1 for x in rows if x['activity'] == k) for k in order}
         print(f"-- {len(rows)} agents: {n['working']} working, {n['waiting']} waiting (chat open, idle), {n['off']} off")
+        return
+
+    if args.cmd == 'jira':
+        tool, a = {
+            'search': ('jira_search', {'jql': args.arg, 'fields': args.fields, 'max_results': args.max}),
+            'get': ('jira_get_issue', {'issue_key': args.arg, 'fields': args.fields}),
+            'transitions': ('jira_get_transitions', {'issue_key': args.arg}),
+            'me': ('jira_get_user_profile', {}),
+        }[args.what]
+        status, data = call('POST', '/jira/read', {'tool': tool, 'args': a}, timeout=120)
+        if status != 200: fail(status, data)
+        print(data['result'])
         return
 
     if args.cmd == 'run':
