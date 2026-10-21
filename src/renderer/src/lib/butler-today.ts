@@ -61,3 +61,27 @@ export function routineToday(r: RoutineLike, weekdays: number[], last: { at: num
   if (slots[0] > now) return { state: 'next', label: `next ${hm(slots[0])}` }
   return next ? { state: 'missed', label: `missed ${hm(slots.filter(d => d <= now).pop()!)} · next ${hm(next)}` } : { state: 'missed', label: `missed ${hm(slots[slots.length - 1])}` }
 }
+
+export interface MeetingLine { start: string | null; end: string | null; title: string }
+
+/** "- 14:00–14:30 Review" / "- all day Birthday" lines from the journal's Meetings section. */
+export function meetingLines(text: string): MeetingLine[] {
+  return text.split('\n').map(l => l.trim().replace(/^[-*]\s*/, '')).filter(Boolean).flatMap(l => {
+    const m = /^(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})\s+(.+)$/.exec(l)
+    if (m) return [{ start: m[1], end: m[2], title: m[3] }]
+    const a = /^all day\s+(.+)$/i.exec(l)
+    return a ? [{ start: null, end: null, title: a[1] }] : []
+  })
+}
+
+const mins = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + m }
+
+/** The next (or current) timed meeting: "in 50 min · 30 min" / "now · 15 min left". */
+export function nextMeeting(lines: MeetingLine[], now: Date): { m: MeetingLine; when: string } | null {
+  const n = now.getHours() * 60 + now.getMinutes()
+  const m = lines.find(x => x.start && x.end && mins(x.end) > n)
+  if (!m || !m.start || !m.end) return null
+  const s = mins(m.start), e = mins(m.end)
+  const left = (x: number) => (x >= 60 ? `${Math.floor(x / 60)}h${x % 60 ? ` ${x % 60}m` : ''}` : `${x} min`)
+  return { m, when: s <= n ? `now · ${left(e - n)} left` : `in ${left(s - n)} · ${left(e - s)}` }
+}

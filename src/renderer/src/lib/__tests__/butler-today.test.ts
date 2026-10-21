@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dayTitle, headline, previousDay, routineToday, shiftDate, toggleWeekday } from '../butler-today'
+import { dayTitle, headline, meetingLines, nextMeeting, previousDay, routineToday, shiftDate, toggleWeekday } from '../butler-today'
 
 describe('butler-today', () => {
   it('formats a day title', () => {
@@ -43,6 +43,22 @@ describe('butler-today', () => {
       expect(routineToday(inbox, wk, { at: wed(14, 30).getTime(), ok: true }, wed(14, 40)).label).toBe('ran 14:30 · next 15:00')
       expect(routineToday(inbox, wk, undefined, wed(7)).label).toBe('next 09:00')
       expect(routineToday(inbox, wk, undefined, wed(9, 10)).label).toBe('missed 09:00 · next 09:30')
+    })
+  })
+  describe('meetings', () => {
+    const lines = meetingLines('- all day 曹焕 的生日\n- 10:00–10:30 P4 sprint review\n- 14:00–15:30 MNO weekly\nNo meetings today')
+    it('parses timed and all-day lines, skips anything else', () => {
+      expect(lines).toEqual([
+        { start: null, end: null, title: '曹焕 的生日' },
+        { start: '10:00', end: '10:30', title: 'P4 sprint review' },
+        { start: '14:00', end: '15:30', title: 'MNO weekly' }
+      ])
+    })
+    it('next meeting: upcoming, in progress, none left', () => {
+      expect(nextMeeting(lines, new Date(2026, 9, 21, 9, 10))).toEqual({ m: lines[1], when: 'in 50 min · 30 min' })
+      expect(nextMeeting(lines, new Date(2026, 9, 21, 10, 20))!.when).toBe('now · 10 min left')
+      expect(nextMeeting(lines, new Date(2026, 9, 21, 11, 0))!.when).toBe('in 3h · 1h 30m')
+      expect(nextMeeting(lines, new Date(2026, 9, 21, 16, 0))).toBeNull()
     })
   })
 })

@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Butler Today 效果图</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --canvas: #F3F0F8; --card: #FFFFFF; --ink: #1E1B2E; --ink-2: #4A4560; --muted: #8C87A0; --faint: #B9B4C9;
+  --hover: #ECE8F4; --accent: #7C3AED; --accent-soft: #EFE7FD; --ok: #22C55E; --warn: #F59E0B; --bad: #EF4444;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #E6E2EE; font-family: 'Inter Tight', -apple-system, 'PingFang SC', sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; padding: 20px; }
+button { font: inherit; border: 0; background: none; cursor: pointer; color: inherit; }
+.bar { display: flex; gap: 12px; align-items: center; margin-bottom: 6px; font-size: 13px; }
+.bar strong { font-size: 15px; }
+.seg { display: inline-flex; background: #fff; border-radius: 999px; padding: 3px; }
+.seg button { font-size: 12px; font-weight: 600; color: var(--muted); padding: 6px 12px; border-radius: 999px; }
+.seg button.on { background: var(--accent); color: #fff; }
+.note { color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+.wrap { display: flex; gap: 28px; align-items: flex-start; flex-wrap: wrap; }
+.cap { font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+
+.drawer { width: 400px; height: 760px; background: var(--card); border-radius: 18px; box-shadow: 0 24px 60px rgba(30,27,46,.18); display: flex; flex-direction: column; overflow: hidden; }
+.dh { height: 52px; display: flex; align-items: center; gap: 8px; padding: 0 16px; font-weight: 600; font-size: 14px; }
+.face { width: 22px; height: 22px; border-radius: 50%; background: var(--accent-soft); display: inline-flex; align-items: center; justify-content: center; font-size: 13px; }
+.tabs { display: flex; gap: 2px; margin: 0 12px 8px; padding: 3px; background: var(--canvas); border-radius: 10px; }
+.tabs button { flex: 1; font-size: 12px; color: var(--muted); padding: 5px 0; border-radius: 8px; }
+.tabs button.on { background: #fff; color: var(--ink); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.06); }
+.body { flex: 1; overflow-y: auto; padding: 4px 14px 14px; display: flex; flex-direction: column; gap: 14px; }
+
+/* new design */
+.day { display: flex; align-items: center; gap: 6px; }
+.day h3 { font-size: 15px; font-weight: 600; flex: 1; }
+.arrow { width: 26px; height: 26px; border-radius: 8px; color: var(--muted); font-size: 14px; }
+.arrow:hover { background: var(--hover); color: var(--ink); }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--canvas); font-size: 11.5px; color: var(--ink-2); }
+.chip b { font-weight: 600; color: var(--ink); }
+.chip.warn { background: #FEF3E2; color: #9A5B00; }
+.chip.warn b { color: #9A5B00; }
+.dot { width: 6px; height: 6px; border-radius: 50%; background: var(--ok); }
+.dot.w { background: var(--warn); } .dot.m { background: var(--faint); }
+
+.next { border-radius: 14px; background: var(--accent-soft); padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+.next .t { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 500; color: var(--accent); }
+.next .n { flex: 1; min-width: 0; font-size: 13px; }
+.next .n div:last-child { font-size: 11px; color: var(--muted); }
+.next .more { font-size: 11.5px; color: var(--accent); font-weight: 600; }
+
+.sec { display: flex; align-items: baseline; gap: 8px; }
+.sec span { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); flex: 1; }
+.sec em { font-style: normal; font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; }
+.plan { display: flex; flex-direction: column; }
+.item { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid #F1EEF6; font-size: 13px; }
+.item:last-child { border-bottom: 0; }
+.box { width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--faint); flex-shrink: 0; }
+.item.done .box { background: var(--accent); border-color: var(--accent); }
+.item.done .tx { color: var(--faint); text-decoration: line-through; }
+.tx { flex: 1; min-width: 0; }
+.tag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 6px; background: var(--canvas); color: var(--muted); }
+.tag.d { background: var(--accent-soft); color: var(--accent); }
+
+.rows { border-radius: 14px; background: var(--canvas); padding: 2px 12px; }
+.row { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid #E9E5F1; font-size: 13px; }
+.row:last-child { border-bottom: 0; }
+.row .ic { width: 18px; text-align: center; }
+.row .k { width: 64px; color: var(--muted); font-size: 12px; }
+.row .v { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.row .c { color: var(--faint); font-size: 12px; }
+.open { padding: 4px 0 10px 28px; font-size: 12px; color: var(--ink-2); line-height: 1.55; border-bottom: 1px solid #E9E5F1; }
+
+.routines { padding: 4px 0 10px 28px; display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; font-size: 12px; border-bottom: 1px solid #E9E5F1; }
+.routines .s { font-family: 'JetBrains Mono', monospace; font-size: 11px; }
+.ok { color: #15803D; } .wa { color: #B45309; } .mu { color: var(--muted); }
+
+/* old */
+.old .box2 { border-radius: 12px; background: var(--canvas); padding: 8px 10px; font-size: 12px; }
+.old .lbl { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.old .body { gap: 6px; }
+.old .it { border-radius: 12px; background: var(--canvas); padding: 8px 10px; font-size: 13px; display: flex; gap: 8px; align-items: center; }
+</style>
+</head>
+<body>
+<div class="bar"><strong>Butler › Today 重新设计</strong>
+  <div class="seg" id="seg"><button class="on" data-v="am">早上 9:10</button><button data-v="pm">晚上 19:30</button></div>
+</div>
+<div class="note">静态效果图，内容是示意。左：现在 · 右：新设计</div>
+
+<div class="wrap">
+  <div>
+    <div class="cap">现在</div>
+    <div class="drawer old">
+      <div class="dh"><span class="face">🎩</span>Butler</div>
+      <div class="tabs"><button>Chat</button><button class="on">Today</button><button>Sessions</button><button>Approve</button></div>
+      <div class="body">
+        <div class="box2"><div class="lbl">Meetings · Wed 21 Oct</div>10:00–10:30 P4 sprint review<br>14:00–14:30 Sync with Daniel<br>16:00–17:00 MNO weekly</div>
+        <div class="box2"><div class="lbl">Routines</div>Morning plan · ran 08:31<br>Sort inbox · ran 09:00 · next 09:30<br>Jira · off<br>Evening report · next 19:00</div>
+        <div class="lbl" style="padding:4px 2px 0">Plan · Wed 21 Oct</div>
+        <div class="it">☑ Reply Gary on Claro roaming <span class="tag d">draft</span></div>
+        <div class="it">☐ Review SN-412 design</div>
+        <div class="it">☐ P4-881 needs a PR <span class="tag">Jira</span></div>
+        <div class="it">☐ Prep MNO weekly</div>
+        <div class="box2">Jira · 3 closed, 2 need you, 1 stale…</div>
+        <div class="box2">Butler today · Feishu: answered 6 · passed to you 2…</div>
+        <div class="box2">@ you on Feishu</div>
+        <div class="box2">Yesterday · Shipped v2.34.1…</div>
+        <div style="font-size:12px;color:var(--muted);padding:0 4px">‹ Older days</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="cap">新设计</div>
+    <div class="drawer">
+      <div class="dh"><span class="face">🎩</span>Butler</div>
+      <div class="tabs"><button>Chat</button><button class="on">Today</button><button>Sessions</button><button>Approve</button></div>
+      <div class="body" id="new"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const AM = {
+  next: { t: '10:00', n: 'P4 sprint review', sub: 'in 50 min · 30 min', more: '+2' },
+  chips: [['dot', '<b>2</b>/4 routines'], ['warn', '⚠ <b>1</b> missed'], ['', '<b>2</b> to approve']],
+  plan: [[1, 'Reply Gary on Claro roaming', 'draft'], [0, 'Review SN-412 design', ''], [0, 'P4-881 needs a PR', 'Jira'], [0, 'Prep MNO weekly', '']],
+  rows: [['🎫', 'Jira', '3 closed · 2 need you', ''], ['📋', 'Routines', 'Jira missed 09:00', 'r'], ['🌙', 'Yesterday', 'Shipped v2.34.1 · 4 PRs merged', '']]
+}
+const PM = {
+  next: null,
+  chips: [['dot', '<b>4</b>/4 routines'], ['', '<b>0</b> to approve']],
+  plan: [[1, 'Reply Gary on Claro roaming', 'draft'], [1, 'Review SN-412 design', ''], [1, 'P4-881 needs a PR', 'Jira'], [0, 'Prep MNO weekly', '']],
+  rows: [['✨', 'Summary', 'Shipped v2.35.0 · 3 agents done', 'o'], ['🎩', 'Butler', 'Feishu 6 answered · 2 to you', ''], ['💬', '@ you', '3 mentions · Daniel, Lin', ''], ['🎫', 'Jira', '3 closed · 2 need you', ''], ['📋', 'Routines', 'all ran', 'r']]
+}
+function render(d) {
+  const done = d.plan.filter(p => p[0]).length
+  document.getElementById('new').innerHTML = `
+    <div class="day"><button class="arrow">‹</button><h3>Wed 21 Oct</h3><button class="arrow" style="opacity:.3">›</button></div>
+    <div class="chips">${d.chips.map(([k, t]) => `<span class="chip ${k === 'warn' ? 'warn' : ''}">${k === 'dot' ? '<i class="dot"></i>' : ''}${t}</span>`).join('')}</div>
+    ${d.next ? `<div class="next"><span class="t">${d.next.t}</span><div class="n"><div>${d.next.n}</div><div>${d.next.sub}</div></div><button class="more">${d.next.more} meetings ▾</button></div>` : ''}
+    <div><div class="sec"><span>Plan</span><em>${done}/${d.plan.length}</em></div>
+      <div class="plan">${d.plan.map(([x, t, g]) => `<div class="item ${x ? 'done' : ''}"><i class="box"></i><span class="tx">${t}</span>${g ? `<span class="tag ${g === 'draft' ? 'd' : ''}">${g}</span>` : ''}</div>`).join('')}</div></div>
+    <div class="rows">${d.rows.map(([ic, k, v, x]) => `<div class="row"><span class="ic">${ic}</span><span class="k">${k}</span><span class="v">${v}</span><span class="c">${x ? '▾' : '›'}</span></div>` +
+      (x === 'r' ? `<div class="routines"><span>Morning plan</span><span class="s ok">ran 08:31</span><span>Sort inbox</span><span class="s ok">ran 09:00 · next 09:30</span><span>Jira</span><span class="s wa">missed 09:00</span><span>Evening report</span><span class="s mu">next 19:00</span></div>` : '') +
+      (x === 'o' ? `<div class="open">Shipped v2.35.0 (title bar, Approve history, voice preview). Missy finished SN-412 e2e; Wendy waiting on eSIM API.</div>` : '')).join('')}</div>`
+}
+document.querySelectorAll('#seg button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#seg button').forEach(x => x.classList.toggle('on', x === b)); render(b.dataset.v === 'am' ? AM : PM)
+})
+render(AM)
+</script>
+</body>
+</html>
