@@ -89,13 +89,13 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
               </>
             ) : editing === it.id ? (
               <label className="flex flex-col gap-1">
-                <span className="text-[11px] font-semibold text-text-muted">Reply · sent exactly as written</span>
+                <span className="text-[11px] font-semibold text-text-muted">{it.kind.startsWith('jira') ? 'Comment · added to the ticket' : 'Reply · sent exactly as written'}</span>
                 <textarea value={text} onChange={e => setText(e.target.value)} aria-label="Reply" rows={5}
                   className="w-full rounded-lg bg-bg-secondary border border-border px-2.5 py-2 text-[12px] text-text-primary focus:outline-none focus:border-accent resize-y" />
               </label>
             ) : (
               <details>
-                <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">Reply</summary>
+                <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">{it.kind.startsWith('jira') ? 'Comment' : 'Reply'}</summary>
                 <div className="mt-1.5 rounded-lg bg-bg-secondary px-2.5 py-2 text-[12px] text-text-primary whitespace-pre-wrap">{it.draft}</div>
               </details>
             )}

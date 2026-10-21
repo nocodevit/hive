@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { assistantHolding, createRelationLookup, declineReply, DECLINE_TOPICS, freeBusyText, gateAnswer, isAck, meetingCreatedReply, meetingSlot, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
 
-const ans = (o: Partial<Answer> = {}): Answer => ({ category: 'product-status', level: 'auto', confidence: 'high', reply: 'ok', sources: [], claims: [], ...o })
+const ans = (o: Partial<Answer> = {}): Answer => ({ category: 'product-status', level: 'auto', confidence: 'high', reply: 'ok', sources: [], claims: [], jiraFixes: [], ...o })
 
 describe('parseAnswer', () => {
   it('reads the JSON, defaults the unknown to the safe side', () => {
     expect(parseAnswer('x {"category":"meeting","level":"auto","confidence":"high","reply":" hi ","sources":["FAE-1"],"claims":[{"claim":"c","verdict":"confirmed","source":"FAE-1"}]} y'))
-      .toEqual({ category: 'meeting', level: 'auto', confidence: 'high', reply: 'hi', sources: ['FAE-1'], claims: [{ claim: 'c', verdict: 'confirmed', source: 'FAE-1' }] })
+      .toEqual({ category: 'meeting', level: 'auto', confidence: 'high', reply: 'hi', sources: ['FAE-1'], claims: [{ claim: 'c', verdict: 'confirmed', source: 'FAE-1' }], jiraFixes: [] })
     expect(parseAnswer('{"category":"x","level":"y","confidence":"z","reply":"r","claims":[{"claim":"c","verdict":"maybe"}]}'))
       .toMatchObject({ category: 'cannot-answer', level: 'hold', confidence: 'low', claims: [{ verdict: 'unverified' }] })
     expect(parseAnswer('not json')).toBeNull()
@@ -128,5 +128,12 @@ describe('meetings Butler may create', () => {
   it('the reply says what, when and the reminder', () => {
     expect(meetingCreatedReply({ start: new Date(2026, 9, 22, 16).getTime(), end: new Date(2026, 9, 22, 16, 30).getTime(), title: 'Sync' }, 'https://applink/x', 15))
       .toBe('好的，会议已创建：Sync，10/22 16:00–16:30，已设 15 分钟提醒。 https://applink/x')
+  })
+})
+
+describe('jira fixes from an answer', () => {
+  it('only FAE / P4 / LFCS / OUTLET keys with a status and a reason', () => {
+    const a = parseAnswer('{"category":"product-status","level":"auto","confidence":"high","reply":"r","jira_fixes":[{"key":"FAE-1076","to":"完成","why":"P4-5317 released"},{"key":"PR-1","to":"Done","why":"x"},{"key":"P4-1","to":"","why":"x"}]}')!
+    expect(a.jiraFixes).toEqual([{ key: 'FAE-1076', to: '完成', why: 'P4-5317 released' }])
   })
 })

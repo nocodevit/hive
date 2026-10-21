@@ -15,6 +15,7 @@ import { claudeJsonPath, discoverTools } from './butlerTools'
 import { createMcpClient } from './mcpHttp'
 import { freeBusyText, workingDays } from './feishuAnswer'
 import { slotIsFree } from './calendar'
+import { jiraCaller, registerJiraActions } from './butlerJira'
 import { setupButlerMailRoutines } from './butlerMailRoutines' // [butler:mail-routines]
 import { agendaText } from './calendar'
 
@@ -676,6 +677,9 @@ const butlerRoutineMode = setupButlerMailRoutines({
 })
 // [butler:feishu-agent-calendar]
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory, previewFeishuAnswer } from './butlerFeishuAgentIpc'
+// Approved Jira changes (status fixes from answers, later handle-jira) run through the
+// owner's own Jira MCP server; the model never holds these write tools.
+registerJiraActions(approvals, () => jiraCaller(butlerDir(DATA_DIR), claudeJsonPath(app.getPath('home'))))
 registerButlerFeishuAgentIpc({
   ipcMain, butlerDir: butlerDir(DATA_DIR), feishu, approvals, claudeBin, readProfile,
   // butlerCalendar is created below; this only runs when a message is answered.

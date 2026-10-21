@@ -23,6 +23,7 @@ import type { ButlerProfile } from './butlerProfile'
 import type { Approval } from './approvals'
 import { createCaseLog, type FeishuCase } from './feishuCases'
 import { MEETING_REMINDER_MIN } from './calendar'
+import { jiraFixApproval } from './butlerJira'
 import { assistantHolding, consentReply, declineReply, DECLINE_TOPICS, gateAnswer, meetingCreatedReply, meetingSlot, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
 
 export const FEISHU_API = 'https://open.feishu.cn/open-apis'
@@ -576,6 +577,8 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
 
     const { relation, answer, draft, guard, gate } = await decide(job, history, self)
 
+    // Status fixes the answer found (verified against code / releases): one card each for the owner.
+    for (const f of answer?.jiraFixes ?? []) deps.approvals.add(jiraFixApproval(f, `from Feishu · ${job.chatName || 'chat'}`))
     const decided = { ...baseCase(job, relation), category: answer?.category ?? 'cannot-answer', confidence: answer?.confidence ?? 'low', claims: answer?.claims ?? [], sources: answer?.sources ?? [], draft, level: gate.level, reasons: gate.reasons }
     if (gate.level === 'auto') {
       const r = await reply(token, job, draft, 'answer')

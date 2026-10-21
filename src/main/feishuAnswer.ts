@@ -46,6 +46,8 @@ export interface Answer {
   sources: string[]
   claims: Claim[]
   proposal?: Proposal
+  /** Tickets whose status is wrong by what was verified; the owner approves each change. */
+  jiraFixes: Array<{ key: string; to: string; why: string }>
 }
 
 /** "ok", "好的", "收到", 👍, a sticker … — an acknowledgement, nothing to answer. */
@@ -92,7 +94,10 @@ export function parseAnswer(output: string): Answer | null {
         ...(str(j.proposal.end, 16) ? { end: str(j.proposal.end, 16) } : {}),
         ...(str(j.proposal.title, 100) ? { title: str(j.proposal.title, 100) } : {})
       } : undefined
-  return { category, level, confidence, reply: str(j.reply, 2000), sources, claims, ...(proposal ? { proposal } : {}) }
+  const jiraFixes = (Array.isArray(j.jira_fixes) ? j.jira_fixes : []).slice(0, 5)
+    .map((f: any) => ({ key: str(f?.key, 20), to: str(f?.to, 40), why: str(f?.why, 200) }))
+    .filter((f: { key: string; to: string; why: string }) => /^(?:FAE|P4|LFCS|OUTLET)-\d+$/.test(f.key) && f.to && f.why)
+  return { category, level, confidence, reply: str(j.reply, 2000), sources, claims, jiraFixes, ...(proposal ? { proposal } : {}) }
 }
 
 /** What Butler says when the sender's "ok" agrees to a proposal the owner must approve. */
