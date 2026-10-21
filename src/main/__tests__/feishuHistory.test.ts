@@ -56,3 +56,15 @@ describe('chat history search', () => {
     expect((await createHistorySearch({ http: fakeFeishu(), token: async () => 'u' })('a', ben)).note).toBe('empty query')
   })
 })
+
+describe('owner search without the message-search scope', () => {
+  it('a name finds that direct chat (named after the other person) and its latest messages', async () => {
+    const search = createHistorySearch({
+      http: fakeFeishu({ searchAllowed: false }), token: async () => 'u',
+      chats: async () => [{ id: 'here', name: 'Daniel Vargas Millan', p2p: true }, { id: 'shared', name: 'Sphere2 项目群', p2p: false }]
+    })
+    const r = await search('daniel', null)
+    expect(r.hits.map(h => h.chatId)).toEqual(['here', 'here'])
+    expect(r.note).toBe('no message-search permission: latest messages in "Daniel Vargas Millan"')
+  })
+})

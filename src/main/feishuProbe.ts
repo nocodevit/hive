@@ -37,11 +37,13 @@ export async function probeFeishu(token: string, scope: string, get: Get): Promi
     try { return await get(url, token) } catch (e) { return { status: 0, body: { code: -1, msg: e instanceof Error ? e.message : String(e) } } }
   }
   const userInfo = step(await safe(`${API}/authen/v1/user_info`), d => ({ hasOpenId: !!d?.open_id }))
-  const chatsRes = await safe(`${API}/im/v1/chats?page_size=50`)
+  const chatsRes = await safe(`${API}/im/v1/chats?page_size=100&types=p2p,group&sort_type=ByActiveTimeDesc`)
   const items: any[] = chatsRes.body?.data?.items ?? []
+  const modeOf = (c: any) => String(c?.chat_mode ?? c?.chat_type ?? '?')
   const chats = step(chatsRes, () => ({
     count: items.length,
-    modes: Array.from(new Set(items.map(c => String(c?.chat_mode ?? c?.chat_type ?? '?')))),
+    modes: Array.from(new Set(items.map(modeOf))),
+    p2p: items.filter(c => modeOf(c) === 'p2p').length,
     hasMore: !!chatsRes.body?.data?.has_more
   }))
   const pick = (mode: string) => items.find(c => (c?.chat_mode ?? c?.chat_type) === mode)?.chat_id as string | undefined

@@ -85,7 +85,8 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
   })
   const search = createHistorySearch({
     http: feishuHttp,
-    token: async () => { const t = await d.feishu.accessToken(); return t.ok && t.token ? t.token : null }
+    token: async () => { const t = await d.feishu.accessToken(); return t.ok && t.token ? t.token : null },
+    chats: () => agent.chats()
   })
   chatSearch = (q, runToken) => {
     if (runToken && !runs.has(runToken)) return Promise.resolve({ hits: [], note: 'run ended' })

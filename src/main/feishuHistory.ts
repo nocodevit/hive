@@ -63,7 +63,7 @@ export async function searchAllChats(http: Http, token: string, query: string): 
   return (r.body.data?.items ?? []).filter((x: unknown) => typeof x === 'string').map((messageId: string) => ({ messageId }))
 }
 
-export function createHistorySearch(deps: { http: Http; token: () => Promise<string | null> }) {
+export function createHistorySearch(deps: { http: Http; token: () => Promise<string | null>; chats?: () => Promise<Array<{ id: string; name: string; p2p: boolean }>> }) {
   const membership = new Map<string, boolean>()
   async function member(token: string, chatId: string, openId: string) {
     const k = `${chatId}:${openId}`
@@ -88,6 +88,16 @@ export function createHistorySearch(deps: { http: Http; token: () => Promise<str
       // The guardrail: while answering someone, only chats they are in.
       if (scope && chatId !== scope.chatId && !(await member(token, chatId, scope.senderId))) { note = note || 'some results hidden: the sender is not in those chats'; continue }
       hits.push(toHit(m, chatId, chatId === scope?.chatId ? scope.chatName : ''))
+    }
+    // The owner asking for themselves without the search scope: chats named like the
+    // query (a direct chat is named after the other person) — their latest messages.
+    if (!scope && found === null && deps.chats) {
+      const named = (await deps.chats().catch(() => [])).filter(c => words.some(w => c.name.toLowerCase().includes(w))).slice(0, 3)
+      for (const c of named) {
+        const latest = await searchChat(deps.http, token, { senderId: '', chatId: c.id, chatName: c.name }, [''], 1).catch(() => [])
+        hits.push(...latest.slice(0, 10))
+      }
+      if (named.length) note = `no message-search permission: latest messages in ${named.map(c => `"${c.name}"`).join(', ')}`
     }
     hits.sort((a, b) => b.time - a.time)
     return { hits: hits.slice(0, 15), note }
