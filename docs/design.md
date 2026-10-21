@@ -246,6 +246,8 @@ Dot placement: bottom-right corner of avatar/icon, with 2px border matching pare
 | Slide-in panels | 200ms | ease-out |
 | Hover scale (avatar) | 200ms | ease |
 | Progress bar fill | 300ms | ease |
+| Button press (`:active`): sink 1px, scale 0.97, inset shadow | 80ms | motion-ease |
+| Async button (Resume, Send…): spinner + "…ing" label, disabled until done | — | — |
 
 ### Keyframes
 ```css

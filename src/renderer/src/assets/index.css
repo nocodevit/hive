@@ -371,6 +371,15 @@ a:focus-visible,
   outline-offset: 2px;
 }
 
+/* Press feedback for every button: it sinks a pixel and loses its lift while held. */
+button, [role='button'] {
+  transition: transform 80ms var(--motion-ease), box-shadow 80ms var(--motion-ease), background-color 200ms ease, color 200ms ease;
+}
+button:not(:disabled):active, [role='button']:not([aria-disabled='true']):active {
+  transform: translateY(1px) scale(0.97);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.12);
+}
+
 /* Card lift — apply to any interactive card that should visibly react
    to hover. Combines shadow bump (e1 → e2) with a 1px translate. */
 .card-lift {

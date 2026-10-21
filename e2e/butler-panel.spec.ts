@@ -68,7 +68,10 @@ test('the Butler button opens the panel with Chat and Sessions', async () => {
 test('Resume on an off agent starts its chat; Open jumps to it and closes the panel', async () => {
   const panel = page.getByRole('complementary', { name: 'Butler panel' })
   await panel.getByRole('tab', { name: /Sessions/ }).click()
-  await panel.getByRole('button', { name: 'Resume Missy' }).click()
+  const resume = panel.getByRole('button', { name: 'Resume Missy' })
+  await resume.click()
+  // Pressed: it says so and cannot be pressed again (unless the row is already live).
+  await expect(panel.getByRole('button', { name: /^(Resume|Open|Answer) Missy$/ })).toHaveText(/Resuming…|Open|Answer/)
   await expect.poll(async () => (await page.evaluate(() => window.api.butler.agents())).find(r => r.agent === 'Missy')?.activity, { timeout: 30000 }).not.toBe('off')
   await panel.getByRole('button', { name: /^(Open|Answer) Missy$/ }).click()
   await expect(panel).toBeHidden()
