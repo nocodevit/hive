@@ -5,7 +5,8 @@
       "Bash(./hive tail:*)",
       "Bash(./hive send:*)",
       "Bash(./hive start:*)",
-      "Bash(./hive chat-search:*)"
+      "Bash(./hive chat-search:*)",
+      "Bash(./hive pending:*)"
     ],
     "deny": [
       "Edit",

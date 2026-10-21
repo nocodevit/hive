@@ -15,7 +15,8 @@ import { createButlerMail } from './butlerMail'
 import { createMailClients } from './butlerMailClients'
 import { createClaudeRunner } from './butlerClaude'
 import { createRoutineScheduler, readRoutineSettings } from './butlerRoutines'
-import { agentDays, createRoutineRunner, type AgentInfo } from './butlerRoutineRun'
+import { agentDays, createRoutineRunner, type AgentInfo, type RoutineRunner } from './butlerRoutineRun'
+import type { RoutineRunRecord } from '../shared/butler-routines'
 import { startRoutineMode, type RoutineMode } from './butlerRoutineMode'
 import { registerButlerMailIpc } from './butlerMailIpc'
 import { registerButlerRoutinesIpc } from './butlerRoutinesIpc'
@@ -42,9 +43,10 @@ export interface ButlerMailRoutinesDeps {
   calendar?: (date: string) => Promise<string>
   /** Another normal Hive launch: show (or reopen) the window. */
   reopen?: () => void
+  onRoutineRun?: (rec: RoutineRunRecord) => void
 }
 
-export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode {
+export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: RoutineMode; runner: RoutineRunner } {
   const folder = butlerDir(d.dataDir)
   const isolated = !!process.env.HIVE_DATA_DIR
   // Isolated test data dirs may keep passwords in plain files (never the Keychain).
@@ -87,6 +89,7 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode 
       if (!call) throw new Error('Jira not connected')
       return (await runHandleJira({ folder, call, write: p => runClaude(p), approvals: d.approvals }, cfg)).text
     },
+    onRun: d.onRoutineRun,
     // State and journal live at the plain path; only a claude run (runClaude's
     // cwd is d.folder) installs the Butler files.
     folder: () => folder,
@@ -121,5 +124,5 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode 
   // must not install the Butler folder (only running a routine does).
   registerButlerRoutinesIpc({ ipcMain: d.ipcMain, folder: () => folder, scheduler, runner })
 
-  return startRoutineMode(d.app, process.argv, (id, opts) => runner.run(id, opts), msg => console.log(`[butler] ${msg}`), d.reopen)
+  return { runner, mode: startRoutineMode(d.app, process.argv, (id, opts) => runner.run(id, opts), msg => console.log(`[butler] ${msg}`), d.reopen) }
 }
