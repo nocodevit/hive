@@ -1,6 +1,6 @@
 import { app, shell, BrowserWindow, ipcMain, dialog, Menu, safeStorage } from 'electron'
 import { join } from 'path'
-import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync, fstatSync } from 'fs'
+import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync, fstatSync, openSync, readSync, closeSync } from 'fs'
 import { createServer } from 'http'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import * as pty from 'node-pty'
@@ -186,7 +186,7 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
 import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage } from './chat'
-import { getPrevSessionInfo } from './chat-recent-sessions'
+import { scanPrevSessionInfo } from './session-scan-host'
 import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
 import { readOpenChats, writeOpenChats, buildUnclosedRows, lastUserText } from './openChats'
 import { createFeishuAuth, relayUrl, RELAY_TIMEOUT_MS } from './feishuAuth'
@@ -554,7 +554,7 @@ ipcMain.handle('chat:listUnclosed', async () => {
   const open = readOpenChats(DATA_DIR)
   if (!open.length) return []
   const details = new Map<string, Awaited<ReturnType<typeof unclosedDetail>>>()
-  for (const rec of open) details.set(rec.agentId, await unclosedDetail(rec))
+  await Promise.all(open.map(async rec => { details.set(rec.agentId, await unclosedDetail(rec)) }))
   return buildUnclosedRows(data, open, listLiveChatAgentIds(), rec => details.get(rec.agentId)!)
 })
 // The user has answered the prompt (resumed some, skipped the rest): keep
@@ -729,8 +729,8 @@ async function unclosedDetail(rec: { agentId: string; cwd: string; since: number
     const log = latestChatLogPath(join(DATA_DIR, 'chat-logs'), rec.agentId)
     if (log) lastTask = lastUserText(readLogTailLines(log))
   } catch { /* log unreadable: show the row without a task */ }
-  let prev: Awaited<ReturnType<typeof getPrevSessionInfo>> | null = null
-  try { prev = rec.cwd ? await getPrevSessionInfo(rec.cwd, `chat-${rec.agentId}`) : null } catch { /* no session on disk */ }
+  let prev: Awaited<ReturnType<typeof scanPrevSessionInfo>> | null = null
+  try { prev = rec.cwd ? await scanPrevSessionInfo(rec.cwd, `chat-${rec.agentId}`) : null } catch { /* no session on disk */ }
   return {
     lastTask,
     lastActiveMs: prev?.lastActiveMs || rec.since,
@@ -765,11 +765,18 @@ function butlerRows() {
 
 /** Last ~2MB of a log, dropping the (probably cut) first line. */
 function readLogTailLines(path: string): string[] {
-  const size = statSync(path).size
-  const start = Math.max(0, size - BUTLER_TAIL_BYTES)
-  const buf = readFileSync(path).subarray(start)
-  const lines = buf.toString('utf-8').split('\n')
-  return start > 0 ? lines.slice(1) : lines
+  // Read only the tail: chat logs reach hundreds of MB, and this runs on main.
+  const fd = openSync(path, 'r')
+  try {
+    const size = fstatSync(fd).size
+    const start = Math.max(0, size - BUTLER_TAIL_BYTES)
+    const buf = Buffer.alloc(size - start)
+    readSync(fd, buf, 0, buf.length, start)
+    const lines = buf.toString('utf-8').split('\n')
+    return start > 0 ? lines.slice(1) : lines
+  } finally {
+    closeSync(fd)
+  }
 }
 
 function readJsonBody(req: IncomingMessage): Promise<any> {
