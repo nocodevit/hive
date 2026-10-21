@@ -1,12 +1,15 @@
-// One-shot `claude -p` in the Butler folder for the routines and mail.
-// Always a fresh session (never the Butler chat's), prompt on stdin, and no
-// Bash / file-writing / web tools: the input carries untrusted email and
-// chat text, and the Butler folder's settings allow `./hive send`.
+// One-shot `claude -p` in the Butler folder for the routines, mail and
+// answer-for-me. Always a fresh session (never the Butler chat's), prompt on
+// stdin, dontAsk: only the Butler allow-list runs (so `./hive agents`, `tail`
+// and the read tools work; any other shell command is refused). The input
+// carries untrusted email and chat text, so these stay off on top: writing
+// files, the web (no sending data out), and `./hive send` / `./hive start`,
+// which would hand a stranger's words to an agent to act on.
 
 import { spawn as nodeSpawn } from 'child_process'
 
 export const ROUTINE_CLAUDE_TIMEOUT_MS = 5 * 60_000
-export const DISALLOWED_TOOLS = ['Bash', 'Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch']
+export const DISALLOWED_TOOLS = ['Edit', 'Write', 'NotebookEdit', 'WebFetch', 'WebSearch', 'Bash(./hive send:*)', 'Bash(./hive start:*)']
 
 export function claudePrintArgs(allowedTools: string[] = []): string[] {
   return [
