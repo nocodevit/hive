@@ -176,6 +176,22 @@ export function inQuietHours(q: QuietHours | null, at: Date): boolean {
 }
 
 /** Readable text of a Feishu message (text / post); @-keys become names. */
+/** Feishu's calendar cards: a shared event, an invitation, a general calendar message. */
+const CALENDAR_TYPES = new Set(['share_calendar_event', 'calendar', 'general_calendar'])
+
+const pad = (n: number) => String(n).padStart(2, '0')
+const hm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`
+
+/** "[Calendar event] Review · 10-22 14:00–15:00" — the title and time Butler needs to check the calendar. */
+export function calendarText(c: any): string {
+  const title = String(c?.summary ?? '').trim() || '(untitled)'
+  const s = Number(c?.start_time), e = Number(c?.end_time)
+  if (!Number.isFinite(s) || s <= 0) return `[Calendar event] ${title}`
+  const a = new Date(s), b = Number.isFinite(e) && e > s ? new Date(e) : null
+  const day = `${pad(a.getMonth() + 1)}-${pad(a.getDate())}`
+  return `[Calendar event] ${title} · ${day} ${hm(a)}${b ? `–${hm(b)}` : ''}`
+}
+
 export function messageText(m: any): string {
   let content: any = {}
   try { content = JSON.parse(m?.body?.content ?? '{}') } catch { /* not JSON */ }
@@ -186,7 +202,8 @@ export function messageText(m: any): string {
     const lines: any[] = Array.isArray(post?.content) ? post.content : []
     text = [post?.title, ...lines.map(l => (Array.isArray(l) ? l : []).map((e: any) => e?.text ?? (e?.tag === 'at' ? `@${e?.user_name ?? ''}` : '')).join(''))]
       .filter(Boolean).join('\n')
-  } else text = `[${m?.msg_type ?? 'message'}]`
+  } else if (CALENDAR_TYPES.has(m?.msg_type)) text = calendarText(content)
+  else text = `[${m?.msg_type ?? 'message'}]`
   for (const at of Array.isArray(m?.mentions) ? m.mentions : []) {
     if (at?.key) text = text.split(at.key).join(`@${at.name ?? ''}`)
   }
