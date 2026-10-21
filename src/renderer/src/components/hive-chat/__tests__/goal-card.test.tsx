@@ -69,3 +69,13 @@ describe('/goal as the user turn', () => {
     expect((container.firstElementChild as HTMLElement).getAttribute('title')).toBeNull()
   })
 })
+
+describe('UserMessage bubble', () => {
+  it('wraps long words inside the bubble when the panel is narrow', () => {
+    const long = 'https://example.com/' + 'a'.repeat(300)
+    render(<UserMessage text={long} />)
+    const span = screen.getByText(long)
+    expect(span.style.minWidth).toBe('0px')
+    expect(span.style.overflowWrap).toBe('anywhere')
+  })
+})

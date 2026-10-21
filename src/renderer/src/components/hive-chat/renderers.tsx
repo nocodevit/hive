@@ -399,7 +399,7 @@ export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRe
         fontFamily: FONT_MONO
       }}>
         <span style={{ color: CRUSH.Charple, fontWeight: 700, fontSize: 16 }}>❯</span>
-        <span style={{ color: CRUSH.Ash, fontWeight: 500, whiteSpace: 'pre-wrap', flex: 1 }}>
+        <span style={{ color: CRUSH.Ash, fontWeight: 500, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', flex: 1, minWidth: 0 }}>
           {redact(parsed.kind === 'command' ? `/${parsed.command}${parsed.args ? ' ' + parsed.args : ''}` : parsed.text)}
         </span>
       </div>
@@ -442,7 +442,7 @@ export function UserMessage({ text, onRecall, isSubagent }: { text: string; onRe
       lineHeight: 1.6,
       position: 'relative' as const
     }}>
-      <span style={{ color: CHAT.ink, whiteSpace: 'pre-wrap', flex: 1 }}>{redact(parsed.text)}</span>
+      <span style={{ color: CHAT.ink, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', flex: 1, minWidth: 0 }}>{redact(parsed.text)}</span>
       {onRecall && (
         <button
           onClick={() => onRecall(parsed.text)}
