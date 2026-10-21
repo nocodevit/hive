@@ -78,8 +78,8 @@ export function ButlerPanel(p: Props) {
   const n = sessionCounts(rows)
   const waiting = rows.filter(r => r.activity === 'waiting')
   const box = p.mode === 'drawer'
-    ? { top: 10, right: 10, bottom: 10, width: 420 }
-    : { top: 10, right: 10, bottom: 10, left: p.pageLeft }
+    ? { top: 44, right: 10, bottom: 10, width: 420 }
+    : { top: 44, right: 10, bottom: 10, left: p.pageLeft }
 
   return (
     <div

@@ -962,7 +962,6 @@ export default function App() {
     )
   }
 
-  const filesVisible = !!(showFiles && selectedProject && selectedAgent)
   const butlerButton = (
     <div className="no-drag inline-flex items-center gap-1.5 flex-shrink-0">
       <QuickToggles
@@ -981,10 +980,18 @@ export default function App() {
   const butlerInList = butlerPinned || (butlerOpen && butlerMode === 'page')
 
   return (
-    <div className="flex h-screen bg-sidebar-bg text-text-primary pr-2.5 pb-2.5">
+    <div className="flex flex-col h-screen bg-sidebar-bg text-text-primary">
+      {/* Title bar across the window: traffic lights, where you are, Butler (ui-preview-butler.html). */}
+      <div className="drag-region h-[44px] flex-shrink-0 flex items-center gap-2 pl-[88px] pr-3">
+        <span className="flex-1 min-w-0 truncate text-[12px] font-medium text-text-muted" aria-label="Location">
+          {[selectedProject?.name, selectedAgent?.name].filter(Boolean).join(' / ')}
+        </span>
+        {butlerButton}
+      </div>
+      <div className="flex flex-1 min-h-0 pr-2.5 pb-2.5">
       {/* Left: Projects */}
       <div className="flex flex-col flex-shrink-0 pl-2.5" style={{ width: panelWidths.projects }}>
-        <div className="drag-region h-[62px] flex items-end px-2 pb-2.5 justify-between">
+        <div className="drag-region flex items-center px-2 pt-1 pb-2.5 justify-between">
           <h2 className="no-drag text-[14px] font-bold text-text-primary">
             Hive<span className="ml-1.5 text-[11px] font-medium text-text-muted">v{__APP_VERSION__}</span>
           </h2>
@@ -1364,7 +1371,7 @@ export default function App() {
       <ResizeHandle onResize={(d) => resizePanel('projects', d)} />
 
       {/* Middle: Agents */}
-      <div className="hive-card mt-2.5 flex flex-col flex-shrink-0" style={{ width: panelWidths.agents }}>
+      <div className="hive-card flex flex-col flex-shrink-0" style={{ width: panelWidths.agents }}>
         <div className="drag-region hive-head">
           <h2 className="no-drag hive-head-title truncate">
             {selectedProject ? selectedProject.name : 'Agents'}
@@ -1630,7 +1637,7 @@ export default function App() {
       <ResizeHandle onResize={(d) => resizePanel('agents', d)} />
 
       {/* Right: Main Panel */}
-      <div className="hive-card mt-2.5 flex-1 flex flex-col min-w-0">
+      <div className="hive-card flex-1 flex flex-col min-w-0">
         <div className="drag-region hive-head gap-3">
           <div className="no-drag flex items-center min-w-0">
             <h2 className="hive-head-title flex-shrink-0">
@@ -1728,7 +1735,6 @@ export default function App() {
               )}
             </div>
           )}
-          {!filesVisible && butlerButton}
         </div>
         <div className="flex-1 relative">
           {!selectedAgent && !selectedProject && (
@@ -3147,7 +3153,6 @@ export default function App() {
               agentCwd={cwd}
               width={panelWidths.files}
               onOpenFile={setPreviewFilePath}
-              headerTrailing={butlerButton}
             />
           </>
         )
@@ -3872,6 +3877,7 @@ export default function App() {
             </div>
           )
         })}
+      </div>
       </div>
     </div>
   )
