@@ -151,6 +151,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     return view()
   })
   d.ipcMain.handle('feishuAgent:log', () => agent.log(20))
+  d.ipcMain.handle('feishuAgent:scanNow', () => agent.scanNow())
   d.ipcMain.handle('feishuAgent:setPerson', (_e, id: unknown, relation: unknown) => {
     if (typeof id === 'string' && typeof relation === 'string') setPerson(d.butlerDir, id, relation as any)
     return view()

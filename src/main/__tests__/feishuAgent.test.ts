@@ -1,10 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { mkdtempSync, readFileSync, existsSync, writeFileSync } from 'fs'
+import { describe, it, expect, vi } from 'vitest'
+import { mkdtempSync, readFileSync, existsSync, writeFileSync , START_SCAN_MS } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   createFeishuAgent, ensurePrefix, quoteBlock, POLL_CHATS, lockedTopicHit, inQuietHours, messageText, normalizeAgentSettings,
-  defaultPrefix, FOLLOWUP_KIND, RECALL_WINDOW_MS
+  defaultPrefix, FOLLOWUP_KIND, RECALL_WINDOW_MS, START_SCAN_MS
 } from '../feishuAgent'
 import { createApprovals } from '../approvals'
 import { EMPTY_PROFILE } from '../butlerProfile'
@@ -152,6 +152,29 @@ describe('feishu agent', () => {
     const onDisk = JSON.parse(readFileSync(join(t.dir, 'feishu-agent.json'), 'utf8'))
     expect(onDisk.extraAskFirst).toBeUndefined()
     expect(onDisk.askFirstTopics).toEqual([{ name: '招人', words: ['招人'], hint: '招人' }])
+  })
+
+  it('scan now: one pass on demand; refused while off', async () => {
+    const t = setup()
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', 'build 状态?')
+    expect(await t.agent.scanNow()).toEqual({ ok: true, handled: 0 })
+    expect(t.agent.pendingJobs()).toHaveLength(1)
+    t.agent.setSettings({ enabled: false })
+    expect(await t.agent.scanNow()).toMatchObject({ ok: false, error: 'off' })
+  })
+
+  it('the first scan after start runs within seconds, not after a full poll interval', async () => {
+    vi.useFakeTimers()
+    try {
+      const t = setup()
+      t.advance(1000)
+      t.fs.add('p1', 'ou_lin', 'build 状态?')
+      t.agent.start()
+      await vi.advanceTimersByTimeAsync(START_SCAN_MS + 10)
+      expect(t.agent.pendingJobs()).toHaveLength(1)
+      t.agent.stop()
+    } finally { vi.useRealTimers() }
   })
 
   it('first enable starts at now: history is never answered', async () => {

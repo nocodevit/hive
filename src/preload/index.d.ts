@@ -165,6 +165,7 @@ declare global {
         get: () => Promise<import('./feishuAgentTypes').FeishuAgentView>
         set: (patch: Partial<import('./feishuAgentTypes').FeishuAgentSettings>) => Promise<import('./feishuAgentTypes').FeishuAgentView>
         log: () => Promise<import('./feishuAgentTypes').FeishuLogEntry[]>
+        scanNow: () => Promise<{ ok: boolean; handled: number; error?: string }>
         setPerson: (id: string, relation: string) => Promise<import('./feishuAgentTypes').FeishuAgentView>
         recall: (id: string) => Promise<{ ok: boolean; error?: string }>
         onChange: (cb: () => void) => () => void

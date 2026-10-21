@@ -203,6 +203,24 @@ function LogList() {
 }
 
 /** Wizard → Feishu: 代管 switch + who it answers. */
+/** One scan right now, instead of waiting for the next minute. */
+function ScanNow() {
+  const [busy, setBusy] = useState(false)
+  const [res, setRes] = useState('')
+  const scan = async () => {
+    setBusy(true); setRes('')
+    const r = await window.api.feishuAgent.scanNow().catch(e => ({ ok: false, handled: 0, error: String(e) }))
+    setBusy(false)
+    setRes(r.ok ? (r.handled ? `${r.handled} handled` : 'Nothing new') : r.error === 'busy' ? 'Scanning…' : (r.error || 'failed'))
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      {res && <span role="status" aria-label="Scan result" className="text-[11px] text-text-muted">{res}</span>}
+      <button onClick={scan} disabled={busy} className="px-2.5 py-1 rounded-lg bg-bg-primary border border-border text-[12px] text-text-primary cursor-pointer disabled:opacity-50">{busy ? 'Scanning…' : 'Scan now'}</button>
+    </span>
+  )
+}
+
 export function FeishuAgentQuick() {
   const { v, set } = useFeishuAgent()
   if (!v) return null
@@ -234,6 +252,7 @@ export function FeishuAgentSettings() {
             <div className="text-[12px] text-text-muted truncate">as {v.prefix}</div>
           </div>
           <Pill tone={v.connected ? 'ok' : 'off'}>{v.connected ? 'Connected' : 'Not connected'}</Pill>
+          {s.enabled && <ScanNow />}
           <Switch on={s.enabled} label="代管" disabled={!v.connected && !s.enabled} onChange={on => set({ enabled: on })} />
         </div>
         {s.enabled && v.lastError && <div className="text-[11px] text-red-400 font-mono truncate" title={v.lastError}>{v.lastError}</div>}

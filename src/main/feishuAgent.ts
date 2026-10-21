@@ -299,6 +299,9 @@ export function mergeJobs(group: Job[]): Job {
   return group.length === 1 ? last : { ...last, text: group.map(j => j.text).join('\n') }
 }
 
+/** First scan after Hive starts. */
+export const START_SCAN_MS = 3_000
+
 export function createFeishuAgent(deps: FeishuAgentDeps) {
   const now = deps.now ?? Date.now
   const settingsFile = join(deps.dir, 'feishu-agent.json')
@@ -670,15 +673,23 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
   }
 
   let timer: ReturnType<typeof setTimeout> | null = null
+  /** Hive just opened: the first scan runs right away (a few seconds for sign-in to load), then every pollMs. */
   function start() {
     if (timer) return
-    const loop = () => { timer = setTimeout(() => { void tick().finally(loop) }, settings.pollMs); (timer as any).unref?.() }
-    loop()
+    const loop = (ms: number) => { timer = setTimeout(() => { void tick().finally(() => loop(settings.pollMs)) }, ms); (timer as any).unref?.() }
+    loop(START_SCAN_MS)
   }
   function stop() { if (timer) clearTimeout(timer); timer = null }
 
   return {
     tick,
+    /** "Scan now": one poll + answer pass; how many messages were handled. */
+    async scanNow(): Promise<{ ok: boolean; handled: number; error?: string }> {
+      if (!settings.enabled) return { ok: false, handled: 0, error: 'off' }
+      if (busy) return { ok: false, handled: 0, error: 'busy' }
+      const done = await tick()
+      return lastError ? { ok: false, handled: done.length, error: lastError } : { ok: true, handled: done.length }
+    },
     start,
     stop,
     /** Direct messages and groups, most recently active first (owner-side tools). */

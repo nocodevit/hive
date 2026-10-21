@@ -79,6 +79,7 @@ test('flip both on from the header: immediate, and settings agree', async () => 
   await page.getByRole('button', { name: 'App Settings' }).click()
   await expect(page.getByRole('switch', { name: 'Allow remote control from my phone (Butler)' })).toHaveAttribute('aria-checked', 'true')
   await expect(page.getByRole('switch', { name: '代管' })).toHaveAttribute('aria-checked', 'true')
+  await expect(page.getByRole('button', { name: 'Scan now' })).toBeVisible()
   await page.getByRole('button', { name: 'Close' }).click()
 })
 
