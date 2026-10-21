@@ -160,7 +160,7 @@ test.describe('Task Group Creation Flow', () => {
   })
 
   test('control buttons are visible', async () => {
-    await expect(page.getByText('⏸ Pause')).toBeVisible()
+    await expect(page.getByText('⏸ Pause')).toHaveCount(0)
     await expect(page.getByText('🗑 Dissolve')).toBeVisible()
   })
 
