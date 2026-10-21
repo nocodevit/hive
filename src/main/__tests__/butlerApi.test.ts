@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
-  isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode
+  isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode, buildPending
 } from '../butlerApi'
 
 const DATA = {
@@ -22,6 +22,7 @@ describe('isButlerRoute', () => {
     expect(isButlerRoute('/chat/tail?agentId=a&n=5')).toBe(true)
     expect(isButlerRoute('/chat/send')).toBe(true)
     expect(isButlerRoute('/chat/start')).toBe(true)
+    expect(isButlerRoute('/pending')).toBe(true)
   })
   it('leaves the existing task routes alone', () => {
     expect(isButlerRoute('/task-status?projectId=p1')).toBe(false)
@@ -160,5 +161,39 @@ describe('parseStartMode', () => {
   it('rejects anything else', () => {
     expect(parseStartMode('fork')).toBeNull()
     expect(parseStartMode(1)).toBeNull()
+  })
+})
+
+describe('buildPending', () => {
+  const row = (agentId: string, agent: string, project: string) => ({ agentId, agent, projectId: 'p', project, role: '', note: '', chatLive: true, activity: 'waiting' as const })
+  const dayStart = new Date('2026-10-21T00:00:00').getTime()
+
+  it('reports waiting agents, approvals and today\'s failed routines', () => {
+    const r = buildPending({
+      waits: [
+        { agentId: 'a1', state: 'permission', since: 10, text: 'Bash · git push' },
+        { agentId: 'gone', state: 'waiting', since: 11, text: '' }
+      ],
+      rows: [row('a1', 'Missy', 'Cube v2'), row('a2', 'Bob', 'Cube v2')],
+      approvals: [{ title: 'Lin · UAT down?' }, { title: 'Ben · checkout' }],
+      lastRuns: {
+        'morning-plan': { at: dayStart + 3600_000, ok: false, error: 'Feishu not connected' },
+        'evening-report': { at: dayStart - 3600_000, ok: false, error: 'yesterday' },
+        'sort-inbox': { at: dayStart + 7200_000, ok: true }
+      },
+      routineName: id => (id === 'morning-plan' ? 'Morning plan' : id),
+      dayStart
+    })
+    expect(r).toEqual({
+      ok: true,
+      agents: [{ agentId: 'a1', agent: 'Missy', project: 'Cube v2', state: 'permission', since: 10, text: 'Bash · git push' }],
+      approvals: { count: 2, titles: ['Lin · UAT down?', 'Ben · checkout'] },
+      routinesFailed: [{ id: 'morning-plan', name: 'Morning plan', at: dayStart + 3600_000, error: 'Feishu not connected' }]
+    })
+  })
+
+  it('nothing waiting', () => {
+    expect(buildPending({ waits: [], rows: [], approvals: [], lastRuns: {}, routineName: x => x, dayStart }))
+      .toEqual({ ok: true, agents: [], approvals: { count: 0, titles: [] }, routinesFailed: [] })
   })
 })

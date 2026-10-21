@@ -40,6 +40,8 @@ export interface RoutineRunDeps {
   /** handle-jira for an owner with a jira-config.json: Today's Jira text, or null when not configured. */
   handleJira?: () => Promise<string | null>
   now?: () => number
+  /** Every finished run (the notifier tells the owner about failures). */
+  onRun?: (rec: RoutineRunRecord) => void
 }
 
 const FEISHU = 'https://open.feishu.cn/open-apis'
@@ -243,6 +245,7 @@ export function createRoutineRunner(deps: RoutineRunDeps) {
     }
     state.lastRuns[id] = rec
     saveState(state)
+    try { deps.onRun?.(rec) } catch { /* a listener never fails the run */ }
     return rec
   }
 

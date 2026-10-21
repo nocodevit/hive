@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, Menu, safeStorage } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, Menu, safeStorage, Notification, powerMonitor } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync, appendFileSync, existsSync, mkdirSync, readdirSync, symlinkSync, unlinkSync, statSync, lstatSync, fstatSync } from 'fs'
 import { createServer } from 'http'
@@ -190,7 +190,7 @@ import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './
 import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
-import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage } from './chat'
+import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage, chatEventBus } from './chat'
 import { getPrevSessionInfo } from './chat-recent-sessions'
 import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
 import { readOpenChats, writeOpenChats, buildUnclosedRows, lastUserText } from './openChats'
@@ -202,7 +202,12 @@ import { DELIVERABLE_RULE } from '../shared/deliverable'
 import { registerButlerWakeIpc } from './butlerWakeIpc'
 import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder, installButlerFiles } from './butler'
 import { claudeBin } from './claude-env'
-import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode } from './butlerApi'
+import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode, buildPending } from './butlerApi'
+import { setupNotifications } from './notifyIpc'
+import { createAgentWatch, agentWaitEvent } from './notifier'
+import { agentIdFromChatId } from './chatActivity'
+import { ROUTINE_NAME, isRoutineId } from '../shared/butler-routines'
+import type { NotifyTarget } from '../shared/notify'
 import { randomBytes } from 'crypto'
 import type { IncomingMessage, ServerResponse } from 'http'
 import { parsePsForReap, orphanedHiveClaudePids } from './orphanReaper'
@@ -642,13 +647,55 @@ ipcMain.handle('feishu:status', () => feishu.getStatus())
 ipcMain.handle('feishu:login', () => feishu.login())
 ipcMain.handle('feishu:logout', () => { feishu.logout(); return feishu.getStatus() })
 
+// ── Notifications (notifier.ts / notifyIpc.ts) ────────────────────────
+// Plain code, no LLM: events → filter → Mac / away push. A click focuses
+// Hive and the renderer opens the right place ('notify:open').
+function openFromNotification(target: NotifyTarget) {
+  let win = BrowserWindow.getAllWindows().find(w => !w.isDestroyed())
+  if (!win) { createWindow(); win = BrowserWindow.getAllWindows()[0]; if (!win) return }
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+  const w = win
+  const send = () => { if (!w.isDestroyed()) w.webContents.send('notify:open', target) }
+  if (w.webContents.isLoading()) w.webContents.once('did-finish-load', send); else send()
+}
+const notifications = setupNotifications({
+  ipcMain, safeStorage, dataDir: DATA_DIR,
+  headless: isHeadlessMode(process.env),
+  plainStore: !!process.env.HIVE_DATA_DIR && process.env.HIVE_NOTIFY_PLAIN_STORE === '1',
+  makeNotification: o => new Notification({ title: o.title, body: o.body }),
+  macSupported: () => Notification.isSupported(),
+  idleState: n => (app.isReady() ? powerMonitor.getSystemIdleState(n) : null),
+  windowFocused: () => BrowserWindow.getAllWindows().some(w => !w.isDestroyed() && w.isFocused()),
+  open: openFromNotification,
+  openExternal: u => { shell.openExternal(u).catch(() => {}) }
+})
+const agentName = (id: string) => ((loadData().agents || []) as any[]).find(a => a.id === id)?.name || 'Agent'
+// What each chat waits on (also ./hive pending). Only chats with an agentId.
+const agentWatch = createAgentWatch()
+chatEventBus.on('event', ({ sessionId, event }: { sessionId: string; event: unknown }) => {
+  if (!sessionId.startsWith('chat-')) return
+  const w = agentWatch.onEvent(agentIdFromChatId(sessionId), event)
+  if (w) void notifications.emit(agentWaitEvent(w, agentName(w.agentId)))
+})
+
 // ── Butler approval queue (approvals.ts) ──────────────────────────────
 // Everything that leaves Hive on the owner's behalf waits here. Features
 // register an executor for their kind (approvals.register) and add items.
+const knownApprovals = new Set<string>()
 const approvals = createApprovals({
   dir: butlerDir(DATA_DIR),
-  onChange: pending => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send('approvals:changed', pending) }
+  onChange: pending => {
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('approvals:changed', pending)
+    for (const a of pending) {
+      if (knownApprovals.has(a.id)) continue
+      knownApprovals.add(a.id)
+      void notifications.emit({ kind: 'butlerApproval', key: `approval:${a.id}`, title: 'Butler needs you', body: a.title, target: { kind: 'approvals' } })
+    }
+  }
 })
+for (const a of approvals.pending()) knownApprovals.add(a.id)
 ipcMain.handle('approvals:list', () => approvals.pending())
 ipcMain.handle('approvals:approve', (_e, id: unknown, draft: unknown) =>
   typeof id === 'string' ? approvals.approve(id, typeof draft === 'string' ? draft : undefined) : { ok: false, error: 'bad_id' })
@@ -659,7 +706,10 @@ ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' &
 import { registerButlerSkillsIpc } from './butlerSkillsIpc'
 registerButlerSkillsIpc({ ipcMain, previewFeishu: text => previewFeishuAnswer({ text }), butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
-const butlerRoutineMode = setupButlerMailRoutines({
+const butlerRoutines = setupButlerMailRoutines({
+  onRoutineRun: rec => {
+    if (!rec.ok) void notifications.emit({ kind: 'routineFailed', key: `routine:${rec.id}`, title: `${ROUTINE_NAME[rec.id]} failed`, body: rec.error || '', target: { kind: 'routines' } })
+  },
   app, ipcMain, safeStorage, dataDir: DATA_DIR, approvals, claudeBin, feishu,
   openExternal: u => { shell.openExternal(u).catch(() => {}) },
   folder: () => butler.ensureFolder(),
@@ -675,6 +725,7 @@ const butlerRoutineMode = setupButlerMailRoutines({
     win.focus()
   }
 })
+const butlerRoutineMode = butlerRoutines.mode
 // [butler:feishu-agent-calendar]
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory, previewFeishuAnswer } from './butlerFeishuAgentIpc'
 // Approved Jira changes (status fixes from answers, later handle-jira) run through the
@@ -825,6 +876,19 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
 
     if (req.method === 'GET' && url.pathname === '/agents') {
       return reply(200, { ok: true, agents: rows })
+    }
+
+    // ./hive pending: what waits for the owner (a phone gets no pushes).
+    if (req.method === 'GET' && url.pathname === '/pending') {
+      const d = new Date()
+      return reply(200, buildPending({
+        waits: agentWatch.pending(listLiveChatAgentIds()),
+        rows,
+        approvals: approvals.pending(),
+        lastRuns: butlerRoutines.runner.lastRuns(),
+        routineName: id => (isRoutineId(id) ? ROUTINE_NAME[id] : id),
+        dayStart: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+      }))
     }
 
     // What the signed-in user's Feishu token can do (feishuProbe.ts):
@@ -1027,6 +1091,9 @@ const statusServer = createServer((req, res) => {
         const projectId = data.projectId || ctx?.projectId || ''
         const task = readTask(homeDir, projectId, data.taskId)
         dispatchLog('task-done', `${data.taskId}: "${data.summary || ''}"`, data.agentId)
+        if (typeof data.agentId === 'string' && data.agentId) {
+          void notifications.emit({ kind: 'taskDone', key: `done:${data.taskId}`, title: `${agentName(data.agentId)} finished a task`, body: String(data.summary || data.taskId || ''), target: { kind: 'agent', agentId: data.agentId } })
+        }
 
         const cwd = findAgentWorktree(data.agentId)
         if (task && cwd && task.scope && task.scope !== '.') {
@@ -2568,7 +2635,11 @@ app.whenReady().then(() => {
           if (count < 3) {
             // First 3 times: notify human + ping worker
             sendToAgent(task.owner!, 'MSG', { ping: task.id, message: `Task ${task.id} exceeded estimated time (${limit}m). Status?` })
-            notifyHuman('Task Stuck', `[${projectName}] ${workerName} · ${task.id} "${task.title}" — ${Math.round(elapsed)}m (est. ${limit}m)`)
+            void notifications.emit({
+              kind: 'taskStuck', key: `stuck:${task.id}`, title: `Task stuck · ${workerName}`,
+              body: `[${projectName}] ${task.id} "${task.title}" — ${Math.round(elapsed)}m (est. ${limit}m)`,
+              target: { kind: 'agent', agentId: task.owner! }
+            })
             stuckNotifyCount.set(task.id, count + 1)
             saveStuckCounts(Object.fromEntries(stuckNotifyCount))
           }
