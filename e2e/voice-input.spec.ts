@@ -100,15 +100,15 @@ test('mic pill: start, preview, finals land in the input in order, stop', async 
   await expect(page.getByRole('button', { name: 'Stop listening' })).toBeVisible()
   expect(await calls()).toEqual([{ op: 'start' }])
 
-  // Live preview shows next to the mic, and does not touch the input.
+  // Live preview shows in full inside the input box, and does not touch the typed text.
   await line('partial:我现在想说')
-  await expect(page.getByText('我现在想说', { exact: true })).toBeVisible()
+  await expect(page.getByLabel('Hearing')).toHaveText('🎙 我现在想说')
   await expect(input).toHaveValue('')
 
   // A finished sentence goes into the input and the preview clears.
   await line('final:我现在想说 project，completion date 是明天')
   await expect(input).toHaveValue('我现在想说 project，completion date 是明天')
-  await expect(page.getByText('我现在想说', { exact: true })).toBeHidden()
+  await expect(page.getByLabel('Hearing')).toBeHidden()
 
   // The next sentence is appended: no stray space after Chinese punctuation…
   await line('final:by end of day')
