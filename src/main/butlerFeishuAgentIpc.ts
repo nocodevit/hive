@@ -52,6 +52,8 @@ export interface FeishuAgentIpcDeps {
   agents: () => AgentRow[]
   tail: (agentId: string) => TailItem[]
   notify?: (title: string, body: string) => void
+  /** The owner's busy blocks (see feishuAnswer.freeBusyText). */
+  freeBusy?: () => Promise<{ known: boolean; text: string }>
   broadcast: (channel: string, payload: unknown) => void
 }
 
@@ -80,6 +82,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
       token: async () => { const t = await d.feishu.accessToken(); return t.ok && t.token ? t.token : null },
       selfOpenId: () => { const s = d.feishu.getStatus(); return s.state === 'signed_in' && s.openId ? s.openId : null }
     }),
+    freeBusy: d.freeBusy,
     approvals: d.approvals,
     notify: d.notify ?? ((title, body) => { try { new Notification({ title, body }).show() } catch { /* no notification center */ } }),
     context: () => agentsContext(d.agents(), d.tail),
