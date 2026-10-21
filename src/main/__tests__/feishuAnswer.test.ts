@@ -19,7 +19,8 @@ describe('gateAnswer', () => {
     expect(gateAnswer({ answer: ans({ reply: 'REQ-1076 已上线', sources: ['REQ-1076'] }), relation: 'requester' })).toEqual({ level: 'auto', reasons: [], notify: false })
   })
   it('never sends: PR content, an unchecked key, unreadable answers, cannot-answer, low confidence, the manager', () => {
-    expect(gateAnswer({ answer: ans({ reply: 'PR-8885 在做' }), relation: 'peer' }).level).toBe('hold')
+    expect(gateAnswer({ answer: ans({ reply: 'PR-8885 在做', sources: ['PR-8885'] }), relation: 'peer', neverQuote: ['PR'] })).toMatchObject({ level: 'hold', reasons: ['mentions PR (never quoted)'] })
+    expect(gateAnswer({ answer: ans({ reply: 'PR-8885 在做', sources: ['PR-8885'] }), relation: 'peer' }).level).toBe('auto')
     expect(gateAnswer({ answer: ans({ reply: 'DEV-7 下周上线', sources: ['REQ-1'] }), relation: 'peer' })).toMatchObject({ level: 'hold', reasons: ['names DEV-7 without looking it up'] })
     expect(gateAnswer({ answer: null, relation: 'peer' }).level).toBe('hold')
     expect(gateAnswer({ answer: ans({ category: 'cannot-answer' }), relation: 'peer' }).level).toBe('hold')
@@ -132,8 +133,8 @@ describe('meetings Butler may create', () => {
 })
 
 describe('jira fixes from an answer', () => {
-  it('only FAE / DEV / LFCS / OUTLET keys with a status and a reason', () => {
+  it('any Jira key with a status and a reason', () => {
     const a = parseAnswer('{"category":"product-status","level":"auto","confidence":"high","reply":"r","jira_fixes":[{"key":"REQ-1076","to":"完成","why":"DEV-5317 released"},{"key":"PR-1","to":"Done","why":"x"},{"key":"DEV-1","to":"","why":"x"}]}')!
-    expect(a.jiraFixes).toEqual([{ key: 'REQ-1076', to: '完成', why: 'DEV-5317 released' }])
+    expect(a.jiraFixes).toEqual([{ key: 'REQ-1076', to: '完成', why: 'DEV-5317 released' }, { key: 'PR-1', to: 'Done', why: 'x' }])
   })
 })
