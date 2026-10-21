@@ -262,7 +262,7 @@ describe('probeFeishu', () => {
       return { status: 200, body: { code: 0, data: { calendar_list: [{}, {}] } } }
     })
     expect(report.scope).toEqual(['im:message', 'offline_access'])
-    expect(report.chats).toEqual({ ok: true, count: 2, modes: ['p2p', 'group'], hasMore: false })
+    expect(report.chats).toEqual({ ok: true, count: 2, modes: ['p2p', 'group'], p2p: 1, hasMore: false })
     expect(report.p2pMessages).toMatchObject({ ok: true, count: 1, types: ['text'], senderTypes: ['user'] })
     expect(report.groupMessages).toEqual({ ok: false, code: 99991672, msg: 'no permission' })
     expect(report.calendars).toEqual({ ok: true, count: 2 })

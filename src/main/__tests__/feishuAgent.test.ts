@@ -21,6 +21,7 @@ function fakeFeishu(clock: () => number) {
   const sent: Array<{ replyTo: string; text: string; id: string }> = []
   const deleted: string[] = []
   const reactions: string[] = []
+  const listQueries: string[] = []
   let n = 0
   const add = (chat: string, from: string, text: string, at = clock(), mentions?: any[]) => {
     const m: Msg = {
@@ -33,6 +34,7 @@ function fakeFeishu(clock: () => number) {
   const http = async (method: string, url: string, _token: string, body?: any) => {
     const u = new URL(url)
     const path = u.pathname.replace('/open-apis', '')
+    if (method === 'GET' && path === '/im/v1/chats') listQueries.push(u.search)
     if (method === 'GET' && path === '/im/v1/chats') return { status: 200, body: { code: 0, data: { items: chats, has_more: false } } }
     if (method === 'GET' && path === '/im/v1/messages') {
       const list = msgs[u.searchParams.get('container_id')!] ?? []
@@ -57,7 +59,7 @@ function fakeFeishu(clock: () => number) {
     if (method === 'DELETE' && del) { deleted.push(decodeURIComponent(del[1])); return { status: 200, body: { code: 0 } } }
     return { status: 404, body: { code: 404 } }
   }
-  return { msgs, sent, deleted, reactions, add, http }
+  return { msgs, sent, deleted, reactions, listQueries, add, http }
 }
 
 function setup(opts: { claude?: (p: string) => string | Promise<string>; settings?: any; profile?: Partial<typeof EMPTY_PROFILE> } = {}) {
@@ -445,6 +447,14 @@ describe('feishu agent', () => {
     await t.agent.tick()
     expect(t.fs.reactions).toEqual([`${late.message_id}:THUMBSUP`])
     expect(t.approvals.pending()).toEqual([])
+  })
+
+  it('lists direct messages too (types=p2p,group), most recently active first', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 } })
+    await t.agent.tick()
+    const q = new URLSearchParams(t.fs.listQueries[0])
+    expect(q.get('types')).toBe('p2p,group')
+    expect(q.get('sort_type')).toBe('ByActiveTimeDesc')
   })
 
   it('reminds once when a follow-up is still pending after remindAfterMs', async () => {
