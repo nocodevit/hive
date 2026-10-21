@@ -369,7 +369,9 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const out: Array<{ id: string; name: string; p2p: boolean }> = []
     let pageToken = ''
     for (let i = 0; i < MAX_CHAT_PAGES; i++) {
-      const q = new URLSearchParams({ page_size: '100' })
+      // types=p2p,group: without it Feishu lists groups only and no direct message is ever seen.
+      // Most recently active first, so a busy owner's live chats are inside the page limit.
+      const q = new URLSearchParams({ page_size: '100', types: 'p2p,group', sort_type: 'ByActiveTimeDesc' })
       if (pageToken) q.set('page_token', pageToken)
       const r = await deps.http('GET', `${FEISHU_API}/im/v1/chats?${q}`, token)
       if (!ok(r)) throw new Error(errOf(r))
@@ -646,6 +648,11 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     tick,
     start,
     stop,
+    /** Direct messages and groups, most recently active first (owner-side tools). */
+    async chats(): Promise<Array<{ id: string; name: string; p2p: boolean }>> {
+      const tok = await deps.token()
+      return tok.ok && tok.token ? listChats(tok.token) : []
+    },
     /** The case log (memory layer 1). */
     cases: () => cases.all(),
     /** Try a message through the whole decision without sending or recording anything.
