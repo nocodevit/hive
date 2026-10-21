@@ -19,7 +19,25 @@ beforeEach(() => {
       dates: vi.fn(async () => ['2026-10-20', '2026-10-19']),
       toggle: vi.fn(async () => ({ ok: true }))
     },
-    routines: { run: vi.fn(async () => ({ ok: true })) }
+    routines: {
+      run: vi.fn(async () => ({ ok: true })),
+      get: vi.fn(async () => ({
+        settings: {
+          weekdays: [1, 2, 3, 4, 5, 6, 7],
+          routines: {
+            'morning-plan': { enabled: true, schedule: { kind: 'times', times: ['00:00'] } },
+            'sort-inbox': { enabled: true, schedule: { kind: 'times', times: ['00:00'] } },
+            'jira-check': { enabled: false, schedule: { kind: 'times', times: ['09:00'] } },
+            'evening-report': { enabled: true, schedule: { kind: 'times', times: ['23:59'] } }
+          }
+        },
+        installed: {},
+        lastRuns: {
+          'morning-plan': { id: 'morning-plan', at: new Date().setHours(0, 0, 30, 0), ok: true, late: false },
+          'sort-inbox': { id: 'sort-inbox', at: new Date().setHours(0, 0, 30, 0), ok: false, late: false, error: 'mail: auth' }
+        }
+      }))
+    }
   }
 })
 
@@ -32,5 +50,13 @@ describe('TodayTab', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: /Reply Lin/ }))
     await waitFor(() => expect((window as any).api.journal.toggle).toHaveBeenCalledWith('2026-10-20', 1, 'Reply Lin', true))
     expect(screen.getByRole('button', { name: '‹ Older days' })).toBeInTheDocument()
+  })
+  it('lists every routine with what ran, failed, is next or off today', async () => {
+    render(<TodayTab visible />)
+    const box = await screen.findByRole('generic', { name: 'Routines' })
+    expect(box).toHaveTextContent('Morning planran 00:00')
+    expect(box).toHaveTextContent('Sort inboxfailed 00:00')
+    expect(box).toHaveTextContent('Jiraoff')
+    expect(box).toHaveTextContent('Evening reportnext 23:59')
   })
 })
