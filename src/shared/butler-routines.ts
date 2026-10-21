@@ -23,7 +23,7 @@ export const ROUTINE_NAME: Record<RoutineId, string> = {
   'morning-plan': 'Morning plan',
   'sort-inbox': 'Sort inbox',
   'feishu-digest': 'Feishu @mentions',
-  'jira-check': 'Jira check',
+  'jira-check': 'Jira',
   'evening-report': 'Evening report'
 }
 
@@ -32,7 +32,7 @@ export const ROUTINE_DESC: Record<RoutineId, string> = {
   'morning-plan': 'Plan for the day from mail, calendar, agents → Today',
   'sort-inbox': 'Sorts new mail, drafts replies → Approve',
   'feishu-digest': 'Messages that @mention you, summarized → Today',
-  'jira-check': 'Your stale or moved tickets → Today',
+  'jira-check': 'Closes, nudges and lists your tickets → Today, Approve',
   'evening-report': 'What every agent did today → Today'
 }
 
@@ -41,7 +41,7 @@ export const ROUTINE_SKILL: Record<RoutineId, string | null> = {
   'morning-plan': 'morning-plan',
   'sort-inbox': 'sort-inbox',
   'feishu-digest': null,
-  'jira-check': 'jira-check',
+  'jira-check': 'handle-jira',
   'evening-report': 'evening-report'
 }
 
