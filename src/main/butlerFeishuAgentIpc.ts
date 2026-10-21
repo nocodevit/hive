@@ -2,6 +2,8 @@
 // day agenda (calendar.ts). index.ts calls each register function once.
 
 import { execFile } from 'child_process'
+import { DISALLOWED_TOOLS } from './butlerClaude'
+import { STARGATE_JIRA_WRITE } from './butlerTools'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { Notification, type IpcMain } from 'electron'
@@ -52,9 +54,15 @@ export interface FeishuAgentIpcDeps {
   broadcast: (channel: string, payload: unknown) => void
 }
 
+/** answer-feishu run: the Butler allow-list (dontAsk), minus anything that writes —
+ *  the message being answered comes from someone else. */
+export function feishuAnswerArgs(prompt: string): string[] {
+  return ['-p', prompt, '--output-format', 'text', '--permission-mode', 'dontAsk', '--disallowedTools', [...DISALLOWED_TOOLS, ...STARGATE_JIRA_WRITE].join(',')]
+}
+
 export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
   const runClaude = (prompt: string) => new Promise<string>((resolve, reject) => {
-    execFile(d.claudeBin(), ['-p', prompt, '--output-format', 'text'],
+    execFile(d.claudeBin(), feishuAnswerArgs(prompt),
       { cwd: d.butlerDir, timeout: CLAUDE_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, env: process.env },
       (err, stdout) => (err && !stdout ? reject(err) : resolve(String(stdout))))
   })

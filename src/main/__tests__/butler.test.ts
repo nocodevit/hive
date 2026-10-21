@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { STARGATE_READ, STARGATE_JIRA_WRITE } from '../butlerTools'
+import { feishuAnswerArgs } from '../butlerFeishuAgentIpc'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, realpathSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -140,11 +142,34 @@ describe('installButlerFiles', () => {
     expect(readFileSync(join(dest, 'CLAUDE.md'), 'utf8')).toBe(readFileSync(join(RESOURCES, 'CLAUDE.md'), 'utf8'))
     expect(statSync(join(dest, 'hive')).mode & 0o111).toBeTruthy()
     const settings = JSON.parse(readFileSync(join(dest, '.claude', 'settings.json'), 'utf8'))
-    expect(settings.permissions.allow).toEqual([
+    expect(settings.permissions.allow.slice(0, 4)).toEqual([
       'Bash(./hive agents:*)', 'Bash(./hive tail:*)', 'Bash(./hive send:*)', 'Bash(./hive start:*)'
     ])
+    // The allow-list: stargate reads + the Jira writes handle-jira uses; nothing that deletes.
+    expect(settings.permissions.allow).toEqual(expect.arrayContaining([...STARGATE_READ, ...STARGATE_JIRA_WRITE]))
+    expect(settings.permissions.allow.some((t: string) => /delete|remove/.test(t))).toBe(false)
     expect(settings.permissions.deny).toEqual(expect.arrayContaining(['Edit', 'Write']))
     expect(readFileSync(join(dest, 'notes.txt'), 'utf8')).toBe('keep me')
+  })
+  it("merges the owner's allow-list additions, and keeps them across a reinstall", () => {
+    const dest = join(mkdtempSync(join(tmpdir(), 'hive-butler-dest-')), 'butler')
+    mkdirSync(dest)
+    writeFileSync(join(dest, 'allow-list.json'), JSON.stringify({ allow: ['mcp__stargate__gitlab_get_file', ' ', 42, 'mcp__stargate__gitlab_get_file'] }))
+    installButlerFiles(RESOURCES, dest)
+    installButlerFiles(RESOURCES, dest)
+    const allow: string[] = JSON.parse(readFileSync(join(dest, '.claude', 'settings.json'), 'utf8')).permissions.allow
+    expect(allow.filter(t => t === 'mcp__stargate__gitlab_get_file')).toHaveLength(1)
+    expect(allow).toEqual(expect.arrayContaining(['Bash(./hive agents:*)', ...STARGATE_READ]))
+  })
+})
+
+describe('answer-feishu run', () => {
+  it('follows the allow-list (dontAsk) with every write tool off', () => {
+    const a = feishuAnswerArgs('hi')
+    expect(a.slice(0, 2)).toEqual(['-p', 'hi'])
+    expect(a[a.indexOf('--permission-mode') + 1]).toBe('dontAsk')
+    const off = a[a.indexOf('--disallowedTools') + 1].split(',')
+    expect(off).toEqual(expect.arrayContaining(['Bash', 'Edit', 'Write', ...STARGATE_JIRA_WRITE]))
   })
 })
 

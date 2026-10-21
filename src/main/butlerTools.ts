@@ -18,6 +18,18 @@ export const STARGATE_READ = [
   'feishu_search_wiki', 'feishu_read_document'
 ].map(t => `mcp__stargate__${t}`)
 
+/** Jira writes on the Butler allow-list (handle-jira). Never in a run that answers someone else. */
+export const STARGATE_JIRA_WRITE = [
+  'jira_add_comment', 'jira_transition_issue', 'jira_create_issue', 'jira_update_issue', 'jira_create_issue_link', 'jira_add_watcher'
+].map(t => `mcp__stargate__${t}`)
+
+/** The owner's own additions to the Butler allow-list (<butler>/allow-list.json → {"allow": [...]}). */
+export function ownerAllow(butlerFolder: string): string[] {
+  const j = readJson(join(butlerFolder, 'allow-list.json'))
+  const list: unknown[] = Array.isArray(j?.allow) ? j.allow : []
+  return Array.from(new Set(list.filter((x): x is string => typeof x === 'string' && x.trim().length > 0 && x.length <= 200).map(x => x.trim())))
+}
+
 export interface ToolSet {
   /** The MCP server Jira comes from. */
   server: string
