@@ -13,7 +13,7 @@
 // Guide for writing a skill: docs/butler-skills.md.
 
 import { createHash } from 'crypto'
-import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 export const SKILL_ID_RE = /^[a-z][a-z0-9-]{0,31}$/
@@ -400,6 +400,9 @@ export function compareSkill(s: SkillStore, id: string): { defaultMd: string; mi
 /** Write every effective skill to <butler>/.claude/skills/<id>/SKILL.md. */
 export function composeSkills(s: SkillStore): string[] {
   const ids = defaultIds(s)
+  // A skill Hive no longer ships (e.g. jira-check → handle-jira) leaves its composed copy behind.
+  const root = join(s.butlerDir, '.claude', 'skills')
+  try { for (const d of readdirSync(root)) if (isSkillId(d) && !ids.includes(d)) rmSync(join(root, d), { recursive: true, force: true }) } catch { /* none yet */ }
   for (const id of ids) {
     const dir = join(s.butlerDir, '.claude', 'skills', id)
     mkdirSync(dir, { recursive: true })

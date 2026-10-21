@@ -4,6 +4,9 @@
 // index.ts calls setupButlerMailRoutines once (marker [butler:mail-routines]).
 
 import { execFile, execFileSync } from 'child_process'
+import { readJiraConfig, runHandleJira } from './handleJira'
+import { jiraCaller } from './butlerJira'
+import { claudeJsonPath } from './butlerTools'
 import { homedir } from 'os'
 import { join } from 'path'
 import type { App, IpcMain, SafeStorage } from 'electron'
@@ -77,6 +80,13 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode 
 
   const runner = createRoutineRunner({
     calendar: d.calendar,
+    handleJira: async () => {
+      const cfg = readJiraConfig(folder)
+      if (!cfg) return null
+      const call = jiraCaller(folder, claudeJsonPath(homedir()))
+      if (!call) throw new Error('Jira not connected')
+      return (await runHandleJira({ folder, call, write: p => runClaude(p), approvals: d.approvals }, cfg)).text
+    },
     // State and journal live at the plain path; only a claude run (runClaude's
     // cwd is d.folder) installs the Butler files.
     folder: () => folder,
