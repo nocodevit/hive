@@ -5,6 +5,8 @@
 
 import { execFile, execFileSync } from 'child_process'
 import { readJiraConfig, runHandleJira } from './handleJira'
+import { butlerDayText, waitingLines } from './butlerDay'
+import { createCaseLog } from './feishuCases'
 import { jiraCaller } from './butlerJira'
 import { claudeJsonPath } from './butlerTools'
 import { homedir } from 'os'
@@ -80,6 +82,8 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): RoutineMode 
 
   const runner = createRoutineRunner({
     calendar: d.calendar,
+    waiting: () => waitingLines(d.approvals.all()),
+    butlerToday: since => butlerDayText(createCaseLog(folder).all(), d.approvals.all(), since),
     handleJira: async () => {
       const cfg = readJiraConfig(folder)
       if (!cfg) return null
