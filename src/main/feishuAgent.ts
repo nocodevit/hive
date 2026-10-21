@@ -21,6 +21,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeF
 import { join } from 'path'
 import type { ButlerProfile } from './butlerProfile'
 import type { Approval } from './approvals'
+import { createCaseLog, type FeishuCase } from './feishuCases'
 import { assistantHolding, gateAnswer, parseAnswer, RELATION_LABEL, type Answer, type Relation } from './feishuAnswer'
 
 export const FEISHU_API = 'https://open.feishu.cn/open-apis'
@@ -271,6 +272,8 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
   const stateFile = join(deps.dir, 'feishu-agent-state.json')
   const logFile = join(deps.dir, 'feishu-log.jsonl')
 
+  const cases = createCaseLog(deps.dir, now)
+  try { cases.compact() } catch { /* memory is best-effort */ }
   const readJson = (f: string) => { try { return JSON.parse(readFileSync(f, 'utf8')) } catch { return null } }
   const writeJson = (f: string, v: unknown) => {
     if (!existsSync(deps.dir)) mkdirSync(deps.dir, { recursive: true })
@@ -327,6 +330,10 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const tok = await deps.token()
     if (!tok.ok || !tok.token) return { ok: false, error: tok.error || 'signed_out' }
     const r = await reply(tok.token, { messageId: p.messageId, chatId: p.chatId, chatName: String(p.chatName ?? '') }, item.draft, 'followup')
+    if (r.ok) {
+      const c = cases.byApproval(item.id)
+      if (c) cases.resolve(c.id, item.draft.trim() === c.draft.trim() ? 'approved' : 'edited', item.draft.trim())
+    }
     return r.ok ? { ok: true } : r
   })
 
@@ -450,6 +457,11 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     return readLog().filter(e => e.chatId === chatId && e.time > cutoff && (e.kind === 'answer' || e.kind === 'holding')).length
   }
 
+  const baseCase = (job: Job, relation: Relation): FeishuCase => ({
+    id: job.messageId, at: now(), chatId: job.chatId, chatName: job.chatName, p2p: job.p2p, senderId: job.senderId, relation,
+    question: job.text, category: '', confidence: '', claims: [], sources: [], draft: '', level: 'hold', reasons: [], sent: '', outcome: 'pending'
+  })
+
   async function handle(token: string, self: string, job: Job): Promise<Outcome> {
     const ownSent = new Set(readLog().map(e => e.id))
     let history: any[] = []
@@ -457,7 +469,12 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       return { messageId: job.messageId, result: 'failed', error: e instanceof Error ? e.message : String(e) }
     }
     const tookOver = history.some(m => m?.sender?.id === self && Number(m?.create_time) > job.createTime && !ownSent.has(m?.message_id))
-    if (tookOver) return { messageId: job.messageId, result: 'skipped', why: 'owner_took_over' }
+    if (tookOver) {
+      // The owner answered it themselves: their words are the gold answer.
+      const own = history.filter(m => m?.sender?.id === self && Number(m?.create_time) > job.createTime && !ownSent.has(m?.message_id)).map(m => messageText(m)).join('\n')
+      cases.add({ ...baseCase(job, 'unknown'), outcome: 'owner_replied', final: own, resolvedAt: now() })
+      return { messageId: job.messageId, result: 'skipped', why: 'owner_took_over' }
+    }
     if (sentInLastHour(job.chatId) >= settings.maxRepliesPerChatPerHour) return { messageId: job.messageId, result: 'skipped', why: 'rate_limited' }
 
     const relation: Relation = await (deps.relation?.(job.senderId) ?? Promise.resolve('unknown' as Relation)).catch(() => 'unknown' as Relation)
@@ -469,8 +486,10 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const guard = lockedTopicHit(job.text, settings.askFirstTopics) ?? lockedTopicHit(draft, settings.askFirstTopics)
     const gate = guard === null ? gateAnswer({ answer, relation, calendarKnown: busy.known }) : { level: 'hold' as const, reasons: [guard], notify: true }
 
+    const decided = { ...baseCase(job, relation), category: answer?.category ?? 'cannot-answer', confidence: answer?.confidence ?? 'low', claims: answer?.claims ?? [], sources: answer?.sources ?? [], draft, level: gate.level, reasons: gate.reasons }
     if (gate.level === 'auto') {
       const r = await reply(token, job, draft, 'answer')
+      if (r.ok) cases.add({ ...decided, sent: draft, outcome: 'auto' })
       if (r.ok && gate.notify) deps.notify('Feishu · answered for you', `${job.chatName || 'Feishu'} · ${clip(job.text, 60)}`)
       return r.ok ? { messageId: job.messageId, result: 'answered' } : { messageId: job.messageId, result: 'failed', error: r.error }
     }
@@ -488,6 +507,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, question: job.text, topic, relation, category: answer?.category ?? 'cannot-answer', claims: answer?.claims ?? [] },
       action: 'Reply'
     })
+    cases.add({ ...decided, sent: holding, approvalId: item.id, outcome: 'pending' })
     state.followups.push({ approvalId: item.id, createdAt: now(), reminded: false })
     return { messageId: job.messageId, result: 'escalated' }
   }
@@ -496,7 +516,11 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     let changed = false
     state.followups = state.followups.filter(f => {
       const item = deps.approvals.get(f.approvalId)
-      if (!item || item.status !== 'pending') { changed = true; return false }
+      if (!item || item.status !== 'pending') {
+        if (item?.status === 'rejected') { const c = cases.byApproval(item.id); if (c && c.outcome === 'pending') cases.resolve(c.id, 'rejected') }
+        changed = true
+        return false
+      }
       if (!f.reminded && now() - f.createdAt >= settings.remindAfterMs) {
         deps.notify('Feishu · waiting for you', item.title)
         f.reminded = true
@@ -555,6 +579,8 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     tick,
     start,
     stop,
+    /** The case log (memory layer 1). */
+    cases: () => cases.all(),
     getSettings: () => ({ ...settings }),
     setSettings(patch: Partial<FeishuAgentSettings>): FeishuAgentSettings {
       const next = normalizeAgentSettings({ ...settings, ...patch })
@@ -588,6 +614,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       const r = await deps.http('DELETE', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(id)}`, tok.token)
       if (!ok(r)) return { ok: false, error: errOf(r) }
       e.recalled = true
+      if (e.inReplyTo && cases.get(e.inReplyTo)) cases.resolve(e.inReplyTo, 'recalled')
       writeFileSync(logFile + '.tmp', all.map(x => JSON.stringify(x)).join('\n') + '\n')
       renameSync(logFile + '.tmp', logFile)
       deps.onChange?.()
