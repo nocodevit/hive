@@ -21,6 +21,8 @@ export function SettingsNav({ scrollRef }: { scrollRef: RefObject<HTMLDivElement
     clicked.current = label
     setActive(label)
     el.scrollIntoView({ block: 'start', behavior: 'smooth' })
+    // Sections above may still be loading and push it down: land again once settled.
+    setTimeout(() => { if (clicked.current === label) sectionEl(label)?.scrollIntoView({ block: 'start' }) }, 600)
   }
 
   // Which sections render something (Butler-only ones may be empty).
@@ -46,15 +48,14 @@ export function SettingsNav({ scrollRef }: { scrollRef: RefObject<HTMLDivElement
     const root = scrollRef.current
     if (!root || !present.length) return
     const inBand = new Set<string>(), onScreen = new Set<string>()
-    const update = () => {
-      if (clicked.current && !onScreen.has(clicked.current)) clicked.current = null
-      setActive(activeSection(present, inBand, onScreen, clicked.current))
-    }
+    const update = () => setActive(activeSection(present, inBand, onScreen, clicked.current))
     const track = (set: Set<string>) => (entries: IntersectionObserverEntry[]) => {
       for (const e of entries) {
         const l = (e.target as HTMLElement).dataset.settingsSection
         if (!l) continue
         if (e.isIntersecting) set.add(l); else set.delete(l)
+        // A clicked section that left the screen no longer holds the highlight.
+        if (set === onScreen && !e.isIntersecting && l === clicked.current) clicked.current = null
       }
       update()
     }
