@@ -107,3 +107,11 @@ test('Describe a change → chips + example → Accept saves an override; Reset 
   await expect.poll(() => existsSync(join(BUTLER_DIR, 'skills', 'answer-feishu.md'))).toBe(false)
   expect(existsSync(join(BUTLER_DIR, 'skills', 'answer-feishu.json'))).toBe(false)
 })
+
+test('a reference skill (Jira knowledge) has no tone form; its markdown is open to edit', async () => {
+  await page.getByRole('option', { name: /Jira knowledge/ }).click()
+  await expect(page.getByText('Reference · facts the other skills read · edit below')).toBeVisible()
+  await expect(page.getByRole('radiogroup', { name: 'Tone' })).toHaveCount(0)
+  await expect(page.getByLabel('Skill markdown')).toBeVisible()
+  await expect(page.getByLabel('Skill markdown')).toHaveValue(/kind: reference/)
+})
