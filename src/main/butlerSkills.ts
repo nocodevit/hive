@@ -41,6 +41,8 @@ export interface SkillOverlay {
 export interface ParsedSkill {
   name: string
   description: string
+  /** 'reference': facts other skills read (no tone form, free sections after ## Purpose). */
+  kind: 'task' | 'reference'
   sections: Array<{ title: string; body: string }>
 }
 
@@ -54,6 +56,7 @@ export function parseSkill(md: string): ParsedSkill {
   const text = norm(md)
   let name = ''
   let description = ''
+  let kind: ParsedSkill['kind'] = 'task'
   let rest = text
   const fm = text.match(/^---\n([\s\S]*?)\n---\n?/)
   if (fm) {
@@ -62,6 +65,7 @@ export function parseSkill(md: string): ParsedSkill {
       if (!m) continue
       if (m[1] === 'name') name = m[2].trim()
       if (m[1] === 'description') description = m[2].trim()
+      if (m[1] === 'kind' && m[2].trim() === 'reference') kind = 'reference'
     }
     rest = text.slice(fm[0].length)
   }
@@ -75,11 +79,11 @@ export function parseSkill(md: string): ParsedSkill {
     } else if (cur) cur.lines.push(line)
   }
   if (cur) sections.push({ title: cur.title, body: cur.lines.join('\n').trim() })
-  return { name, description, sections }
+  return { name, description, kind, sections }
 }
 
 export function renderSkill(p: ParsedSkill): string {
-  const head = `---\nname: ${p.name}\ndescription: ${p.description}\n---\n`
+  const head = `---\nname: ${p.name}\ndescription: ${p.description}\n${p.kind === 'reference' ? 'kind: reference\n' : ''}---\n`
   return head + p.sections.map(s => `\n## ${s.title}\n\n${s.body}\n`).join('')
 }
 
@@ -146,6 +150,12 @@ export function lintSkill(id: string, md: string, defaultMd: string): LintProble
   else if (!p.description) problems.push({ rule: 'frontmatter', message: 'Frontmatter: description is empty' })
   if (p.name !== id) problems.push({ rule: 'name', message: `Frontmatter name must be "${id}" (is "${p.name}")` })
   const titles = p.sections.map(s => s.title)
+  if (d.kind === 'reference') {
+    if (p.kind !== 'reference') problems.push({ rule: 'frontmatter', message: 'Frontmatter: keep "kind: reference"' })
+    if (titles[0] !== 'Purpose') problems.push({ rule: 'sections', message: 'A reference starts with ## Purpose' })
+    if (new Set(titles).size !== titles.length) problems.push({ rule: 'sections', message: 'A section appears twice' })
+    return problems
+  }
   for (const t of SECTIONS) if (!titles.includes(t)) problems.push({ rule: 'sections', message: `Missing section: ## ${t}` })
   for (const t of titles) if (!(SECTIONS as readonly string[]).includes(t)) problems.push({ rule: 'sections', message: `Unknown section: ## ${t}` })
   const known = titles.filter(t => (SECTIONS as readonly string[]).includes(t))
@@ -277,6 +287,7 @@ export interface SkillInfo {
   id: string
   name: string
   description: string
+  kind: ParsedSkill['kind']
   customized: 'none' | 'form' | 'override'
   /** The shipped default changed since the owner wrote their override. */
   defaultUpdated: boolean
@@ -314,6 +325,7 @@ export function skillInfo(s: SkillStore, id: string): SkillInfo {
     id,
     name: p.name,
     description: p.description,
+    kind: p.kind,
     customized: ov !== null ? 'override' : isEmptyOverlay(overlay) ? 'none' : 'form',
     defaultUpdated: ov !== null && !!hash && hash !== hashText(def),
     overrideProblems: ov !== null ? lintSkill(id, ov, def) : []

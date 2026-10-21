@@ -140,7 +140,7 @@ export function SkillsSettings() {
               {advanced && <span className="px-2 py-0.5 rounded-full bg-accent-subtle text-accent text-[11px] font-semibold">markdown</span>}
               {d.defaultUpdated && <span className="px-2 py-0.5 rounded-full bg-bg-primary text-status-waiting text-[11px] font-semibold">default updated</span>}
               <button className={btnS} onClick={() => setTrying(t => !t)} aria-expanded={trying}>Try</button>
-              {!advanced && <button className={btnP} disabled={!formDirty || busy === 'save'} onClick={saveForm}>{busy === 'save' ? '…' : 'Save'}</button>}
+              {!advanced && d.kind !== 'reference' && <button className={btnP} disabled={!formDirty || busy === 'save'} onClick={saveForm}>{busy === 'save' ? '…' : 'Save'}</button>}
             </div>
 
             {d.overrideProblems.length > 0 && <Problems items={d.overrideProblems} />}
@@ -156,7 +156,9 @@ export function SkillsSettings() {
               </div>
             )}
 
-            {advanced ? (
+            {d.kind === 'reference' ? (
+              <div className="text-[12px] text-text-muted">Reference · facts the other skills read · edit below</div>
+            ) : advanced ? (
               <div className="flex items-center gap-2 text-[12px] text-text-muted">
                 <span className="flex-1">Edited as markdown</span>
                 <button className={link} onClick={reset}>Reset</button>
@@ -212,7 +214,7 @@ export function SkillsSettings() {
               </>
             )}
 
-            <details open={d.defaultUpdated || undefined}>
+            <details open={d.defaultUpdated || d.kind === 'reference' || undefined}>
               <summary className={summaryCls}>Advanced · markdown{d.defaultUpdated ? ' · default updated ●' : ''}</summary>
               <div className="flex flex-col gap-2 mt-2">
                 <textarea value={md} onChange={e => { setMd(e.target.value); setProblems([]) }} rows={12} aria-label="Skill markdown" className={`${area} font-mono text-[11px]`} />
