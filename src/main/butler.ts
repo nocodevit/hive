@@ -10,7 +10,7 @@
 // last. Everything here takes its side effects as deps so it can be tested
 // without a real pty or a real `claude`.
 
-import { chmodSync, copyFileSync, mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from 'fs'
+import { chmodSync, copyFileSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { claudeProjectSlug } from '../shared/claude-project-slug'
 import { composeSkills } from './butlerSkills'
@@ -27,6 +27,26 @@ export const BUTLER_FILES: ReadonlyArray<{ from: string; to: string; mode?: numb
 
 export function butlerDir(dataDir: string): string {
   return join(dataDir, 'butler')
+}
+
+/**
+ * Where the phone Butler (claude remote-control) runs. Its own folder: Claude
+ * keys a remote session to the folder, and its worker rewrites that session's
+ * local transcript from the cloud copy at every start — in ~/.hive/butler that
+ * was the desk Butler chat's transcript, wiped back each time Hive started.
+ * Same Butler: CLAUDE.md, .claude (allow-list, skills) and ./hive are links.
+ */
+export function phoneDir(dataDir: string): string {
+  return join(dataDir, 'butler-phone')
+}
+
+export function linkPhoneFolder(butler: string, phone: string): void {
+  mkdirSync(phone, { recursive: true })
+  for (const name of ['CLAUDE.md', 'hive', '.claude']) {
+    const link = join(phone, name)
+    try { if (lstatSync(link).isSymbolicLink() && readlinkSync(link) === join(butler, name)) continue; rmSync(link, { recursive: true, force: true }) } catch { /* not there */ }
+    symlinkSync(join(butler, name), link)
+  }
 }
 
 /** Overwrite the bundled files into the butler folder. Other files are left alone.
@@ -173,9 +193,9 @@ export interface ButlerDeps {
 
 const SETTINGS_FILE = 'butler.json'
 const PID_FILE = '.pid'
-/** The phone's own session. (The old `.session-id` could name the desk chat's session: dropped.) */
-const SESSION_FILE = '.phone-session-id'
-const OLD_SESSION_FILE = '.session-id'
+/** The phone's own session, in its own folder. Older pointers were bound to the desk chat's session: dropped. */
+const SESSION_FILE = '.phone-session'
+const OLD_SESSION_FILES = ['.session-id', '.phone-session-id']
 /** Restart delays after a connected session exits on its own. */
 export const RESTART_DELAYS_MS = [2_000, 10_000, 30_000, 120_000]
 /** A session that stayed up this long resets the restart count. */
@@ -246,6 +266,7 @@ export function createButler(deps: ButlerDeps) {
   const setTimer = deps.setTimer ?? ((fn, ms) => setTimeout(fn, ms))
   const clearTimer = deps.clearTimer ?? (t => clearTimeout(t as ReturnType<typeof setTimeout>))
   const dir = butlerDir(deps.dataDir)
+  const phone = phoneDir(deps.dataDir)
 
   const saved = readButlerSettings(deps.dataDir)
   let trusted = saved.trusted
@@ -274,7 +295,7 @@ export function createButler(deps: ButlerDeps) {
   const pidPath = join(dir, PID_FILE)
   const sessionPath = join(dir, SESSION_FILE)
 
-  try { unlinkSync(join(dir, OLD_SESSION_FILE)) } catch { /* not there */ }
+  for (const f of OLD_SESSION_FILES) { try { unlinkSync(join(dir, f)) } catch { /* not there */ } }
   const savedSession = (): string | null => {
     try { return readFileSync(sessionPath, 'utf8').trim() || null } catch { return null }
   }
@@ -295,6 +316,7 @@ export function createButler(deps: ButlerDeps) {
     restartTimer = null
     try {
       installButlerFiles(deps.resourcesDir, dir)
+      linkPhoneFolder(dir, phone)
     } catch (e) {
       set({ status: 'error', error: `Could not write ${dir}: ${e instanceof Error ? e.message : String(e)}` })
       return
@@ -304,7 +326,7 @@ export function createButler(deps: ButlerDeps) {
     set({ status: 'starting' })
     let t: PtyLike
     try {
-      t = deps.spawn(butlerArgs(mode), dir)
+      t = deps.spawn(butlerArgs(mode), phone)
     } catch (e) {
       set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
       return

@@ -201,7 +201,7 @@ import { readProfile, writeProfile } from './butlerProfile'
 import { createApprovals } from './approvals'
 import { DELIVERABLE_RULE } from '../shared/deliverable'
 import { registerButlerWakeIpc } from './butlerWakeIpc'
-import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder, installButlerFiles } from './butler'
+import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder, installButlerFiles, phoneDir } from './butler'
 import { claudeBin } from './claude-env'
 import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode, buildPending } from './butlerApi'
 import { setupNotifications } from './notifyIpc'
@@ -588,9 +588,9 @@ const butler = createButler({
   resourcesDir: butlerResourcesDir(),
   claudeTrusts: () => claudeTrustsFolder(
     process.env.CLAUDE_CONFIG_DIR ? join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : join(app.getPath('home'), '.claude.json'),
-    butlerDir(DATA_DIR)
+    phoneDir(DATA_DIR)
   ),
-  recordedSessionId: () => bridgeSessionId(process.env.CLAUDE_CONFIG_DIR || join(app.getPath('home'), '.claude'), butlerDir(DATA_DIR)),
+  recordedSessionId: () => bridgeSessionId(process.env.CLAUDE_CONFIG_DIR || join(app.getPath('home'), '.claude'), phoneDir(DATA_DIR)),
   spawn: (args, cwd) => spawnPty('butler', claudeBin(), args, {
     name: 'xterm-color',
     cols: 120, rows: 30,
