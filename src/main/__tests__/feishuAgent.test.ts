@@ -91,6 +91,9 @@ describe('pure helpers', () => {
     expect(ensurePrefix(' 【Mei 的 AI 代理】hi', '【Mei 的 AI 代理】')).toBe('【Mei 的 AI 代理】hi')
     expect(ensurePrefix('[Alice · Megan 的 AI 助手]收到', '[Alice · Megan 的 AI 助手]')).toBe('[Alice · Megan 的 AI 助手] 收到')
     expect(ensurePrefix('收到', '[Alice · Megan 的 AI 助手]')).toBe('[Alice · Megan 的 AI 助手] 收到')
+    // an old tag in an approved draft never stacks: one prefix only
+    expect(ensurePrefix("【Megan's AI助手Alice】好，你先试一下。", '[Alice · Megan 的 AI 助手]')).toBe('[Alice · Megan 的 AI 助手] 好，你先试一下。')
+    expect(ensurePrefix('[P4-1] 已上线', '[Alice · Megan 的 AI 助手]')).toBe('[Alice · Megan 的 AI 助手] [P4-1] 已上线')
   })
 
   it('defaultPrefix: profile prefix, else name', () => {
@@ -483,7 +486,7 @@ describe('feishu agent', () => {
     expect(r).toMatchObject({ ok: true, gate: { level: 'auto' }, wouldSend: 'FAE-1 已上线', relation: 'unknown', calendarKnown: false })
     const held = await t.agent.preview({ text: '报价多少？' })
     expect(held).toMatchObject({ ok: true, gate: { level: 'hold' }, wouldSend: '(nothing sent — a card for you)' })
-    expect(await t.agent.preview({ text: 'Mei 和 Lin 在聊什么？' })).toMatchObject({ wouldSend: '这个我不方便透露。有具体的事可以告诉我，我转给 Mei。' })
+    expect(await t.agent.preview({ text: 'Mei 和 Lin 在聊什么？' })).toMatchObject({ wouldSend: '(nothing sent — a card for you)' })
     expect(t.fs.sent).toEqual([])
     expect(t.agent.cases()).toEqual([])
     expect(t.approvals.pending()).toEqual([])

@@ -24,7 +24,7 @@ import type { Approval } from './approvals'
 import { createCaseLog, type FeishuCase } from './feishuCases'
 import { MEETING_REMINDER_MIN } from './calendar'
 import { jiraFixApproval } from './butlerJira'
-import { declineReply, DECLINE_TOPICS, gateAnswer, meetingCreatedReply, meetingSlot, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
+import { gateAnswer, meetingCreatedReply, meetingSlot, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
 
 export const FEISHU_API = 'https://open.feishu.cn/open-apis'
 
@@ -146,6 +146,8 @@ export function ensurePrefix(text: string, prefix: string): string {
   let t = text.trim()
   if (!p) return t
   if (t.startsWith(p)) t = t.slice(p.length).trimStart()
+  // An older or model-written assistant tag ("【Megan's AI助手Alice】") never stacks under the current one.
+  for (let tag = /^[\[【]([^\]】\n]{1,60})[\]】]\s*/.exec(t); tag && /AI|助手|助理|代理|assistant|agent|bot/i.test(tag[1]); tag = /^[\[【]([^\]】\n]{1,60})[\]】]\s*/.exec(t)) t = t.slice(tag[0].length)
   return p + (p.endsWith(']') ? ' ' : '') + t
 }
 
@@ -679,9 +681,8 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
 
   function holdingText(job: Pick<Job, 'text'>, answer: Answer | null, draft: string, guard: string | null): string {
     const chat = !!answer && (answer.category === 'chitchat-life' || answer.category === 'chitchat-work') && !answer.claims.length && !answer.sources.length && !/[A-Z][A-Z0-9]+-\d+/.test(answer.reply)
-    if (guard === null && chat && draft.trim()) return draft
-    if (guard !== null && DECLINE_TOPICS.has(guard)) return declineReply(deps.profile().name)
-    return ''
+    // Only small talk in Butler's own words; everything else (declines included) is silence + a card.
+    return guard === null && chat && draft.trim() ? draft : ''
   }
 
   function remind() {

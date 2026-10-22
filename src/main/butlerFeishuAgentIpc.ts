@@ -12,7 +12,6 @@ import { randomUUID } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { Notification, type IpcMain } from 'electron'
-import { declineReply } from './feishuAnswer'
 import { createFeishuAgent, LOCKED_TOPICS, defaultPrefix, type FeishuAgentSettings } from './feishuAgent'
 import { createCalendar, createFeishuMeeting, type Exec } from './calendar'
 import type { ButlerProfile } from './butlerProfile'
@@ -136,7 +135,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
       settings: agent.getSettings(),
       prefix: agent.prefix(),
       defaultPrefix: defaultPrefix(profile),
-      holding: declineReply(profile.name),
+      holding: '收到，我看一下。',
       connected: st.state === 'signed_in',
       locked: LOCKED_TOPICS.map(({ id, label, hint, example }) => ({ id, label, hint, example })),
       people: readPeople(d.butlerDir),

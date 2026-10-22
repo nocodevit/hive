@@ -19,8 +19,15 @@
       "date": "2026-10-22",
       "changes": [
         "Held for you: nothing is sent to them (no \"我需要和…确认\" / \"我会转给…处理\" lines). A private topic still gets the polite decline; small talk Butler's own words; an agreed proposal a 👍"
+      ]
+    },
+    {
+      "version": 4,
+      "date": "2026-10-22",
+      "changes": [
+        "No decline line either (\"这个我不方便透露…\"): a guarded topic is silence + a card for you. Only small talk is answered while waiting"
       ],
-      "hash": "00c2c913826c316a"
+      "hash": "7971b39407069826"
     }
   ],
   "evening-report": [
