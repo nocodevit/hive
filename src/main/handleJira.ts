@@ -6,6 +6,7 @@
 // Nothing company-specific lives here: projects, final statuses, owners and
 // thresholds come from the owner's <butler>/jira-config.json.
 
+import { rememberJiraBase } from './jiraRest'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
 import { jiraAssignApproval, jiraCommentApproval, jiraFixApproval, transitionTo } from './butlerJira'
 import type { Approval } from './approvals'
@@ -192,10 +193,11 @@ function writeState(folder: string, s: RunState) {
 }
 
 const quote = (s: string) => `"${s.replace(/"/g, '\\"')}"`
-async function search(call: Call, jql: string, max = 300): Promise<Issue[]> {
+async function search(call: Call, jql: string, max = 300, onSelf?: (self: unknown) => void): Promise<Issue[]> {
   const out: Issue[] = []
   for (let start = 0; start < max; start += 100) {
     const r = JSON.parse(await call('jira_search', { jql, fields: FIELDS, max_results: 100, start_at: start }))
+    if (r.issues?.[0]?.self) onSelf?.(r.issues[0].self)
     out.push(...(r.issues ?? []))
     if (out.length >= (r.total ?? 0) || !(r.issues ?? []).length) break
   }
@@ -215,7 +217,7 @@ export async function runHandleJira(deps: HandleJiraDeps, cfg: JiraConfig): Prom
   const state = readState(deps.folder)
   const projects = [...Object.keys(cfg.requests), cfg.product.key]
   const open = `project in (${projects.join(', ')}) AND status not in (${finalStatuses(cfg).map(quote).join(', ')})`
-  const mine = await search(deps.call, `${open} AND assignee = currentUser() ORDER BY updated DESC`)
+  const mine = await search(deps.call, `${open} AND assignee = currentUser() ORDER BY updated DESC`, 300, self => rememberJiraBase(deps.folder, self))
   const findings = classify(mine, cfg, at)
   const actions: string[] = []
   const fresh = (k: string) => !state.acted[k] || at - state.acted[k] > ACT_AGAIN_MS
