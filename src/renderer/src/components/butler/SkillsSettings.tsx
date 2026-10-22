@@ -80,6 +80,7 @@ export function SkillsSettings() {
     setBusy(key); setErr('')
     try { await fn() } catch (e) { setErr(e instanceof Error ? e.message : String(e)) } finally { setBusy(null) }
   }
+  const [saved, setSaved] = useState('')
   const after = async (r: SkillDetail | { ok: false; error: string }) => {
     if (isIpcError(r)) { setErr(r.error); return }
     show(r); await refreshList()
@@ -142,6 +143,28 @@ export function SkillsSettings() {
               <button className={btnS} onClick={() => setTrying(t => !t)} aria-expanded={trying}>Try</button>
               {!advanced && d.kind !== 'reference' && <button className={btnP} disabled={!formDirty || busy === 'save'} onClick={saveForm}>{busy === 'save' ? '…' : 'Save'}</button>}
             </div>
+
+            {d.defaultUpdated && (
+              <div className="rounded-lg border border-status-waiting/40 bg-bg-primary px-3 py-2.5 flex flex-col gap-2" role="group" aria-label="Skill update">
+                <div className="text-[12px] font-semibold text-text-primary">Hive updated this skill · v{d.baseVersion} → v{d.version} · you have your own version</div>
+                {d.updates.length > 0 && (
+                  <ul className="text-[12px] text-text-secondary list-disc pl-4" aria-label="What changed">
+                    {d.updates.flatMap(u => u.changes.map((c, i) => <li key={`${u.version}-${i}`}><span className="font-mono text-[11px] text-text-muted">v{u.version}</span> {c}</li>))}
+                  </ul>
+                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button className={btnP} disabled={busy !== null} onClick={() => run('upd', async () => after(await window.api.butlerSkills.useDefault(d.id)))}>Overwrite with new</button>
+                  <button className={btnS} disabled={busy !== null} onClick={() => run('upd', async () => after(await window.api.butlerSkills.ackDefault(d.id)))}>Keep mine</button>
+                  <button className={btnS} disabled={busy !== null} onClick={() => run('upd', async () => {
+                    const r = await window.api.butlerSkills.saveCopy(d.id)
+                    if (!isIpcError(r)) setSaved(r.savedCopy ?? '')
+                    await after(r)
+                  })}>Save mine as a copy</button>
+                  <button className={link} onClick={doCompare}>Compare</button>
+                </div>
+              </div>
+            )}
+            {saved && <div className="text-[11px] text-text-muted truncate" title={saved} aria-live="polite">Your version is saved at {saved}</div>}
 
             {d.overrideProblems.length > 0 && <Problems items={d.overrideProblems} />}
 

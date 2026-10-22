@@ -1,0 +1,86 @@
+{
+  "answer-feishu": [
+    {
+      "version": 1,
+      "date": "2026-10-21",
+      "changes": [
+        "First version"
+      ],
+      "hash": "18301f1a67f46555"
+    }
+  ],
+  "evening-report": [
+    {
+      "version": 1,
+      "date": "2026-10-21",
+      "changes": [
+        "First version"
+      ],
+      "hash": "3e1659bd09e84ca6"
+    }
+  ],
+  "handle-jira": [
+    {
+      "version": 1,
+      "date": "2026-10-21",
+      "changes": [
+        "First version: close what shipped, draft comments, hand tickets to their owners, list what needs you"
+      ]
+    },
+    {
+      "version": 2,
+      "date": "2026-10-22",
+      "changes": [
+        "Engineering follow-up (no task / PR, engineering done, no fixVersion) only for product issues in the sprint running now — not the backlog, past or future sprints"
+      ],
+      "hash": "9bd92a889a3d6486"
+    }
+  ],
+  "jira-knowledge": [
+    {
+      "version": 1,
+      "date": "2026-10-21",
+      "changes": [
+        "First version: how to read a product team's Jira"
+      ]
+    },
+    {
+      "version": 2,
+      "date": "2026-10-22",
+      "changes": [
+        "Reaching Jira without Stargate: ./hive jira search / get / transitions / me"
+      ],
+      "hash": "d452a8a92f2975ff"
+    }
+  ],
+  "morning-plan": [
+    {
+      "version": 1,
+      "date": "2026-10-21",
+      "changes": [
+        "First version"
+      ],
+      "hash": "319095de2aa19965"
+    }
+  ],
+  "reply-email": [
+    {
+      "version": 1,
+      "date": "2026-10-21",
+      "changes": [
+        "First version"
+      ],
+      "hash": "e6de32992f2be22f"
+    }
+  ],
+  "sort-inbox": [
+    {
+      "version": 1,
+      "date": "2026-10-21",
+      "changes": [
+        "First version"
+      ],
+      "hash": "6c950e65b5feeb3d"
+    }
+  ]
+}

@@ -433,7 +433,7 @@ export default function App() {
     } else {
       setWizardAt(null)
       setShowAppSettings(true)
-      openSettingsSection('Daily routine')
+      openSettingsSection(t.kind === 'skills' ? 'Skills' : 'Daily routine')
     }
   }), [])
   const projectScan = selectedProjectId ? projectScans[selectedProjectId] || null : null

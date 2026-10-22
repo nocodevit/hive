@@ -38,6 +38,11 @@ test.beforeAll(async () => {
   writeFileSync(FAKE, FAKE_SCRIPT)
   chmodSync(FAKE, 0o755)
   writeFileSync(PROPOSAL, readFileSync(SHIPPED, 'utf8').replace('- Plain text; no headings, no tables.', '- Casual, no 您好.'))
+  // The owner rewrote handle-jira against v1; this Hive ships v2.
+  const jira = readFileSync(join(PROJECT_ROOT, 'resources', 'butler', 'skills', 'handle-jira.md'), 'utf8')
+  mkdirSync(join(BUTLER_DIR, 'skills'), { recursive: true })
+  writeFileSync(join(BUTLER_DIR, 'skills', 'handle-jira.md'), jira.replace('one ask per comment.', 'one ask per comment. Always in English.'))
+  writeFileSync(join(BUTLER_DIR, 'skills', '.meta.json'), JSON.stringify({ 'handle-jira': { defaultHash: 'old', version: 1 } }))
   execSync('npx electron-vite build', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 60000 })
   app = await electron.launch({
     args: [join(PROJECT_ROOT, 'out', 'main', 'index.js')],
@@ -116,4 +121,17 @@ test('a reference skill (Jira knowledge) has no tone form; its markdown is open 
   await expect(page.getByRole('radiogroup', { name: 'Tone' })).toHaveCount(0)
   await expect(page.getByLabel('Skill markdown')).toBeVisible()
   await expect(page.getByLabel('Skill markdown')).toHaveValue(/kind: reference/)
+})
+
+test('a skill the owner rewrote gets an update: what changed, then Overwrite / Keep mine / Save mine as a copy', async () => {
+  await page.getByRole('option', { name: /Handle Jira/ }).click()
+  const upd = page.getByRole('group', { name: 'Skill update' })
+  await expect(upd).toContainText('v1 → v2')
+  await expect(upd.getByLabel('What changed')).toContainText('sprint running now')
+  await expect(upd.getByRole('button', { name: 'Overwrite with new' })).toBeVisible()
+  await expect(upd.getByRole('button', { name: 'Keep mine' })).toBeVisible()
+  await upd.getByRole('button', { name: 'Save mine as a copy' }).click()
+  await expect(page.getByText(/Your version is saved at .*handle-jira\.saved-v1-/)).toBeVisible()
+  await expect(upd).toHaveCount(0)
+  expect(existsSync(join(BUTLER_DIR, 'skills', 'handle-jira.md'))).toBe(false)
 })

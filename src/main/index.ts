@@ -744,6 +744,7 @@ const butlerRoutineMode = butlerRoutines.mode
 // [butler:feishu-agent-calendar]
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory, previewFeishuAnswer } from './butlerFeishuAgentIpc'
 import { jiraBrowseBase, rememberJiraBase, withJiraLinks } from './jiraRest'
+import { newSkillUpdates } from './butlerSkills'
 const JIRA_READ_TOOLS = new Set(['jira_search', 'jira_get_issue', 'jira_get_transitions', 'jira_get_user_profile'])
 // Approved Jira changes (status fixes from answers, later handle-jira) run through the
 // owner's own Jira MCP server; the model never holds these write tools.
@@ -2642,6 +2643,13 @@ app.whenReady().then(() => {
   }
   // A new Hive brings new skill text: write the Butler files now, not only after tool discovery.
   try { if (existsSync(butlerDir(DATA_DIR))) installButlerFiles(butlerResourcesDir(), butlerDir(DATA_DIR)) } catch (e) { console.log(`[butler] install: ${e instanceof Error ? e.message : e}`) }
+  // A skill the owner rewrote got a new shipped version: ask once (Overwrite / Keep mine / Save mine as a copy in Settings › Skills).
+  try {
+    if (existsSync(butlerDir(DATA_DIR))) {
+      for (const u of newSkillUpdates({ defaultsDir: join(butlerResourcesDir(), 'skills'), butlerDir: butlerDir(DATA_DIR) }))
+        void notifications.emit({ kind: 'butlerApproval', key: `skill:${u.id}:${u.version}`, title: `Skill updated · ${u.name} v${u.version}`, body: u.changes[0] ?? 'Review in Settings › Skills', target: { kind: 'skills' } })
+    }
+  } catch (e) { console.log(`[butler] skill updates: ${e instanceof Error ? e.message : e}`) }
   refreshButlerTools()
   setInterval(refreshButlerTools, 24 * 3600_000).unref?.()
 

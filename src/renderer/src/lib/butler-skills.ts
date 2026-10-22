@@ -12,6 +12,9 @@ export interface SkillInfo {
   kind: 'task' | 'reference'
   customized: 'none' | 'form' | 'override'
   defaultUpdated: boolean
+  version: number
+  baseVersion: number
+  updates: Array<{ version: number; date: string; changes: string[] }>
   overrideProblems: LintProblem[]
 }
 export interface SkillDetail extends SkillInfo {

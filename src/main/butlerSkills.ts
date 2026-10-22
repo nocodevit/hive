@@ -257,7 +257,22 @@ function assertId(s: SkillStore, id: unknown): asserts id is string {
   if (!existsSync(join(s.defaultsDir, `${id}.md`))) throw new Error('unknown_skill')
 }
 
-type Meta = Record<string, { defaultHash: string }>
+/** What the owner's copy is based on: the shipped text's hash and version; notifiedHash = already told about this update. */
+type Meta = Record<string, { defaultHash: string; version?: number; notifiedHash?: string }>
+
+export interface SkillChange { version: number; date: string; changes: string[]; hash?: string }
+
+/** <defaults>/changelog.json: every shipped skill's versions, newest last. */
+export function readChangelog(s: SkillStore): Record<string, SkillChange[]> {
+  try {
+    const j = JSON.parse(readFileSync(join(s.defaultsDir, 'changelog.json'), 'utf8'))
+    return j && typeof j === 'object' ? j : {}
+  } catch { return {} }
+}
+export function skillVersion(s: SkillStore, id: string): number {
+  const l = readChangelog(s)[id] ?? []
+  return l.length ? Math.max(...l.map(c => Number(c.version) || 0)) : 1
+}
 function readMeta(s: SkillStore): Meta {
   try {
     const j = JSON.parse(readFileSync(metaPath(s), 'utf8'))
@@ -291,6 +306,12 @@ export interface SkillInfo {
   customized: 'none' | 'form' | 'override'
   /** The shipped default changed since the owner wrote their override. */
   defaultUpdated: boolean
+  /** The shipped version now. */
+  version: number
+  /** The version the owner's copy is based on (= version when nothing to review). */
+  baseVersion: number
+  /** What changed since the owner's copy (newest first), when defaultUpdated. */
+  updates: SkillChange[]
   /** The override on disk fails lint (edited by hand): the default + form is used. */
   overrideProblems: LintProblem[]
 }
@@ -320,14 +341,21 @@ export function skillInfo(s: SkillStore, id: string): SkillInfo {
   const ov = readOverride(s, id)
   const overlay = readOverlay(s, id)
   const p = parseSkill(def)
-  const hash = readMeta(s)[id]?.defaultHash
+  const meta = readMeta(s)[id]
+  const hash = meta?.defaultHash
+  const version = skillVersion(s, id)
+  const defaultUpdated = ov !== null && !!hash && hash !== hashText(def)
+  const baseVersion = defaultUpdated ? Math.min(meta?.version ?? version - 1, version) : version
   return {
     id,
     name: p.name,
     description: p.description,
     kind: p.kind,
     customized: ov !== null ? 'override' : isEmptyOverlay(overlay) ? 'none' : 'form',
-    defaultUpdated: ov !== null && !!hash && hash !== hashText(def),
+    defaultUpdated,
+    version,
+    baseVersion,
+    updates: defaultUpdated ? (readChangelog(s)[id] ?? []).filter(c => c.version > baseVersion).sort((a, b) => b.version - a.version) : [],
     overrideProblems: ov !== null ? lintSkill(id, ov, def) : []
   }
 }
@@ -351,7 +379,7 @@ export function skillDetail(s: SkillStore, id: string): SkillDetail {
 
 function rememberDefault(s: SkillStore, id: string) {
   const m = readMeta(s)
-  m[id] = { defaultHash: hashText(readDefault(s, id)) }
+  m[id] = { ...m[id], defaultHash: hashText(readDefault(s, id)), version: skillVersion(s, id) }
   writeMeta(s, m)
 }
 
@@ -381,6 +409,41 @@ export function saveOverride(s: SkillStore, id: string, md: unknown): { ok: bool
 export function ackDefault(s: SkillStore, id: string): void {
   assertId(s, id)
   rememberDefault(s, id)
+}
+
+/** "Overwrite": the new shipped text replaces the owner's markdown (form settings like tone stay). */
+export function useNewDefault(s: SkillStore, id: string): void {
+  assertId(s, id)
+  try { unlinkSync(overridePath(s, id)) } catch { /* none */ }
+  rememberDefault(s, id)
+}
+
+/** "Save mine as a copy": the owner's markdown is kept beside it (<id>.saved-<stamp>.md), the new text is used. */
+export function saveMineAsCopy(s: SkillStore, id: string, at = new Date()): string | null {
+  assertId(s, id)
+  const mine = readOverride(s, id)
+  if (mine === null) return null
+  const p2 = (n: number) => String(n).padStart(2, '0')
+  const stamp = `${at.getFullYear()}${p2(at.getMonth() + 1)}${p2(at.getDate())}-${p2(at.getHours())}${p2(at.getMinutes())}`
+  const copy = join(userDir(s), `${id}.saved-v${readMeta(s)[id]?.version ?? 1}-${stamp}.md`)
+  writeFileSync(copy, mine)
+  useNewDefault(s, id)
+  return copy
+}
+
+/** Skills whose shipped text changed under the owner's own markdown and were not announced yet (marks them told). */
+export function newSkillUpdates(s: SkillStore): Array<{ id: string; name: string; version: number; changes: string[] }> {
+  const m = readMeta(s)
+  const out: Array<{ id: string; name: string; version: number; changes: string[] }> = []
+  for (const id of defaultIds(s)) {
+    const info = skillInfo(s, id)
+    const h = hashText(readDefault(s, id))
+    if (!info.defaultUpdated || m[id]?.notifiedHash === h) continue
+    out.push({ id, name: info.name, version: info.version, changes: info.updates.flatMap(u => u.changes) })
+    m[id] = { ...m[id], notifiedHash: h }
+  }
+  if (out.length) writeMeta(s, m)
+  return out
 }
 
 /** Back to the shipped default: the owner's files for this id are removed. */
