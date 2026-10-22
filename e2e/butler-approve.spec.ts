@@ -41,6 +41,8 @@ test.beforeAll(async () => {
     card('new-q', 'email.decide', 'Ana · Price list', 'needs you · email · to ana@c.com · from mei@corp.com', '',
       { v: 2, accountId: 'acc-aaaaaaaa', to: 'ana@c.com', about: 'Ana wants the 2027 price list', question: 'Which prices can I share?', from: 'Ana <ana@c.com>', originalSubject: 'Price list', original: 'Hi Mei, can you send the 2027 price list?' }, 'Discuss'),
     // A Jira comment card: the ticket opens in the browser from the card.
+    card('fs-1', 'feishu.followup', 'Daniel Vargas Millan · On another topic, I have a requirement f…', 'Feishu follow-up · unsure', 'Thanks Daniel, I will check.',
+      { chatId: 'oc_1', question: 'On another topic, I have a requirement from Claro: they need the roaming CDRs split by country every Monday, starting next month.' }, 'Reply'),
     card('jira-c', 'jira.comment', 'P4-6926 · comment', 'Jira · in analysis 21 days', '请补充验收标准？', { key: 'P4-6926' }, 'Comment')
   ]))
   writeFileSync(join(BUTLER, 'jira-base.txt'), 'https://jira.example.com\n')
@@ -57,6 +59,11 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close().catch(() => {})
+})
+
+test('a Feishu card shows their whole message', async () => {
+  const c = page.getByLabel('Reply: Daniel Vargas Millan · On another topic, I have a requirement f…')
+  await expect(c.getByLabel('Their message')).toContainText('roaming CDRs split by country every Monday, starting next month.')
 })
 
 test('a Jira card links to its ticket', async () => {

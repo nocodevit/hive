@@ -7,6 +7,19 @@ const iconOf = (kind: string) => ICON[kind.split('.')[0]] ?? '📝'
 const DECIDE = 'email.decide'
 const str = (p: Record<string, unknown> | undefined, k: string) => (typeof p?.[k] === 'string' ? (p[k] as string) : '')
 
+/** What they wrote (Feishu cards): in full, folded after a few lines. */
+function TheirMessage({ text }: { text: string }) {
+  const [open, setOpen] = useState(false)
+  if (!text.trim()) return null
+  const long = text.length > 220 || text.split('\n').length > 4
+  return (
+    <div aria-label="Their message" className="rounded-lg border-l-2 border-border pl-2.5 text-[12px] text-text-secondary">
+      <div className={`whitespace-pre-wrap break-words ${long && !open ? 'line-clamp-4' : ''}`}>{text}</div>
+      {long && <button onClick={() => setOpen(o => !o)} className="mt-0.5 text-[11px] font-semibold text-accent cursor-pointer">{open ? 'Less' : 'More'}</button>}
+    </div>
+  )
+}
+
 /** "P4-6926 ↗" — opens the ticket in the browser (main adds payload.url to Jira cards). */
 function JiraLink({ payload }: { payload?: Record<string, unknown> }) {
   const url = str(payload, 'url')
@@ -85,6 +98,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
               <button onClick={() => window.api.approvals.reject(it.id)} aria-label={`Reject ${it.title}`} title="Dismiss" className={icon}>✕</button>
             </div>
             {about && <div className="text-[12px] text-text-secondary truncate" title={about} aria-label="What it wants">{about}</div>}
+            {it.kind.startsWith('feishu.') && <TheirMessage text={str(it.payload, 'question')} />}
             {decide ? (
               <>
                 <div className="text-[12px] text-status-waiting" aria-label="Butler asks">Needs you · {str(it.payload, 'question')}</div>
