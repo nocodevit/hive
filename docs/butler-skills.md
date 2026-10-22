@@ -85,3 +85,10 @@ App Settings → About me edits `profile.json` (`butler:profile` /
 a, when unsure. "More": name, team, works with, often/never says,
 language, prefix, intro. "What your agent reads" shows the rendered
 `profile.md` live (`butler:profilePreview`).
+
+## Versions and updates
+
+- `resources/butler/skills/changelog.json` lists every shipped skill's versions (newest last) with what changed. The latest entry's `hash` is the shipped text's hash: changing a skill's `.md` without adding a version fails `butlerSkills.test.ts`.
+- An owner who only set the form (tone, ask-first) gets new versions automatically.
+- An owner who rewrote the markdown is asked once per new version (Mac notification → Settings › Skills): **Overwrite with new**, **Keep mine**, or **Save mine as a copy** (`skills/<id>.saved-v<N>-<stamp>.md`, then the new text is used). Each shows what changed since their version.
+- Skill files are rewritten at every Hive start, so an update takes effect on the first launch.
