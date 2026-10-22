@@ -142,3 +142,36 @@ export function butlerJiraCall(folder: string, claudeJsonPath: string, store: Pi
   const token = store.token()
   return token ? { call: createJiraRestCaller(conn, token, fetchImpl), via: 'rest' } : null
 }
+
+const BASE_FILE = 'jira-base.txt'
+
+/** "https://jira.x/rest/api/2/issue/1" → "https://jira.x" (keeps a context path like /jira). */
+export function baseFromSelf(self: unknown): string | null {
+  if (typeof self !== 'string') return null
+  const i = self.indexOf('/rest/')
+  return i > 0 ? normalizeJiraUrl(self.slice(0, i)) : null
+}
+
+/** Remember Jira's web address as Jira itself reports it (for "open in Jira" links). */
+export function rememberJiraBase(folder: string, self: unknown): void {
+  const base = baseFromSelf(self)
+  if (!base) return
+  try { if (readFileSync(join(folder, BASE_FILE), 'utf8').trim() === base) return } catch { /* first time */ }
+  try { if (!existsSync(folder)) mkdirSync(folder, { recursive: true }); writeFileSync(join(folder, BASE_FILE), base + '\n') } catch { /* best-effort */ }
+}
+
+/** Where a ticket opens in the browser: the connection URL, else what Jira reported. */
+export function jiraBrowseBase(folder: string): string | null {
+  const c = readConnection(folder)
+  if (c.url) return c.url
+  try { return normalizeJiraUrl(readFileSync(join(folder, BASE_FILE), 'utf8').trim()) } catch { return null }
+}
+
+/** Jira cards get payload.url = <base>/browse/<KEY> when the address is known. */
+export function withJiraLinks<T extends { kind: string; payload: Record<string, unknown> }>(items: T[], base: string | null): T[] {
+  if (!base) return items
+  return items.map(i => {
+    const key = i.payload?.key
+    return i.kind.startsWith('jira.') && typeof key === 'string' && KEY.test(key) ? { ...i, payload: { ...i.payload, url: `${base}/browse/${key}` } } : i
+  })
+}

@@ -39,8 +39,11 @@ test.beforeAll(async () => {
       'To: lin@c.com\nSubject: Re: UAT down?\n\nHi Lin, UAT is back. Thanks. — Mei', { accountId: 'acc-aaaaaaaa', to: 'lin@c.com' }, 'Send'),
     // New format: needs you, with the email kept.
     card('new-q', 'email.decide', 'Ana · Price list', 'needs you · email · to ana@c.com · from mei@corp.com', '',
-      { v: 2, accountId: 'acc-aaaaaaaa', to: 'ana@c.com', about: 'Ana wants the 2027 price list', question: 'Which prices can I share?', from: 'Ana <ana@c.com>', originalSubject: 'Price list', original: 'Hi Mei, can you send the 2027 price list?' }, 'Discuss')
+      { v: 2, accountId: 'acc-aaaaaaaa', to: 'ana@c.com', about: 'Ana wants the 2027 price list', question: 'Which prices can I share?', from: 'Ana <ana@c.com>', originalSubject: 'Price list', original: 'Hi Mei, can you send the 2027 price list?' }, 'Discuss'),
+    // A Jira comment card: the ticket opens in the browser from the card.
+    card('jira-c', 'jira.comment', 'P4-6926 · comment', 'Jira · in analysis 21 days', '请补充验收标准？', { key: 'P4-6926' }, 'Comment')
   ]))
+  writeFileSync(join(BUTLER, 'jira-base.txt'), 'https://jira.example.com\n')
   execSync('npx electron-vite build', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 60000 })
   app = await electron.launch({
     args: [join(PROJECT_ROOT, 'out', 'main', 'index.js')],
@@ -54,6 +57,11 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await app?.close().catch(() => {})
+})
+
+test('a Jira card links to its ticket', async () => {
+  const c = page.getByLabel('Comment: P4-6926 · comment')
+  await expect(c.getByRole('link', { name: 'Open P4-6926 in Jira' })).toHaveAttribute('href', 'https://jira.example.com/browse/P4-6926')
 })
 
 test('a question that sat behind Send is now a needs-you card with no Send', async () => {

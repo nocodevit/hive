@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { mkdtempSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { authHeader, butlerJiraCall, createJiraConnectionStore, createJiraRestCaller, normalizeConnection, normalizeJiraUrl } from '../jiraRest'
+import { authHeader, baseFromSelf, butlerJiraCall, createJiraConnectionStore, createJiraRestCaller, jiraBrowseBase, normalizeConnection, normalizeJiraUrl, rememberJiraBase, withJiraLinks } from '../jiraRest'
 
 const plain = { encrypt: (s: string) => Buffer.from(s), decrypt: (b: Buffer) => b.toString() }
 
@@ -64,5 +64,20 @@ describe('jira REST', () => {
     store.save({ mode: 'rest', url: 'https://j.x' }, null)
     expect(store.hasToken()).toBe(false)
     expect(butlerJiraCall(folder, noClaude, store)).toBeNull()
+  })
+  it('Jira cards get an "open in Jira" link from the connection URL, else from what Jira reported', () => {
+    const folder = mkdtempSync(join(tmpdir(), 'hive-jira-base-'))
+    expect(baseFromSelf('https://pm.x.net/rest/api/2/issue/10423')).toBe('https://pm.x.net')
+    expect(baseFromSelf('https://x.net/jira/rest/api/2/myself')).toBe('https://x.net/jira')
+    expect(jiraBrowseBase(folder)).toBeNull()
+    const cards = [{ kind: 'jira.comment', payload: { key: 'P4-6926' } }, { kind: 'email.reply', payload: { key: 'P4-1' } }, { kind: 'jira.fix', payload: { key: 'bad key' } }]
+    expect(withJiraLinks(cards, null)).toEqual(cards)
+    rememberJiraBase(folder, 'https://pm.x.net/rest/api/2/user?username=mei')
+    const linked = withJiraLinks(cards, jiraBrowseBase(folder))
+    expect(linked[0].payload).toEqual({ key: 'P4-6926', url: 'https://pm.x.net/browse/P4-6926' })
+    expect(linked[1].payload).toEqual({ key: 'P4-1' })
+    expect(linked[2].payload).toEqual({ key: 'bad key' })
+    createJiraConnectionStore(folder, plain).save({ mode: 'rest', url: 'https://jira.other.com' })
+    expect(jiraBrowseBase(folder)).toBe('https://jira.other.com')
   })
 })

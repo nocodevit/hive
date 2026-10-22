@@ -7,6 +7,14 @@ const iconOf = (kind: string) => ICON[kind.split('.')[0]] ?? '📝'
 const DECIDE = 'email.decide'
 const str = (p: Record<string, unknown> | undefined, k: string) => (typeof p?.[k] === 'string' ? (p[k] as string) : '')
 
+/** "P4-6926 ↗" — opens the ticket in the browser (main adds payload.url to Jira cards). */
+function JiraLink({ payload }: { payload?: Record<string, unknown> }) {
+  const url = str(payload, 'url')
+  if (!/^https?:\/\//.test(url)) return null
+  return <a href={url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()} aria-label={`Open ${str(payload, 'key')} in Jira`}
+    className="text-[11px] font-semibold text-accent hover:underline whitespace-nowrap">{str(payload, 'key')} ↗</a>
+}
+
 /** What Butler's chat gets when the owner presses Discuss on a needs-you card. */
 export function discussText(it: ApprovalCard): string {
   const p = it.payload
@@ -64,7 +72,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
               <span aria-hidden>{iconOf(it.kind)}</span>
               <div className="flex-1 min-w-0">
                 <div className="text-[13px] font-bold text-text-primary truncate">{it.title}</div>
-                <div className="text-[11px] text-text-muted truncate">{it.subtitle}</div>
+                <div className="flex items-center gap-2 min-w-0"><span className="text-[11px] text-text-muted truncate">{it.subtitle}</span><JiraLink payload={it.payload} /></div>
               </div>
               {decide ? (
                 <button onClick={() => onDiscuss?.(discussText(it))} aria-label={`Discuss ${it.title}`} className={btn}>Discuss</button>
@@ -163,7 +171,7 @@ export function ApprovalHistory({ onDiscuss }: { onDiscuss?: (text: string) => v
                 <span className={o.cls}>{o.text}</span>
                 <span className="text-text-muted">{whenLabel(it.resolvedAt ?? it.createdAt)}</span>
               </summary>
-              <div className="mt-1 text-[11px] text-text-muted truncate">{it.subtitle}</div>
+              <div className="mt-1 flex items-center gap-2 min-w-0"><span className="text-[11px] text-text-muted truncate">{it.subtitle}</span><JiraLink payload={it.payload} /></div>
               <div className="mt-1 rounded-lg bg-bg-secondary px-2.5 py-2 text-[12px] text-text-primary whitespace-pre-wrap">{it.draft}</div>
               {it.error && <div className="mt-1 text-[11px] text-red-400 font-mono">{it.error}</div>}
               {onDiscuss && (
