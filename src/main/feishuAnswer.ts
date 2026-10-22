@@ -51,6 +51,8 @@ export interface Answer {
   proposal?: Proposal
   /** Tickets whose status is wrong by what was verified; the owner approves each change. */
   jiraFixes: Array<{ key: string; to: string; why: string }>
+  /** The one judgment that is the owner's ("escalate or not?"): the checked facts go out, this goes to the owner. */
+  ownerQuestion?: string
 }
 
 /** "ok", "好的", "收到", 👍, a sticker … — an acknowledgement, nothing to answer. */
@@ -99,7 +101,8 @@ export function parseAnswer(output: string): Answer | null {
   const jiraFixes = (Array.isArray(j.jira_fixes) ? j.jira_fixes : []).slice(0, 5)
     .map((f: any) => ({ key: str(f?.key, 20), to: str(f?.to, 40), why: str(f?.why, 200) }))
     .filter((f: { key: string; to: string; why: string }) => /^[A-Z][A-Z0-9]+-\d+$/.test(f.key) && f.to && f.why)
-  return { category, level, confidence, reply: str(j.reply, 2000), sources, claims, jiraFixes, ...(proposal ? { proposal } : {}) }
+  const ownerQuestion = str(j.owner_question, 300)
+  return { category, level, confidence, reply: str(j.reply, 2000), sources, claims, jiraFixes, ...(proposal ? { proposal } : {}), ...(ownerQuestion ? { ownerQuestion } : {}) }
 }
 
 /** What Butler says when the sender's "ok" agrees to a proposal the owner must approve. */
@@ -114,6 +117,8 @@ export interface GateResult {
   reasons: string[]
   /** The owner should hear about it even when it was sent. */
   notify: boolean
+  /** Facts go out now; answer.ownerQuestion goes to the owner as a card. */
+  split?: boolean
 }
 
 /** Decide what goes out. Only ever lowers the model's level. */
@@ -140,6 +145,11 @@ export function gateAnswer({ answer, relation, calendarKnown = false, neverQuote
     if (c.verdict === 'contradicted') lower('approve', `corrects "${c.claim.slice(0, 40)}"`)
     if (c.verdict === 'unverified') notify = true
   }
+  // Every fact checked against a source, only a judgment left for the owner: send the facts, card the judgment.
+  const factsChecked = answer.claims.length > 0 && answer.claims.every(c => c.verdict === 'confirmed' && !!c.source)
+  const split = !!answer.ownerQuestion && !!answer.reply && factsChecked && level !== 'hold' && answer.confidence !== 'low' &&
+    relation !== 'boss' && answer.category !== 'meeting' && answer.category !== 'cannot-answer' && !hidden.length && !unchecked.length
+  if (split) return { level: 'auto', reasons: [`yours: ${answer.ownerQuestion}`], notify: true, split: true }
   const chitchat = answer.category === 'chitchat-work' || answer.category === 'chitchat-life'
   // Small talk with nothing checkable in it never waits for the owner over "medium".
   const plainChat = chitchat && !answer.claims.length && !answer.sources.length && !named.length

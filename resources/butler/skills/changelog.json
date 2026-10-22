@@ -5,8 +5,15 @@
       "date": "2026-10-21",
       "changes": [
         "First version"
+      ]
+    },
+    {
+      "version": 2,
+      "date": "2026-10-22",
+      "changes": [
+        "Facts checked, only a judgment left (e.g. escalate or not): the analysis is sent right away and only that judgment comes to you as a card"
       ],
-      "hash": "18301f1a67f46555"
+      "hash": "d64ce0f4c4a58bc6"
     }
   ],
   "evening-report": [

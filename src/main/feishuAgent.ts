@@ -626,6 +626,25 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     // Status fixes the answer found (verified against code / releases): one card each for the owner.
     for (const f of answer?.jiraFixes ?? []) deps.approvals.add(jiraFixApproval(f, `from Feishu · ${job.chatName || 'chat'}`))
     const decided = { ...baseCase(job, relation), category: answer?.category ?? 'cannot-answer', confidence: answer?.confidence ?? 'low', claims: answer?.claims ?? [], sources: answer?.sources ?? [], draft, level: gate.level, reasons: gate.reasons }
+    if (gate.level === 'auto' && gate.split && answer?.ownerQuestion) {
+      // The checked facts now; the owner's call ("escalate?") as a card, promised in the reply.
+      const owner = deps.profile().name.trim() || '主人'
+      const text = draft.includes(owner) ? draft : `${draft}\n「${answer.ownerQuestion}」我跟 ${owner} 确认后回复你。`
+      const r = await reply(token, job, text, 'answer')
+      if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
+      const item = deps.approvals.add({
+        kind: FOLLOWUP_KIND,
+        title: `${job.chatName || 'Feishu'} · ${clip(answer.ownerQuestion, 40)}`,
+        subtitle: `Feishu · facts sent, your call · ${clip(answer.ownerQuestion, 60)}`,
+        draft: '',
+        payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, senderId: job.senderId, question: job.text, topic: answer.ownerQuestion, relation, category: answer.category, claims: answer.claims, sent: text },
+        action: 'Reply'
+      })
+      cases.add({ ...decided, sent: text, approvalId: item.id, outcome: 'pending' })
+      state.followups.push({ approvalId: item.id, createdAt: now(), reminded: false })
+      deps.notify('Feishu · your call', `${job.chatName || 'Feishu'} · ${clip(answer.ownerQuestion, 60)}`)
+      return { messageId: job.messageId, result: 'answered' }
+    }
     if (gate.level === 'auto') {
       const r = await reply(token, job, draft, 'answer')
       if (r.ok) cases.add({ ...decided, sent: draft, outcome: 'auto' })
