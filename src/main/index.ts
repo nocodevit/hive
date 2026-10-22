@@ -2640,6 +2640,8 @@ app.whenReady().then(() => {
       .then(c => { if (existsSync(folder) && Object.keys(c.servers).length) installButlerFiles(butlerResourcesDir(), folder) })
       .catch(e => console.log(`[butler] tool discovery: ${e instanceof Error ? e.message : e}`))
   }
+  // A new Hive brings new skill text: write the Butler files now, not only after tool discovery.
+  try { if (existsSync(butlerDir(DATA_DIR))) installButlerFiles(butlerResourcesDir(), butlerDir(DATA_DIR)) } catch (e) { console.log(`[butler] install: ${e instanceof Error ? e.message : e}`) }
   refreshButlerTools()
   setInterval(refreshButlerTools, 24 * 3600_000).unref?.()
 
