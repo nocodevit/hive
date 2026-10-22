@@ -26,8 +26,15 @@
       "date": "2026-10-22",
       "changes": [
         "No decline line either (\"这个我不方便透露…\"): a guarded topic is silence + a card for you. Only small talk is answered while waiting"
+      ]
+    },
+    {
+      "version": 5,
+      "date": "2026-10-22",
+      "changes": [
+        "Three outcomes only: can't answer / your call → nothing sent, a card for you; can answer → answered and you are told; partly → the checked facts + \"其余已转告 <you>，稍后回复\", a card for the rest"
       ],
-      "hash": "7971b39407069826"
+      "hash": "4e551d7213ed20ea"
     }
   ],
   "evening-report": [
