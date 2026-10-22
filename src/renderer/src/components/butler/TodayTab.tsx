@@ -25,6 +25,16 @@ function Summary({ text }: { text: string }) {
   )
 }
 
+/** A plan item → the Butler chat, to work on it there. */
+export function planDiscussText(it: { text: string; source: string | null; ref: string | null; done: boolean }, date: string): string {
+  return [
+    `Help me with this item from my plan for ${date}. Do not send or change anything until I confirm.`,
+    `- ${it.text}${it.done ? ' (done)' : ''}`,
+    it.source === 'jira' ? 'It is about a Jira ticket: look it up first.' : '',
+    (it.source === 'mail' || it.source === 'draft') ? `It is about an email${it.ref ? ` (Butler's email key ${it.ref})` : ''}${it.source === 'draft' ? '; a reply draft is waiting in Approve' : ''}.` : ''
+  ].filter(Boolean).join('\n')
+}
+
 /** One folded line: icon · label · headline; opens to the full text. */
 function Row({ icon, label, line, children }: { icon: string; label: string; line: string; children: React.ReactNode }) {
   return (
@@ -41,7 +51,7 @@ function Row({ icon, label, line, children }: { icon: string; label: string; lin
 }
 
 /** Butler → Today: one day at a time — status chips, the next meeting, the plan, then folded rows. */
-export function TodayTab({ visible }: { visible: boolean }) {
+export function TodayTab({ visible, onDiscuss }: { visible: boolean; onDiscuss?: (text: string) => void }) {
   const [today, setToday] = useState<string | null>(null)
   const [date, setDate] = useState<string | null>(null)
   const [day, setDay] = useState<JournalDay | null>(null)
@@ -174,6 +184,10 @@ export function TodayTab({ visible }: { visible: boolean }) {
               <span className={`flex-1 min-w-0 ${it.done ? 'line-through text-text-muted' : 'text-text-primary'}`}>{it.text}</span>
             </label>
             {it.source && <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${TAG[it.source].cls}`}>{TAG[it.source].text}</span>}
+            {onDiscuss && (
+              <button onClick={() => onDiscuss(planDiscussText(it, date))} aria-label={`Discuss ${it.text}`} title="Discuss in the Butler chat"
+                className="w-6 h-6 rounded-md text-[12px] text-text-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-bg-hover cursor-pointer">💬</button>
+            )}
             {!it.done && (
               <button onClick={() => ignore(it.index, it.text)} aria-label={`Ignore ${it.text}`}
                 title={(it.source === 'mail' || it.source === 'draft') && it.ref ? 'Ignore · marks the email read' : 'Ignore'}
