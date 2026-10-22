@@ -19,6 +19,7 @@ Keep the owner's tickets moving with as little of their time as possible: do the
 - L2 only for the clear case: a request ticket whose linked product issue has shipped → move the request to its final status, comment which issue shipped and when.
 - L1: comments on other people's tickets, reassigning, asking the dev lead for an engineering task, questions for a requester, a product issue drafted from a clear request.
 - L0: product issues whose engineering is done but whose status did not move, sprints without a version (no date), stuck / not started / old backlog — grouped, one line each.
+- Engineering follow-up (no engineering task / PR, engineering done but status not moved, no fixVersion) only for product issues in the sprint running now. Never for the backlog, a closed sprint or a future sprint.
 - Questions for a stuck request make the user story black and white: who, what problem, which scenario, expected result, acceptance, deadline. Or offer a short initial solution to confirm.
 - Exact keys only. Never guess a key, a status or a date.
 - Never quote engineering-task content (see jira-knowledge never-share).
