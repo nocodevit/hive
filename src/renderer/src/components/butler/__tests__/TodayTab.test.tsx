@@ -115,4 +115,11 @@ describe('TodayTab', () => {
     finish()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Run Jira now' })).toHaveTextContent('Run'))
   })
+  it('a plan item goes to the Butler chat with its context', async () => {
+    const onDiscuss = vi.fn()
+    render(<TodayTab visible onDiscuss={onDiscuss} />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Discuss Reply Lin' }))
+    expect(onDiscuss).toHaveBeenCalledWith(expect.stringContaining('- Reply Lin'))
+    expect(onDiscuss.mock.calls[0][0]).toContain('a reply draft is waiting in Approve')
+  })
 })

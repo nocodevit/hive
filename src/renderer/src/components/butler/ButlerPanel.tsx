@@ -187,7 +187,7 @@ export function ButlerPanel(p: Props) {
       )}
 
       {/* [butler:mail-routines] Today tab body */}
-      {tab === 'today' && <TodayTab visible={p.visible} />}
+      {tab === 'today' && <TodayTab visible={p.visible} onDiscuss={discuss} />}
 
       {tab === 'sessions' && (
         <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-2">
