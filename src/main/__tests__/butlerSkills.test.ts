@@ -56,9 +56,10 @@ describe('shipped defaults', () => {
     expect(md).toMatch(/no second apology/)
     expect(lockedLines(md).join('\n')).toMatch(/never send without/)
   })
-  it('answer-feishu escalates with the check-with line and uses the profile prefix', () => {
+  it('answer-feishu sends nothing while held (no check-with lines) and uses the profile prefix', () => {
     const md = def('answer-feishu')
-    expect(md).toMatch(/我需要和 <name> 确认，稍后回复你/)
+    expect(md).not.toMatch(/稍后回复你/)
+    expect(md).toMatch(/Hive sends nothing and gives the owner a card/)
     expect(md).toMatch(/prefix from `profile\.md`/)
     expect(lockedLines(md).map(l => l.split(' — ')[0])).toEqual(['- 🔒 prices', '- 🔒 approvals', '- 🔒 private chats', '- 🔒 personal info', '- 🔒 sensitive info', '- 🔒 confidential'])
   })

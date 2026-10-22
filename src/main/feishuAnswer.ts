@@ -105,11 +105,6 @@ export function parseAnswer(output: string): Answer | null {
   return { category, level, confidence, reply: str(j.reply, 2000), sources, claims, jiraFixes, ...(proposal ? { proposal } : {}), ...(ownerQuestion ? { ownerQuestion } : {}) }
 }
 
-/** What Butler says when the sender's "ok" agrees to a proposal the owner must approve. */
-export function consentReply(ownerName: string): string {
-  return `好的，我会转给 ${ownerName.trim() || '主人'} 确认和批准。`
-}
-
 export interface GateInput { answer: Answer | null; relation: Relation; calendarKnown?: boolean; /** Projects whose keys never go out (engineering tasks). */ neverQuote?: string[] }
 export interface GateResult {
   level: Level
@@ -169,12 +164,6 @@ export function gateAnswer({ answer, relation, calendarKnown = false, neverQuote
 export const RELATION_LABEL: Record<Relation, string> = {
   boss: "the owner's manager", report: 'reports to the owner', peer: "a colleague in the owner's department",
   requester: 'from another department (a requester)', unknown: 'relationship unknown'
-}
-
-/** Sent while the owner decides: says who is answering and that the owner will follow up. */
-export function assistantHolding(ownerName: string): string {
-  const n = ownerName.trim() || '主人'
-  return `我是 ${n} 的助理，可能不太了解上下文，判断和回答不一定准确，我会转给 ${n} 处理。`
 }
 
 // ── Who is the sender to the owner (Feishu contacts) ─────────────────────
