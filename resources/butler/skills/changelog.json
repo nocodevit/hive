@@ -12,8 +12,15 @@
       "date": "2026-10-22",
       "changes": [
         "Facts checked, only a judgment left (e.g. escalate or not): the analysis is sent right away and only that judgment comes to you as a card"
+      ]
+    },
+    {
+      "version": 3,
+      "date": "2026-10-22",
+      "changes": [
+        "Held for you: nothing is sent to them (no \"我需要和…确认\" / \"我会转给…处理\" lines). A private topic still gets the polite decline; small talk Butler's own words; an agreed proposal a 👍"
       ],
-      "hash": "d64ce0f4c4a58bc6"
+      "hash": "00c2c913826c316a"
     }
   ],
   "evening-report": [
