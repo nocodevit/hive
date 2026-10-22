@@ -418,17 +418,35 @@ export function useNewDefault(s: SkillStore, id: string): void {
   rememberDefault(s, id)
 }
 
-/** "Save mine as a copy": the owner's markdown is kept beside it (<id>.saved-<stamp>.md), the new text is used. */
-export function saveMineAsCopy(s: SkillStore, id: string, at = new Date()): string | null {
+/** "另存新版": the new shipped text is saved beside the owner's (<id>.new-v<N>.md); the owner keeps theirs. */
+export function saveNewAsCopy(s: SkillStore, id: string): string {
   assertId(s, id)
-  const mine = readOverride(s, id)
-  if (mine === null) return null
-  const p2 = (n: number) => String(n).padStart(2, '0')
-  const stamp = `${at.getFullYear()}${p2(at.getMonth() + 1)}${p2(at.getDate())}-${p2(at.getHours())}${p2(at.getMinutes())}`
-  const copy = join(userDir(s), `${id}.saved-v${readMeta(s)[id]?.version ?? 1}-${stamp}.md`)
-  writeFileSync(copy, mine)
-  useNewDefault(s, id)
+  const copy = join(userDir(s), `${id}.new-v${skillVersion(s, id)}.md`)
+  mkdirSync(userDir(s), { recursive: true })
+  writeFileSync(copy, readDefault(s, id))
+  rememberDefault(s, id)
   return copy
+}
+
+/** "Merge": the owner's version stays the base; the shipped changes are brought in. A proposal to Accept, like Describe a change. */
+export async function mergeUpdate(s: SkillStore, id: string, run: Runner): Promise<EditProposal> {
+  assertId(s, id)
+  const info = skillInfo(s, id)
+  const changes = info.updates.flatMap(u => u.changes.map(c => `- v${u.version}: ${c}`)).join('\n') || '- (see the new version)'
+  const request = [
+    `Hive shipped a new version (v${info.version}) of this skill. Keep everything the owner wrote; bring in only these changes from the new version:`,
+    changes, '', '<<<NEW VERSION', readDefault(s, id), 'NEW VERSION>>>'
+  ].join('\n')
+  const def = readDefault(s, id)
+  const current = effectiveSkill(s, id).md
+  let problems: LintProblem[] = []
+  let reply = { md: '', example: '' }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try { reply = parseEditReply(await run(editPrompt(current, request, problems))) } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+    problems = lintSkill(id, reply.md, def)
+    if (!problems.length) break
+  }
+  return { ok: true, md: reply.md, example: reply.example, chips: changeChips(current, reply.md), diff: lineDiff(current, reply.md), problems }
 }
 
 /** Skills whose shipped text changed under the owner's own markdown and were not announced yet (marks them told). */
