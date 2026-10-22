@@ -46,7 +46,14 @@ export function ButlerPanel(p: Props) {
   const [tab, setTab] = useState<Tab>('chat')
   const discuss = (text: string) => {
     setTab('chat')
-    window.api.chat.send('chat-butler', text).catch(() => {})
+    // Shown as the owner's own message; the chat may still be starting, so try for a few seconds.
+    void (async () => {
+      for (let i = 0; i < 20; i++) {
+        const r = await window.api.chat.sendAsUser('chat-butler', text).catch(() => ({ ok: false }))
+        if (r.ok) return
+        await new Promise(res => setTimeout(res, 500))
+      }
+    })()
   }
   useEffect(() => { if (p.tabRequest) setTab(p.tabRequest.tab) }, [p.tabRequest])
   useEffect(() => { p.onTab?.(tab) }, [tab, p.onTab])

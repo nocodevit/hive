@@ -171,6 +171,8 @@ const api = {
       }>,
     send: (id: string, text: string) =>
       ipcRenderer.invoke('chat:send', { id, text }) as Promise<{ ok: boolean; error?: string }>,
+    sendAsUser: (id: string, text: string) =>
+      ipcRenderer.invoke('chat:sendAsUser', { id, text }) as Promise<{ ok: boolean; error?: string }>,
     respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny', input?: Record<string, unknown>, denyMessage?: string) =>
       ipcRenderer.invoke('chat:respondPermission', { id, requestId, decision, input, denyMessage }) as Promise<{ ok: boolean; error?: string }>,
     allowToolForSession: (id: string, toolName: string) =>
