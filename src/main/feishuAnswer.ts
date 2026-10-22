@@ -242,14 +242,6 @@ export function freeBusyText(days: AgendaLike[], sourcesOn: boolean): { known: b
   return { known: true, text: lines.join('\n') }
 }
 
-/** Guardrail topics where the answer is simply "not mine to share" — said politely,
- *  instead of "I'll check with <owner>" (which would suggest the owner might tell). */
-export const DECLINE_TOPICS = new Set(['private-chats', 'personal-info', 'sensitive-info', 'confidential'])
-
-export function declineReply(ownerName: string): string {
-  return `这个我不方便透露。有具体的事可以告诉我，我转给 ${ownerName.trim() || '主人'}。`
-}
-
 export function meetingCreatedReply(m: { start: number; end: number; title: string }, link: string, reminder: number): string {
   const d = new Date(m.start)
   const hm = (x: number) => { const t = new Date(x); return `${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}` }
