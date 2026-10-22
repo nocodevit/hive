@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { readPeople, setPerson } from '../feishuAnswer'
-import { assistantHolding, createRelationLookup, declineReply, DECLINE_TOPICS, freeBusyText, gateAnswer, isAck, meetingCreatedReply, meetingSlot, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
+import { createRelationLookup, declineReply, DECLINE_TOPICS, freeBusyText, gateAnswer, isAck, meetingCreatedReply, meetingSlot, parseAnswer, relationOf, workingDays, type Answer } from '../feishuAnswer'
 
 const ans = (o: Partial<Answer> = {}): Answer => ({ category: 'product-status', level: 'auto', confidence: 'high', reply: 'ok', sources: [], claims: [], jiraFixes: [], ...o })
 
@@ -59,7 +59,6 @@ describe('gateAnswer', () => {
     expect(gateAnswer({ answer: ans({ category: 'new-request' }), relation: 'peer' })).toMatchObject({ level: 'auto', notify: true })
   })
   it('the assistant holding line', () => {
-    expect(assistantHolding('Megan')).toBe('我是 Megan 的助理，可能不太了解上下文，判断和回答不一定准确，我会转给 Megan 处理。')
   })
 })
 

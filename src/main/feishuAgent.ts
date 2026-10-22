@@ -24,7 +24,7 @@ import type { Approval } from './approvals'
 import { createCaseLog, type FeishuCase } from './feishuCases'
 import { MEETING_REMINDER_MIN } from './calendar'
 import { jiraFixApproval } from './butlerJira'
-import { assistantHolding, consentReply, declineReply, DECLINE_TOPICS, gateAnswer, meetingCreatedReply, meetingSlot, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
+import { declineReply, DECLINE_TOPICS, gateAnswer, meetingCreatedReply, meetingSlot, isAck, parseAnswer, RELATION_LABEL, type Answer, type Proposal, type Relation } from './feishuAnswer'
 
 export const FEISHU_API = 'https://open.feishu.cn/open-apis'
 
@@ -147,10 +147,6 @@ export function ensurePrefix(text: string, prefix: string): string {
   if (!p) return t
   if (t.startsWith(p)) t = t.slice(p.length).trimStart()
   return p + (p.endsWith(']') ? ' ' : '') + t
-}
-
-export function holdingReply(name: string): string {
-  return `我需要和 ${name.trim() || 'TA'} 确认，稍后回复你`
 }
 
 /** CJK words match anywhere; latin words only whole ("nda" is not in "agenda"). */
@@ -601,9 +597,9 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
             return r.ok ? { messageId: job.messageId, result: 'answered' } : { messageId: job.messageId, result: 'failed', error: r.error }
           }
         }
-        const said = consentReply(deps.profile().name)
-        const r = await reply(token, job, said, 'holding')
-        if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
+        // Their "ok" is noted with 👍, not a "我会转给…确认" line; the owner gets the card.
+        const liked = await thumbsUp(token, job.messageId)
+        const said = liked ? '👍' : ''
         const item = deps.approvals.add({
           kind: FOLLOWUP_KIND,
           title: `${job.chatName || 'Feishu'} · agreed: ${clip(p.summary, 40)}`,
@@ -661,17 +657,13 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       cases.add({ ...decided, sent: '', approvalId: open.id, outcome: 'pending' })
       return { messageId: job.messageId, result: 'skipped', why: 'added_to_card' }
     }
-    // A guardrail hit or "ask the owner" → "I need to check with …"; anything the
-    // assistant cannot judge → "I'm the assistant, I'll pass it on".
-    const owner = deps.profile().name
-    // Small talk with nothing to check ("feeling better?"): Butler's own short reply, in their language,
-    // is the holding message; the generic line read oddly. The owner still gets the card.
-    const chat = answer && (answer.category === 'chitchat-life' || answer.category === 'chitchat-work') && !answer.claims.length && !answer.sources.length && !/[A-Z][A-Z0-9]+-\d+/.test(answer.reply)
-    const holding = guard === null && chat && draft.trim() ? draft
-      : guard !== null && DECLINE_TOPICS.has(guard) ? declineReply(owner)
-      : guard !== null || gate.level === 'approve' ? holdingReply(owner) : assistantHolding(owner)
-    const r = await reply(token, job, holding, 'holding')
-    if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
+    // Held for the owner: nothing goes out ("我需要和…确认" lines were noise) — except a real answer:
+    // the polite decline on a private topic, or small talk in Butler's own words. The owner gets the card.
+    const holding = holdingText(job, answer, draft, guard)
+    if (holding) {
+      const r = await reply(token, job, holding, 'holding')
+      if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
+    }
     const item = deps.approvals.add({
       kind: FOLLOWUP_KIND,
       title: `${job.chatName || 'Feishu'} · ${clip(job.text.replace(/\s+/g, ' '), 40)}`,
@@ -683,6 +675,13 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     cases.add({ ...decided, sent: holding, approvalId: item.id, outcome: 'pending' })
     state.followups.push({ approvalId: item.id, createdAt: now(), reminded: false })
     return { messageId: job.messageId, result: 'escalated' }
+  }
+
+  function holdingText(job: Pick<Job, 'text'>, answer: Answer | null, draft: string, guard: string | null): string {
+    const chat = !!answer && (answer.category === 'chitchat-life' || answer.category === 'chitchat-work') && !answer.claims.length && !answer.sources.length && !/[A-Z][A-Z0-9]+-\d+/.test(answer.reply)
+    if (guard === null && chat && draft.trim()) return draft
+    if (guard !== null && DECLINE_TOPICS.has(guard)) return declineReply(deps.profile().name)
+    return ''
   }
 
   function remind() {
@@ -782,10 +781,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       }
       if (isAck(job.text)) return { ok: true as const, ack: true, wouldSend: '👍 (reaction, no reply — or consent if Butler just proposed an action to this person)' }
       const d = await decide(job, history, self)
-      const owner = deps.profile().name
-      return { ok: true as const, ...d, wouldSend: d.gate.level === 'auto' ? d.draft
-        : d.guard !== null && DECLINE_TOPICS.has(d.guard) ? declineReply(owner)
-        : d.guard !== null || d.gate.level === 'approve' ? holdingReply(owner) : assistantHolding(owner) }
+      return { ok: true as const, ...d, wouldSend: d.gate.level === 'auto' ? d.draft : holdingText(job, d.answer, d.draft, d.guard) || '(nothing sent — a card for you)' }
     },
     getSettings: () => ({ ...settings }),
     setSettings(patch: Partial<FeishuAgentSettings>): FeishuAgentSettings {
