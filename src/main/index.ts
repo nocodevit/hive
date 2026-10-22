@@ -688,7 +688,8 @@ const knownApprovals = new Set<string>()
 const approvals = createApprovals({
   dir: butlerDir(DATA_DIR),
   onChange: pending => {
-    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('approvals:changed', pending)
+    const linked = withJiraLinks(pending, jiraBrowseBase(butlerDir(DATA_DIR)))
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send('approvals:changed', linked)
     for (const a of pending) {
       if (knownApprovals.has(a.id)) continue
       knownApprovals.add(a.id)
@@ -697,8 +698,20 @@ const approvals = createApprovals({
   }
 })
 for (const a of approvals.pending()) knownApprovals.add(a.id)
-ipcMain.handle('approvals:list', () => approvals.pending())
-ipcMain.handle('approvals:history', () => approvals.history())
+// Jira cards carry an "open in Jira" link. The address comes from the connection or from Jira itself;
+// learned once (its own self URL) when neither is known yet.
+let jiraBaseAsked = false
+async function jiraLinks<T extends { kind: string; payload: Record<string, unknown> }>(items: T[]): Promise<T[]> {
+  const folder = butlerDir(DATA_DIR)
+  if (!jiraBrowseBase(folder) && !jiraBaseAsked && items.some(i => i.kind.startsWith('jira.'))) {
+    jiraBaseAsked = true
+    const call = butlerRoutines.jiraCall()
+    if (call) await call('jira_get_user_profile', {}).then(r => rememberJiraBase(folder, JSON.parse(r)?.self)).catch(() => {})
+  }
+  return withJiraLinks(items, jiraBrowseBase(folder))
+}
+ipcMain.handle('approvals:list', () => jiraLinks(approvals.pending()))
+ipcMain.handle('approvals:history', () => jiraLinks(approvals.history()))
 ipcMain.handle('approvals:approve', (_e, id: unknown, draft: unknown) =>
   typeof id === 'string' ? approvals.approve(id, typeof draft === 'string' ? draft : undefined) : { ok: false, error: 'bad_id' })
 ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' && approvals.reject(id))
@@ -730,6 +743,7 @@ const butlerRoutines = setupButlerMailRoutines({
 const butlerRoutineMode = butlerRoutines.mode
 // [butler:feishu-agent-calendar]
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory, previewFeishuAnswer } from './butlerFeishuAgentIpc'
+import { jiraBrowseBase, rememberJiraBase, withJiraLinks } from './jiraRest'
 const JIRA_READ_TOOLS = new Set(['jira_search', 'jira_get_issue', 'jira_get_transitions', 'jira_get_user_profile'])
 // Approved Jira changes (status fixes from answers, later handle-jira) run through the
 // owner's own Jira MCP server; the model never holds these write tools.
