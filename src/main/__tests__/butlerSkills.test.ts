@@ -5,8 +5,7 @@ import { join } from 'path'
 import {
   SECTIONS, ackDefault, applyOverlay, changeChips, composeSkills, compareSkill, editPrompt, effectiveSkill, isSkillId,
   lineDiff, lintSkill, listSkills, lockedLines, normalizeOverlay, parseEditReply, parseSkill, proposeEdit, readOverlay,
-  renderSkill, resetSkill, saveOverlay, saveOverride, skillDetail, tryIt, DRY_RUN_NOTE, readableOutput, type SkillStore
-} from '../butlerSkills'
+  renderSkill, resetSkill, saveOverlay, saveOverride, skillDetail, tryIt, DRY_RUN_NOTE, readableOutput, type SkillStore, readChangelog, newSkillUpdates, saveMineAsCopy, useNewDefault, readOverride, hashText } from '../butlerSkills'
 import { installButlerFiles } from '../butler'
 import { registerButlerSkillsIpc } from '../butlerSkillsIpc'
 
@@ -237,6 +236,42 @@ describe('default updated', () => {
     ])
     ackDefault(store, 'reply-email')
     expect(skillDetail(store, 'reply-email').defaultUpdated).toBe(false)
+  })
+  it('an update shows its version and changes; Overwrite / Save mine as a copy / Keep mine', () => {
+    const log = readChangelog(store)
+    log['reply-email'] = [...(log['reply-email'] ?? []), { version: 2, date: '2026-10-22', changes: ['Shorter replies'] }]
+    writeFileSync(join(store.defaultsDir, 'changelog.json'), JSON.stringify(log))
+    const mine = def('reply-email').replace('Plain and calm.', 'Warm.')
+    writeFileSync(join(store.defaultsDir, 'reply-email.md'), def('reply-email'))
+    saveOverride(store, 'reply-email', mine)
+    saveOverlay(store, 'reply-email', { tone: 'formal' })
+    // remembered as based on v2 now; pretend it was written against v1 and the text changed since
+    const metaFile = join(store.butlerDir, 'skills', '.meta.json')
+    const meta = JSON.parse(readFileSync(metaFile, 'utf8'))
+    meta['reply-email'] = { defaultHash: 'old', version: 1 }
+    writeFileSync(metaFile, JSON.stringify(meta))
+    const info = skillDetail(store, 'reply-email')
+    expect(info).toMatchObject({ defaultUpdated: true, version: 2, baseVersion: 1, updates: [{ version: 2, changes: ['Shorter replies'] }] })
+    expect(newSkillUpdates(store)).toEqual([{ id: 'reply-email', name: 'reply-email', version: 2, changes: ['Shorter replies'] }])
+    expect(newSkillUpdates(store)).toEqual([])
+    const copy = saveMineAsCopy(store, 'reply-email', new Date(2026, 9, 22, 9, 5))!
+    expect(copy).toMatch(/reply-email\.saved-v1-20261022-0905\.md$/)
+    expect(readFileSync(copy, 'utf8')).toBe(mine.trimEnd() + '\n')
+    expect(readOverride(store, 'reply-email')).toBeNull()
+    expect(skillDetail(store, 'reply-email')).toMatchObject({ defaultUpdated: false, customized: 'form', overlay: { tone: 'formal' } })
+    saveOverride(store, 'reply-email', mine)
+    useNewDefault(store, 'reply-email')
+    expect(readOverride(store, 'reply-email')).toBeNull()
+  })
+  it('every shipped skill has a changelog whose latest entry matches the shipped text (edit a skill → bump its version)', () => {
+    const log = readChangelog({ defaultsDir: SHIPPED, butlerDir: '' })
+    for (const f of readdirSync(SHIPPED).filter(f => f.endsWith('.md'))) {
+      const id = f.slice(0, -3)
+      const entries = log[id] ?? []
+      expect(entries.length, `${id} has no changelog entry`).toBeGreaterThan(0)
+      const latest = entries[entries.length - 1]
+      expect(latest.hash, `${id}.md changed: add a version to changelog.json with its hash`).toBe(hashText(readFileSync(join(SHIPPED, f), 'utf8')))
+    }
   })
   it('a form-only customization never reports it (the overlay follows the new default)', () => {
     saveOverlay(store, 'reply-email', { tone: 'formal' })

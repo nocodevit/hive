@@ -15,7 +15,7 @@ export const NOTIFY_EVENT_LABEL: Record<NotifyEventKind, string> = {
 }
 
 /** Where a click lands: an agent's chat, Butler › Approve, Settings › Daily routine. */
-export type NotifyTarget = { kind: 'agent'; agentId: string } | { kind: 'approvals' } | { kind: 'routines' }
+export type NotifyTarget = { kind: 'agent'; agentId: string } | { kind: 'approvals' } | { kind: 'routines' } | { kind: 'skills' }
 
 export function targetPlace(t: NotifyTarget): string {
   return t.kind === 'agent' ? `agent:${t.agentId}` : t.kind
