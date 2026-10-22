@@ -43,6 +43,8 @@ test.beforeAll(async () => {
     // A Jira comment card: the ticket opens in the browser from the card.
     card('fs-1', 'feishu.followup', 'Daniel Vargas Millan · On another topic, I have a requirement f…', 'Feishu follow-up · unsure', 'Thanks Daniel, I will check.',
       { chatId: 'oc_1', question: 'On another topic, I have a requirement from Claro: they need the roaming CDRs split by country every Monday, starting next month.' }, 'Reply'),
+    card('fs-2', 'feishu.followup', 'Pod · 这批 SOW 改动是否接受进 P4', 'Feishu · facts sent, your call', '',
+      { chatId: 'oc_2', question: 'SOW 模块改动需求 6 条', topic: '这批 SOW 改动是否接受进 P4、优先级怎么定', sent: '收到，纪要已看过。FAE-1446 建议合并筛选项。\n其余已转告 Megan，稍后回复。' }, 'Reply'),
     card('jira-c', 'jira.comment', 'P4-6926 · comment', 'Jira · in analysis 21 days', '请补充验收标准？', { key: 'P4-6926' }, 'Comment')
   ]))
   writeFileSync(join(BUTLER, 'jira-base.txt'), 'https://jira.example.com\n')
@@ -72,6 +74,15 @@ test('a card can go to the Butler chat instead of replying', async () => {
   // It shows in the chat as the owner's own message.
   await expect(page.getByRole('complementary', { name: 'Butler panel' }).getByText('Help me think this through.', { exact: false }).first()).toBeVisible({ timeout: 15000 })
   await page.getByRole('tab', { name: /Approve/ }).click()
+})
+
+test('a card whose facts went out shows what was sent and what is your call; Reply opens an empty box', async () => {
+  const c = page.getByLabel('Reply: Pod · 这批 SOW 改动是否接受进 P4')
+  await expect(c.getByLabel('Your call')).toHaveText('Your call · 这批 SOW 改动是否接受进 P4、优先级怎么定')
+  await c.getByText('Sent to them ✓').click()
+  await expect(c.getByLabel('Already sent')).toContainText('FAE-1446 建议合并筛选项')
+  await c.getByRole('button', { name: /^Reply Pod/ }).click()
+  await expect(c.getByLabel('Reply', { exact: true })).toHaveValue('')
 })
 
 test('a Jira card links to its ticket', async () => {

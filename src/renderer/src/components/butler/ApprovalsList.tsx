@@ -70,6 +70,9 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   useEffect(() => { if (editing && !items.some(i => i.id === editing)) setEditing(null) }, [items, editing])
 
   const approve = async (it: ApprovalCard) => {
+    // No draft (the owner's call): Reply opens an empty box instead of sending nothing.
+    if (!it.draft.trim() && editing !== it.id) { setEditing(it.id); setText(''); return }
+    if (editing === it.id && !text.trim()) return
     setBusy(it.id)
     const r = await window.api.approvals.approve(it.id, editing === it.id ? text : undefined)
     setBusy(null)
@@ -116,6 +119,15 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
             </div>
             {about && <div className="text-[12px] text-text-secondary truncate" title={about} aria-label="What it wants">{about}</div>}
             {it.kind.startsWith('feishu.') && <TheirMessage text={str(it.payload, 'question')} />}
+            {str(it.payload, 'sent') && (
+              <>
+                <div className="text-[12px] text-status-waiting" aria-label="Your call">Your call · {str(it.payload, 'topic')}</div>
+                <details aria-label="Already sent">
+                  <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">Sent to them ✓</summary>
+                  <div className="mt-1.5 rounded-lg bg-bg-secondary px-2.5 py-2 text-[12px] text-text-primary whitespace-pre-wrap">{str(it.payload, 'sent')}</div>
+                </details>
+              </>
+            )}
             {decide ? (
               <>
                 <div className="text-[12px] text-status-waiting" aria-label="Butler asks">Needs you · {str(it.payload, 'question')}</div>
@@ -132,12 +144,12 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
                 <textarea value={text} onChange={e => setText(e.target.value)} aria-label="Reply" rows={5}
                   className="w-full rounded-lg bg-bg-secondary border border-border px-2.5 py-2 text-[12px] text-text-primary focus:outline-none focus:border-accent resize-y" />
               </label>
-            ) : (
+            ) : it.draft.trim() ? (
               <details>
                 <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">{it.kind.startsWith('jira') ? 'Comment' : 'Reply'}</summary>
                 <div className="mt-1.5 rounded-lg bg-bg-secondary px-2.5 py-2 text-[12px] text-text-primary whitespace-pre-wrap">{it.draft}</div>
               </details>
-            )}
+            ) : null}
             {error[it.id] && <div className="text-[11px] text-red-400 font-mono">{error[it.id]}</div>}
           </div>
         )
