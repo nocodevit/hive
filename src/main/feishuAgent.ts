@@ -12,8 +12,10 @@
 // `claude -p` (the answer-feishu skill) decides answer / escalate. Locked
 // topics (prices, approvals, private chats, personal / sensitive /
 // confidential info + the owner's own
-// list) always escalate: a holding reply goes out and a follow-up waits in
-// the approval queue with a suggested answer.
+// list) always escalate. The owner's three cases: can't answer / the owner's
+// call → nothing is sent, a card waits in the approval queue; can answer →
+// answered and the owner is told; partly → the checked facts go out with
+// "其余已转告 <owner>，稍后回复" and the rest is a card.
 //
 // Side effects (HTTP, token, claude, notifications, clock) are deps.
 
@@ -627,7 +629,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     if (gate.level === 'auto' && gate.split && answer?.ownerQuestion) {
       // The checked facts now; the owner's call ("escalate?") as a card, promised in the reply.
       const owner = deps.profile().name.trim() || '主人'
-      const text = draft.includes(owner) ? draft : `${draft}\n「${answer.ownerQuestion}」我跟 ${owner} 确认后回复你。`
+      const text = `${draft}\n其余已转告 ${owner}，稍后回复。`
       const r = await reply(token, job, text, 'answer')
       if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
       const item = deps.approvals.add({
@@ -647,7 +649,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       const r = await reply(token, job, draft, 'answer')
       if (r.ok) cases.add({ ...decided, sent: draft, outcome: 'auto' })
       if (r.ok && answer?.proposal) state.proposals[job.chatId] = { to: job.senderId, ...answer.proposal, at: now() }
-      if (r.ok && gate.notify) deps.notify('Feishu · answered for you', `${job.chatName || 'Feishu'} · ${clip(job.text, 60)}`)
+      if (r.ok) deps.notify('Feishu · answered for you', `${job.chatName || 'Feishu'} · ${clip(draft, 80)}`)
       return r.ok ? { messageId: job.messageId, result: 'answered' } : { messageId: job.messageId, result: 'failed', error: r.error }
     }
     const topic = gate.reasons[0] || 'unsure'
@@ -659,13 +661,8 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       cases.add({ ...decided, sent: '', approvalId: open.id, outcome: 'pending' })
       return { messageId: job.messageId, result: 'skipped', why: 'added_to_card' }
     }
-    // Held for the owner: nothing goes out ("我需要和…确认" lines were noise) — except a real answer:
-    // the polite decline on a private topic, or small talk in Butler's own words. The owner gets the card.
-    const holding = holdingText(job, answer, draft, guard)
-    if (holding) {
-      const r = await reply(token, job, holding, 'holding')
-      if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
-    }
+    // The owner's three cases: (1) can't answer / the owner's call → nothing is sent, the owner gets this card;
+    // (2) can answer → answered above; (3) partly → the checked facts went out above (split), the rest is a card.
     const item = deps.approvals.add({
       kind: FOLLOWUP_KIND,
       title: `${job.chatName || 'Feishu'} · ${clip(job.text.replace(/\s+/g, ' '), 40)}`,
@@ -674,15 +671,9 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, senderId: job.senderId, question: job.text, topic, relation, category: answer?.category ?? 'cannot-answer', claims: answer?.claims ?? [] },
       action: 'Reply'
     })
-    cases.add({ ...decided, sent: holding, approvalId: item.id, outcome: 'pending' })
+    cases.add({ ...decided, sent: '', approvalId: item.id, outcome: 'pending' })
     state.followups.push({ approvalId: item.id, createdAt: now(), reminded: false })
     return { messageId: job.messageId, result: 'escalated' }
-  }
-
-  function holdingText(job: Pick<Job, 'text'>, answer: Answer | null, draft: string, guard: string | null): string {
-    const chat = !!answer && (answer.category === 'chitchat-life' || answer.category === 'chitchat-work') && !answer.claims.length && !answer.sources.length && !/[A-Z][A-Z0-9]+-\d+/.test(answer.reply)
-    // Only small talk in Butler's own words; everything else (declines included) is silence + a card.
-    return guard === null && chat && draft.trim() ? draft : ''
   }
 
   function remind() {
@@ -782,7 +773,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       }
       if (isAck(job.text)) return { ok: true as const, ack: true, wouldSend: '👍 (reaction, no reply — or consent if Butler just proposed an action to this person)' }
       const d = await decide(job, history, self)
-      return { ok: true as const, ...d, wouldSend: d.gate.level === 'auto' ? d.draft : holdingText(job, d.answer, d.draft, d.guard) || '(nothing sent — a card for you)' }
+      return { ok: true as const, ...d, wouldSend: d.gate.level === 'auto' ? d.draft : '(nothing sent — a card for you)' }
     },
     getSettings: () => ({ ...settings }),
     setSettings(patch: Partial<FeishuAgentSettings>): FeishuAgentSettings {
