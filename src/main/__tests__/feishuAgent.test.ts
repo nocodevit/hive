@@ -356,6 +356,16 @@ describe('feishu agent', () => {
     expect((cards[0].payload as any).question).toBe('这个方案你看了吗\n在吗？')
   })
 
+  it('facts checked, judgment left: the analysis goes out now, the owner gets a card for the judgment only', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => JSON.stringify({ category: 'product-status', level: 'approve', confidence: 'medium', reply: '看了 FAE-1422：三项都没回答，建议先在单里追问。', sources: ['FAE-1422'], claims: [{ claim: '三项未回答', verdict: 'confirmed', source: 'FAE-1422 comments' }], owner_question: '要不要升级' }) })
+    t.advance(1000)
+    const q = t.fs.add('p1', 'ou_lin', 'https://jira.example.com/browse/FAE-1422')
+    expect(await t.agent.tick()).toEqual([{ messageId: q.message_id, result: 'answered' }])
+    expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '[Mei 的 AI 代理] 看了 FAE-1422：三项都没回答，建议先在单里追问。\n「要不要升级」我跟 Mei 确认后回复你。' })])
+    const [card] = t.approvals.pending()
+    expect(card).toMatchObject({ kind: FOLLOWUP_KIND, title: 'Lin · 要不要升级', draft: '' })
+  })
+
   it('a locked word in the model reply also escalates; owner topics too', async () => {
     const t = setup({ settings: { waitBeforeReplyMs: 0, askFirstTopics: [{ name: 'hiring', words: ['招人'], hint: 'hiring plans' }] }, claude: () => '{"category":"product-status","level":"auto","confidence":"high","reply":"报价是 5 万","sources":[],"claims":[]}' })
     t.advance(1000)

@@ -19,6 +19,18 @@ describe('parseAnswer', () => {
 })
 
 describe('gateAnswer', () => {
+  it('facts all checked, only a judgment left: facts go out, the judgment is the owner\'s (split)', () => {
+    const ok = { claim: '10-12 的三个问题未回答', verdict: 'confirmed' as const, source: 'FAE-1422 comments' }
+    const base = { category: 'product-status' as const, level: 'approve' as const, confidence: 'medium' as const, reply: '看了 FAE-1422：三项都没回答。', sources: ['FAE-1422'], claims: [ok], ownerQuestion: '要不要升级' }
+    expect(gateAnswer({ answer: ans(base), relation: 'peer' })).toMatchObject({ level: 'auto', split: true })
+    // any unchecked or contradicted fact, low confidence, the manager, or no owner question → held as before
+    expect(gateAnswer({ answer: ans({ ...base, claims: [{ ...ok, verdict: 'unverified' }] }), relation: 'peer' })).toMatchObject({ level: 'approve' })
+    expect(gateAnswer({ answer: ans({ ...base, claims: [{ ...ok, source: '' }] }), relation: 'peer' }).split).toBeFalsy()
+    expect(gateAnswer({ answer: ans({ ...base, claims: [] }), relation: 'peer' }).split).toBeFalsy()
+    expect(gateAnswer({ answer: ans({ ...base, confidence: 'low' }), relation: 'peer' }).level).toBe('hold')
+    expect(gateAnswer({ answer: ans(base), relation: 'boss' }).level).toBe('hold')
+    expect(gateAnswer({ answer: ans({ ...base, ownerQuestion: undefined }), relation: 'peer' }).level).toBe('approve')
+  })
   it('a reply that hands it to the owner is held, so a card reaches the owner', () => {
     for (const reply of ['收到。报告已转给 Megan 查阅，执行通过率和计划完成时间由 Megan 看过后回复您。', 'Thanks — I will pass it on to Megan.', '我会反馈给 Megan，稍后回复'])
       expect(gateAnswer({ answer: ans({ reply }), relation: 'peer' })).toMatchObject({ level: 'hold', notify: true })
