@@ -97,12 +97,12 @@ test('switching on installs the files, asks before trusting, then connects', asy
   const [first] = spawns()
   const [cwd, args] = first.split('|')
   expect(cwd).toBe(BUTLER_DIR)
-  expect(args).toBe('remote-control --name Hive Butler --permission-mode dontAsk --continue')
+  expect(args).toBe('remote-control --name Hive Butler --permission-mode dontAsk')
 
   await page.getByRole('button', { name: 'Trust and continue' }).click()
   await expect(page.getByText('Connected', { exact: true })).toBeVisible()
   await expect(page.getByText('open the Claude app → Code and tap “Hive Butler”')).toBeVisible()
-  expect(readFileSync(join(BUTLER_DIR, '.session-id'), 'utf8')).toBe('session_fake123')
+  expect(readFileSync(join(BUTLER_DIR, '.phone-session-id'), 'utf8')).toBe('session_fake123')
 })
 
 test('a restart brings the session back; quitting stops the old one', async () => {
