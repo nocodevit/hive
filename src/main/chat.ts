@@ -1696,6 +1696,8 @@ export function registerChatIpc() {
   ipcMain.handle('chat:getRecentSessions', (_e, { cwd, limit }) => getRecentSessions(cwd, limit ?? 5))
   ipcMain.handle('chat:scrapeContext', (_e, { id, force }) => scrapeContextLive(id, !!force))
   ipcMain.handle('chat:send', (_e, { id, text }) => sendUserMessage(id, text))
+  // Sent on the owner's behalf from elsewhere in Hive (Discuss in Butler): shown as their own message.
+  ipcMain.handle('chat:sendAsUser', (_e, { id, text }) => sendExternalUserMessage(id, text))
   ipcMain.handle('chat:respondPermission', (_e, { id, requestId, decision, input, denyMessage }) =>
     respondPermission(id, requestId, decision, input, denyMessage)
   )

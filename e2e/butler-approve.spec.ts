@@ -69,6 +69,8 @@ test('a Feishu card shows their whole message', async () => {
 test('a card can go to the Butler chat instead of replying', async () => {
   await page.getByLabel('Reply: Daniel Vargas Millan · On another topic, I have a requirement f…').getByRole('button', { name: /^Discuss/ }).click()
   await expect(page.getByRole('tab', { name: /Chat/ })).toHaveAttribute('aria-selected', 'true')
+  // It shows in the chat as the owner's own message.
+  await expect(page.getByRole('complementary', { name: 'Butler panel' }).getByText('Help me think this through.', { exact: false }).first()).toBeVisible({ timeout: 15000 })
   await page.getByRole('tab', { name: /Approve/ }).click()
 })
 
