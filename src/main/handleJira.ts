@@ -79,6 +79,18 @@ const status = (i: { fields?: { status?: { name?: string } } }) => i.fields?.sta
 const days = (iso: string | undefined, at: number) => (iso ? Math.floor((at - new Date(iso).getTime()) / 86_400_000) : 0)
 const linked = (i: Issue): LinkedIssue[] => (i.fields.issuelinks ?? []).map(l => l.inwardIssue ?? l.outwardIssue).filter((x): x is LinkedIssue => !!x?.key)
 
+/** A sprint as Jira Server ("…Sprint@x[…,state=ACTIVE,…]") or Cloud ({ state: 'active' }) reports it. */
+export function sprintState(v: unknown): string {
+  if (typeof v === 'string') return (/\bstate=([A-Za-z]+)/.exec(v)?.[1] ?? '').toUpperCase()
+  if (v && typeof v === 'object' && typeof (v as { state?: unknown }).state === 'string') return String((v as { state: string }).state).toUpperCase()
+  return ''
+}
+
+/** In the sprint running now (not only a past or future one). */
+export function inActiveSprint(field: unknown): boolean {
+  return Array.isArray(field) && field.some(s => sprintState(s) === 'ACTIVE')
+}
+
 /** The owner's open tickets → what to do about each (at most one finding per ticket, most useful first). */
 export function classify(issues: Issue[], cfg: JiraConfig, at: number): Finding[] {
   const out: Finding[] = []
@@ -113,15 +125,16 @@ export function classify(issues: Issue[], cfg: JiraConfig, at: number): Finding[
       const dev = cfg.dev ? links.filter(l => project(l.key) === cfg.dev!.key) : []
       const desc = i.fields.description ?? ''
       const ready = desc.length >= (cfg.product.ready?.minChars ?? 400) || /feishu\.cn|larksuite\.com|PRD/i.test(desc)
-      const inSprint = Array.isArray(i.fields.customfield_10105) && i.fields.customfield_10105.length > 0
+      // Engineering follow-up only for the sprint running now: not the backlog, past or future sprints.
+      const active = inActiveSprint(i.fields.customfield_10105)
       // Design is done (detailed description or a PRD link): engineering should have a task.
-      if (cfg.dev && ready && !dev.length) {
+      if (active && cfg.dev && ready && !dev.length) {
         add({ kind: 'p4-no-pr', level: 'L1', detail: `ready, no ${cfg.dev.key} task`, to: cfg.dev.lead }); continue
       }
-      if (dev.length && dev.every(d => status(d) === 'Done') && !['UAT', ...shipped].includes(st)) {
+      if (active && dev.length && dev.every(d => status(d) === 'Done') && !['UAT', ...shipped].includes(st)) {
         add({ kind: 'p4-pr-done', level: 'L0', detail: `all ${cfg.dev!.key} done, still ${st}` }); continue
       }
-      if (inSprint && !(i.fields.fixVersions ?? []).length) { add({ kind: 'p4-no-version', level: 'L0', detail: 'in a sprint, no fixVersion (no date)' }); continue }
+      if (active && !(i.fields.fixVersions ?? []).length) { add({ kind: 'p4-no-version', level: 'L0', detail: 'in this sprint, no fixVersion (no date)' }); continue }
     }
 
     // How long it sat, by status.

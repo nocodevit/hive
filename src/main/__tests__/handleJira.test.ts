@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { createApprovals } from '../approvals'
-import { classify, inboxText, ownerFor, readJiraConfig, runHandleJira, type Issue, type JiraConfig } from '../handleJira'
+import { classify, inboxText, ownerFor, readJiraConfig, runHandleJira, type Issue, type JiraConfig, inActiveSprint, sprintState } from '../handleJira'
 
 const AT = new Date(2026, 9, 21, 9).getTime()
 const ago = (d: number) => new Date(AT - d * 86_400_000).toISOString()
@@ -18,6 +18,9 @@ const cfg: JiraConfig = {
 }
 const issue = (key: string, status: string, updatedDays: number, extra: Partial<Issue['fields']> = {}): Issue =>
   ({ key, fields: { summary: `${key} title`, status: { name: status }, updated: ago(updatedDays), ...extra } })
+const ACTIVE = 'com.atlassian.greenhopper.service.sprint.Sprint@6ce7722f[id=129,name=P4 2026-41 OCT26,state=ACTIVE,rapidViewId=35]'
+const FUTURE = 'com.atlassian.greenhopper.service.sprint.Sprint@7a3845bb[id=130,name=P4 2026-43 NOV09,state=FUTURE,rapidViewId=35]'
+const CLOSED = 'com.atlassian.greenhopper.service.sprint.Sprint@1[id=128,name=P4 2026-39,state=CLOSED,rapidViewId=35]'
 const link = (key: string, status: string) => ({ type: { name: 'Defect' }, outwardIssue: { key, fields: { status: { name: status } } } })
 
 describe('handle-jira findings', () => {
@@ -28,9 +31,9 @@ describe('handle-jira findings', () => {
       issue('REQ-3', 'Analysis', 2),
       issue('REQ-4', 'Rejected', 400),
       issue('SUP-1', 'Validation', 40, { issuelinks: [link('PROD-1', 'Done')] }),
-      issue('PROD-2', 'Open', 3, { description: 'x'.repeat(60) }),
-      issue('PROD-3', 'In Review', 3, { description: 'short', issuelinks: [link('DEV-1', 'Done')] }),
-      issue('PROD-4', 'In Progress', 3, { description: 'short', customfield_10105: ['sprint'], issuelinks: [link('DEV-2', 'In Progress')] }),
+      issue('PROD-2', 'Open', 3, { description: 'x'.repeat(60), customfield_10105: [CLOSED, ACTIVE] }),
+      issue('PROD-3', 'In Review', 3, { description: 'short', customfield_10105: [{ state: 'active' }], issuelinks: [link('DEV-1', 'Done')] }),
+      issue('PROD-4', 'In Progress', 3, { description: 'short', customfield_10105: [ACTIVE], issuelinks: [link('DEV-2', 'In Progress')] }),
       issue('PROD-5', 'In Review', 20, { description: 'short', issuelinks: [link('DEV-3', 'In Progress')] }),
       issue('PROD-6', 'Open', 45, { description: 'short' }),
       issue('PROD-7', 'Open', 200, { description: 'short' }),
@@ -42,6 +45,19 @@ describe('handle-jira findings', () => {
     ])
     expect(f[0]).toMatchObject({ related: 'PROD-1', to: 'Done' })
     expect(f[2]).toMatchObject({ to: 'lead@x' })
+  })
+  it('engineering follow-up only for the sprint running now: backlog, past and future sprints are left alone', () => {
+    const ready = { description: 'x'.repeat(600) }
+    const f = classify([
+      issue('PROD-10', 'Open', 3, { ...ready }),
+      issue('PROD-11', 'Open', 3, { ...ready, customfield_10105: [FUTURE] }),
+      issue('PROD-12', 'Open', 3, { ...ready, customfield_10105: [CLOSED] }),
+      issue('PROD-13', 'In Review', 3, { description: 'short', customfield_10105: [FUTURE], issuelinks: [link('DEV-9', 'Done')] }),
+      issue('PROD-14', 'Open', 3, { ...ready, customfield_10105: [ACTIVE] })
+    ], cfg, AT)
+    expect(f.map(x => [x.key, x.kind])).toEqual([['PROD-14', 'p4-no-pr']])
+    expect(sprintState(ACTIVE)).toBe('ACTIVE')
+    expect(inActiveSprint([CLOSED, FUTURE])).toBe(false)
   })
   it('owners by project or label; none → the owner keeps it', () => {
     expect(ownerFor({ key: 'SUP-1', fields: {} }, cfg)!.name).toBe('Sue')
@@ -71,7 +87,7 @@ describe('handle-jira daily run', () => {
     const mine = [
       issue('REQ-1', 'Live', 1, { issuelinks: [link('PROD-1', 'Released')] }),
       issue('REQ-2', 'Analysis', 12),
-      issue('PROD-2', 'Open', 3, { description: 'x'.repeat(60) })
+      issue('PROD-2', 'Open', 3, { description: 'x'.repeat(60), customfield_10105: [ACTIVE] })
     ]
     const newly = [issue('SUP-9', 'Open', 0), issue('SUP-10', 'Open', 0), issue('PROD-9', 'Open', 0, { labels: ['misc'] })]
     const call = async (tool: string, args: Record<string, unknown>) => {
