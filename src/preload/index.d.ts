@@ -131,7 +131,8 @@ declare global {
         reset: (id: string) => Promise<import('../renderer/src/lib/butler-skills').SkillDetail | import('../renderer/src/lib/butler-skills').IpcError>
         ackDefault: (id: string) => Promise<import('../renderer/src/lib/butler-skills').SkillDetail | import('../renderer/src/lib/butler-skills').IpcError>
         useDefault: (id: string) => Promise<import('../renderer/src/lib/butler-skills').SkillDetail | import('../renderer/src/lib/butler-skills').IpcError>
-        saveCopy: (id: string) => Promise<(import('../renderer/src/lib/butler-skills').SkillDetail & { savedCopy: string | null }) | import('../renderer/src/lib/butler-skills').IpcError>
+        saveNew: (id: string) => Promise<(import('../renderer/src/lib/butler-skills').SkillDetail & { savedCopy: string }) | import('../renderer/src/lib/butler-skills').IpcError>
+        merge: (id: string) => Promise<import('../renderer/src/lib/butler-skills').EditProposal>
         compare: (id: string) => Promise<{ defaultMd: string; mine: string; diff: import('../renderer/src/lib/butler-skills').DiffLine[] } | import('../renderer/src/lib/butler-skills').IpcError>
         tryIt: (id: string, sample: string, md?: string) => Promise<{ ok: boolean; output?: string; error?: string }>
         propose: (id: string, request: string) => Promise<import('../renderer/src/lib/butler-skills').EditProposal>

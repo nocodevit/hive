@@ -123,15 +123,17 @@ test('a reference skill (Jira knowledge) has no tone form; its markdown is open 
   await expect(page.getByLabel('Skill markdown')).toHaveValue(/kind: reference/)
 })
 
-test('a skill the owner rewrote gets an update: what changed, then Overwrite / Keep mine / Save mine as a copy', async () => {
+test('a skill the owner rewrote gets an update: what changed, then Overwrite / Keep mine / Merge, or save the new one beside it', async () => {
   await page.getByRole('option', { name: /Handle Jira/ }).click()
   const upd = page.getByRole('group', { name: 'Skill update' })
   await expect(upd).toContainText('v1 → v2')
   await expect(upd.getByLabel('What changed')).toContainText('sprint running now')
   await expect(upd.getByRole('button', { name: 'Overwrite with new' })).toBeVisible()
   await expect(upd.getByRole('button', { name: 'Keep mine' })).toBeVisible()
-  await upd.getByRole('button', { name: 'Save mine as a copy' }).click()
-  await expect(page.getByText(/Your version is saved at .*handle-jira\.saved-v1-/)).toBeVisible()
+  await expect(upd.getByRole('button', { name: 'Merge' })).toBeVisible()
+  await upd.getByRole('button', { name: 'Save new as a copy' }).click()
+  await expect(page.getByText(/New version saved at .*handle-jira\.new-v2\.md · yours is still in use/)).toBeVisible()
   await expect(upd).toHaveCount(0)
-  expect(existsSync(join(BUTLER_DIR, 'skills', 'handle-jira.md'))).toBe(false)
+  expect(readFileSync(join(BUTLER_DIR, 'skills', 'handle-jira.md'), 'utf8')).toContain('Always in English.')
+  expect(existsSync(join(BUTLER_DIR, 'skills', 'handle-jira.new-v2.md'))).toBe(true)
 })

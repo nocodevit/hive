@@ -5,7 +5,7 @@ import { join } from 'path'
 import {
   SECTIONS, ackDefault, applyOverlay, changeChips, composeSkills, compareSkill, editPrompt, effectiveSkill, isSkillId,
   lineDiff, lintSkill, listSkills, lockedLines, normalizeOverlay, parseEditReply, parseSkill, proposeEdit, readOverlay,
-  renderSkill, resetSkill, saveOverlay, saveOverride, skillDetail, tryIt, DRY_RUN_NOTE, readableOutput, type SkillStore, readChangelog, newSkillUpdates, saveMineAsCopy, useNewDefault, readOverride, hashText } from '../butlerSkills'
+  renderSkill, resetSkill, saveOverlay, saveOverride, skillDetail, tryIt, DRY_RUN_NOTE, readableOutput, type SkillStore, readChangelog, newSkillUpdates, saveNewAsCopy, mergeUpdate, useNewDefault, readOverride, hashText } from '../butlerSkills'
 import { installButlerFiles } from '../butler'
 import { registerButlerSkillsIpc } from '../butlerSkillsIpc'
 
@@ -254,14 +254,32 @@ describe('default updated', () => {
     expect(info).toMatchObject({ defaultUpdated: true, version: 2, baseVersion: 1, updates: [{ version: 2, changes: ['Shorter replies'] }] })
     expect(newSkillUpdates(store)).toEqual([{ id: 'reply-email', name: 'reply-email', version: 2, changes: ['Shorter replies'] }])
     expect(newSkillUpdates(store)).toEqual([])
-    const copy = saveMineAsCopy(store, 'reply-email', new Date(2026, 9, 22, 9, 5))!
-    expect(copy).toMatch(/reply-email\.saved-v1-20261022-0905\.md$/)
-    expect(readFileSync(copy, 'utf8')).toBe(mine.trimEnd() + '\n')
-    expect(readOverride(store, 'reply-email')).toBeNull()
-    expect(skillDetail(store, 'reply-email')).toMatchObject({ defaultUpdated: false, customized: 'form', overlay: { tone: 'formal' } })
+    const copy = saveNewAsCopy(store, 'reply-email')
+    expect(copy).toMatch(/reply-email\.new-v2\.md$/)
+    expect(readFileSync(copy, 'utf8')).toBe(def('reply-email'))
+    expect(readOverride(store, 'reply-email')).toBe(mine.trimEnd() + '\n')
+    expect(skillDetail(store, 'reply-email')).toMatchObject({ defaultUpdated: false, customized: 'override' })
     saveOverride(store, 'reply-email', mine)
     useNewDefault(store, 'reply-email')
     expect(readOverride(store, 'reply-email')).toBeNull()
+  })
+  it('Merge asks the model to keep the owner\'s version and bring in the listed changes', async () => {
+    const log = readChangelog(store)
+    log['reply-email'] = [...(log['reply-email'] ?? []), { version: 2, date: '2026-10-22', changes: ['Shorter replies'] }]
+    writeFileSync(join(store.defaultsDir, 'changelog.json'), JSON.stringify(log))
+    const mine = def('reply-email').replace('Plain and calm.', 'Warm.')
+    saveOverride(store, 'reply-email', mine)
+    const metaFile = join(store.butlerDir, 'skills', '.meta.json')
+    const meta = JSON.parse(readFileSync(metaFile, 'utf8'))
+    meta['reply-email'] = { defaultHash: 'old', version: 1 }
+    writeFileSync(metaFile, JSON.stringify(meta))
+    let prompt = ''
+    const merged = mine.replace('Short sentences.', 'Short sentences. Shorter replies.')
+    const r = await mergeUpdate(store, 'reply-email', async p => { prompt = p; return `<<<SKILL\n${merged}\nSKILL>>>\n<<<EXAMPLE\nhi\nEXAMPLE>>>` })
+    expect(prompt).toContain('- v2: Shorter replies')
+    expect(prompt).toContain('Keep everything the owner wrote')
+    expect(r).toMatchObject({ ok: true, problems: [] })
+    expect(r.md).toContain('Warm.')
   })
   it('every shipped skill has a changelog whose latest entry matches the shipped text (edit a skill → bump its version)', () => {
     const log = readChangelog({ defaultsDir: SHIPPED, butlerDir: '' })

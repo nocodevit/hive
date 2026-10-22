@@ -155,16 +155,17 @@ export function SkillsSettings() {
                 <div className="flex flex-wrap items-center gap-2">
                   <button className={btnP} disabled={busy !== null} onClick={() => run('upd', async () => after(await window.api.butlerSkills.useDefault(d.id)))}>Overwrite with new</button>
                   <button className={btnS} disabled={busy !== null} onClick={() => run('upd', async () => after(await window.api.butlerSkills.ackDefault(d.id)))}>Keep mine</button>
-                  <button className={btnS} disabled={busy !== null} onClick={() => run('upd', async () => {
-                    const r = await window.api.butlerSkills.saveCopy(d.id)
-                    if (!isIpcError(r)) setSaved(r.savedCopy ?? '')
-                    await after(r)
-                  })}>Save mine as a copy</button>
+                  <button className={btnS} disabled={busy !== null} onClick={() => run('merge', async () => setProposal(await window.api.butlerSkills.merge(d.id)))}>{busy === 'merge' ? 'Merging…' : 'Merge'}</button>
                   <button className={link} onClick={doCompare}>Compare</button>
+                  <button className={link} onClick={() => run('upd', async () => {
+                    const r = await window.api.butlerSkills.saveNew(d.id)
+                    if (!isIpcError(r)) setSaved(r.savedCopy)
+                    await after(r)
+                  })}>Save new as a copy</button>
                 </div>
               </div>
             )}
-            {saved && <div className="text-[11px] text-text-muted truncate" title={saved} aria-live="polite">Your version is saved at {saved}</div>}
+            {saved && <div className="text-[11px] text-text-muted truncate" title={saved} aria-live="polite">New version saved at {saved} · yours is still in use</div>}
 
             {d.overrideProblems.length > 0 && <Problems items={d.overrideProblems} />}
 

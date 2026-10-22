@@ -66,6 +66,12 @@ test('a Feishu card shows their whole message', async () => {
   await expect(c.getByLabel('Their message')).toContainText('roaming CDRs split by country every Monday, starting next month.')
 })
 
+test('a card can go to the Butler chat instead of replying', async () => {
+  await page.getByLabel('Reply: Daniel Vargas Millan · On another topic, I have a requirement f…').getByRole('button', { name: /^Discuss/ }).click()
+  await expect(page.getByRole('tab', { name: /Chat/ })).toHaveAttribute('aria-selected', 'true')
+  await page.getByRole('tab', { name: /Approve/ }).click()
+})
+
 test('a Jira card links to its ticket', async () => {
   const c = page.getByLabel('Comment: P4-6926 · comment')
   await expect(c.getByRole('link', { name: 'Open P4-6926 in Jira' })).toHaveAttribute('href', 'https://jira.example.com/browse/P4-6926')
