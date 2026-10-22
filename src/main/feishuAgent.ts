@@ -59,7 +59,7 @@ export const DEFAULT_AGENT_SETTINGS: FeishuAgentSettings = {
   prefix: '',
   askFirstTopics: [],
   pollMs: 60_000,
-  maxRepliesPerChatPerHour: 10,
+  maxRepliesPerChatPerHour: 3,
   quietHours: null
 }
 
@@ -192,6 +192,18 @@ export function calendarText(c: any): string {
   return `[Calendar event] ${title} · ${day} ${hm(a)}${b ? `–${hm(b)}` : ''}`
 }
 
+/**
+ * Another AI assistant's message (Hive Butlers and the like sign with a tag:
+ * "[我 的 AI 代理] …", "【X's AI助手】…", "[Bot] …"). Answering it starts two
+ * assistants talking to each other forever: never reply, never card it.
+ */
+export function isAssistantMessage(text: string): boolean {
+  const t = text.trim()
+  const tag = /^[\[【]([^\]】\n]{1,60})[\]】]/.exec(t)
+  if (tag && /\bAI\b|AI|助手|助理|代理|assistant|agent|\bbot\b/i.test(tag[1])) return true
+  return /^我是\s*\S{0,20}\s*的\s*(AI\s*)?(助理|助手|代理)/.test(t)
+}
+
 export function messageText(m: any): string {
   let content: any = {}
   try { content = JSON.parse(m?.body?.content ?? '{}') } catch { /* not JSON */ }
@@ -248,7 +260,7 @@ interface AgentState {
 
 export type Outcome =
   | { messageId: string; result: 'answered' | 'escalated' }
-  | { messageId: string; result: 'skipped'; why: 'owner_took_over' | 'rate_limited' | 'acknowledged' }
+  | { messageId: string; result: 'skipped'; why: 'owner_took_over' | 'rate_limited' | 'acknowledged' | 'from_assistant' | 'added_to_card' }
   | { messageId: string; result: 'failed'; error: string }
 
 type Http = (method: 'GET' | 'POST' | 'DELETE', url: string, token: string, body?: unknown) => Promise<{ status: number; body: any }>
@@ -266,6 +278,7 @@ export interface FeishuAgentDeps {
     add: (i: Pick<Approval, 'kind' | 'title' | 'subtitle' | 'draft' | 'payload' | 'action'>) => Approval
     register: (kind: string, exec: (item: Approval) => Promise<{ ok: boolean; error?: string }>) => void
     get: (id: string) => Approval | undefined
+    update: (id: string, patch: Partial<Pick<Approval, 'title' | 'payload' | 'draft'>>) => boolean
   }
   notify: (title: string, body: string) => void
   /** Agents' status and latest progress, as text for the prompt. */
@@ -563,6 +576,10 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       cases.add({ ...baseCase(job, 'unknown'), outcome: 'owner_replied', final: own, resolvedAt: now() })
       return { messageId: job.messageId, result: 'skipped', why: 'owner_took_over' }
     }
+    if (isAssistantMessage(job.text)) {
+      cases.add({ ...baseCase(job, 'unknown'), category: 'from-assistant', level: 'hold', outcome: 'acknowledged', resolvedAt: now() })
+      return { messageId: job.messageId, result: 'skipped', why: 'from_assistant' }
+    }
     if (sentInLastHour(job.chatId) >= settings.maxRepliesPerChatPerHour) return { messageId: job.messageId, result: 'skipped', why: 'rate_limited' }
 
     // "ok": consent to what Butler last asked this person to agree to, else just 👍.
@@ -617,6 +634,14 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       return r.ok ? { messageId: job.messageId, result: 'answered' } : { messageId: job.messageId, result: 'failed', error: r.error }
     }
     const topic = gate.reasons[0] || 'unsure'
+    // Already waiting for the owner on this person in this chat: add the message to that card, say nothing more.
+    const open = state.followups.map(f => deps.approvals.get(f.approvalId)).find(a => a?.status === 'pending' && a.payload?.chatId === job.chatId && a.payload?.senderId === job.senderId)
+    if (open) {
+      const q = `${String(open.payload.question ?? '')}\n${job.text}`.trim()
+      deps.approvals.update(open.id, { payload: { ...open.payload, question: q }, title: `${job.chatName || 'Feishu'} · ${clip(q.replace(/\s+/g, ' '), 40)}` })
+      cases.add({ ...decided, sent: '', approvalId: open.id, outcome: 'pending' })
+      return { messageId: job.messageId, result: 'skipped', why: 'added_to_card' }
+    }
     // A guardrail hit or "ask the owner" → "I need to check with …"; anything the
     // assistant cannot judge → "I'm the assistant, I'll pass it on".
     const owner = deps.profile().name
@@ -629,7 +654,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       title: `${job.chatName || 'Feishu'} · ${clip(job.text.replace(/\s+/g, ' '), 40)}`,
       subtitle: `Feishu follow-up · ${clip(gate.reasons.join(' · ') || topic, 60)}`,
       draft: draft.startsWith(prefix()) ? draft.slice(prefix().length) : draft,
-      payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, question: job.text, topic, relation, category: answer?.category ?? 'cannot-answer', claims: answer?.claims ?? [] },
+      payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, senderId: job.senderId, question: job.text, topic, relation, category: answer?.category ?? 'cannot-answer', claims: answer?.claims ?? [] },
       action: 'Reply'
     })
     cases.add({ ...decided, sent: holding, approvalId: item.id, outcome: 'pending' })

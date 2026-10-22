@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   createFeishuAgent, ensurePrefix, quoteBlock, POLL_CHATS, lockedTopicHit, inQuietHours, messageText, normalizeAgentSettings,
-  defaultPrefix, FOLLOWUP_KIND, RECALL_WINDOW_MS, START_SCAN_MS, calendarText
+  defaultPrefix, FOLLOWUP_KIND, RECALL_WINDOW_MS, START_SCAN_MS, calendarText, isAssistantMessage
 } from '../feishuAgent'
 import { createApprovals } from '../approvals'
 import { EMPTY_PROFILE } from '../butlerProfile'
@@ -141,7 +141,16 @@ describe('pure helpers', () => {
 
   it('normalizeAgentSettings applies defaults and bounds', () => {
     const s = normalizeAgentSettings({ scope: 'x', waitBeforeReplyMs: -5, quietHours: { start: '25:00', end: '1' } })
-    expect(s).toMatchObject({ enabled: false, scope: 'everyone', waitBeforeReplyMs: 0, quietHours: null, maxRepliesPerChatPerHour: 10 })
+    expect(s).toMatchObject({ enabled: false, scope: 'everyone', waitBeforeReplyMs: 0, quietHours: null, maxRepliesPerChatPerHour: 3 })
+  })
+})
+
+describe('assistant messages', () => {
+  it('a message signed by another AI assistant is recognised', () => {
+    for (const t of ['[我 的 AI 代理] 我是 主人 的助理，我会转给 主人 处理。', "【Megan's AI助手Alice】收到", '[Bot] done', '[Alice · Megan 的 AI 助手] 收到', '我是 Megan 的助理，可能不太了解上下文'])
+      expect(isAssistantMessage(t)).toBe(true)
+    for (const t of ['[P4-1] 上线了吗', '【通知】明天停电', 'AI 方案你看了吗', '我是魏皎明'])
+      expect(isAssistantMessage(t)).toBe(false)
   })
 })
 
@@ -322,6 +331,29 @@ describe('feishu agent', () => {
     expect(r.ok).toBe(true)
     expect(t.fs.sent[1]).toEqual(expect.objectContaining({ replyTo: q.message_id, text: '[Mei 的 AI 代理] 下周一上线' }))
     expect(t.agent.log(5)[0]).toMatchObject({ kind: 'followup', inReplyTo: q.message_id })
+  })
+
+  it('two assistants never talk in circles: another Butler\'s holding reply gets nothing back', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"cannot-answer","level":"hold","confidence":"low","reply":"","sources":[],"claims":[]}' })
+    t.advance(1000)
+    const q = t.fs.add('p1', 'ou_lin', '[我 的 AI 代理] 我是 主人 的助理，可能不太了解上下文，我会转给 主人 处理。')
+    expect(await t.agent.tick()).toEqual([{ messageId: q.message_id, result: 'skipped', why: 'from_assistant' }])
+    expect(t.fs.sent).toHaveLength(0)
+    expect(t.approvals.pending()).toHaveLength(0)
+  })
+
+  it('while a card waits for the owner, more messages in that chat join the card: one holding reply only', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"cannot-answer","level":"hold","confidence":"low","reply":"","sources":[],"claims":[]}' })
+    t.advance(1000)
+    t.fs.add('p1', 'ou_lin', '这个方案你看了吗')
+    await t.agent.tick()
+    t.advance(5 * MIN)
+    const q2 = t.fs.add('p1', 'ou_lin', '在吗？')
+    expect(await t.agent.tick()).toEqual([{ messageId: q2.message_id, result: 'skipped', why: 'added_to_card' }])
+    expect(t.fs.sent).toHaveLength(1)
+    const cards = t.approvals.pending()
+    expect(cards).toHaveLength(1)
+    expect((cards[0].payload as any).question).toBe('这个方案你看了吗\n在吗？')
   })
 
   it('a locked word in the model reply also escalates; owner topics too', async () => {
