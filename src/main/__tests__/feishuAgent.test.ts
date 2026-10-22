@@ -224,6 +224,8 @@ describe('feishu agent', () => {
     const out = await t.agent.tick()
     expect(out).toEqual([{ messageId: q.message_id, result: 'answered' }])
     expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '[Mei 的 AI 代理] Missy 在修 iOS 失焦' })])
+    // case 2: answered, and the owner is told
+    expect(t.notes.at(-1)).toContain('Missy 在修 iOS 失焦')
     expect(t.prompts[0]).toContain('answer-feishu')
     expect(t.prompts[0]).toContain('build 状态?')
   })
@@ -365,17 +367,18 @@ describe('feishu agent', () => {
     t.advance(1000)
     const q = t.fs.add('p1', 'ou_lin', 'https://jira.example.com/browse/FAE-1422')
     expect(await t.agent.tick()).toEqual([{ messageId: q.message_id, result: 'answered' }])
-    expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '[Mei 的 AI 代理] 看了 FAE-1422：三项都没回答，建议先在单里追问。\n「要不要升级」我跟 Mei 确认后回复你。' })])
+    expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '[Mei 的 AI 代理] 看了 FAE-1422：三项都没回答，建议先在单里追问。\n其余已转告 Mei，稍后回复。' })])
     const [card] = t.approvals.pending()
     expect(card).toMatchObject({ kind: FOLLOWUP_KIND, title: 'Lin · 要不要升级', draft: '' })
   })
 
-  it('small talk Butler holds for the owner goes out in Butler\'s own words, not the generic line', async () => {
+  it('case 1: small talk Butler cannot answer for the owner ("how do you feel") sends nothing; the owner gets the card', async () => {
     const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => JSON.stringify({ category: 'chitchat-life', level: 'hold', confidence: 'high', reply: "Thanks Edward. I'll pass your message to Mei, and she'll reply herself.", sources: [], claims: [] }) })
     t.advance(1000)
     const q = t.fs.add('p1', 'ou_lin', 'How do you feel now\nBetter? Take more rest')
     await t.agent.tick()
-    expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: "[Mei 的 AI 代理] Thanks Edward. I'll pass your message to Mei, and she'll reply herself." })])
+    expect(q.message_id).toBeTruthy()
+    expect(t.fs.sent).toEqual([])
     expect(t.approvals.pending()).toHaveLength(1)
   })
 
