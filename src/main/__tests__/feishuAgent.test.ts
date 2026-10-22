@@ -366,6 +366,15 @@ describe('feishu agent', () => {
     expect(card).toMatchObject({ kind: FOLLOWUP_KIND, title: 'Lin · 要不要升级', draft: '' })
   })
 
+  it('small talk Butler holds for the owner goes out in Butler\'s own words, not the generic line', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => JSON.stringify({ category: 'chitchat-life', level: 'hold', confidence: 'high', reply: "Thanks Edward. I'll pass your message to Mei, and she'll reply herself.", sources: [], claims: [] }) })
+    t.advance(1000)
+    const q = t.fs.add('p1', 'ou_lin', 'How do you feel now\nBetter? Take more rest')
+    await t.agent.tick()
+    expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: "[Mei 的 AI 代理] Thanks Edward. I'll pass your message to Mei, and she'll reply herself." })])
+    expect(t.approvals.pending()).toHaveLength(1)
+  })
+
   it('a locked word in the model reply also escalates; owner topics too', async () => {
     const t = setup({ settings: { waitBeforeReplyMs: 0, askFirstTopics: [{ name: 'hiring', words: ['招人'], hint: 'hiring plans' }] }, claude: () => '{"category":"product-status","level":"auto","confidence":"high","reply":"报价是 5 万","sources":[],"claims":[]}' })
     t.advance(1000)

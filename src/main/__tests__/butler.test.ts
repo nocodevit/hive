@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { feishuAnswerArgs } from '../butlerFeishuAgentIpc'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, realpathSync } from 'fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, realpathSync, readlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -212,11 +212,14 @@ describe('createButler', () => {
     expect(t.ptys).toHaveLength(0)
   })
 
-  it('switching on installs the files, starts in the butler folder and reports connected', () => {
+  it('switching on installs the files, starts in its own phone folder (linked to the butler files) and reports connected', () => {
     t.butler.setEnabled(true)
     expect(readButlerSettings(t.dataDir).enabled).toBe(true)
     expect(existsSync(join(t.dataDir, 'butler', 'CLAUDE.md'))).toBe(true)
-    expect(t.last().cwd).toBe(join(t.dataDir, 'butler'))
+    expect(t.last().cwd).toBe(join(t.dataDir, 'butler-phone'))
+    // Same Butler, other folder: the phone's remote session never owns the desk chat's transcript.
+    for (const f of ['CLAUDE.md', 'hive', '.claude']) expect(readlinkSync(join(t.dataDir, 'butler-phone', f))).toBe(join(t.dataDir, 'butler', f))
+    expect(existsSync(join(t.dataDir, 'butler-phone', '.claude', 'settings.json'))).toBe(true)
     expect(t.butler.getState().status).toBe('starting')
     t.last().emit('Connected: https://claude.ai/code/s1\r\n')
     expect(t.butler.getState()).toEqual({ enabled: true, status: 'connected', url: 'https://claude.ai/code/s1' })
@@ -239,7 +242,7 @@ describe('createButler', () => {
     t.butler.setEnabled(true)
     t.record('session_01KEEP')
     t.last().emit('Ready: https://claude.ai/code?environment=env_1\r\n')
-    expect(readFileSync(join(t.dataDir, 'butler', '.phone-session-id'), 'utf8')).toBe('session_01KEEP')
+    expect(readFileSync(join(t.dataDir, 'butler', '.phone-session'), 'utf8')).toBe('session_01KEEP')
     t.butler.shutdown()
     t.butler.restore()
     expect(t.last().args).toEqual(['remote-control', '--session-id', 'session_01KEEP'])
@@ -247,11 +250,11 @@ describe('createButler', () => {
 
   it('a saved session that cannot be reattached is forgotten, then a new one', () => {
     mkdirSync(join(t.dataDir, 'butler'), { recursive: true })
-    writeFileSync(join(t.dataDir, 'butler', '.phone-session-id'), 'session_GONE')
+    writeFileSync(join(t.dataDir, 'butler', '.phone-session'), 'session_GONE')
     t.butler.setEnabled(true)
     expect(t.last().args).toContain('--session-id')
     t.last().exit(1)
-    expect(existsSync(join(t.dataDir, 'butler', '.phone-session-id'))).toBe(false)
+    expect(existsSync(join(t.dataDir, 'butler', '.phone-session'))).toBe(false)
     expect(t.last().args).toEqual(['remote-control', '--name', 'Hive Butler', '--permission-mode', 'dontAsk'])
     expect(t.ptys).toHaveLength(2)
   })

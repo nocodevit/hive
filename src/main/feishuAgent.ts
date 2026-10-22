@@ -664,7 +664,11 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     // A guardrail hit or "ask the owner" → "I need to check with …"; anything the
     // assistant cannot judge → "I'm the assistant, I'll pass it on".
     const owner = deps.profile().name
-    const holding = guard !== null && DECLINE_TOPICS.has(guard) ? declineReply(owner)
+    // Small talk with nothing to check ("feeling better?"): Butler's own short reply, in their language,
+    // is the holding message; the generic line read oddly. The owner still gets the card.
+    const chat = answer && (answer.category === 'chitchat-life' || answer.category === 'chitchat-work') && !answer.claims.length && !answer.sources.length && !/[A-Z][A-Z0-9]+-\d+/.test(answer.reply)
+    const holding = guard === null && chat && draft.trim() ? draft
+      : guard !== null && DECLINE_TOPICS.has(guard) ? declineReply(owner)
       : guard !== null || gate.level === 'approve' ? holdingReply(owner) : assistantHolding(owner)
     const r = await reply(token, job, holding, 'holding')
     if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
