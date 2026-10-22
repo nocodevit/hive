@@ -8,7 +8,7 @@ import { dirname, join } from 'path'
 import { claudeBin } from './claude-env'
 import { normalizeProfile, renderProfileMd } from './butlerProfile'
 import {
-  ackDefault, compareSkill, composeSkills, listSkills, proposeEdit, resetSkill, saveMineAsCopy, saveOverlay, saveOverride, useNewDefault,
+  ackDefault, compareSkill, composeSkills, listSkills, proposeEdit, mergeUpdate, resetSkill, saveNewAsCopy, saveOverlay, saveOverride, useNewDefault,
   skillDetail, tryIt, type Runner, type SkillStore
 } from './butlerSkills'
 
@@ -84,7 +84,10 @@ export function registerButlerSkillsIpc(deps: ButlerSkillsDeps): void {
   h('butlerSkills:reset', (_e, id: unknown) => wrap(() => { const s = store(); resetSkill(s, id as string); return changed(s, skillDetail(s, id as string)) }))
   h('butlerSkills:ackDefault', (_e, id: unknown) => wrap(() => { const s = store(); ackDefault(s, id as string); return skillDetail(s, id as string) }))
   h('butlerSkills:useDefault', (_e, id: unknown) => wrap(() => { const s = store(); useNewDefault(s, id as string); return changed(s, skillDetail(s, id as string)) }))
-  h('butlerSkills:saveCopy', (_e, id: unknown) => wrap(() => { const s = store(); const copy = saveMineAsCopy(s, id as string); return changed(s, { ...skillDetail(s, id as string), savedCopy: copy }) }))
+  h('butlerSkills:saveNew', (_e, id: unknown) => wrap(() => { const s = store(); const copy = saveNewAsCopy(s, id as string); return { ...skillDetail(s, id as string), savedCopy: copy } }))
+  h('butlerSkills:merge', async (_e, id: unknown) => {
+    try { return await mergeUpdate(store(), id as string, run) } catch (e) { return { ok: false, error: e instanceof Error ? e.message : String(e) } }
+  })
   h('butlerSkills:compare', (_e, id: unknown) => wrap(() => compareSkill(store(), id as string)))
   h('butlerSkills:try', async (_e, id: unknown, sample: unknown, md: unknown) => {
     try {

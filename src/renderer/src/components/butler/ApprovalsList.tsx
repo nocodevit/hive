@@ -43,6 +43,22 @@ export function discussText(it: ApprovalCard): string {
   ].join('\n').replace(/\n{3,}/g, '\n\n').trim()
 }
 
+/** Any waiting card → the Butler chat, to think it through instead of replying. */
+export function cardDiscussText(it: ApprovalCard): string {
+  const p = it.payload
+  return [
+    'Help me think this through. Do not send or change anything until I confirm.',
+    `${it.title} · ${it.subtitle}`,
+    str(p, 'key') ? `Jira: ${str(p, 'key')}${str(p, 'url') ? ` (${str(p, 'url')})` : ''}` : '',
+    str(p, 'chatName') ? `Feishu chat: ${str(p, 'chatName')}` : '',
+    str(p, 'topic') ? `Why it waits for me: ${str(p, 'topic')}` : '',
+    str(p, 'question') ? `--- their message ---\n${str(p, 'question')}` : '',
+    str(p, 'original') ? `--- email from ${str(p, 'from')} ---\n${str(p, 'original')}` : '',
+    str(p, 'sent') ? `--- already sent to them ---\n${str(p, 'sent')}` : '',
+    it.draft ? `--- Butler's draft (not sent) ---\n${it.draft}` : ''
+  ].filter(Boolean).join('\n')
+}
+
 /** Butler → Approve: who/what + one button. A reply card's box is exactly what gets
  *  sent; a needs-you card has no Send — it asks, and offers Discuss or a short answer. */
 export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onDiscuss?: (text: string) => void }) {
@@ -92,6 +108,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
               ) : (
                 <>
                   <button disabled={busy === it.id} onClick={() => approve(it)} aria-label={`${it.action} ${it.title}`} className={btn}>{busy === it.id ? '…' : it.action}</button>
+                  {onDiscuss && <button onClick={() => onDiscuss(cardDiscussText(it))} aria-label={`Discuss ${it.title}`} title="Discuss in the Butler chat" className={icon}>💬</button>}
                   <button onClick={() => { setEditing(editing === it.id ? null : it.id); setText(it.draft) }} aria-label={`Edit ${it.title}`} title="Edit reply" className={icon}>✎</button>
                 </>
               )}
