@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { feishuToggle, mobileToggle, wakeToggle, type FeishuToggleView, type MobileState, type WakeView } from '../../lib/quick-toggles'
 
-function Toggle({ icon, label, title, checked, disabled, onClick }: { icon: string; label: string; title: string; checked: boolean; disabled?: boolean; onClick: () => void }) {
+function Toggle({ icon, label, title, checked, disabled, alert, onClick }: { icon: string; label: string; title: string; checked: boolean; disabled?: boolean; alert?: 'error' | 'warn' | null; onClick: () => void }) {
   return (
     <span title={title} className="inline-flex">
       <button role="switch" aria-checked={checked} aria-label={label} disabled={disabled} onClick={onClick}
-        className="h-[30px] pl-2 pr-1.5 rounded-full inline-flex items-center gap-1.5 bg-bg-secondary shadow-sm hover:bg-bg-hover cursor-pointer disabled:cursor-not-allowed disabled:opacity-40">
+        className={`relative h-[30px] pl-2 pr-1.5 rounded-full inline-flex items-center gap-1.5 bg-bg-secondary shadow-sm hover:bg-bg-hover cursor-pointer disabled:cursor-not-allowed disabled:opacity-40 ${alert === 'error' ? 'ring-1 ring-red-400' : alert === 'warn' ? 'ring-1 ring-status-waiting' : ''}`}>
+        {alert && <span role="img" aria-label={alert === 'error' ? `${label} not working` : `${label} needs you`} className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-bg-secondary ${alert === 'error' ? 'bg-red-400' : 'bg-status-waiting'}`} />}
         <span className={`text-[13px] ${checked ? '' : 'grayscale opacity-50'}`} aria-hidden>{icon}</span>
         <span className={`relative w-7 h-4 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-bg-hover'}`} aria-hidden>
           <span className={`absolute top-0.5 w-3 h-3 rounded-full bg-white shadow-sm transition-[left] ${checked ? 'left-[14px]' : 'left-0.5'}`} />
@@ -49,9 +50,9 @@ export function QuickToggles({ setupMarks, onSetupMobile }: { setupMarks: Record
 
   return (
     <div className="no-drag inline-flex items-center gap-1 flex-shrink-0">
-      <Toggle icon="📱" label="Mobile Butler" title={m.title} checked={m.checked} disabled={m.disabled || busy} onClick={flipMobile} />
-      <Toggle icon="💬" label="Feishu answer-for-me" title={f.title} checked={f.checked} disabled={f.disabled} onClick={flipFeishu} />
-      <Toggle icon="🎙" label="Listen for Hola Butler" title={w.title} checked={w.checked} disabled={w.disabled} onClick={flipWake} />
+      <Toggle icon="📱" label="Mobile Butler" title={m.title} checked={m.checked} disabled={m.disabled || busy} alert={m.alert} onClick={flipMobile} />
+      <Toggle icon="💬" label="Feishu answer-for-me" title={f.title} checked={f.checked} disabled={f.disabled} alert={f.alert} onClick={flipFeishu} />
+      <Toggle icon="🎙" label="Listen for Hola Butler" title={w.title} checked={w.checked} disabled={w.disabled} alert={w.alert} onClick={flipWake} />
     </div>
   )
 }
