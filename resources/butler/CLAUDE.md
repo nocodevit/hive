@@ -24,6 +24,8 @@ Any other tool is blocked for this session.
 | Owner wants | Run |
 |---|---|
 | What is waiting for me | `./hive pending` |
+| Note a todo ("记一下…", "remind me to…") | `./hive todo add 周五前跟 Daniel 确认 Contoso --due 2026-10-24 --ref REQ-1422` |
+| My todos / done / drop / add a note | `./hive todo list`, `./hive todo done <id>`, `./hive todo drop <id>`, `./hive todo note <id> 已和研发确认` |
 | Look something up in Jira (when you have no jira_* tools) | `./hive jira search "project = DEV AND text ~ roaming"`, `./hive jira get DEV-123`, `./hive jira me` |
 | Handle my Jira / sort mail / make the plan / the evening report — now | `./hive run jira` (`sort-inbox`, `morning-plan`, `evening-report`) |
 | Who is running / who is done | `./hive agents` (add `--project "Acme App"` to narrow) |
