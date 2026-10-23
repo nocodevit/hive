@@ -47,6 +47,7 @@ export function agentsContext(rows: AgentRow[], tail: (agentId: string) => TailI
 }
 
 export interface FeishuAgentIpcDeps {
+  todos?: import('./feishuAgent').FeishuTodos
   ipcMain: IpcMain
   butlerDir: string
   feishu: FeishuLike
@@ -103,6 +104,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
   })
   const agent = createFeishuAgent({
     dir: d.butlerDir,
+    todos: d.todos,
     http: feishuHttp,
     token: () => d.feishu.accessToken(),
     selfOpenId: () => { const s = d.feishu.getStatus(); return s.state === 'signed_in' && s.openId ? s.openId : null },

@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Butler Todo 效果图</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root { --canvas:#F3F0F8; --card:#fff; --ink:#1E1B2E; --ink-2:#4A4560; --muted:#8C87A0; --faint:#B9B4C9; --hover:#ECE8F4; --accent:#7C3AED; --accent-soft:#EFE7FD; --ok:#22C55E; --warn:#F59E0B; --line:#EEEAF4; }
+* { box-sizing:border-box; margin:0; padding:0 }
+body { background:#E6E2EE; font-family:'Inter Tight',-apple-system,'PingFang SC',sans-serif; color:var(--ink); -webkit-font-smoothing:antialiased; padding:20px }
+button { font:inherit; border:0; background:none; cursor:pointer; color:inherit }
+.bar { display:flex; gap:12px; align-items:center; margin-bottom:6px; font-size:13px } .bar strong { font-size:15px }
+.seg { display:inline-flex; background:#fff; border-radius:999px; padding:3px } .seg button { font-size:12px; font-weight:600; color:var(--muted); padding:6px 12px; border-radius:999px } .seg button.on { background:var(--accent); color:#fff }
+.note { color:var(--muted); font-size:12px; margin-bottom:14px }
+.wrap { display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start } .cap { font-size:12px; font-weight:600; color:var(--muted); margin-bottom:8px }
+.drawer { width:420px; height:780px; background:var(--card); border-radius:18px; box-shadow:0 24px 60px rgba(30,27,46,.18); display:flex; flex-direction:column; overflow:hidden }
+.dh { height:52px; display:flex; align-items:center; gap:8px; padding:0 14px 0 16px; font-weight:600; font-size:14px } .dh .sp { flex:1 }
+.face { width:22px; height:22px; border-radius:50%; background:var(--accent-soft); display:inline-flex; align-items:center; justify-content:center; font-size:13px }
+.qbtn { width:26px; height:26px; border-radius:50%; background:var(--canvas); color:var(--ink-2); font-weight:700; font-size:13px }
+.tabs { display:flex; gap:2px; margin:0 12px 8px; padding:3px; background:var(--canvas); border-radius:10px }
+.tabs button { flex:1; font-size:12px; color:var(--muted); padding:5px 0; border-radius:8px } .tabs button.on { background:#fff; color:var(--ink); font-weight:600; box-shadow:0 1px 2px rgba(0,0,0,.06) }
+.tabs .n { font-size:10px; background:var(--accent); color:#fff; border-radius:999px; padding:0 5px; margin-left:3px }
+.body { flex:1; overflow-y:auto; padding:2px 14px 14px; display:flex; flex-direction:column; gap:10px }
+.add { display:flex; gap:6px } .add input { flex:1; height:32px; border-radius:10px; border:1px solid var(--line); background:var(--canvas); padding:0 10px; font:inherit; font-size:13px }
+.add button { height:32px; padding:0 12px; border-radius:10px; background:var(--accent); color:#fff; font-size:12px; font-weight:600 }
+.ctl { display:flex; gap:6px; align-items:center; font-size:11.5px; color:var(--muted) }
+.ctl select { font:inherit; font-size:11.5px; border:1px solid var(--line); border-radius:8px; padding:3px 6px; background:#fff; color:var(--ink-2) }
+.ctl .sp { flex:1 }
+.grp { font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:4px 2px 0 }
+.item { border-radius:12px; background:var(--canvas); }
+.row { display:flex; align-items:center; gap:9px; padding:9px 10px; font-size:13px }
+.box { width:16px; height:16px; border-radius:5px; border:1.5px solid var(--faint); flex-shrink:0 }
+.done .box { background:var(--accent); border-color:var(--accent) } .done .tt { color:var(--muted); text-decoration:line-through }
+.tt { flex:1; min-width:0 } .tt small { display:block; font-size:11px; color:var(--muted); margin-top:1px }
+.src { font-size:10px; font-weight:600; padding:1px 6px; border-radius:6px; background:#fff; color:var(--ink-2) }
+.due { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--muted) } .due.late { color:#B45309 }
+.tl { padding:0 12px 10px 35px; display:flex; flex-direction:column; gap:7px; position:relative }
+.tl:before { content:''; position:absolute; left:17px; top:2px; bottom:12px; width:1.5px; background:var(--line) }
+.ev { font-size:12px; color:var(--ink-2); line-height:1.45; position:relative }
+.ev:before { content:''; position:absolute; left:-21px; top:5px; width:7px; height:7px; border-radius:50%; background:var(--faint) }
+.ev.you:before { background:var(--accent) } .ev.ok:before { background:var(--ok) }
+.ev b { font-family:'JetBrains Mono',monospace; font-weight:500; font-size:11px; color:var(--muted); margin-right:6px }
+.ev a { color:var(--accent); font-weight:600; text-decoration:none; margin-left:4px }
+.acts { display:flex; gap:6px; padding:0 12px 10px 35px } .acts button { font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:8px; background:#fff; color:var(--ink-2) } .acts button.p { background:var(--accent); color:#fff }
+.comp { border-top:1px solid var(--line); padding-top:8px }
+.comp summary { list-style:none; cursor:pointer; font-size:12px; font-weight:600; color:var(--muted); padding:2px }
+/* guide */
+.guide { padding:4px 16px 16px; display:flex; flex-direction:column; gap:12px; overflow-y:auto }
+.guide h3 { font-size:15px } .guide p { font-size:12px; color:var(--muted) }
+.g { border-radius:12px; background:var(--canvas); padding:4px 12px }
+.gr { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #E9E5F1; font-size:12.5px } .gr:last-child { border-bottom:0 }
+.gr .w { width:92px; color:var(--muted); font-size:12px; flex-shrink:0 }
+.gr .say { flex:1; color:var(--ink) }
+.gr button { font-size:11px; font-weight:600; color:var(--accent); padding:3px 8px; border-radius:7px; background:#fff }
+</style>
+</head>
+<body>
+<div class="bar"><strong>Butler › Todo + 使用说明</strong>
+  <div class="seg" id="seg"><button class="on" data-v="time">按创建时间</button><button data-v="src">按来源</button><button data-v="due">按截止</button></div>
+</div>
+<div class="note">静态效果图，内容是示意。左：Todo（点开一条看来龙去脉）· 右：右上角 ? 打开的使用说明</div>
+<div class="wrap">
+  <div>
+    <div class="cap">Todo tab</div>
+    <div class="drawer">
+      <div class="dh"><span class="face">🎩</span>Butler<span class="sp"></span><button class="qbtn" title="使用说明">?</button></div>
+      <div class="tabs"><button>Chat</button><button>Today</button><button class="on">Todo<span class="n">5</span></button><button>Sessions</button><button>Approve</button></div>
+      <div class="body" id="todo"></div>
+    </div>
+  </div>
+  <div>
+    <div class="cap">使用说明（?）</div>
+    <div class="drawer">
+      <div class="dh"><span class="face">🎩</span>Butler · 使用说明<span class="sp"></span><button class="qbtn">✕</button></div>
+      <div class="guide">
+        <div><h3>在 Chat 里直接说</h3><p>点「试试」把这句话发进 Chat。</p></div>
+        <div class="g">
+          <div class="gr"><span class="w">记待办</span><span class="say">记一下：周五前回 Daniel</span><button>试试</button></div>
+          <div class="gr"><span class="w">看待办</span><span class="say">我还有哪些待办？</span><button>试试</button></div>
+          <div class="gr"><span class="w">谁在等我</span><span class="say">有什么在等我？</span><button>试试</button></div>
+          <div class="gr"><span class="w">指挥 agent</span><span class="say">让 Missy 继续做 mobile e2e</span><button>试试</button></div>
+          <div class="gr"><span class="w">看 agent</span><span class="say">Missy 做完了吗？</span><button>试试</button></div>
+          <div class="gr"><span class="w">Jira</span><span class="say">处理一下我的 Jira / 看下 FAE-1422</span><button>试试</button></div>
+          <div class="gr"><span class="w">邮件</span><span class="say">整理一下邮箱</span><button>试试</button></div>
+          <div class="gr"><span class="w">计划</span><span class="say">做一下今天的计划</span><button>试试</button></div>
+          <div class="gr"><span class="w">飞书</span><span class="say">Daniel 上周说的 Claro 那件事</span><button>试试</button></div>
+          <div class="gr"><span class="w">开会</span><span class="say">明天下午约 Daniel 半小时</span><button>试试</button></div>
+        </div>
+        <div><h3>Butler 自己会做</h3><p>每 30 分钟整理邮箱 · 每天早上做计划、晚上写报告 · 飞书代你回（答不了的给你卡片） · 答应过要跟进的事自动记成 Todo</p></div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+const T = [
+  { id:1, t:'SOW 改动是否进 P4、优先级', sub:'产品小队 · 周正林', src:'飞书', due:'10-24', created:'今天', cday:0, open:true, ev:[
+    ['10-22 16:40','','飞书 · 周正林在「产品小队」发来 SOW 6 条改动','原消息'],
+    ['10-22 16:41','','Butler 回了事实部分（FAE-1446 合并筛选项），其余转你','发出的内容'],
+    ['10-22 17:05','you','你在 Chat 里讨论：先收进 P4，下个冲刺','讨论'],
+    ['10-23 09:30','','Jira · FAE-1446 → 需求设计','FAE-1446']], acts:true },
+  { id:2, t:'周五前跟 Daniel 确认 Claro 漫游', sub:'你在 Chat 里记的', src:'Chat', due:'10-24', created:'今天', cday:0 },
+  { id:3, t:'FAE-1422 要不要升级', sub:'阚保柱 10-12 的问题未回复', src:'Jira', due:'10-22', late:true, created:'昨天', cday:1 },
+  { id:4, t:'回 Lauren：TELLCALL RADIUS APN 方案', sub:'邮件 · 草稿在 Approve', src:'邮件', due:'', created:'本周', cday:3 },
+  { id:5, t:'Missy：mobile e2e 失败 4 个待看', sub:'Cube v2 · Missy 提的', src:'Agent', due:'', created:'本周', cday:3 }
+]
+const DONE = [
+  { t:'P4-6690 关闭说明', sub:'完成 10-21 · 4 步', src:'Jira' },
+  { t:'回 Gary：Claro 漫游', sub:'完成 10-21 · 3 步', src:'邮件' }
+]
+function item(x){
+  return `<div class="item"><div class="row"><i class="box"></i><div class="tt">${x.t}<small>${x.sub}</small></div><span class="src">${x.src}</span>${x.due?`<span class="due ${x.late?'late':''}">${x.due}</span>`:''}</div>`+
+  (x.open?`<div class="tl">${x.ev.map(([w,k,s,l])=>`<div class="ev ${k}"><b>${w}</b>${s}<a>${l} ↗</a></div>`).join('')}</div><div class="acts"><button class="p">完成</button><button>💬 Chat</button><button>放弃</button></div>`:'')+`</div>`
+}
+function render(by){
+  const groups = by==='src' ? [...new Set(T.map(x=>x.src))].map(g=>[g,T.filter(x=>x.src===g)])
+    : by==='due' ? [['已逾期',T.filter(x=>x.late)],['本周到期',T.filter(x=>x.due&&!x.late)],['没有截止',T.filter(x=>!x.due)]]
+    : ['今天','昨天','本周'].map(g=>[g,T.filter(x=>x.created===g)])
+  document.getElementById('todo').innerHTML =
+    `<div class="add"><input placeholder="记一件事…（或在 Chat 里说「记一下」）"><button>记下</button></div>
+     <div class="ctl">分组 <select><option>${by==='src'?'来源':by==='due'?'截止':'创建时间'}</option></select> 排序 <select><option>最新在前</option></select><span class="sp"></span>搜索 🔍</div>`+
+    groups.filter(([,l])=>l.length).map(([g,l])=>`<div class="grp">${g} · ${l.length}</div>${l.map(item).join('')}`).join('')+
+    `<details class="comp" open><summary>Completed · ${DONE.length} ▾</summary><div style="display:flex;flex-direction:column;gap:6px;margin-top:6px">${DONE.map(x=>`<div class="item done"><div class="row"><i class="box"></i><div class="tt">${x.t}<small>${x.sub}</small></div><span class="src">${x.src}</span></div></div>`).join('')}</div></details>`
+}
+document.querySelectorAll('#seg button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#seg button').forEach(x=>x.classList.toggle('on',x===b));render(b.dataset.v)})
+render('time')
+</script>
+</body>
+</html>

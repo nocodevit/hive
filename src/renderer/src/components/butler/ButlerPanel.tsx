@@ -5,11 +5,13 @@ import { setupProgress, type SetupMark } from '../../lib/butler-setup'
 import { ApprovalHistory, ApprovalsList, type ApprovalCard } from './ApprovalsList'
 import { openSkill } from '../../lib/butler-skills'
 import { TodayTab } from './TodayTab' // [butler:mail-routines]
+import { TodoTab } from './TodoTab'
+import { ButlerGuide } from './ButlerGuide'
 
 export type ButlerMode = 'drawer' | 'page'
 // [butler:mail-routines] add 'today'
-type Tab = 'chat' | 'today' | 'sessions' | 'approve'
-const TAB_LABEL: Record<Tab, string> = { chat: 'Chat', today: 'Today', sessions: 'Sessions', approve: 'Approve' }
+type Tab = 'chat' | 'today' | 'todo' | 'sessions' | 'approve'
+const TAB_LABEL: Record<Tab, string> = { chat: 'Chat', today: 'Today', todo: 'Todo', sessions: 'Sessions', approve: 'Approve' }
 
 interface Props {
   mode: ButlerMode
@@ -56,6 +58,13 @@ export function ButlerPanel(p: Props) {
     })()
   }
   useEffect(() => { if (p.tabRequest) setTab(p.tabRequest.tab) }, [p.tabRequest])
+  const [openTodos, setOpenTodos] = useState(0)
+  const [guide, setGuide] = useState(false)
+  useEffect(() => {
+    const load = () => window.api.todos.list().then(l => setOpenTodos(l.filter(t => t.status === 'open').length)).catch(() => {})
+    load()
+    return window.api.todos.onChange(load)
+  }, [])
   useEffect(() => { p.onTab?.(tab) }, [tab, p.onTab])
   const [approvals, setApprovals] = useState<ApprovalCard[]>([])
   const [folder, setFolder] = useState<string | null>(null)
@@ -126,6 +135,8 @@ export function ButlerPanel(p: Props) {
             <button onClick={() => p.onMode('drawer')} title="Back to the side panel" aria-label="Back to the side panel"
               className="w-7 h-7 rounded-lg text-text-muted hover:bg-bg-hover cursor-pointer">⤡</button>
           )}
+          <button onClick={() => setGuide(g => !g)} aria-label="How to use Butler" aria-expanded={guide} title="What you can ask Butler"
+            className="w-7 h-7 rounded-full bg-bg-primary text-[13px] font-bold text-text-secondary hover:bg-bg-hover cursor-pointer">?</button>
           <button onClick={() => openSkill(null)} aria-label="Butler settings" title="Skills & settings"
             className="w-7 h-7 rounded-lg text-text-muted hover:bg-bg-hover cursor-pointer">⚙️</button>
           <button onClick={p.onClose} aria-label="Close Butler" className="w-7 h-7 rounded-lg text-text-muted hover:bg-bg-hover cursor-pointer">✕</button>
@@ -134,12 +145,12 @@ export function ButlerPanel(p: Props) {
 
       <div className="no-drag flex gap-0.5 px-3 pb-1" role="tablist">
         {(Object.keys(TAB_LABEL) as Tab[]).map(t => {
-          const count = t === 'sessions' ? n.waiting : t === 'approve' ? approvals.length : 0
+          const count = t === 'sessions' ? n.waiting : t === 'approve' ? approvals.length : t === 'todo' ? openTodos : 0
           return (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
               className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer inline-flex items-center gap-1 ${tab === t ? 'bg-accent-subtle text-accent' : 'text-text-muted hover:text-text-primary'}`}>
               {TAB_LABEL[t]}
-              {count > 0 && <span className="min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold inline-flex items-center justify-center">{count}</span>}
+              {count > 0 && <span className={`min-w-[16px] h-4 px-1 rounded-full ${t === 'todo' ? 'bg-accent' : 'bg-red-500'} text-white text-[10px] font-bold inline-flex items-center justify-center`}>{count}</span>}
             </button>
           )
         })}
@@ -193,6 +204,8 @@ export function ButlerPanel(p: Props) {
         </div>
       )}
 
+      {guide && <ButlerGuide onClose={() => setGuide(false)} onTry={text => { setGuide(false); discuss(text) }} />}
+      {tab === 'todo' && <TodoTab visible={p.visible} onDiscuss={discuss} onCard={() => setTab('approve')} />}
       {/* [butler:mail-routines] Today tab body */}
       {tab === 'today' && <TodayTab visible={p.visible} onDiscuss={discuss} />}
 

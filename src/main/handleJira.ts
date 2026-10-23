@@ -192,6 +192,8 @@ export interface HandleJiraDeps {
   /** The model, for writing only (questions, comments). No tools. */
   write: (prompt: string) => Promise<string>
   approvals: { add: (c: Pick<Approval, 'kind' | 'title' | 'subtitle' | 'draft' | 'payload' | 'action'>) => Approval }
+  /** A follow-up Butler drafted (stuck in analysis, a sprint P4 without PR): it becomes a todo. */
+  followUp?: (card: Approval) => void
   now?: () => number
 }
 
@@ -247,7 +249,8 @@ export async function runHandleJira(deps: HandleJiraDeps, cfg: JiraConfig): Prom
       else deps.approvals.add(jiraFixApproval({ key: f.key, to: f.to, why: `${f.detail}` }, `could not close it automatically: ${r.error}`))
       mark(k)
     } else if (f.kind === 'p4-no-pr' && f.to) {
-      deps.approvals.add(jiraCommentApproval(f.key, `design ready, no engineering task`, `[~${f.to}] 这张单的设计已就绪（详细描述 / PRD 已完成），还没有对应的研发任务，麻烦安排一下？`))
+      const card = deps.approvals.add(jiraCommentApproval(f.key, `design ready, no engineering task`, `[~${f.to}] 这张单的设计已就绪（详细描述 / PRD 已完成），还没有对应的研发任务，麻烦安排一下？`))
+      deps.followUp?.(card)
       mark(k)
     } else if (f.kind === 'stuck-analysis' && drafts < 3) {
       drafts++
@@ -256,7 +259,7 @@ export async function runHandleJira(deps: HandleJiraDeps, cfg: JiraConfig): Prom
         `Ticket ${f.key} "${f.summary}" has been in requirements analysis (${f.detail}).`,
         'Write one Jira comment for the requester: the questions that make the user story black-and-white (who, what problem, scenario, expected result, acceptance, deadline), or a short initial solution to confirm. Comment text only.'
       ].join('\n')).catch(() => '')).trim()
-      if (text) { deps.approvals.add(jiraCommentApproval(f.key, `in analysis ${f.detail}`, text)); mark(k) }
+      if (text) { const card = deps.approvals.add(jiraCommentApproval(f.key, `in analysis ${f.detail}`, text)); deps.followUp?.(card); mark(k) }
     }
   }
 

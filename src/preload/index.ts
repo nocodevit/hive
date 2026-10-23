@@ -308,6 +308,18 @@ const api = {
       return () => ipcRenderer.removeListener('butler:state', handler)
     }
   },
+  todos: {
+    list: () => ipcRenderer.invoke('todos:list'),
+    add: (input: { title: string; due?: string }) => ipcRenderer.invoke('todos:add', input),
+    setStatus: (id: string, status: 'open' | 'done' | 'dropped') => ipcRenderer.invoke('todos:setStatus', id, status) as Promise<boolean>,
+    note: (id: string, text: string) => ipcRenderer.invoke('todos:note', id, text) as Promise<boolean>,
+    fromApproval: (id: string, note?: string) => ipcRenderer.invoke('todos:fromApproval', id, note),
+    onChange: (cb: () => void) => {
+      const handler = () => cb()
+      ipcRenderer.on('todos:changed', handler)
+      return () => ipcRenderer.removeListener('todos:changed', handler)
+    }
+  },
   approvals: {
     list: () => ipcRenderer.invoke('approvals:list') as Promise<ApprovalItem[]>,
     history: () => ipcRenderer.invoke('approvals:history') as Promise<ApprovalItem[]>,

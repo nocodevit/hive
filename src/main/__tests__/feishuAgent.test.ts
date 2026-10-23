@@ -69,6 +69,10 @@ function setup(opts: { claude?: (p: string) => string | Promise<string>; setting
   const fs = fakeFeishu(now)
   const approvals = createApprovals({ dir, now })
   const notes: string[] = []
+  const todos = { added: [] as any[], events: [] as any[],
+    add(i: any) { this.added.push(i); return { id: `td-${this.added.length}` } },
+    event(_id: string, e: any) { this.events.push(e); return true },
+    openByRef() { return [] as Array<{ id: string }> } }
   const prompts: string[] = []
   const deps = {
     dir, http: fs.http as any, now,
@@ -77,11 +81,12 @@ function setup(opts: { claude?: (p: string) => string | Promise<string>; setting
     profile: () => ({ ...EMPTY_PROFILE, name: 'Mei', ...opts.profile }),
     runClaude: async (p: string) => { prompts.push(p); return opts.claude ? opts.claude(p) : '{"category":"product-status","level":"auto","confidence":"high","reply":"Missy 在修 iOS 失焦","sources":[],"claims":[]}' },
     approvals,
-    notify: (_t: string, b: string) => { notes.push(b) }
+    notify: (_t: string, b: string) => { notes.push(b) },
+    todos
   }
   const agent = createFeishuAgent(deps)
   agent.setSettings({ enabled: true, ...opts.settings })
-  return { dir, fs, agent, approvals, notes, prompts, deps, advance: (ms: number) => { clock += ms }, now }
+  return { dir, fs, agent, approvals, notes, prompts, deps, todos, advance: (ms: number) => { clock += ms }, now }
 }
 
 describe('pure helpers', () => {
@@ -370,6 +375,9 @@ describe('feishu agent', () => {
     expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '[Mei 的 AI 代理] 看了 FAE-1422：三项都没回答，建议先在单里追问。\n其余已转告 Mei，稍后回复。' })])
     const [card] = t.approvals.pending()
     expect(card).toMatchObject({ kind: FOLLOWUP_KIND, title: 'Lin · 要不要升级', draft: '' })
+    // the promised follow-up is a todo: what came in, what went out
+    expect(t.todos.added).toEqual([expect.objectContaining({ source: 'feishu', who: 'butler', refs: { approvalId: card.id, chatId: 'p1', messageId: q.message_id } })])
+    expect(t.todos.events.map(e => e.text)).toEqual([expect.stringContaining('Butler sent the facts: 看了 FAE-1422')])
   })
 
   it('case 1: small talk Butler cannot answer for the owner ("how do you feel") sends nothing; the owner gets the card', async () => {

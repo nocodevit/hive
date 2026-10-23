@@ -67,6 +67,10 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Record<string, string>>({})
+  const [noted, setNoted] = useState<Record<string, boolean>>({})
+  // "+ Todo", and Discuss (a card taken to the chat is a follow-up): the card becomes a todo with its refs.
+  const toTodo = (id: string, note?: string) => { void window.api.todos.fromApproval(id, note).then(t => { if (t) setNoted(n => ({ ...n, [id]: true })) }).catch(() => {}) }
+  const discuss = (it: ApprovalCard, text: string) => { onDiscuss?.(text); toTodo(it.id, 'Discussed in Chat') }
   useEffect(() => { if (editing && !items.some(i => i.id === editing)) setEditing(null) }, [items, editing])
 
   const approve = async (it: ApprovalCard) => {
@@ -107,14 +111,15 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
                 <div className="flex items-center gap-2 min-w-0"><span className="text-[11px] text-text-muted truncate">{it.subtitle}</span><JiraLink payload={it.payload} /></div>
               </div>
               {decide ? (
-                <button onClick={() => onDiscuss?.(discussText(it))} aria-label={`Discuss ${it.title}`} className={btn}>Discuss</button>
+                <button onClick={() => discuss(it, discussText(it))} aria-label={`Discuss ${it.title}`} className={btn}>Discuss</button>
               ) : (
                 <>
                   <button disabled={busy === it.id} onClick={() => approve(it)} aria-label={`${it.action} ${it.title}`} className={btn}>{busy === it.id ? '…' : it.action}</button>
-                  {onDiscuss && <button onClick={() => onDiscuss(cardDiscussText(it))} aria-label={`Discuss ${it.title}`} title="Discuss in the Butler chat" className={icon}>💬</button>}
+                  {onDiscuss && <button onClick={() => discuss(it, cardDiscussText(it))} aria-label={`Discuss ${it.title}`} title="Discuss in the Butler chat" className={icon}>💬</button>}
                   <button onClick={() => { setEditing(editing === it.id ? null : it.id); setText(it.draft) }} aria-label={`Edit ${it.title}`} title="Edit reply" className={icon}>✎</button>
                 </>
               )}
+              <button onClick={() => toTodo(it.id)} disabled={noted[it.id]} aria-label={`Add ${it.title} to Todo`} title={noted[it.id] ? 'In Todo' : 'Add to Todo'} className={`${icon} text-[12px] font-semibold disabled:text-accent`}>{noted[it.id] ? '✓' : '+'}</button>
               <button onClick={() => window.api.approvals.reject(it.id)} aria-label={`Reject ${it.title}`} title="Dismiss" className={icon}>✕</button>
             </div>
             {about && <div className="text-[12px] text-text-secondary truncate" title={about} aria-label="What it wants">{about}</div>}

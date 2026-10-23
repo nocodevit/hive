@@ -8,7 +8,8 @@
       "Bash(./hive chat-search:*)",
       "Bash(./hive pending:*)",
       "Bash(./hive run:*)",
-      "Bash(./hive jira:*)"
+      "Bash(./hive jira:*)",
+      "Bash(./hive todo:*)"
     ],
     "deny": [
       "Edit",

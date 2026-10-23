@@ -99,6 +99,8 @@ def main():
     sub = p.add_subparsers(dest='cmd', required=True)
     a = sub.add_parser('agents'); a.add_argument('--project')
     sub.add_parser('pending')
+    t = sub.add_parser('todo'); t.add_argument('what', choices=['add', 'list', 'done', 'drop', 'note']); t.add_argument('args', nargs='*')
+    t.add_argument('--due'); t.add_argument('--ref'); t.add_argument('--all', action='store_true')
     j = sub.add_parser('jira'); j.add_argument('what', choices=['search', 'get', 'transitions', 'me']); j.add_argument('arg', nargs='?', default='')
     j.add_argument('--fields', default='summary,status,assignee,updated,labels,fixVersions,issuelinks'); j.add_argument('--max', type=int, default=20)
     r = sub.add_parser('run'); r.add_argument('routine', choices=['jira', 'jira-check', 'sort-inbox', 'morning-plan', 'evening-report'])
@@ -121,6 +123,31 @@ def main():
             print(row(x))
         n = {k: sum(1 for x in rows if x['activity'] == k) for k in order}
         print(f"-- {len(rows)} agents: {n['working']} working, {n['waiting']} waiting (chat open, idle), {n['off']} off")
+        return
+
+    if args.cmd == 'todo':
+        if args.what == 'list':
+            status, data = call('GET', '/todos' + ('?all=1' if args.all else ''))
+            if status != 200: fail(status, data)
+            rows = data['todos']
+            if not rows: print('No open todos.'); return
+            for x in rows:
+                print(f"{x['id'][:8]}  {'[x] ' if x['status'] == 'done' else '[-] ' if x['status'] == 'dropped' else ''}{x['title']}{'  · due ' + x['due'] if x['due'] else ''}  ({x['source']}, {x['steps']} steps)")
+            return
+        if args.what == 'add':
+            title = ' '.join(args.args).strip()
+            status, data = call('POST', '/todos/add', {'title': title, 'due': args.due, 'ref': args.ref})
+            if status != 200: fail(status, data)
+            print(f"Noted {data['todo']['id'][:8]}: {data['todo']['title']}" + (f" (due {data['todo']['due']})" if data['todo']['due'] else ''))
+            return
+        if not args.args: sys.exit('Which todo? Give its id (from ./hive todo list).')
+        tid, rest = args.args[0], ' '.join(args.args[1:])
+        if args.what == 'note':
+            status, data = call('POST', '/todos/note', {'id': tid, 'text': rest})
+        else:
+            status, data = call('POST', '/todos/status', {'id': tid, 'status': 'done' if args.what == 'done' else 'dropped'})
+        if status != 200: fail(status, data)
+        print({'note': 'Added to its history.', 'done': 'Done.', 'drop': 'Dropped.'}[args.what])
         return
 
     if args.cmd == 'jira':

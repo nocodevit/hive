@@ -685,9 +685,25 @@ chatEventBus.on('event', ({ sessionId, event }: { sessionId: string; event: unkn
 // Everything that leaves Hive on the owner's behalf waits here. Features
 // register an executor for their kind (approvals.register) and add items.
 const knownApprovals = new Set<string>()
+// Butler › Todo (butlerTodos.ts): every write tells the tab.
+const todosChanged = () => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send('todos:changed') }
+const todos: TodoStore = (() => {
+  const s = createTodoStore(butlerDir(DATA_DIR))
+  return {
+    ...s,
+    add: (i: Parameters<TodoStore['add']>[0]) => { const r = s.add(i); if (r) todosChanged(); return r },
+    event: (id: string, e: Parameters<TodoStore['event']>[1]) => { const r = s.event(id, e); if (r) todosChanged(); return r },
+    setStatus: (id: string, st: Parameters<TodoStore['setStatus']>[1], who?: Parameters<TodoStore['setStatus']>[2]) => { const r = s.setStatus(id, st, who); if (r) todosChanged(); return r }
+  }
+})()
+let pendingIds = new Set<string>()
 const approvals = createApprovals({
   dir: butlerDir(DATA_DIR),
   onChange: pending => {
+    // A card that left the queue: its todos say what happened.
+    const now = new Set(pending.map(a => a.id))
+    try { for (const id of pendingIds) if (!now.has(id)) { const a = approvals.get(id); if (a) noteApprovalOutcome(todos, a) } } catch { /* not ready yet */ }
+    pendingIds = now
     const linked = withJiraLinks(pending, jiraBrowseBase(butlerDir(DATA_DIR)))
     for (const win of BrowserWindow.getAllWindows()) win.webContents.send('approvals:changed', linked)
     for (const a of pending) {
@@ -698,6 +714,8 @@ const approvals = createApprovals({
   }
 })
 for (const a of approvals.pending()) knownApprovals.add(a.id)
+pendingIds = new Set(approvals.pending().map(a => a.id))
+registerTodosIpc({ ipcMain, store: () => todos, approvals, changed: todosChanged })
 // Jira cards carry an "open in Jira" link. The address comes from the connection or from Jira itself;
 // learned once (its own self URL) when neither is known yet.
 let jiraBaseAsked = false
@@ -722,6 +740,7 @@ import { registerButlerSkillsIpc } from './butlerSkillsIpc'
 registerButlerSkillsIpc({ ipcMain, previewFeishu: text => previewFeishuAnswer({ text }), butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
 const butlerRoutines = setupButlerMailRoutines({
+  todos,
   onRoutineRun: rec => {
     if (!rec.ok) void notifications.emit({ kind: 'routineFailed', key: `routine:${rec.id}`, title: `${ROUTINE_NAME[rec.id]} failed`, body: rec.error || '', target: { kind: 'routines' } })
   },
@@ -745,13 +764,15 @@ const butlerRoutineMode = butlerRoutines.mode
 import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory, previewFeishuAnswer } from './butlerFeishuAgentIpc'
 import { jiraBrowseBase, rememberJiraBase, withJiraLinks } from './jiraRest'
 import { newSkillUpdates } from './butlerSkills'
+import { createTodoStore, type TodoStore } from './butlerTodos'
+import { noteApprovalOutcome, registerTodosIpc } from './butlerTodosIpc'
 const JIRA_READ_TOOLS = new Set(['jira_search', 'jira_get_issue', 'jira_get_transitions', 'jira_get_user_profile'])
 // Approved Jira changes (status fixes from answers, later handle-jira) run through the
 // owner's own Jira MCP server; the model never holds these write tools.
 registerJiraActions(approvals, () => butlerRoutines.jiraCall())
 registerJiraWriteActions(approvals, () => butlerRoutines.jiraCall())
 registerButlerFeishuAgentIpc({
-  ipcMain, butlerDir: butlerDir(DATA_DIR), feishu, approvals, claudeBin, readProfile,
+  ipcMain, butlerDir: butlerDir(DATA_DIR), feishu, approvals, claudeBin, readProfile, todos,
   // butlerCalendar is created below; this only runs when a message is answered.
   freeBusy: async () => {
     const s = butlerCalendar.getSettings()
@@ -923,6 +944,29 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
         routineName: id => (isRoutineId(id) ? ROUTINE_NAME[id] : id),
         dayStart: new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
       }))
+    }
+
+    // ./hive todo …: Butler › Todo from the chat or the phone. A todo is named by its id or a unique id prefix.
+    if (url.pathname.startsWith('/todos')) {
+      const pick = (ref: unknown) => {
+        const r = typeof ref === 'string' ? ref.trim() : ''
+        const hits = r.length >= 4 ? todos.all().filter(t => t.id === r || t.id.startsWith(r)) : []
+        return hits.length === 1 ? hits[0] : null
+      }
+      if (req.method === 'GET' && url.pathname === '/todos') {
+        const all = url.searchParams.get('all') === '1'
+        return reply(200, { ok: true, todos: todos.all().filter(t => all || t.status === 'open').map(t => ({ id: t.id, title: t.title, status: t.status, due: t.due ?? '', source: t.source, createdAt: t.createdAt, steps: t.events.length })) })
+      }
+      const body = req.method === 'POST' ? await readJsonBody(req).catch(() => null) : null
+      if (url.pathname === '/todos/add') {
+        const t = todos.add({ title: String(body?.title ?? ''), due: body?.due, source: 'chat', who: 'owner', refs: typeof body?.ref === 'string' && /^[A-Z][A-Z0-9]+-\d+$/.test(body.ref) ? { jiraKey: body.ref } : {}, note: body?.note })
+        return t ? reply(200, { ok: true, todo: { id: t.id, title: t.title, due: t.due ?? '' } }) : reply(400, { ok: false, error: 'empty_title' })
+      }
+      const t = pick(body?.id)
+      if (!t) return reply(404, { ok: false, error: 'no_such_todo' })
+      if (url.pathname === '/todos/status' && ['open', 'done', 'dropped'].includes(body?.status)) { todos.setStatus(t.id, body.status, 'owner'); return reply(200, { ok: true, id: t.id }) }
+      if (url.pathname === '/todos/note' && typeof body?.text === 'string' && body.text.trim()) { todos.event(t.id, { who: 'owner', kind: 'note', text: body.text }); return reply(200, { ok: true, id: t.id }) }
+      return reply(400, { ok: false, error: 'bad_request' })
     }
 
     // ./hive jira …: read Jira the way Butler is connected (Stargate or REST). Reads only.

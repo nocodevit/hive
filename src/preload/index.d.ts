@@ -114,6 +114,14 @@ declare global {
         onState: (cb: (s: ButlerState) => void) => () => void
         onStartAgent: (cb: (payload: { agentId: string; mode: 'resume' | 'new' }) => void) => () => void
       }
+      todos: {
+        list: () => Promise<import('../renderer/src/lib/butler-todos').TodoView[]>
+        add: (input: { title: string; due?: string }) => Promise<import('../renderer/src/lib/butler-todos').TodoView | null>
+        setStatus: (id: string, status: 'open' | 'done' | 'dropped') => Promise<boolean>
+        note: (id: string, text: string) => Promise<boolean>
+        fromApproval: (id: string, note?: string) => Promise<import('../renderer/src/lib/butler-todos').TodoView | null>
+        onChange: (cb: () => void) => () => void
+      }
       approvals: {
         list: () => Promise<ApprovalItem[]>
         history: () => Promise<ApprovalItem[]>

@@ -169,3 +169,17 @@ test('routines/run: runs one routine now and says how it went; "jira" is the Jir
   const jira = await (await post('/routines/run', { id: 'jira' })).json()
   expect(jira).toMatchObject({ ok: false, name: 'Jira', run: { id: 'jira-check', ok: false, error: 'Jira not connected' } })
 })
+
+test('todos: Butler notes one from the chat, adds a note, closes it by its id prefix', async () => {
+  expect((await post('/todos/add', { title: '  ' })).status).toBe(400)
+  const added = await (await post('/todos/add', { title: '周五前回 Daniel', due: '2026-10-24', ref: 'FAE-1422' })).json()
+  expect(added).toMatchObject({ ok: true, todo: { title: '周五前回 Daniel', due: '2026-10-24' } })
+  const id = added.todo.id.slice(0, 8)
+  expect(await (await post('/todos/note', { id, text: '已问研发' })).json()).toMatchObject({ ok: true })
+  expect((await post('/todos/note', { id: 'zz', text: 'x' })).status).toBe(404)
+  const open = await (await call('/todos')).json()
+  expect(open.todos).toEqual([expect.objectContaining({ title: '周五前回 Daniel', status: 'open', source: 'chat', steps: 2 })])
+  expect(await (await post('/todos/status', { id, status: 'done' })).json()).toMatchObject({ ok: true })
+  expect((await (await call('/todos')).json()).todos).toEqual([])
+  expect((await (await call('/todos?all=1')).json()).todos[0]).toMatchObject({ status: 'done', steps: 3 })
+})

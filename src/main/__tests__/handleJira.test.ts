@@ -105,8 +105,11 @@ describe('handle-jira daily run', () => {
     const f = fake()
     const prompts: string[] = []
     const write = async (p: string) => { prompts.push(p); return '想确认几点：1) 场景？2) 期望结果？' }
-    const r = await runHandleJira({ folder: dir, call: f.call, write, approvals, now: () => AT }, cfg)
+    const followed: string[] = []
+    const r = await runHandleJira({ folder: dir, call: f.call, write, approvals, now: () => AT, followUp: c => followed.push(c.title) }, cfg)
     expect(r.actions).toEqual(['REQ-1 → Done'])
+    // the follow-ups Butler drafted become todos; a reassignment does not
+    expect(followed).toEqual(['REQ-2 · comment', 'PROD-2 · comment'])
     expect(f.calls.find(c => c[0] === 'jira_transition_issue')![1]).toMatchObject({ issue_key: 'REQ-1', transition_id: '9' })
     const cards = approvals.pending().map(c => [c.kind, c.title])
     expect(cards).toEqual([

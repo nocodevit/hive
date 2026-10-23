@@ -3,6 +3,7 @@
 // pieces, registers their IPC, and handles a --butler-routine launch.
 // index.ts calls setupButlerMailRoutines once (marker [butler:mail-routines]).
 
+import { todoFromApproval } from './butlerTodosIpc'
 import { butlerJiraCall, createJiraConnectionStore, createJiraRestCaller, normalizeConnection, type Call } from './jiraRest'
 import { execFile, execFileSync } from 'child_process'
 import { readJiraConfig, runHandleJira } from './handleJira'
@@ -28,6 +29,8 @@ import { butlerDir } from './butler'
 import type { Approvals } from './approvals'
 
 export interface ButlerMailRoutinesDeps {
+  /** Butler › Todo: follow-ups handle-jira drafts become todos. */
+  todos?: { add: (i: import('./butlerTodos').TodoInput) => unknown; all: () => import('./butlerTodos').Todo[] }
   app: App
   ipcMain: IpcMain
   safeStorage: SafeStorage
@@ -90,14 +93,19 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
     // The model's Jira: Stargate / MCP tools, else ./hive jira over direct REST.
     jira: () => jiraTools(folder, claudeJsonPath(homedir())) ?? (jiraCall() ? { server: 'rest', read: ['Bash(./hive jira:*)'] } : null),
     calendar: d.calendar,
-    waiting: () => waitingLines(d.approvals.all()),
+    // What waits for the owner: Approve cards, then open todos due today or overdue (morning plan input).
+    waiting: () => {
+      const today = new Date().toISOString().slice(0, 10)
+      const due = (d.todos?.all() ?? []).filter(t => t.status === 'open' && t.due && t.due <= today).map(t => `${t.title} (todo, due ${t.due})`)
+      return [...waitingLines(d.approvals.all()), ...due]
+    },
     butlerToday: since => butlerDayText(createCaseLog(folder).all(), d.approvals.all(), since),
     handleJira: async () => {
       const cfg = readJiraConfig(folder)
       if (!cfg) return null
       const call = jiraCall()
       if (!call) throw new Error('Jira not connected (Settings › Jira › Connection)')
-      return (await runHandleJira({ folder, call, write: p => runClaude(`${p}\n\n# The owner's Jira (settings)\n${readJiraMd(folder)}`), approvals: d.approvals }, cfg)).text
+      return (await runHandleJira({ folder, call, write: p => runClaude(`${p}\n\n# The owner's Jira (settings)\n${readJiraMd(folder)}`), approvals: d.approvals, followUp: card => { d.todos?.add(todoFromApproval(card, 'butler')) } }, cfg)).text
     },
     onRun: d.onRoutineRun,
     // State and journal live at the plain path; only a claude run (runClaude's

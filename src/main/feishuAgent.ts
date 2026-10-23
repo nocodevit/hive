@@ -265,8 +265,17 @@ export type Outcome =
 
 type Http = (method: 'GET' | 'POST' | 'DELETE', url: string, token: string, body?: unknown) => Promise<{ status: number; body: any }>
 
+/** Butler › Todo, as the Feishu agent uses it (butlerTodos.ts). */
+export interface FeishuTodos {
+  add: (i: { title: string; source: 'feishu'; who: 'butler'; refs: { approvalId?: string; chatId?: string; messageId?: string }; note?: string; link?: string }) => { id: string } | null
+  event: (id: string, e: { who: 'butler' | 'owner'; kind: 'action' | 'note'; text: string; link?: string }) => boolean
+  openByRef: (kind: 'chatId', value: string) => Array<{ id: string }>
+}
+
 export interface FeishuAgentDeps {
   dir: string
+  /** Follow-ups Butler promised ("其余已转告") become todos; later replies in that chat join their history. */
+  todos?: FeishuTodos
   http: Http
   token: () => Promise<{ ok: boolean; token?: string; error?: string }>
   selfOpenId: () => string | null
@@ -391,6 +400,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     if (!ok(r)) return { ok: false as const, error: errOf(r) }
     const id = String(r.body?.data?.message_id ?? '')
     appendLog({ id, time: now(), chatId: job.chatId, chatName: job.chatName, inReplyTo: job.messageId, text: full, kind })
+    for (const t of deps.todos?.openByRef('chatId', job.chatId) ?? []) deps.todos!.event(t.id, { who: 'butler', kind: 'action', text: `Butler replied in ${job.chatName || 'Feishu'}: ${clip(full, 200)}` })
     return { ok: true as const, id }
   }
 
@@ -642,6 +652,9 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       })
       cases.add({ ...decided, sent: text, approvalId: item.id, outcome: 'pending' })
       state.followups.push({ approvalId: item.id, createdAt: now(), reminded: false })
+      // Promised a follow-up ("其余已转告"): it is a todo, with what came in and what went out.
+      const todo = deps.todos?.add({ title: `${job.chatName || 'Feishu'} · ${clip(answer.ownerQuestion, 80)}`, source: 'feishu', who: 'butler', refs: { approvalId: item.id, chatId: job.chatId, messageId: job.messageId }, note: `${job.chatName || 'Feishu'}: ${clip(job.text, 400)}`, link: `approval:${item.id}` })
+      if (todo) deps.todos!.event(todo.id, { who: 'butler', kind: 'action', text: `Butler sent the facts: ${clip(text, 300)}`, link: `approval:${item.id}` })
       deps.notify('Feishu · your call', `${job.chatName || 'Feishu'} · ${clip(answer.ownerQuestion, 60)}`)
       return { messageId: job.messageId, result: 'answered' }
     }
