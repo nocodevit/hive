@@ -1,5 +1,10 @@
 import { claudeProjectSlug } from '../shared/claude-project-slug'
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { headLines, tailLines } from './fileSlices'
+
+/** A log's start (system/init, the first prompt) and its end (latest usage) — enough for the chooser. */
+const HEAD_BYTES = 64 * 1024
+const TAIL_BYTES = 2 * 1024 * 1024
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { resolveAgentSession } from './session-locator'
@@ -73,7 +78,7 @@ export function getRecentSessions(cwd: string, limit = 5): RecentSession[] {
           .map(f => ({ f, m: statSync(join(hiveLogs, f)).mtimeMs }))
           .sort((a, b) => b.m - a.m)
         outer: for (const hf of hiveFiles.slice(0, 50)) {
-          const txt = readFileSync(join(hiveLogs, hf.f), 'utf8').split('\n').filter(Boolean)
+          const txt = headLines(join(hiveLogs, hf.f), HEAD_BYTES)
           for (const line of txt) {
             try {
               const ev = JSON.parse(line)
@@ -99,7 +104,8 @@ export function getRecentSessions(cwd: string, limit = 5): RecentSession[] {
       let preview = ''
       let lastInputTokens = 0
       try {
-        const lines = readFileSync(join(dir, file.f), 'utf8').split('\n').filter(Boolean)
+        // Title from the start, preview / usage from the end: never the whole file.
+        const lines = [...headLines(join(dir, file.f), HEAD_BYTES), ...tailLines(join(dir, file.f), TAIL_BYTES)]
         for (const line of lines) {
           try {
             const ev = JSON.parse(line)
@@ -245,7 +251,8 @@ export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInf
     // high token counts. Using the latest assistant.usage matches what
     // the live chat would show on resume — i.e. post-compact ~12%, not
     // the 97% peak we hit before the compact.
-    const lines = readFileSync(sessionFile, 'utf8').split('\n').filter(Boolean)
+    // The latest usage is near the end: read the tail only.
+    const lines = tailLines(sessionFile, TAIL_BYTES)
     const events = lines.map((l) => { try { return JSON.parse(l) } catch { return null } }).filter(Boolean)
     const { model, peakInputTokens } = latestRealSessionUsage(events)
 
@@ -258,7 +265,7 @@ export function getPrevSessionInfo(cwd: string, chatId?: string): PrevSessionInf
           .map(f => ({ f, m: statSync(join(hiveLogs, f)).mtimeMs }))
           .sort((a, b) => b.m - a.m)
         outer: for (const hf of hiveFiles.slice(0, 50)) {
-          const txt = readFileSync(join(hiveLogs, hf.f), 'utf8').split('\n').filter(Boolean)
+          const txt = headLines(join(hiveLogs, hf.f), HEAD_BYTES)
           for (const line of txt) {
             try {
               const ev = JSON.parse(line)
