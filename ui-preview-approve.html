@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Approve 卡片 before / after</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root { --canvas:#F3F0F8; --card:#fff; --ink:#1E1B2E; --ink-2:#4A4560; --muted:#8C87A0; --faint:#B9B4C9; --line:#EEEAF4; --hover:#ECE8F4; --accent:#7C3AED; --accent-soft:#EFE7FD; --ok:#16A34A; --ok-soft:#E8F7EE; --warn:#B45309; --warn-soft:#FEF3E2; --red:#EF4444 }
+* { box-sizing:border-box; margin:0; padding:0 }
+body { background:#E6E2EE; font-family:'Inter Tight',-apple-system,'PingFang SC',sans-serif; color:var(--ink); -webkit-font-smoothing:antialiased; padding:20px }
+button { font:inherit; border:0; background:none; cursor:pointer; color:inherit }
+h1 { font-size:15px; margin-bottom:4px } .note { color:var(--muted); font-size:12px; margin-bottom:14px }
+.wrap { display:flex; gap:28px; flex-wrap:wrap; align-items:flex-start } .cap { font-size:12px; font-weight:600; color:var(--muted); margin-bottom:8px }
+.drawer { width:420px; height:1120px; background:var(--card); border-radius:18px; box-shadow:0 24px 60px rgba(30,27,46,.18); display:flex; flex-direction:column; overflow:hidden }
+.dh { height:52px; display:flex; align-items:center; gap:8px; padding:0 16px; font-weight:600; font-size:14px }
+.face { width:22px; height:22px; border-radius:50%; background:var(--accent-soft); display:inline-flex; align-items:center; justify-content:center; font-size:13px }
+.tabs { display:flex; gap:2px; padding:0 12px 6px } .tabs span { font-size:12px; font-weight:600; color:var(--muted); padding:4px 10px; border-radius:8px }
+.tabs .on { background:var(--accent-soft); color:var(--accent) } .badge { background:var(--red); color:#fff; border-radius:999px; font-size:10px; padding:0 5px; margin-left:3px }
+.body { flex:1; overflow-y:auto; padding:4px 12px 14px; display:flex; flex-direction:column; gap:8px }
+
+/* BEFORE — today's card */
+.old { flex-shrink:0; border-radius:12px; background:var(--canvas); padding:10px 12px; display:flex; flex-direction:column; gap:6px }
+.old .top { display:flex; align-items:center; gap:8px } .old .ic { font-size:14px }
+.old .t { flex:1; min-width:0 } .old .t b { display:block; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis } .old .t span { font-size:11px; color:var(--muted) }
+.old .send { padding:4px 10px; border-radius:8px; background:var(--accent); color:#fff; font-size:12px; font-weight:600 }
+.old .i { width:26px; height:26px; border-radius:7px; color:var(--muted); font-size:13px }
+.old .q { border-left:2px solid var(--line); padding-left:8px; font-size:12px; color:var(--ink-2) }
+.old .d { font-size:12px; font-weight:600; color:var(--muted) } .old .warn { font-size:12px; color:var(--warn) }
+
+/* AFTER */
+.filters { display:flex; gap:6px; padding:2px 0 4px } .chip { font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:999px; background:var(--canvas); color:var(--ink-2) } .chip.on { background:var(--ink); color:#fff } .chip i { font-style:normal; opacity:.6; margin-left:3px }
+.sec { font-size:11px; font-weight:600; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); padding:6px 2px 0; display:flex; gap:6px; align-items:center } .sec::after { content:''; flex:1; height:1px; background:var(--line) }
+.card { flex-shrink:0; border-radius:14px; background:var(--card); border:1px solid var(--line); box-shadow:0 1px 2px rgba(30,27,46,.04),0 4px 14px rgba(30,27,46,.05); overflow:hidden; transition:box-shadow .15s }
+.card:hover { box-shadow:0 2px 4px rgba(30,27,46,.06),0 10px 24px rgba(30,27,46,.09) }
+.card.needs { border-left:3px solid var(--warn) } .card.ready { border-left:3px solid var(--accent) }
+.ch { display:flex; align-items:center; gap:9px; padding:10px 12px 6px }
+.av { width:28px; height:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:12px; font-weight:700; color:#fff; flex-shrink:0 }
+.who { flex:1; min-width:0 } .who b { font-size:13px; font-weight:600 } .who span { display:block; font-size:11px; color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+.src { display:inline-flex; align-items:center; gap:4px; font-size:10.5px; font-weight:600; padding:2px 7px; border-radius:6px; background:var(--canvas); color:var(--ink-2) }
+.ago { font-size:11px; color:var(--faint); font-family:'JetBrains Mono',monospace }
+.cb { padding:2px 12px 10px; display:flex; flex-direction:column; gap:8px }
+.them { align-self:flex-start; max-width:92%; background:var(--canvas); border-radius:4px 12px 12px 12px; padding:7px 10px; font-size:12.5px; color:var(--ink-2); line-height:1.45 }
+.them .more { color:var(--accent); font-weight:600; font-size:11px; margin-left:4px }
+.mine { align-self:flex-end; max-width:92%; background:var(--accent-soft); border-radius:12px 4px 12px 12px; padding:7px 10px; font-size:12.5px; color:var(--ink); line-height:1.45; position:relative }
+.mine .lab { display:block; font-size:10.5px; font-weight:600; color:var(--accent); margin-bottom:2px }
+.mine.sent { background:var(--ok-soft) } .mine.sent .lab { color:var(--ok) }
+.call { display:flex; gap:8px; align-items:flex-start; background:var(--warn-soft); color:var(--warn); border-radius:10px; padding:7px 10px; font-size:12.5px; font-weight:500 }
+.call b { font-weight:700 }
+.jira { display:flex; align-items:center; gap:6px; font-size:12px } .key { font-family:'JetBrains Mono',monospace; font-size:11.5px; color:var(--accent); font-weight:500 }
+.st { font-size:11px; padding:1px 7px; border-radius:6px; background:var(--canvas); color:var(--ink-2) } .arrow { color:var(--faint) }
+.cf { display:flex; align-items:center; gap:4px; padding:8px 10px; border-top:1px solid var(--line); background:#FCFBFE }
+.p { height:28px; padding:0 12px; border-radius:8px; background:var(--accent); color:#fff; font-size:12px; font-weight:600; display:inline-flex; align-items:center; gap:6px; box-shadow:0 1px 2px rgba(124,58,237,.3) }
+.p kbd { font-family:inherit; font-size:10px; opacity:.7; background:rgba(255,255,255,.18); border-radius:4px; padding:0 4px }
+.g { height:28px; padding:0 9px; border-radius:8px; font-size:12px; font-weight:500; color:var(--ink-2); display:inline-flex; align-items:center; gap:5px } .g:hover { background:var(--hover) }
+.sp { flex:1 } .x { color:var(--muted) }
+</style>
+</head>
+<body>
+<h1>Butler › Approve 卡片 · before vs after</h1>
+<div class="note">静态效果图，内容是示意。左：现在 · 右：新设计（同样 4 张卡）</div>
+<div class="wrap">
+  <div>
+    <div class="cap">Before · 现在</div>
+    <div class="drawer">
+      <div class="dh"><span class="face">🎩</span>Butler</div>
+      <div class="tabs"><span>Chat</span><span>Today</span><span>Todo</span><span>Sessions</span><span class="on">Approve<span class="badge">4</span></span></div>
+      <div class="body">
+        <div class="old"><div class="top"><span class="ic">💬</span><div class="t"><b>Daniel Vargas Millan · On another topic, I have a requir…</b><span>Feishu follow-up · unsure</span></div><button class="send">Reply</button><button class="i">💬</button><button class="i">✎</button><button class="i">+</button><button class="i">✕</button></div>
+          <div class="q">On another topic, I have a requirement from Claro: they need the roaming CDRs split by country every Monday, starting next month.</div><div class="d">▸ Reply</div></div>
+        <div class="old"><div class="top"><span class="ic">💬</span><div class="t"><b>Pod Of Sphere&Cube-New · 这批 SOW 改动是否接受进 P4…</b><span>Feishu · facts sent, your call · 这批 SOW…</span></div><button class="send">Reply</button><button class="i">💬</button><button class="i">+</button><button class="i">✕</button></div>
+          <div class="q">@Megan Yang 眉姐，今天和PRCBU讨论了关于sphere-new sow模块的改动需求…</div><div class="warn">Your call · 这批 SOW 改动是否接受进 P4、优先级和排期怎么定</div><div class="d">▸ Sent to them ✓</div></div>
+        <div class="old"><div class="top"><span class="ic">✉️</span><div class="t"><b>Ana · Price list</b><span>needs you · email · to ana@c.com · from mei@c…</span></div><button class="send">Discuss</button><button class="i">+</button><button class="i">✕</button></div>
+          <div class="q">Ana wants the 2027 price list</div><div class="warn">Needs you · Which prices can I share?</div>
+          <div style="display:flex;gap:6px"><input style="flex:1;font-size:12px;padding:5px 8px;border-radius:8px;border:1px solid var(--line)" placeholder="Your answer to Butler · not sent"><button class="send">Write reply</button></div></div>
+        <div class="old"><div class="top"><span class="ic">🎫</span><div class="t"><b>P4-6926 · comment</b><span>Jira · in analysis 21 days <span style="color:var(--accent);font-weight:600">P4-6926 ↗</span></span></div><button class="send">Comment</button><button class="i">💬</button><button class="i">✎</button><button class="i">+</button><button class="i">✕</button></div><div class="d">▸ Comment</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="cap">After · 新设计</div>
+    <div class="drawer">
+      <div class="dh"><span class="face">🎩</span>Butler</div>
+      <div class="tabs"><span>Chat</span><span>Today</span><span>Todo</span><span>Sessions</span><span class="on">Approve<span class="badge">4</span></span></div>
+      <div class="body">
+        <div class="filters"><span class="chip on">All<i>4</i></span><span class="chip">Feishu<i>2</i></span><span class="chip">Email<i>1</i></span><span class="chip">Jira<i>1</i></span></div>
+
+        <div class="sec">Needs your call · 2</div>
+        <div class="card needs">
+          <div class="ch"><span class="av" style="background:#0EA5E9">PS</span><div class="who"><b>Pod Of Sphere&Cube-New</b><span>周正林 · @你</span></div><span class="src">💬 Feishu</span><span class="ago">2h</span></div>
+          <div class="cb">
+            <div class="them">眉姐，今天和 PRCBU（宋妮、笑莹）讨论了 sphere-new SOW 模块的改动需求，6 条优化方向…<span class="more">More</span></div>
+            <div class="mine sent"><span class="lab">✓ Butler already sent</span>收到，纪要已看过。FAE-1446 建议合并筛选项… 其余已转告 Megan，稍后回复。</div>
+            <div class="call">⚖️<span><b>Your call</b> · 这批 SOW 改动是否接受进 P4、优先级和排期怎么定</span></div>
+          </div>
+          <div class="cf"><button class="p">Reply</button><button class="g">💬 Discuss</button><button class="g">＋ Todo</button><span class="sp"></span><button class="g x">Dismiss</button></div>
+        </div>
+        <div class="card needs">
+          <div class="ch"><span class="av" style="background:#F97316">A</span><div class="who"><b>Ana</b><span>Price list · ana@c.com</span></div><span class="src">✉️ Email</span><span class="ago">5h</span></div>
+          <div class="cb">
+            <div class="them">Hi Mei, can you send the 2027 price list?</div>
+            <div class="call">⚖️<span><b>Butler asks</b> · Which prices can I share?</span></div>
+          </div>
+          <div class="cf"><input style="flex:1;height:28px;font-size:12px;padding:0 9px;border-radius:8px;border:1px solid var(--line);background:#fff" placeholder="Answer Butler — it writes the reply"><button class="p">Write</button><button class="g">💬</button><button class="g x">✕</button></div>
+        </div>
+
+        <div class="sec">Ready to send · 2</div>
+        <div class="card ready">
+          <div class="ch"><span class="av" style="background:#10B981">DV</span><div class="who"><b>Daniel Vargas Millan</b><span>Direct message</span></div><span class="src">💬 Feishu</span><span class="ago">20m</span></div>
+          <div class="cb">
+            <div class="them">On another topic, I have a requirement from Claro: they need the roaming CDRs split by country every Monday…<span class="more">More</span></div>
+            <div class="mine"><span class="lab">Butler's reply · click to edit</span>Thanks Daniel — noted. I'll check with Megan on the weekly split and come back to you.</div>
+          </div>
+          <div class="cf"><button class="p">Send <kbd>⌘↵</kbd></button><button class="g">💬 Discuss</button><button class="g">＋ Todo</button><span class="sp"></span><button class="g x">Dismiss</button></div>
+        </div>
+        <div class="card ready">
+          <div class="ch"><span class="av" style="background:#7C3AED">🎫</span><div class="who"><b>P4-6926</b><span>In analysis 21 days · asks the requester</span></div><span class="src">🎫 Jira</span><span class="ago">1d</span></div>
+          <div class="cb">
+            <div class="jira"><span class="key">P4-6926 ↗</span><span class="st">需求分析</span></div>
+            <div class="mine"><span class="lab">Comment · click to edit</span>请补充：谁在什么场景下用？期望结果和验收标准是什么？截止时间？</div>
+          </div>
+          <div class="cf"><button class="p">Comment <kbd>⌘↵</kbd></button><button class="g">💬 Discuss</button><button class="g">＋ Todo</button><span class="sp"></span><button class="g x">Dismiss</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

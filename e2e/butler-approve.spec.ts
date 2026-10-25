@@ -78,11 +78,22 @@ test('a card can go to the Butler chat instead of replying', async () => {
 
 test('a card whose facts went out shows what was sent and what is your call; Reply opens an empty box', async () => {
   const c = page.getByLabel('Reply: Pod · 这批 SOW 改动是否接受进 P4')
-  await expect(c.getByLabel('Your call')).toHaveText('Your call · 这批 SOW 改动是否接受进 P4、优先级怎么定')
+  await expect(c.getByLabel('Your call')).toContainText('Your call · 这批 SOW 改动是否接受进 P4、优先级怎么定')
   await c.getByText('Sent to them ✓').click()
   await expect(c.getByLabel('Already sent')).toContainText('FAE-1446 建议合并筛选项')
   await c.getByRole('button', { name: /^Reply Pod/ }).click()
   await expect(c.getByLabel('Reply', { exact: true })).toHaveValue('')
+})
+
+test('cards are grouped (needs your call / ready to send) and filter by source', async () => {
+  const p = page.getByRole('complementary', { name: 'Butler panel' })
+  await expect(p.getByRole('group', { name: 'Needs your call' })).toContainText('这批 SOW 改动是否接受进 P4')
+  await expect(p.getByRole('group', { name: 'Ready to send' })).toContainText('P4-6926')
+  await p.getByRole('radio', { name: /^Jira/ }).click()
+  await expect(p.getByLabel('Comment: P4-6926 · comment')).toBeVisible()
+  await expect(p.getByLabel('Reply: Daniel Vargas Millan · On another topic, I have a requirement f…')).toHaveCount(0)
+  await p.getByRole('radio', { name: /^All/ }).click()
+  await p.screenshot({ path: test.info().outputPath('approve-new.png') })
 })
 
 test('a Jira card links to its ticket', async () => {
