@@ -7,7 +7,9 @@ const pkg = JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf-8')
 
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()]
+    plugins: [externalizeDepsPlugin()],
+    // sessionInfoWorker.js runs next to index.js on a worker thread (sessionInfo.ts).
+    build: { rollupOptions: { input: { index: resolve(__dirname, 'src/main/index.ts'), sessionInfoWorker: resolve(__dirname, 'src/main/sessionInfoWorker.ts') } } }
   },
   preload: {
     plugins: [externalizeDepsPlugin()]
