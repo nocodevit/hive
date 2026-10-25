@@ -192,7 +192,8 @@ import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
 import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage, chatEventBus } from './chat'
-import { getPrevSessionInfo } from './chat-recent-sessions'
+import type { getPrevSessionInfo } from './chat-recent-sessions'
+import { prevSessionInfo } from './sessionInfo'
 import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
 import { readOpenChats, writeOpenChats, buildUnclosedRows, lastUserText } from './openChats'
 import { createFeishuAuth, relayUrl, RELAY_TIMEOUT_MS } from './feishuAuth'
@@ -851,7 +852,7 @@ async function unclosedDetail(rec: { agentId: string; cwd: string; since: number
     if (log) lastTask = lastUserText(readLogTailLines(log))
   } catch { /* log unreadable: show the row without a task */ }
   let prev: Awaited<ReturnType<typeof getPrevSessionInfo>> | null = null
-  try { prev = rec.cwd ? await getPrevSessionInfo(rec.cwd, `chat-${rec.agentId}`) : null } catch { /* no session on disk */ }
+  try { prev = rec.cwd ? await prevSessionInfo(rec.cwd, `chat-${rec.agentId}`) : null } catch { /* no session on disk */ }
   return {
     lastTask,
     lastActiveMs: prev?.lastActiveMs || rec.since,

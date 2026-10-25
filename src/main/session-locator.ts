@@ -20,7 +20,8 @@
 // ran under (so resume can spawn claude in the RIGHT place). All file-system
 // roots are parameters so the logic is unit-testable against temp dirs.
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { headLines, tailLines } from './fileSlices'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -86,7 +87,8 @@ export function locateSessionBucket(
     if (!existsSync(file)) continue
     let cwd: string | null = null
     try {
-      cwd = recordedCwdFromSession(readFileSync(file, 'utf8').split('\n'))
+      // The cwd is recorded on the first lines.
+      cwd = recordedCwdFromSession(headLines(file, 256 * 1024))
     } catch {
       /* unreadable — keep looking */
     }
@@ -136,7 +138,8 @@ export function resolveAgentSession(
   if (!log) return null
   let sid: string | null = null
   try {
-    sid = latestSessionIdFromHiveLog(readFileSync(log, 'utf8').split('\n'))
+    // The latest session id is near the end of the log.
+    sid = latestSessionIdFromHiveLog(tailLines(log, 1024 * 1024))
   } catch {
     return null
   }

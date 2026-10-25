@@ -10,6 +10,8 @@ import { queryUsageViaCcusage, queryUsagePctViaPty } from './chat-usage-query'
 import { UsageCache, usageCacheFilename } from './usage-cache'
 import { ContextSnapshot, parseContextMarkdown } from './chat-context-parser'
 import { RecentSession, PrevSessionInfo, getRecentSessions, getPrevSessionInfo } from './chat-recent-sessions'
+import { prevSessionInfo, recentSessions } from './sessionInfo'
+import { linesBefore, tailLines } from './fileSlices'
 import { shouldAutoAllow } from './session-permissions'
 import { perRequestContextTokens, contextTokensFromResultUsage } from '../shared/context-size'
 import { addOpenChat, removeOpenChat } from './openChats'
@@ -68,6 +70,7 @@ interface ChatSession {
   // from and the starting line index. Clicking the button walks the
   // cursor back a batch and emits earlier events with _prepend:true.
   replayFile?: string
+  /** Byte position the replayed lines start at in replayFile (0 = nothing older). */
   replayedFrom?: number
   // session_id captured from the system/init event so we can --resume
   // after round-tripping through the interactive TUI (/remote-control).
@@ -395,10 +398,9 @@ function replaySessionHistory(sessionId: string, cwd: string | undefined, limit 
       .sort((a, b) => b.m - a.m)
     if (!files.length) return
     const latest = join(dir, files[0].f)
-    const lines = readFileSync(latest, 'utf8').split('\n').filter(Boolean)
-    const startIdx = Math.max(0, lines.length - limit)
-    for (let i = startIdx; i < lines.length; i++) {
-      const line = lines[i]
+    // Only the newest `limit` lines, read from the end: session files run to 100MB+.
+    const { lines, start: startIdx } = linesBefore(latest, statSync(latest).size, limit)
+    for (const line of lines) {
       try {
         const ev = JSON.parse(line)
         const mapped = mapReplayEvent(ev)
@@ -416,8 +418,7 @@ function replaySessionHistory(sessionId: string, cwd: string | undefined, limit 
       subtype: 'history_replayed',
       session_id: sessionId,
       file: latest,
-      count: lines.length - startIdx,
-      total: lines.length,
+      count: lines.length,
       hasOlder: startIdx > 0
     })
   } catch {}
@@ -434,12 +435,12 @@ export function loadOlderHistory(sessionId: string, batch = DEFAULT_REPLAY_LIMIT
   if (!session?.replayFile || session.replayedFrom === undefined) return { loaded: 0, hasOlder: false }
   if (session.replayedFrom === 0) return { loaded: 0, hasOlder: false }
   try {
-    const lines = readFileSync(session.replayFile, 'utf8').split('\n').filter(Boolean)
-    const newStart = Math.max(0, session.replayedFrom - batch)
+    // replayedFrom is a byte position: the `batch` lines just before it, read backward.
+    const { lines, start: newStart } = linesBefore(session.replayFile, session.replayedFrom, batch)
     const events: any[] = []
-    for (let i = newStart; i < session.replayedFrom; i++) {
+    for (const line of lines) {
       try {
-        const ev = JSON.parse(lines[i])
+        const ev = JSON.parse(line)
         const mapped = mapReplayEvent(ev)
         if (mapped) events.push(mapped)
       } catch {}
@@ -1271,7 +1272,8 @@ function readContextPctFromJsonl(cwd: string | undefined, sid: string): number |
     const slug = claudeProjectSlug(cwd)
     const file = join(homedir(), '.claude', 'projects', slug, `${sid}.jsonl`)
     if (!existsSync(file)) return null
-    const lines = readFileSync(file, 'utf8').split('\n').filter(Boolean)
+    // The newest usage / result are near the end: read the tail only.
+    const lines = tailLines(file, 4 * 1024 * 1024)
     // Walk backward for two independent facts:
     //
     //   tokens — from the newest ASSISTANT event's usage, which is
@@ -1692,8 +1694,9 @@ export function registerChatIpc() {
     }
     return smartStartChat(id, { cwd, agent, name, continueSession, rebaseOnStart, resumeSid, forkSession })
   })
-  ipcMain.handle('chat:getPrevSessionInfo', (_e, { cwd, chatId }) => getPrevSessionInfo(cwd, chatId))
-  ipcMain.handle('chat:getRecentSessions', (_e, { cwd, limit }) => getRecentSessions(cwd, limit ?? 5))
+  // Off the main thread (sessionInfo.ts): past sessions are big files.
+  ipcMain.handle('chat:getPrevSessionInfo', (_e, { cwd, chatId }) => prevSessionInfo(cwd, chatId))
+  ipcMain.handle('chat:getRecentSessions', (_e, { cwd, limit }) => recentSessions(cwd, limit ?? 5))
   ipcMain.handle('chat:scrapeContext', (_e, { id, force }) => scrapeContextLive(id, !!force))
   ipcMain.handle('chat:send', (_e, { id, text }) => sendUserMessage(id, text))
   // Sent on the owner's behalf from elsewhere in Hive (Discuss in Butler): shown as their own message.
