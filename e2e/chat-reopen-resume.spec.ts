@@ -212,6 +212,8 @@ test.describe('Chat reopen → Resume → send', () => {
 
     // ── 5. history loads from the local JSONL replay ───────────────────
     await expect(page.locator('text=mark-pre-restart-AAA').first()).toBeVisible({ timeout: 30000 })
+    // the "Loading last session…" loader is gone once the history is on screen
+    await expect(page.getByRole('status', { name: 'Loading last session' })).toHaveCount(0)
 
     // ── 6. THE BUG CHECK: send a new turn, a reply MUST arrive ─────────
     try {

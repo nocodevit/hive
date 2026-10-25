@@ -388,15 +388,17 @@ async function getSharedUsage(scrapeCwd?: string) {
 }
 
 function replaySessionHistory(sessionId: string, cwd: string | undefined, limit = DEFAULT_REPLAY_LIMIT) {
+  // Nothing on disk is still an answer: the chat's "Loading last session…" waits for this event.
+  const none = () => broadcast(`chat:event:${sessionId}`, { type: 'system', subtype: 'history_replayed', session_id: sessionId, count: 0, hasOlder: false })
   try {
     const slug = claudeProjectSlug(cwd || '')
     const dir = join(homedir(), '.claude', 'projects', slug)
-    if (!existsSync(dir)) return
+    if (!existsSync(dir)) return none()
     const files = readdirSync(dir)
       .filter(f => f.endsWith('.jsonl'))
       .map(f => ({ f, m: statSync(join(dir, f)).mtimeMs }))
       .sort((a, b) => b.m - a.m)
-    if (!files.length) return
+    if (!files.length) return none()
     const latest = join(dir, files[0].f)
     // Only the newest `limit` lines, read from the end: session files run to 100MB+.
     const { lines, start: startIdx } = linesBefore(latest, statSync(latest).size, limit)
@@ -421,7 +423,7 @@ function replaySessionHistory(sessionId: string, cwd: string | undefined, limit 
       count: lines.length,
       hasOlder: startIdx > 0
     })
-  } catch {}
+  } catch { none() }
 }
 
 /**
