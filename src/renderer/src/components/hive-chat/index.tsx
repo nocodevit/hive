@@ -441,6 +441,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     sid: string; model: string; contextSize: string; peakInputTokens: number; lastActiveMs: number; cwd: string
   } | null>(null)
   const [prevInfoLoaded, setPrevInfoLoaded] = useState(false)
+  // Resuming: a loader until the past turns are on screen (history_replayed / the session's init), at most 20s.
+  const [restoring, setRestoring] = useState(false)
+  const restoreTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const stopRestoring = () => { if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current); restoreTimerRef.current = null; setRestoring(false) }
   // Picked-mode opts buffer. launchSession stores the desired chat.start
   // arguments here and flips chooserMode → false in the same render. The
   // main useEffect watches chooserMode; on the false transition it wires
@@ -484,6 +488,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     // hands us an explicit sid; without one we still want a sensible
     // default (latest sid via -c, which behaves like our pre-picker code).
     const sid = chosenSid || prevInfo?.sid
+    if (mode !== 'new') {
+      setRestoring(true)
+      if (restoreTimerRef.current) clearTimeout(restoreTimerRef.current)
+      restoreTimerRef.current = setTimeout(() => setRestoring(false), 20_000)
+    }
     // Resume/compact/fork must spawn claude in the SAME cwd the session was
     // created under, or claude looks in the wrong ~/.claude/projects bucket
     // and reports "No conversation found". prevInfo.cwd carries the recovered
@@ -717,8 +726,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         // JSONL replay capped at DEFAULT_REPLAY_LIMIT; the backend flags
         // whether there are still older lines we can load on demand.
         if ((ev as any).hasOlder) setHasOlderOnDisk(true)
+        stopRestoring()
         return
       }
+      if (ev.type === 'system' && (ev as any).subtype === 'init') stopRestoring()
       // Subagent events: when a Task tool spawns a subagent, claude's
       // stream emits the subagent's user/assistant turns into the
       // parent stream too, with `parent_tool_use_id` pointing at the
@@ -1842,6 +1853,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
          expands, pushing the input downward. Once the timeline's natural
          height exceeds the viewport, it shrinks + scrolls internally and
          the input pins to the viewport bottom. */}
+      {restoring && timeline.length === 0 && <LoadingLastSession />}
       <div ref={scrollRef} style={{
         flex: '1 1 auto',          // fill, so the composer pins to the bottom
         minHeight: 0,              // enables shrinking inside flex parent
@@ -3404,6 +3416,20 @@ export function chooserKeyMode(
  *
  * Keyboard: ↵ fires the focused button; 1-4 picks by index.
  */
+/** Spinner + "Loading last session…": while the chooser reads the past session, and after Resume until it is on screen. */
+function LoadingLastSession({ inline = false }: { inline?: boolean }) {
+  return (
+    <div role="status" aria-label="Loading last session" style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+      padding: inline ? 0 : '28px 0', color: CHAT.muted, fontFamily: FONT_PROSE, fontSize: 12.5
+    }}>
+      <style>{`@keyframes hive-spin { to { transform: rotate(360deg); } }`}</style>
+      <span aria-hidden style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${CHAT.muted}`, borderTopColor: 'transparent', animation: 'hive-spin .8s linear infinite' }} />
+      Loading last session…
+    </div>
+  )
+}
+
 export function StartChooser({
   cwd, loaded, info, onPick, active = true
 }: {
@@ -3563,8 +3589,8 @@ export function StartChooser({
         {!loaded ? (
           <div style={{
             background: CRUSH.Pepper, border: `1px solid ${CRUSH.Charcoal}`, borderRadius: 14,
-            padding: 18, textAlign: 'center', color: CRUSH.Squid, fontSize: 11, marginBottom: 18
-          }}>scanning ~/.claude/projects…</div>
+            padding: 18, marginBottom: 18
+          }}><LoadingLastSession inline /></div>
         ) : hasPrev ? (
           <div style={{
             display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)',
