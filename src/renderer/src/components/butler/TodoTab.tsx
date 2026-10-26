@@ -8,26 +8,34 @@ const readPref = (): { group: GroupBy; sort: SortBy } => {
 }
 const sel = 'px-1.5 py-0.5 rounded-md bg-bg-primary border border-border text-[11.5px] text-text-secondary'
 
-/** One todo: a line; opened, its whole story (who did what, when) and what to do next. */
+const primary = 'h-7 px-3 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold inline-flex items-center shadow-sm cursor-pointer'
+const ghost = 'h-7 px-2 rounded-lg text-[12px] text-text-secondary hover:bg-bg-hover inline-flex items-center gap-1 cursor-pointer'
+
+/** One todo: a line with Discuss and View; View opens its whole story (who did what, when) as a card. */
 function Item({ t, onDiscuss, onCard }: { t: TodoView; onDiscuss?: OnDiscuss; onCard: () => void }) {
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
   const closed = t.status !== 'open'
   const set = (s: 'open' | 'done' | 'dropped') => { void window.api.todos.setStatus(t.id, s) }
+  const sub = t.events[0]?.text !== t.title ? t.events[0]?.text : `${t.createdBy === 'owner' ? 'You' : 'Butler'} · ${whenShort(t.createdAt)}`
   return (
-    <div className="rounded-xl bg-bg-primary" aria-label={`Todo: ${t.title}`}>
-      <div className="flex items-center gap-2.5 px-2.5 py-2 text-[13px]">
+    <div className={`rounded-xl bg-bg-primary ${open ? 'ring-1 ring-border' : ''}`} aria-label={`Todo: ${t.title}`}>
+      <div className="flex items-center gap-2.5 pl-2.5 pr-1.5 py-1.5 text-[13px]">
         <input type="checkbox" checked={t.status === 'done'} onChange={e => set(e.target.checked ? 'done' : 'open')} aria-label={`Done: ${t.title}`} className="accent-accent cursor-pointer" />
-        <button onClick={() => setOpen(o => !o)} aria-expanded={open} className="flex-1 min-w-0 text-left cursor-pointer">
+        <div className="flex-1 min-w-0">
           <span className={`block truncate ${closed ? 'text-text-muted line-through' : 'text-text-primary'}`}>{t.title}</span>
-          <span className="block text-[11px] text-text-muted truncate">{t.events[0]?.text !== t.title ? t.events[0]?.text : `${t.createdBy === 'owner' ? 'You' : 'Butler'} · ${whenShort(t.createdAt)}`}</span>
-        </button>
+          <span className="block text-[11px] text-text-muted truncate">{sub}</span>
+        </div>
         <span className="px-1.5 py-0.5 rounded-md bg-bg-secondary text-[10px] font-semibold text-text-secondary">{SOURCE_LABEL[t.source]}</span>
         {t.due && <span className={`font-mono text-[11px] ${isOverdue(t) ? 'text-status-waiting' : 'text-text-muted'}`}>{t.due.slice(5)}</span>}
+        {onDiscuss && <DiscussButton label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
+        <button onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`View ${t.title}`} className={`${ghost} ${open ? 'bg-bg-hover text-text-primary' : ''}`}>
+          View <span className={`text-[10px] transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>›</span>
+        </button>
       </div>
       {open && (
-        <div className="px-2.5 pb-2.5">
-          <ol className="ml-[7px] border-l border-border pl-3.5 flex flex-col gap-1.5" aria-label="History">
+        <div className="border-t border-border">
+          <ol className="mx-2.5 mt-2.5 ml-[17px] border-l border-border pl-3.5 flex flex-col gap-1.5" aria-label="History">
             {t.events.map((e, i) => (
               <li key={i} className="relative text-[12px] text-text-secondary leading-snug">
                 <span className={`absolute -left-[19px] top-[5px] w-[7px] h-[7px] rounded-full ${e.who === 'owner' ? 'bg-accent' : e.kind === 'status' ? 'bg-status-working' : 'bg-text-muted/50'}`} aria-hidden />
@@ -38,14 +46,14 @@ function Item({ t, onDiscuss, onCard }: { t: TodoView; onDiscuss?: OnDiscuss; on
               </li>
             ))}
           </ol>
-          <div className="mt-2 flex flex-wrap items-center gap-1.5">
-            {!closed && <button onClick={() => set('done')} className="px-2.5 py-1 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold cursor-pointer">Done</button>}
-            {onDiscuss && <DiscussButton label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
-            {!closed ? <button onClick={() => set('dropped')} className="px-2.5 py-1 rounded-lg bg-bg-secondary text-[12px] text-text-muted cursor-pointer">Drop</button>
-              : <button onClick={() => set('open')} className="px-2.5 py-1 rounded-lg bg-bg-secondary text-[12px] text-text-muted cursor-pointer">Reopen</button>}
-            <input value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note…" aria-label={`Note for ${t.title}`}
-              onKeyDown={e => { if (e.key === 'Enter' && note.trim()) { void window.api.todos.note(t.id, note.trim()); setNote('') } }}
-              className="flex-1 min-w-[120px] px-2 py-1 rounded-lg bg-bg-secondary border border-border text-[12px] text-text-primary focus:outline-none focus:border-accent" />
+          <input value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note… ↵" aria-label={`Note for ${t.title}`}
+            onKeyDown={e => { if (e.key === 'Enter' && note.trim()) { void window.api.todos.note(t.id, note.trim()); setNote('') } }}
+            className="mx-2.5 mt-2.5 w-[calc(100%-20px)] h-7 px-2.5 rounded-lg bg-bg-secondary border border-border text-[12px] text-text-primary focus:outline-none focus:border-accent" />
+          <div className="mt-2.5 flex items-center gap-1 px-2.5 py-2 border-t border-border bg-bg-primary/40 rounded-b-xl">
+            {!closed ? <button onClick={() => set('done')} aria-label={`Mark ${t.title} done`} className={primary}>Done</button>
+              : <button onClick={() => set('open')} aria-label={`Reopen ${t.title}`} className={primary}>Reopen</button>}
+            <span className="flex-1" />
+            {!closed && <button onClick={() => set('dropped')} aria-label={`Drop ${t.title}`} className={`${ghost} text-text-muted`}>Drop</button>}
           </div>
         </div>
       )}
