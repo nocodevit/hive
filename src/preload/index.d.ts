@@ -271,6 +271,7 @@ declare global {
         liveAgents: () => Promise<string[]>
         send: (id: string, text: string) => Promise<{ ok: boolean; error?: string }>
         sendAsUser: (id: string, text: string) => Promise<{ ok: boolean; error?: string }>
+        discussWith: (agentId: string, text: string) => Promise<{ ok: boolean; error?: string }>
         respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny', input?: Record<string, unknown>, denyMessage?: string) => Promise<{ ok: boolean; error?: string }>
         allowToolForSession: (id: string, toolName: string) => Promise<{ ok: boolean; error?: string }>
         stop: (id: string) => Promise<{ ok: boolean }>

@@ -6,6 +6,7 @@ import { ApprovalHistory, ApprovalsList, type ApprovalCard } from './ApprovalsLi
 import { openSkill } from '../../lib/butler-skills'
 import { TodayTab } from './TodayTab' // [butler:mail-routines]
 import { TodoTab } from './TodoTab'
+import type { DiscussTarget } from './DiscussButton'
 import { ButlerGuide } from './ButlerGuide'
 
 export type ButlerMode = 'drawer' | 'page'
@@ -46,7 +47,9 @@ const DOT = { working: 'bg-status-working', waiting: 'bg-status-waiting', off: '
  */
 export function ButlerPanel(p: Props) {
   const [tab, setTab] = useState<Tab>('chat')
-  const discuss = (text: string) => {
+  const discuss = (text: string, to?: DiscussTarget) => {
+    // To an agent: Hive resumes its chat if it is off, sends the context as the owner, and opens it.
+    if (to) { void window.api.chat.discussWith(to.agentId, text); p.onOpenAgent(to); return }
     setTab('chat')
     // Shown as the owner's own message; the chat may still be starting, so try for a few seconds.
     void (async () => {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { DiscussButton, type OnDiscuss } from './DiscussButton'
 import { groupTodos, isOverdue, SOURCE_LABEL, sortTodos, todoDiscussText, whenShort, type GroupBy, type SortBy, type TodoView } from '../../lib/butler-todos'
 
 const PREF = 'hive:todo-view'
@@ -8,7 +9,7 @@ const readPref = (): { group: GroupBy; sort: SortBy } => {
 const sel = 'px-1.5 py-0.5 rounded-md bg-bg-primary border border-border text-[11.5px] text-text-secondary'
 
 /** One todo: a line; opened, its whole story (who did what, when) and what to do next. */
-function Item({ t, onDiscuss, onCard }: { t: TodoView; onDiscuss?: (text: string) => void; onCard: () => void }) {
+function Item({ t, onDiscuss, onCard }: { t: TodoView; onDiscuss?: OnDiscuss; onCard: () => void }) {
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
   const closed = t.status !== 'open'
@@ -39,7 +40,7 @@ function Item({ t, onDiscuss, onCard }: { t: TodoView; onDiscuss?: (text: string
           </ol>
           <div className="mt-2 flex flex-wrap items-center gap-1.5">
             {!closed && <button onClick={() => set('done')} className="px-2.5 py-1 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold cursor-pointer">Done</button>}
-            {onDiscuss && <button onClick={() => onDiscuss(todoDiscussText(t))} className="px-2.5 py-1 rounded-lg bg-bg-secondary text-[12px] font-semibold text-text-primary cursor-pointer">💬 Chat</button>}
+            {onDiscuss && <DiscussButton label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
             {!closed ? <button onClick={() => set('dropped')} className="px-2.5 py-1 rounded-lg bg-bg-secondary text-[12px] text-text-muted cursor-pointer">Drop</button>
               : <button onClick={() => set('open')} className="px-2.5 py-1 rounded-lg bg-bg-secondary text-[12px] text-text-muted cursor-pointer">Reopen</button>}
             <input value={note} onChange={e => setNote(e.target.value)} placeholder="Add a note…" aria-label={`Note for ${t.title}`}
@@ -53,7 +54,7 @@ function Item({ t, onDiscuss, onCard }: { t: TodoView; onDiscuss?: (text: string
 }
 
 /** Butler › Todo: open ones grouped (created / source / due), Completed below with their history. */
-export function TodoTab({ visible, onDiscuss, onCard }: { visible: boolean; onDiscuss?: (text: string) => void; onCard: () => void }) {
+export function TodoTab({ visible, onDiscuss, onCard }: { visible: boolean; onDiscuss?: OnDiscuss; onCard: () => void }) {
   const [list, setList] = useState<TodoView[]>([])
   const [title, setTitle] = useState('')
   const [due, setDue] = useState('')

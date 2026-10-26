@@ -47,6 +47,12 @@ test.beforeAll(async () => {
       { chatId: 'oc_2', question: 'SOW 模块改动需求 6 条', topic: '这批 SOW 改动是否接受进 P4、优先级怎么定', sent: '收到，纪要已看过。FAE-1446 建议合并筛选项。\n其余已转告 Megan，稍后回复。' }, 'Reply'),
     card('jira-c', 'jira.comment', 'P4-6926 · comment', 'Jira · in analysis 21 days', '请补充验收标准？', { key: 'P4-6926' }, 'Comment')
   ]))
+  const proj = join(ROOT, 'proj-psle')
+  mkdirSync(proj, { recursive: true })
+  writeFileSync(join(HIVE_DATA_DIR, 'data.json'), JSON.stringify({
+    projects: [{ id: 'p1', name: 'PSLE', path: proj }],
+    agents: [{ id: 'a1', projectId: 'p1', name: 'Planner' }]
+  }))
   writeFileSync(join(BUTLER, 'jira-base.txt'), 'https://jira.example.com\n')
   execSync('npx electron-vite build', { cwd: PROJECT_ROOT, stdio: 'pipe', timeout: 60000 })
   app = await electron.launch({
@@ -69,7 +75,7 @@ test('a Feishu card shows their whole message', async () => {
 })
 
 test('a card can go to the Butler chat instead of replying', async () => {
-  await page.getByLabel('Reply: Daniel Vargas Millan · On another topic, I have a requirement f…').getByRole('button', { name: /^Discuss/ }).click()
+  await page.getByLabel('Reply: Daniel Vargas Millan · On another topic, I have a requirement f…').getByRole('button', { name: /^Discuss (?!.*with…$)/ }).click()
   await expect(page.getByRole('tab', { name: /Chat/ })).toHaveAttribute('aria-selected', 'true')
   // It shows in the chat as the owner's own message.
   await expect(page.getByRole('complementary', { name: 'Butler panel' }).getByText('Help me think this through.', { exact: false }).first()).toBeVisible({ timeout: 15000 })
@@ -107,7 +113,7 @@ test('a question that sat behind Send is now a needs-you card with no Send', asy
   await expect(gary.getByLabel('Butler asks')).toContainText("Gary is asking you to study Telecall's new Claro roaming")
   await expect(gary.getByRole('button', { name: /^Send/ })).toHaveCount(0)
   await expect(gary.getByRole('button', { name: /^Edit/ })).toHaveCount(0)
-  await expect(gary.getByRole('button', { name: /^Discuss/ })).toBeVisible()
+  await expect(gary.getByRole('button', { name: /^Discuss (?!.*with…$)/ })).toBeVisible()
   await expect(gary.getByLabel('Your answer to Butler')).toBeVisible()
   const saved = JSON.parse(readFileSync(join(BUTLER, 'approvals.json'), 'utf8')).find((x: { id: string }) => x.id === 'old-q')
   expect(saved).toMatchObject({ kind: 'email.decide', draft: '', action: 'Discuss' })
@@ -133,9 +139,19 @@ test('a dismissed card leaves the queue and shows in History with its reply', as
 
 test('a past card goes to the Butler chat with its context', async () => {
   const row = page.getByRole('group', { name: 'Approve history' }).getByRole('group').filter({ hasText: 'Lin · UAT down?' })
-  await row.getByRole('button', { name: 'Discuss Lin · UAT down?' }).click()
+  await row.getByRole('button', { name: 'Discuss Lin · UAT down?', exact: true }).click()
   await expect(page.getByRole('tab', { name: /Chat/ })).toHaveAttribute('aria-selected', 'true')
   await page.getByRole('tab', { name: /Approve/ }).click()
+})
+
+test('Discuss ▾ lists Butler first, then agents by project', async () => {
+  const ana = page.getByLabel('Needs you: Ana · Price list')
+  await ana.getByRole('button', { name: 'Discuss Ana · Price list with…' }).click()
+  const menu = page.getByRole('menu', { name: 'Discuss with' })
+  await expect(menu.getByRole('menuitem').first()).toContainText('Butler')
+  await expect(menu.getByRole('group', { name: 'PSLE' }).getByRole('menuitem', { name: 'Discuss with Planner' })).toContainText('resumes')
+  await page.keyboard.press('Escape')
+  await expect(menu).toHaveCount(0)
 })
 
 test('needs-you card: what it wants + question; Discuss opens the Butler chat', async () => {
@@ -144,6 +160,6 @@ test('needs-you card: what it wants + question; Discuss opens the Butler chat', 
   await expect(ana.getByLabel('Butler asks')).toContainText('Which prices can I share?')
   await expect(ana.getByRole('button', { name: 'Write reply' })).toBeDisabled()
   await page.screenshot({ path: test.info().outputPath('approve.png') })
-  await ana.getByRole('button', { name: /^Discuss/ }).click()
+  await ana.getByRole('button', { name: /^Discuss (?!.*with…$)/ }).click()
   await expect(page.getByRole('tab', { name: /Chat/ })).toHaveAttribute('aria-selected', 'true')
 })

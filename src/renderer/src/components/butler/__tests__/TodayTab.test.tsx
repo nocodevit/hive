@@ -119,7 +119,7 @@ describe('TodayTab', () => {
     const onDiscuss = vi.fn()
     render(<TodayTab visible onDiscuss={onDiscuss} />)
     fireEvent.click(await screen.findByRole('button', { name: 'Discuss Reply Lin' }))
-    expect(onDiscuss).toHaveBeenCalledWith(expect.stringContaining('- Reply Lin'))
+    expect(onDiscuss).toHaveBeenCalledWith(expect.stringContaining('- Reply Lin'), undefined)
     expect(onDiscuss.mock.calls[0][0]).toContain('a reply draft is waiting in Approve')
   })
 })

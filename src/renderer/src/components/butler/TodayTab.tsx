@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { DiscussButton, type OnDiscuss } from './DiscussButton'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { ROUTINE_IDS, ROUTINE_NAME, type JournalDay, type RoutinesView } from '../../../../shared/butler-routines'
@@ -51,7 +52,7 @@ function Row({ icon, label, line, children }: { icon: string; label: string; lin
 }
 
 /** Butler → Today: one day at a time — status chips, the next meeting, the plan, then folded rows. */
-export function TodayTab({ visible, onDiscuss }: { visible: boolean; onDiscuss?: (text: string) => void }) {
+export function TodayTab({ visible, onDiscuss }: { visible: boolean; onDiscuss?: OnDiscuss }) {
   const [today, setToday] = useState<string | null>(null)
   const [date, setDate] = useState<string | null>(null)
   const [day, setDay] = useState<JournalDay | null>(null)
@@ -185,8 +186,8 @@ export function TodayTab({ visible, onDiscuss }: { visible: boolean; onDiscuss?:
             </label>
             {it.source && <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${TAG[it.source].cls}`}>{TAG[it.source].text}</span>}
             {onDiscuss && (
-              <button onClick={() => onDiscuss(planDiscussText(it, date))} aria-label={`Discuss ${it.text}`} title="Discuss in the Butler chat"
-                className="w-6 h-6 rounded-md text-[12px] text-text-muted opacity-0 group-hover:opacity-100 focus-visible:opacity-100 hover:bg-bg-hover cursor-pointer">💬</button>
+              <DiscussButton compact label={`Discuss ${it.text}`} text={() => planDiscussText(it, date)} onDiscuss={onDiscuss}
+                className="opacity-0 group-hover:opacity-100 focus-within:opacity-100" />
             )}
             {!it.done && (
               <button onClick={() => ignore(it.index, it.text)} aria-label={`Ignore ${it.text}`}
