@@ -57,6 +57,7 @@ declare global {
       }
       dialog: {
         selectFolder: (title?: string) => Promise<string | null>
+        selectFiles: () => Promise<string[]>
       }
       data: {
         load: () => Promise<Record<string, unknown>>

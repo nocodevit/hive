@@ -153,6 +153,57 @@ test('a cloud failure is shown; a helper that dies resets the button', async () 
   await page.getByRole('button', { name: 'Stop listening' }).click()
 })
 
+test('hold 🎙: the pair becomes a recording bar with a waveform; let go keeps the words, let go on ✕ drops them', async () => {
+  const input = page.getByTestId('hive-chat-input')
+  await input.fill('')
+  const before = (await calls()).length
+  const mic = page.getByRole('button', { name: 'Voice input' })
+  const box = (await mic.boundingBox())!
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.down()
+  const bar = page.getByRole('group', { name: 'Recording' })
+  await expect(bar).toBeVisible()
+  await expect(bar.getByRole('button', { name: 'Cancel recording' })).toBeVisible()
+  await expect.poll(async () => (await calls()).slice(before).map(c => c.op)).toEqual(['start'])
+  for (const db of [-55, -30, -18, -25]) await line(`level:${db}`)
+  await expect(bar.getByRole('img', { name: 'Live waveform' })).toBeVisible()
+  await expect(page.getByText('Release to finish')).toBeVisible()
+  await line('final:按住说的话')
+  await expect(input).toHaveValue('按住说的话')
+  await page.mouse.up()
+  await expect(bar).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Voice input' })).toBeVisible()
+  expect((await calls()).slice(before).map(c => c.op)).toEqual(['start', 'stop'])
+
+  // Hold again, slide onto ✕, let go: listening stops and nothing more lands.
+  const mark = (await calls()).length
+  await page.getByRole('button', { name: 'Voice input' }).hover()
+  await page.mouse.down()
+  await expect(bar).toBeVisible()
+  await line('partial:不要了')
+  const x = (await bar.getByRole('button', { name: 'Cancel recording' }).boundingBox())!
+  await page.mouse.move(x.x + x.width / 2, x.y + x.height / 2, { steps: 4 })
+  await expect(page.getByText('Release to cancel')).toBeVisible()
+  await page.mouse.up()
+  await expect(bar).toHaveCount(0)
+  await expect.poll(async () => (await calls()).slice(mark).map(c => c.op)).toEqual(['start', 'stop'])
+  await line('final:不要了')
+  await expect(input).toHaveValue('按住说的话')
+  await expect(page.getByLabel('Hearing')).toBeHidden()
+})
+
+test('＋ attaches files: their paths go into the input', async () => {
+  await app.evaluate(({ ipcMain }) => {
+    try { ipcMain.removeHandler('dialog:selectFiles') } catch {}
+    ipcMain.handle('dialog:selectFiles', async () => ['/tmp/a.png', '/tmp/my notes.md'])
+  })
+  const input = page.getByTestId('hive-chat-input')
+  await input.fill('看下')
+  await page.getByRole('button', { name: 'Attach files' }).click()
+  await expect(input).toHaveValue('看下 /tmp/a.png "/tmp/my notes.md" ')
+  await input.fill('')
+})
+
 test('auto-send: counts down after the last sentence, cancels on speech or typing, then sends and keeps listening', async () => {
   const input = page.getByTestId('hive-chat-input')
   const countdown = page.getByRole('button', { name: /秒后发送/ })

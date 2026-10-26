@@ -39,13 +39,16 @@ describe.skipIf(process.platform !== 'darwin' || !existsSync(HELPER))('hive-spee
   const made: string[] = []
   afterEach(() => { for (const p of made.splice(0)) rmSync(p, { recursive: true, force: true }) })
 
+  let lastLevels: number[] = []
   let lastKinds: string[] = []
   function run(spans: Array<[number, number]>): string[] {
     const dir = mkdtempSync(join(tmpdir(), 'hive-speech-test-'))
     made.push(dir)
     const input = join(dir, 'in.wav')
     writeFileSync(input, synth(spans))
-    const lines = execFileSync(HELPER, ['--file', input], { encoding: 'utf-8' }).split('\n').filter(Boolean)
+    const all = execFileSync(HELPER, ['--file', input], { encoding: 'utf-8' }).split('\n').filter(Boolean)
+    lastLevels = all.filter(l => l.startsWith('level:')).map(l => Number(l.slice(6)))
+    const lines = all.filter(l => !l.startsWith('level:'))
     lastKinds = lines.map(l => l.slice(0, l.indexOf(':')))
     const paths = lines.filter(l => l.startsWith('audio:')).map(l => l.slice(6).split('\t')[0])
     made.push(...paths)
@@ -62,6 +65,13 @@ describe.skipIf(process.platform !== 'darwin' || !existsSync(HELPER))('hive-spee
     expect(secondsOf(paths[1])).toBeLessThan(3.3)
     // Each utterance is announced when it opens and answered when it ends.
     expect(lastKinds).toEqual(['speaking', 'audio', 'speaking', 'audio'])
+  })
+
+  it('reports loudness about every 50 ms for the waveform', () => {
+    run([[1, -43], [1, -25]])
+    expect(lastLevels.length).toBeGreaterThan(30)
+    expect(lastLevels.length).toBeLessThan(50)
+    expect(Math.max(...lastLevels)).toBeGreaterThan(Math.min(...lastLevels) + 10)
   })
 
   it('still finds the pause in a noisy room (regression: floor stuck, everything read as speech)', () => {
