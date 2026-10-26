@@ -225,6 +225,9 @@ export default function App() {
         if (text) window.dispatchEvent(new CustomEvent('hive:voice-final', { detail: { agentId, text } }))
         voiceEvent(agentId, { kind: 'final', text })
         setSpeechPartial('')
+      } else if (line.startsWith('level:')) {
+        // Loudness for the hold-to-talk waveform; an event, not state — it comes 20× a second.
+        window.dispatchEvent(new CustomEvent('hive:voice-level', { detail: Number(line.slice(6)) }))
       } else if (line.startsWith('partial:')) {
         setSpeechPartial(line.slice(8))
       } else if (line.startsWith('speaking:')) {
@@ -257,6 +260,25 @@ export default function App() {
   }
   const toggleVoiceRef = useRef(toggleVoice)
   toggleVoiceRef.current = toggleVoice
+  // Hold-to-talk released on ✕: stop listening and drop what was said (the
+  // transcript listener goes first, so the last sentence never lands).
+  const cancelVoice = async () => {
+    if (!isListening) return
+    voiceCleanupRef.current?.()
+    voiceCleanupRef.current = null
+    if (voiceAgentRef.current) voiceEvent(voiceAgentRef.current, { kind: 'stopped' })
+    voiceAgentRef.current = null
+    setIsListening(false)
+    setSpeechPartial('')
+    await window.api.speech.stop()
+  }
+  const cancelVoiceRef = useRef(cancelVoice)
+  cancelVoiceRef.current = cancelVoice
+  useEffect(() => {
+    const onCancel = () => { void cancelVoiceRef.current() }
+    window.addEventListener('hive:voice-cancel', onCancel)
+    return () => window.removeEventListener('hive:voice-cancel', onCancel)
+  }, [])
   useEffect(() => {
     const onToggle = (e: Event) => {
       toggleVoiceRef.current((e as CustomEvent<{ agentId: string }>).detail.agentId)

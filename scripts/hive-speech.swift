@@ -14,6 +14,7 @@ import AVFoundation
 //   audio:<wav path>\t<text>  that utterance finished: its recording, plus
 //                             the macOS transcript as a fallback
 //   dropped:                  that utterance was only noise; nothing follows
+//   level:<dB>                loudness every ~50 ms, for the live waveform
 // Every `speaking:` is answered by exactly one `audio:` or `dropped:`.
 //
 // Wake word (`--wake`) — always-on listening for "Hola Butler". An en-US
@@ -141,6 +142,7 @@ var lastTranscript = ""
 
 var levels: [(db: Double, ms: Double)] = []
 var levelsMs = 0.0
+var levelEmitMs = 0.0
 var inSpeech = false
 var pendingStartMs = 0.0
 var speechMs = 0.0
@@ -336,6 +338,10 @@ func process(_ samples: [Float]) {
     let db = 10 * log10(max(sum / Double(samples.count), 1e-12))
     let ms = Double(samples.count) / sampleRate * 1000
     audioMs += ms
+    if !wakeMode {
+        levelEmitMs += ms
+        if levelEmitMs >= 50 { levelEmitMs = 0; emit("level:\(Int(db.rounded()))") }
+    }
     if wakeMode {
         while let next = fakeHears.first, next.ms <= audioMs {
             fakeHears.removeFirst()

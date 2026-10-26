@@ -1810,6 +1810,12 @@ ipcMain.handle('speech:stop', async () => {
   return { ok: true }
 })
 
+// Dialog: pick files to attach to a chat message (their paths go into the input)
+ipcMain.handle('dialog:selectFiles', async () => {
+  const result = await dialog.showOpenDialog({ title: 'Attach files', properties: ['openFile', 'multiSelections'] })
+  return result.canceled ? [] : result.filePaths
+})
+
 // Dialog: select folder
 ipcMain.handle('dialog:selectFolder', async (_event, { title }) => {
   const result = await dialog.showOpenDialog({

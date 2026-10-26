@@ -1,5 +1,6 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, accentTint, redact, configureRedact } from './crush-styles'
+import { VoiceGroup } from './VoiceGroup'
 import { joinVoiceText } from '../../lib/voice-text'
 import { hookLoopStep, HOOK_LOOP_IDLE, stopHookFeedback, goalCheckLine, GOAL_LOOP_STUCK_AFTER } from '../../../../shared/goal-loop'
 import { autoSendStep, AUTO_SEND_IDLE, useAutoSendPrefs, setAutoSendPrefs, type VoiceEvent } from '../../lib/voice-autosend'
@@ -2322,7 +2323,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
             />
               <ActionToolbar
                 leading={<>
-                  <VoicePill agentId={id.startsWith('chat-') ? id.slice(5) : id} />
+                  <VoiceGroup agentId={id.startsWith('chat-') ? id.slice(5) : id}
+                    onAttach={paths => setInput(v => `${v}${v && !/\s$/.test(v) ? ' ' : ''}${paths.map(x => (/\s/.test(x) ? `"${x}"` : x)).join(' ')} `)} />
                   <AutoSendPill on={autoSend.enabled} />
                   {autoSendAt !== null && <AutoSendCountdown at={autoSendAt} onCancel={() => voiceStep({ kind: 'typed' })} />}
                   <StreamingPill on={streamingMode} onToggle={toggleStreamingMode} />
@@ -4236,30 +4238,6 @@ const pillStyle = (active = false): React.CSSProperties => ({
   cursor: 'pointer',
   whiteSpace: 'nowrap'
 })
-
-/** Mic pill. App.tsx owns the speech process: it answers
- *  `hive:voice-toggle` and reports `hive:voice-state`. */
-function VoicePill({ agentId }: { agentId: string }) {
-  const [state, setState] = useState<{ listening: boolean; partial: string; notice?: string }>({ listening: false, partial: '' })
-  useEffect(() => {
-    const onState = (e: Event) => setState((e as CustomEvent<{ listening: boolean; partial: string; notice?: string }>).detail)
-    window.addEventListener('hive:voice-state', onState)
-    return () => window.removeEventListener('hive:voice-state', onState)
-  }, [])
-  return (
-    <span style={{ ...pillStyle(state.listening), padding: 0, gap: 0, overflow: 'hidden' }}>
-      <button
-        onClick={() => window.dispatchEvent(new CustomEvent('hive:voice-toggle', { detail: { agentId } }))}
-        title={state.listening ? 'Stop listening' : 'Voice input'}
-        aria-label={state.listening ? 'Stop listening' : 'Voice input'}
-        style={{ ...pillStyle(state.listening), background: 'transparent', color: state.listening ? CRUSH.Sriracha : 'inherit' }}
-      >{state.listening ? '■' : '🎙'}</button>
-      {state.notice && (
-        <span role="status" title={state.notice} style={{ padding: '0 10px 0 2px', maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', fontWeight: 500, color: CRUSH.Zest }}>⚠ {state.notice}</span>
-      )}
-    </span>
-  )
-}
 
 /** What the mic is hearing right now, in full, inside the input box; it becomes input text when final. */
 function VoicePartial() {
