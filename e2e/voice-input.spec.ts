@@ -192,6 +192,25 @@ test('hold 🎙: the pair becomes a recording bar with a waveform; let go keeps 
   await expect(page.getByLabel('Hearing')).toBeHidden()
 })
 
+test('let go: the bar shrinks back with its waveform fading, not cut off; reduced motion turns the animation off', async () => {
+  const mic = page.getByRole('button', { name: 'Voice input' })
+  await mic.hover()
+  await page.mouse.down()
+  const bar = page.getByRole('group', { name: 'Recording' })
+  await expect(bar).toBeVisible()
+  await expect.poll(() => bar.evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(250)
+  await page.mouse.up()
+  const group = page.getByRole('group', { name: 'Attach and voice' })
+  // Mid-shrink the waveform is still there (fading), then it goes.
+  expect(await group.evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(70)
+  await expect(group.getByRole('img', { name: 'Live waveform' })).toHaveCount(0)
+  await expect.poll(() => group.evaluate(el => el.getBoundingClientRect().width)).toBeLessThan(70)
+
+  await page.emulateMedia({ reducedMotion: 'reduce' })
+  expect(await group.evaluate(el => getComputedStyle(el).transitionDuration)).toMatch(/^0s/)
+  await page.emulateMedia({ reducedMotion: 'no-preference' })
+})
+
 test('＋ attaches files: their paths go into the input', async () => {
   await app.evaluate(({ ipcMain }) => {
     try { ipcMain.removeHandler('dialog:selectFiles') } catch {}
