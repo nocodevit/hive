@@ -14,7 +14,7 @@ export type SortBy = 'newest' | 'oldest' | 'due'
 export const SOURCE_LABEL: Record<TodoSource, string> = { chat: 'Chat', feishu: 'Feishu', jira: 'Jira', email: 'Email', agent: 'Agent', manual: 'Manual' }
 
 const dayStart = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
-const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+export const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 
 export function sortTodos(list: TodoView[], by: SortBy): TodoView[] {
   const due = (t: TodoView) => t.due ?? '9999-99-99'
@@ -57,3 +57,6 @@ export function todoDiscussText(t: TodoView): string {
     ...t.events.map(e => `- ${whenShort(e.at)} ${e.who}: ${e.text}`)
   ].join('\n')
 }
+
+/** Tomorrow's yyyy-MM-dd, local time. */
+export const tomorrow = (now = new Date()) => ymd(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1))

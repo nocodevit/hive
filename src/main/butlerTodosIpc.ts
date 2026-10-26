@@ -53,6 +53,11 @@ export function registerTodosIpc(d: {
   })
   h('todos:setStatus', (_e, id: unknown, status: unknown) =>
     typeof id === 'string' && (status === 'open' || status === 'done' || status === 'dropped') ? done(d.store().setStatus(id, status as TodoStatus)) : false)
+  h('todos:setDue', (_e, ids: unknown, due: unknown) => {
+    if (!Array.isArray(ids) || typeof due !== 'string') return 0
+    const s = d.store()
+    return done(ids.filter(id => typeof id === 'string' && s.setDue(id, due)).length)
+  })
   h('todos:note', (_e, id: unknown, text: unknown) =>
     typeof id === 'string' && typeof text === 'string' && text.trim() ? done(d.store().event(id, { who: 'owner', kind: 'note', text })) : false)
   h('todos:fromApproval', (_e, id: unknown, note: unknown) => {
