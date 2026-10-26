@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { DiscussButton, type OnDiscuss } from './DiscussButton'
 
 export type ApprovalCard = { id: string; kind: string; title: string; subtitle: string; draft: string; action: string; payload?: Record<string, unknown>; createdAt?: number }
 
@@ -73,7 +74,7 @@ const needsYou = (it: ApprovalCard) => it.kind === DECIDE || !!str(it.payload, '
 
 /** Butler → Approve: grouped "needs your call" / "ready to send", filterable by source. Each card reads like a
  *  chat — their message, what Butler already sent, Butler's reply (click to edit) — with the actions in one row. */
-export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onDiscuss?: (text: string) => void }) {
+export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onDiscuss?: OnDiscuss }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [answers, setAnswers] = useState<Record<string, string>>({})
@@ -83,7 +84,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   const [filter, setFilter] = useState<string>('all')
   // "+ Todo", and Discuss (a card taken to the chat is a follow-up): the card becomes a todo with its refs.
   const toTodo = (id: string, note?: string) => { void window.api.todos.fromApproval(id, note).then(t => { if (t) setNoted(n => ({ ...n, [id]: true })) }).catch(() => {}) }
-  const discuss = (it: ApprovalCard, text: string) => { onDiscuss?.(text); toTodo(it.id, 'Discussed in Chat') }
+  const discuss = (it: ApprovalCard, text: string, to?: Parameters<OnDiscuss>[1]) => { onDiscuss?.(text, to); toTodo(it.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed in Chat') }
   useEffect(() => { if (editing && !items.some(i => i.id === editing)) setEditing(null) }, [items, editing])
 
   const approve = async (it: ApprovalCard) => {
@@ -171,7 +172,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
                 onKeyDown={e => { if (e.key === 'Enter') answer(it) }} aria-label="Your answer to Butler" placeholder="Answer Butler — it writes the reply"
                 className="flex-1 min-w-0 h-7 rounded-lg bg-bg-secondary border border-border px-2.5 text-[12px] text-text-primary focus:outline-none focus:border-accent" />
               <button disabled={busy === it.id || !(answers[it.id] ?? '').trim()} onClick={() => answer(it)} className={primary}>{busy === it.id ? 'Writing…' : 'Write reply'}</button>
-              <button onClick={() => discuss(it, discussText(it))} aria-label={`Discuss ${it.title}`} className={ghost}>💬 Discuss</button>
+              {onDiscuss && <DiscussButton label={`Discuss ${it.title}`} text={() => discussText(it)} onDiscuss={(t, to) => discuss(it, t, to)} />}
             </>
           ) : (
             <>
@@ -179,7 +180,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
                 {busy === it.id ? '…' : it.action}{editing === it.id && <kbd className="text-[10px] opacity-70 bg-white/20 rounded px-1 font-sans">⌘↵</kbd>}
               </button>
               {editing !== it.id && it.draft.trim() && <button onClick={() => edit(it)} aria-label={`Edit ${it.title}`} className={ghost}>✎ Edit</button>}
-              {onDiscuss && <button onClick={() => discuss(it, cardDiscussText(it))} aria-label={`Discuss ${it.title}`} className={ghost}>💬 Discuss</button>}
+              {onDiscuss && <DiscussButton label={`Discuss ${it.title}`} text={() => cardDiscussText(it)} onDiscuss={(t, to) => discuss(it, t, to)} />}
             </>
           )}
           {!decide && <button onClick={() => toTodo(it.id)} disabled={noted[it.id]} aria-label={`Add ${it.title} to Todo`} className={`${ghost} ${noted[it.id] ? 'text-accent' : ''}`}>{noted[it.id] ? '✓ In Todo' : '＋ Todo'}</button>}
@@ -244,7 +245,7 @@ export function historyDiscussText(it: HistoryCard): string {
 }
 
 /** Butler → Approve, below the queue: what was approved, dismissed or failed this week. */
-export function ApprovalHistory({ onDiscuss }: { onDiscuss?: (text: string) => void }) {
+export function ApprovalHistory({ onDiscuss }: { onDiscuss?: OnDiscuss }) {
   const [items, setItems] = useState<HistoryCard[]>([])
   useEffect(() => {
     const load = () => { window.api.approvals.history().then(setItems).catch(() => {}) }
@@ -270,8 +271,7 @@ export function ApprovalHistory({ onDiscuss }: { onDiscuss?: (text: string) => v
               <div className="mt-1 rounded-lg bg-bg-secondary px-2.5 py-2 text-[12px] text-text-primary whitespace-pre-wrap">{it.draft}</div>
               {it.error && <div className="mt-1 text-[11px] text-red-400 font-mono">{it.error}</div>}
               {onDiscuss && (
-                <button onClick={() => onDiscuss(historyDiscussText(it))} aria-label={`Discuss ${it.title}`}
-                  className="mt-1.5 px-2.5 py-1 rounded-lg bg-bg-secondary border border-border text-[12px] font-semibold text-text-primary cursor-pointer">Discuss in chat</button>
+                <DiscussButton label={`Discuss ${it.title}`} text={() => historyDiscussText(it)} onDiscuss={onDiscuss} className="mt-1.5" />
               )}
             </details>
           )
