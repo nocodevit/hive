@@ -49,6 +49,7 @@ type Line =
   | { op: 'create'; todo: Omit<Todo, 'events' | 'status'> & { events?: TodoEvent[] } }
   | { op: 'event'; id: string; event: TodoEvent }
   | { op: 'status'; id: string; status: TodoStatus; at: number; who: TodoWho }
+  | { op: 'due'; id: string; due: string; at: number; who: TodoWho }
 
 const SOURCES: TodoSource[] = ['chat', 'feishu', 'jira', 'email', 'agent', 'manual']
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -79,6 +80,11 @@ export function createTodoStore(dir: string, now: () => number = Date.now) {
         t.status = l.status
         t.closedAt = l.status === 'open' ? undefined : l.at
         t.events.push({ at: l.at, who: l.who, kind: 'status', text: l.status === 'done' ? 'Done' : l.status === 'dropped' ? 'Dropped' : 'Reopened' })
+      } else if (l.op === 'due') {
+        const t = byId.get(l.id)
+        if (!t) continue
+        t.events.push({ at: l.at, who: l.who, kind: 'action', text: t.due ? `Due ${t.due} → ${l.due}` : `Due ${l.due}` })
+        t.due = l.due
       }
     }
     return [...byId.values()]
@@ -114,6 +120,13 @@ export function createTodoStore(dir: string, now: () => number = Date.now) {
       const t = get(id)
       if (!t || t.status === status) return false
       write({ op: 'status', id, status, at: now(), who })
+      return true
+    },
+    /** Moves the due date only; createdAt and the history stay as they were. */
+    setDue(id: string, due: string, who: TodoWho = 'owner'): boolean {
+      const t = get(id)
+      if (!t || t.status !== 'open' || !DATE.test(due) || t.due === due) return false
+      write({ op: 'due', id, due, at: now(), who })
       return true
     },
     /** Open todos tied to exactly this ref (an approval, a Feishu chat, a Jira key …). */
