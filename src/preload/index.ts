@@ -171,6 +171,7 @@ const api = {
       }>,
     send: (id: string, text: string) =>
       ipcRenderer.invoke('chat:send', { id, text }) as Promise<{ ok: boolean; error?: string }>,
+    discussWith: (agentId: string, text: string) => ipcRenderer.invoke('chat:discussWith', agentId, text) as Promise<{ ok: boolean; error?: string }>,
     sendAsUser: (id: string, text: string) =>
       ipcRenderer.invoke('chat:sendAsUser', { id, text }) as Promise<{ ok: boolean; error?: string }>,
     respondPermission: (id: string, requestId: string, decision: 'allow' | 'deny', input?: Record<string, unknown>, denyMessage?: string) =>

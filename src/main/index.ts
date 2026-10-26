@@ -843,6 +843,26 @@ ipcMain.handle('claude:auth', async () => {
 ipcMain.handle('butler:pinned', () => butler.pinned)
 ipcMain.handle('butler:setPinned', (_e, v: unknown) => { butler.setPinned(v === true); return butler.pinned })
 ipcMain.handle('butler:agents', () => butlerRows())
+// Discuss with an agent instead of Butler: start its chat when it is off (as a click on it would),
+// then the context goes in as the owner's own message.
+ipcMain.handle('chat:discussWith', async (e, agentId: unknown, text: unknown) => {
+  if (typeof agentId !== 'string' || typeof text !== 'string' || !text.trim()) return { ok: false, error: 'bad_input' }
+  const row = butlerRows().find(r => r.agentId === agentId)
+  if (!row) return { ok: false, error: 'no_such_agent' }
+  const chatId = `chat-${agentId}`
+  const deadline = Date.now() + 60_000
+  let asked = 0
+  while (!getChatSessionInfo(chatId)?.live && Date.now() < deadline) {
+    if (Date.now() - asked > 5000) { e.sender.send('butler:startAgent', { agentId, mode: 'resume' }); asked = Date.now() }
+    await new Promise(r => setTimeout(r, 500))
+  }
+  for (let i = 0; i < 20; i++) {
+    const r = sendExternalUserMessage(chatId, text)
+    if (r.ok) return { ok: true }
+    await new Promise(res => setTimeout(res, 500))
+  }
+  return { ok: false, error: 'no_session' }
+})
 ipcMain.handle('butler:retry', () => { butler.retry(); return butler.getState() })
 
 async function unclosedDetail(rec: { agentId: string; cwd: string; since: number }) {
