@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { DiscussButton, type OnDiscuss } from './DiscussButton'
-import { groupTodos, isOverdue, SOURCE_LABEL, sortTodos, todoDiscussText, whenShort, type GroupBy, type SortBy, type TodoView } from '../../lib/butler-todos'
+import { groupTodos, isOverdue, SOURCE_LABEL, sortTodos, todoDiscussText, tomorrow, whenShort, type GroupBy, type SortBy, type TodoView } from '../../lib/butler-todos'
 
 const PREF = 'hive:todo-view'
 const readPref = (): { group: GroupBy; sort: SortBy } => {
@@ -12,16 +12,18 @@ const primary = 'h-7 px-3 rounded-lg bg-accent text-text-on-purple text-[12px] f
 const ghost = 'h-7 px-2 rounded-lg text-[12px] text-text-secondary hover:bg-bg-hover inline-flex items-center gap-1 cursor-pointer'
 
 /** One todo: a line with Discuss and View; View opens its whole story (who did what, when) as a card. */
-function Item({ t, onDiscuss, onCard }: { t: TodoView; onDiscuss?: OnDiscuss; onCard: () => void }) {
+function Item({ t, onDiscuss, onCard, picked }: { t: TodoView; onDiscuss?: OnDiscuss; onCard: () => void; picked?: { on: boolean; toggle: () => void } }) {
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
   const closed = t.status !== 'open'
   const set = (s: 'open' | 'done' | 'dropped') => { void window.api.todos.setStatus(t.id, s) }
   const sub = t.events[0]?.text !== t.title ? t.events[0]?.text : `${t.createdBy === 'owner' ? 'You' : 'Butler'} · ${whenShort(t.createdAt)}`
   return (
-    <div className={`rounded-xl bg-bg-primary ${open ? 'ring-1 ring-border' : ''}`} aria-label={`Todo: ${t.title}`}>
+    <div className={`rounded-xl bg-bg-primary ${open || picked?.on ? 'ring-1 ring-border' : ''} ${picked?.on ? 'ring-accent' : ''}`} aria-label={`Todo: ${t.title}`}>
       <div className="flex items-center gap-2.5 pl-2.5 pr-1.5 py-1.5 text-[13px]">
-        <input type="checkbox" checked={t.status === 'done'} onChange={e => set(e.target.checked ? 'done' : 'open')} aria-label={`Done: ${t.title}`} className="accent-accent cursor-pointer" />
+        {picked
+          ? <input type="checkbox" checked={picked.on} onChange={picked.toggle} aria-label={`Select: ${t.title}`} className="accent-accent cursor-pointer" />
+          : <input type="checkbox" checked={t.status === 'done'} onChange={e => set(e.target.checked ? 'done' : 'open')} aria-label={`Done: ${t.title}`} className="accent-accent cursor-pointer" />}
         <div className="flex-1 min-w-0">
           <span className={`block truncate ${closed ? 'text-text-muted line-through' : 'text-text-primary'}`}>{t.title}</span>
           <span className="block text-[11px] text-text-muted truncate">{sub}</span>
@@ -68,6 +70,11 @@ export function TodoTab({ visible, onDiscuss, onCard }: { visible: boolean; onDi
   const [due, setDue] = useState('')
   const [{ group, sort }, setView] = useState(readPref)
   const [q, setQ] = useState('')
+  const [picking, setPicking] = useState(false)
+  const [picked, setPicked] = useState<Set<string>>(new Set())
+  const toggle = (id: string) => setPicked(p => { const n = new Set(p); if (n.has(id)) n.delete(id); else n.add(id); return n })
+  const stopPicking = () => { setPicking(false); setPicked(new Set()) }
+  const moveToTomorrow = async () => { await window.api.todos.setDue([...picked], tomorrow()); stopPicking() }
   useEffect(() => {
     if (!visible) return
     let alive = true
@@ -97,12 +104,22 @@ export function TodoTab({ visible, onDiscuss, onCard }: { visible: boolean; onDi
         Group <select value={group} onChange={e => pick({ group: e.target.value as GroupBy })} aria-label="Group by" className={sel}><option value="created">Created</option><option value="source">Source</option><option value="due">Due</option></select>
         Sort <select value={sort} onChange={e => pick({ sort: e.target.value as SortBy })} aria-label="Sort by" className={sel}><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="due">Due date</option></select>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search" aria-label="Search todos" className={`${sel} flex-1 min-w-0`} />
+        {open.length > 0 && !picking && <button onClick={() => setPicking(true)} className={`${sel} cursor-pointer hover:text-text-primary`}>Select</button>}
       </div>
+      {picking && (
+        <div role="toolbar" aria-label="Selected todos" className="sticky top-0 z-10 flex items-center gap-1 px-2 py-1.5 rounded-xl bg-bg-secondary border border-border shadow-sm text-[12px]">
+          <span className="px-1 font-semibold text-text-primary">{picked.size} selected</span>
+          <button onClick={() => setPicked(new Set(picked.size === open.length ? [] : open.map(t => t.id)))} className={ghost}>{picked.size === open.length ? 'None' : 'All'}</button>
+          <span className="flex-1" />
+          <button onClick={moveToTomorrow} disabled={!picked.size} className={`${primary} disabled:opacity-50`}>Move to tomorrow</button>
+          <button onClick={stopPicking} className={`${ghost} text-text-muted`}>Cancel</button>
+        </div>
+      )}
       {!open.length && <div className="text-[12px] text-text-muted px-1">{q ? 'Nothing matches' : 'Nothing to do · Butler adds what it promised to follow up'}</div>}
       {groupTodos(open, group, sort).map(g => (
         <div key={g.label} className="flex flex-col gap-1.5" role="group" aria-label={g.label}>
           <div className="px-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{g.label} · {g.items.length}</div>
-          {g.items.map(t => <Item key={t.id} t={t} onDiscuss={onDiscuss} onCard={onCard} />)}
+          {g.items.map(t => <Item key={t.id} t={t} onDiscuss={onDiscuss} onCard={onCard} picked={picking ? { on: picked.has(t.id), toggle: () => toggle(t.id) } : undefined} />)}
         </div>
       ))}
       {closed.length > 0 && (

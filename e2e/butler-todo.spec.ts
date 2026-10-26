@@ -55,6 +55,27 @@ test('note a todo; Done moves it to Completed, where its history stays', async (
   expect(lines.map(l => l.op)).toEqual(['create', 'status'])
 })
 
+test('select several, Move to tomorrow: due changes, created stays', async () => {
+  await panel().getByRole('tab', { name: /Todo/ }).click()
+  for (const t of ['回 Lin UAT', '看 SOW 6 条']) {
+    await panel().getByLabel('New todo').fill(t)
+    await panel().getByRole('button', { name: 'Add', exact: true }).click()
+  }
+  await panel().getByRole('button', { name: 'Select', exact: true }).click()
+  await panel().getByLabel('Select: 回 Lin UAT').click()
+  await panel().getByLabel('Select: 看 SOW 6 条').click()
+  const bar = panel().getByRole('toolbar', { name: 'Selected todos' })
+  await expect(bar).toContainText('2 selected')
+  await bar.getByRole('button', { name: 'Move to tomorrow' }).click()
+  await expect(bar).toHaveCount(0)
+  const d = new Date(); const tm = new Date(d.getFullYear(), d.getMonth(), d.getDate() + 1)
+  const mmdd = `${String(tm.getMonth() + 1).padStart(2, '0')}-${String(tm.getDate()).padStart(2, '0')}`
+  await expect(panel().getByLabel('Todo: 回 Lin UAT')).toContainText(mmdd)
+  await expect(panel().getByRole('group', { name: 'Today' })).toContainText('回 Lin UAT')
+  const lines = readFileSync(join(BUTLER, 'todos.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
+  expect(lines.filter(l => l.op === 'due')).toHaveLength(2)
+})
+
 test('group by source; "+" on an Approve card makes a todo about it', async () => {
   await panel().getByRole('tab', { name: /Approve/ }).click()
   const card = panel().getByLabel('Reply: Pod · SOW 改动是否进 P4')

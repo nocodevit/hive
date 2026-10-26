@@ -11,6 +11,22 @@ const setup = () => {
 }
 
 describe('todos', () => {
+  it('moving to tomorrow changes the due date only, and says so in the history', () => {
+    const { s } = setup()
+    const a = s.add({ title: 'Reply Lin', due: '2026-10-26' })!
+    const b = s.add({ title: 'No date' })!
+    expect(s.setDue(a.id, '2026-10-27')).toBe(true)
+    expect(s.setDue(b.id, '2026-10-27')).toBe(true)
+    expect(s.setDue(a.id, '2026-10-27')).toBe(false)
+    expect(s.setDue(a.id, 'tomorrow')).toBe(false)
+    const got = s.get(a.id)!
+    expect(got).toMatchObject({ due: '2026-10-27', createdAt: a.createdAt, status: 'open' })
+    expect(got.events.at(-1)!.text).toBe('Due 2026-10-26 → 2026-10-27')
+    expect(s.get(b.id)!.events.at(-1)!.text).toBe('Due 2026-10-27')
+    s.setStatus(b.id, 'done')
+    expect(s.setDue(b.id, '2026-10-28')).toBe(false)
+  })
+
   it('a todo is its whole story: created, actions, notes, done — the file is only appended', () => {
     const { dir, s } = setup()
     const a = s.add({ title: '  周五前跟 Daniel 确认 Claro 漫游 ', source: 'chat', due: '2026-10-24', refs: { jiraKey: 'FAE-1422' } })!
