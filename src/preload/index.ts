@@ -65,7 +65,8 @@ const api = {
     }
   },
   dialog: {
-    selectFolder: (title?: string) => ipcRenderer.invoke('dialog:selectFolder', { title })
+    selectFolder: (title?: string) => ipcRenderer.invoke('dialog:selectFolder', { title }),
+    selectFiles: () => ipcRenderer.invoke('dialog:selectFiles') as Promise<string[]>
   },
   data: {
     load: () => ipcRenderer.invoke('data:load'),
