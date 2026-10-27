@@ -5,10 +5,19 @@ export interface TodoEventView { at: number; who: 'owner' | 'butler' | 'agent'; 
 export interface TodoView {
   id: string; title: string; createdAt: number; createdBy: 'owner' | 'butler' | 'agent'; source: TodoSource
   due?: string; refs: { approvalId?: string; chatId?: string; messageId?: string; jiraKey?: string; mailKey?: string; agentId?: string }
-  status: 'open' | 'done' | 'dropped'; closedAt?: number; events: TodoEventView[]
+  status: 'open' | 'done' | 'dropped'; closedAt?: number; events: TodoEventView[]; priority?: Priority
 }
 
-export type GroupBy = 'created' | 'source' | 'due'
+export type Priority = 1 | 2 | 3
+export const PRIORITIES: Array<{ p: Priority; icon: string; name: string; hint: string }> = [
+  { p: 1, icon: '⚡', name: '要命', hint: 'drop everything' },
+  { p: 2, icon: '🔥', name: '冒烟', hint: 'normal' },
+  { p: 3, icon: '🧊', name: '冻着', hint: 'whenever' }
+]
+export const priOf = (t: TodoView): Priority => t.priority ?? 2
+export const priMeta = (p: Priority) => PRIORITIES[p - 1]
+
+export type GroupBy = 'created' | 'source' | 'due' | 'priority'
 export type SortBy = 'newest' | 'oldest' | 'due'
 
 export const SOURCE_LABEL: Record<TodoSource, string> = { chat: 'Chat', feishu: 'Feishu', jira: 'Jira', email: 'Email', agent: 'Agent', manual: 'Manual' }
@@ -18,9 +27,10 @@ export const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).p
 
 export function sortTodos(list: TodoView[], by: SortBy): TodoView[] {
   const due = (t: TodoView) => t.due ?? '9999-99-99'
-  return [...list].sort((a, b) => by === 'oldest' ? a.createdAt - b.createdAt
+  // ⚡ 要命 always on top, 🧊 冻着 at the bottom, whatever the sort.
+  return [...list].sort((a, b) => priOf(a) - priOf(b) || (by === 'oldest' ? a.createdAt - b.createdAt
     : by === 'due' ? due(a).localeCompare(due(b)) || b.createdAt - a.createdAt
-    : b.createdAt - a.createdAt)
+    : b.createdAt - a.createdAt))
 }
 
 /** Open todos in groups (empty groups left out), each sorted. */
@@ -29,11 +39,13 @@ export function groupTodos(list: TodoView[], by: GroupBy, sort: SortBy, now = ne
   const weekEnd = ymd(new Date(today + 6 * DAY))
   const key = (t: TodoView): string => {
     if (by === 'source') return SOURCE_LABEL[t.source]
+    if (by === 'priority') { const m = priMeta(priOf(t)); return `${m.icon} ${m.name}` }
     if (by === 'due') return !t.due ? 'No due date' : t.due < t0 ? 'Overdue' : t.due === t0 ? 'Due today' : t.due <= weekEnd ? 'This week' : 'Later'
     return t.createdAt >= today ? 'Today' : t.createdAt >= today - DAY ? 'Yesterday' : t.createdAt >= today - 6 * DAY ? 'This week' : 'Earlier'
   }
   const order = by === 'due' ? ['Overdue', 'Due today', 'This week', 'Later', 'No due date']
-    : by === 'created' ? ['Today', 'Yesterday', 'This week', 'Earlier'] : Object.values(SOURCE_LABEL)
+    : by === 'created' ? ['Today', 'Yesterday', 'This week', 'Earlier']
+    : by === 'priority' ? PRIORITIES.map(m => `${m.icon} ${m.name}`) : Object.values(SOURCE_LABEL)
   const groups = new Map<string, TodoView[]>()
   for (const t of list) { const k = key(t); groups.set(k, [...(groups.get(k) ?? []), t]) }
   return order.filter(k => groups.has(k)).map(k => ({ label: k, items: sortTodos(groups.get(k)!, sort) }))
@@ -52,7 +64,7 @@ export function whenShort(ms: number): string {
 export function todoDiscussText(t: TodoView): string {
   return [
     `Help me with this todo. Do not send or change anything until I confirm.`,
-    `- ${t.title}${t.due ? ` (due ${t.due})` : ''}${t.refs.jiraKey ? ` · ${t.refs.jiraKey}` : ''}`,
+    `- ${priOf(t) !== 2 ? `[${priMeta(priOf(t)).name}] ` : ''}${t.title}${t.due ? ` (due ${t.due})` : ''}${t.refs.jiraKey ? ` · ${t.refs.jiraKey}` : ''}`,
     'What happened so far:',
     ...t.events.map(e => `- ${whenShort(e.at)} ${e.who}: ${e.text}`)
   ].join('\n')

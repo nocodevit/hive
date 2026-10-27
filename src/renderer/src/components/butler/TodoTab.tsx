@@ -1,12 +1,57 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { DiscussButton, type OnDiscuss } from './DiscussButton'
-import { groupTodos, isOverdue, SOURCE_LABEL, sortTodos, todoDiscussText, tomorrow, whenShort, type GroupBy, type SortBy, type TodoView } from '../../lib/butler-todos'
+import { groupTodos, isOverdue, PRIORITIES, priMeta, priOf, SOURCE_LABEL, sortTodos, todoDiscussText, tomorrow, whenShort, type GroupBy, type Priority, type SortBy, type TodoView } from '../../lib/butler-todos'
 
 const PREF = 'hive:todo-view'
 const readPref = (): { group: GroupBy; sort: SortBy } => {
-  try { const j = JSON.parse(localStorage.getItem(PREF) || '{}'); return { group: ['created', 'source', 'due'].includes(j.group) ? j.group : 'created', sort: ['newest', 'oldest', 'due'].includes(j.sort) ? j.sort : 'newest' } } catch { return { group: 'created', sort: 'newest' } }
+  try { const j = JSON.parse(localStorage.getItem(PREF) || '{}'); return { group: ['created', 'source', 'due', 'priority'].includes(j.group) ? j.group : 'created', sort: ['newest', 'oldest', 'due'].includes(j.sort) ? j.sort : 'newest' } } catch { return { group: 'created', sort: 'newest' } }
 }
 const sel = 'px-1.5 py-0.5 rounded-md bg-bg-primary border border-border text-[11.5px] text-text-secondary'
+
+/** ⚡ 要命: a storm on the row — lightning flashes across it, the bolt flickers, the edge glows. Off with reduced motion. */
+const STORM_CSS = `
+@keyframes hive-storm-flash { 0%, 86%, 100% { opacity: 0 } 87% { opacity: .7 } 88% { opacity: 0 } 90% { opacity: .45 } 91.5% { opacity: 0 } }
+@keyframes hive-storm-glow { 0%, 100% { box-shadow: 0 0 0 1px rgba(239,68,68,.55), 0 0 10px rgba(239,68,68,.18) } 50% { box-shadow: 0 0 0 1px rgba(251,191,36,.8), 0 0 18px rgba(251,191,36,.32) } }
+@keyframes hive-storm-bolt { 0%, 84%, 100% { transform: none; filter: none } 86% { transform: translate(-1px, 1px) rotate(-8deg) scale(1.25); filter: drop-shadow(0 0 6px #fde047) brightness(1.6) } 88% { transform: translate(1px, -1px) rotate(6deg) } 90% { transform: scale(1.15); filter: drop-shadow(0 0 4px #fde047) } 92% { transform: none; filter: none } }
+.hive-storm { position: relative; overflow: hidden; background-image: linear-gradient(100deg, rgba(239,68,68,.10), rgba(251,191,36,.06) 60%, transparent); animation: hive-storm-glow 2.4s ease-in-out infinite }
+.hive-storm::after { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; opacity: 0;
+  background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.9) 44%, rgba(253,224,71,.55) 48%, transparent 62%); animation: hive-storm-flash 5s linear infinite }
+.hive-storm-bolt { display: inline-block; animation: hive-storm-bolt 5s linear infinite }
+@media (prefers-reduced-motion: reduce) { .hive-storm, .hive-storm::after, .hive-storm-bolt { animation: none !important } .hive-storm { box-shadow: 0 0 0 1px rgba(239,68,68,.6) } }
+`
+
+/** The tier chip on a row: ⚡ 要命 / 🔥 冒烟 / 🧊 冻着, and the menu to change it. */
+function PriorityChip({ t }: { t: TodoView }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLSpanElement>(null)
+  const p = priOf(t), m = priMeta(p)
+  useEffect(() => {
+    if (!open) return
+    const close = (e: MouseEvent | KeyboardEvent) => { if (e instanceof KeyboardEvent ? e.key === 'Escape' : !ref.current?.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', close); document.addEventListener('keydown', close)
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close) }
+  }, [open])
+  // 冒烟 is the normal case: barely there until hovered, so only 要命 / 冻着 catch the eye.
+  const tone = p === 1 ? 'bg-red-500/15 text-red-400 font-bold' : p === 3 ? 'bg-sky-400/10 text-sky-300/80' : 'text-text-muted opacity-25 hover:opacity-100 focus-visible:opacity-100'
+  return (
+    <span ref={ref} className="relative">
+      <button onClick={() => t.status === 'open' && setOpen(o => !o)} aria-label={`Priority ${m.name}: ${t.title}`} aria-expanded={open} title={`${m.name} · ${m.hint}`}
+        className={`h-6 px-1.5 rounded-md text-[11px] inline-flex items-center gap-1 cursor-pointer ${tone}`}>
+        <span className={p === 1 ? 'hive-storm-bolt' : ''} aria-hidden>{m.icon}</span>{p !== 2 && m.name}
+      </button>
+      {open && (
+        <div role="menu" aria-label="Priority" className="absolute z-30 right-0 top-full mt-1 w-[150px] rounded-xl bg-bg-secondary border border-border shadow-lg p-1">
+          {PRIORITIES.map(x => (
+            <button key={x.p} role="menuitemradio" aria-checked={x.p === p} onClick={() => { setOpen(false); void window.api.todos.setPriority([t.id], x.p) }}
+              className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[12.5px] hover:bg-bg-hover cursor-pointer ${x.p === p ? 'text-text-primary font-semibold' : 'text-text-secondary'}`}>
+              <span aria-hidden>{x.icon}</span>{x.name}<span className="ml-auto text-[10.5px] text-text-muted">{x.hint}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
+  )
+}
 
 const primary = 'h-7 px-3 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold inline-flex items-center shadow-sm cursor-pointer'
 const ghost = 'h-7 px-2 rounded-lg text-[12px] text-text-secondary hover:bg-bg-hover inline-flex items-center gap-1 cursor-pointer'
@@ -19,15 +64,16 @@ function Item({ t, onDiscuss, onCard, picked }: { t: TodoView; onDiscuss?: OnDis
   const set = (s: 'open' | 'done' | 'dropped') => { void window.api.todos.setStatus(t.id, s) }
   const sub = t.events[0]?.text !== t.title ? t.events[0]?.text : `${t.createdBy === 'owner' ? 'You' : 'Butler'} · ${whenShort(t.createdAt)}`
   return (
-    <div className={`rounded-xl bg-bg-primary ${open || picked?.on ? 'ring-1 ring-border' : ''} ${picked?.on ? 'ring-accent' : ''}`} aria-label={`Todo: ${t.title}`}>
+    <div className={`rounded-xl bg-bg-primary ${priOf(t) === 1 && !closed ? 'hive-storm' : ''} ${open || picked?.on ? 'ring-1 ring-border' : ''} ${picked?.on ? 'ring-accent' : ''}`} aria-label={`Todo: ${t.title}`}>
       <div className="flex items-center gap-2.5 pl-2.5 pr-1.5 py-1.5 text-[13px]">
         {picked
           ? <input type="checkbox" checked={picked.on} onChange={picked.toggle} aria-label={`Select: ${t.title}`} className="accent-accent cursor-pointer" />
           : <input type="checkbox" checked={t.status === 'done'} onChange={e => set(e.target.checked ? 'done' : 'open')} aria-label={`Done: ${t.title}`} className="accent-accent cursor-pointer" />}
         <div className="flex-1 min-w-0">
-          <span className={`block truncate ${closed ? 'text-text-muted line-through' : 'text-text-primary'}`}>{t.title}</span>
+          <span className={`block truncate ${closed ? 'text-text-muted line-through' : priOf(t) === 1 ? 'text-text-primary font-semibold' : priOf(t) === 3 ? 'text-text-secondary' : 'text-text-primary'}`}>{t.title}</span>
           <span className="block text-[11px] text-text-muted truncate">{sub}</span>
         </div>
+        <PriorityChip t={t} />
         <span className="px-1.5 py-0.5 rounded-md bg-bg-secondary text-[10px] font-semibold text-text-secondary">{SOURCE_LABEL[t.source]}</span>
         {t.due && <span className={`font-mono text-[11px] ${isOverdue(t) ? 'text-status-waiting' : 'text-text-muted'}`}>{t.due.slice(5)}</span>}
         {onDiscuss && <DiscussButton label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
@@ -68,6 +114,7 @@ export function TodoTab({ visible, onDiscuss, onCard }: { visible: boolean; onDi
   const [list, setList] = useState<TodoView[]>([])
   const [title, setTitle] = useState('')
   const [due, setDue] = useState('')
+  const [pri, setPri] = useState<Priority>(2)
   const [{ group, sort }, setView] = useState(readPref)
   const [q, setQ] = useState('')
   const [picking, setPicking] = useState(false)
@@ -86,22 +133,31 @@ export function TodoTab({ visible, onDiscuss, onCard }: { visible: boolean; onDi
   const pick = (v: { group?: GroupBy; sort?: SortBy }) => setView(p => { const n = { ...p, ...v }; try { localStorage.setItem(PREF, JSON.stringify(n)) } catch { /* private */ } return n })
   const add = async () => {
     if (!title.trim()) return
-    await window.api.todos.add({ title: title.trim(), ...(due ? { due } : {}) })
-    setTitle(''); setDue('')
+    await window.api.todos.add({ title: title.trim(), ...(due ? { due } : {}), priority: pri })
+    setTitle(''); setDue(''); setPri(2)
   }
   const match = (t: TodoView) => !q.trim() || `${t.title} ${t.events.map(e => e.text).join(' ')}`.toLowerCase().includes(q.trim().toLowerCase())
   const open = list.filter(t => t.status === 'open' && match(t))
   const closed = sortTodos(list.filter(t => t.status !== 'open' && match(t)), 'newest').sort((a, b) => (b.closedAt ?? 0) - (a.closedAt ?? 0))
   return (
     <div className="flex-1 min-h-0 overflow-y-auto px-3.5 pb-3.5 flex flex-col gap-2.5">
+      <style>{STORM_CSS}</style>
       <div className="flex gap-1.5 pt-1">
         <input value={title} onChange={e => setTitle(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void add() }} placeholder="Note a todo… (or say 记一下 in Chat)" aria-label="New todo"
           className="flex-1 min-w-0 px-2.5 py-1.5 rounded-lg bg-bg-primary border border-border text-[13px] text-text-primary focus:outline-none focus:border-accent" />
+        <span role="radiogroup" aria-label="Pick priority" className="inline-flex rounded-lg bg-bg-primary border border-border p-0.5">
+          {PRIORITIES.map(x => (
+            <button key={x.p} role="radio" aria-checked={pri === x.p} aria-label={x.name} title={`${x.name} · ${x.hint}`} onClick={() => setPri(x.p)}
+              className={`w-7 rounded-md text-[13px] cursor-pointer ${pri === x.p ? (x.p === 1 ? 'bg-red-500/20' : 'bg-bg-hover') : 'opacity-50 hover:opacity-100'}`}>
+              <span className={pri === x.p && x.p === 1 ? 'hive-storm-bolt' : ''} aria-hidden>{x.icon}</span>
+            </button>
+          ))}
+        </span>
         <input type="date" value={due} onChange={e => setDue(e.target.value)} aria-label="Due date" className="w-[118px] px-1.5 rounded-lg bg-bg-primary border border-border text-[12px] text-text-secondary" />
         <button onClick={add} disabled={!title.trim()} className="px-3 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold cursor-pointer disabled:opacity-50">Add</button>
       </div>
       <div className="flex items-center gap-1.5 text-[11.5px] text-text-muted">
-        Group <select value={group} onChange={e => pick({ group: e.target.value as GroupBy })} aria-label="Group by" className={sel}><option value="created">Created</option><option value="source">Source</option><option value="due">Due</option></select>
+        Group <select value={group} onChange={e => pick({ group: e.target.value as GroupBy })} aria-label="Group by" className={sel}><option value="created">Created</option><option value="source">Source</option><option value="due">Due</option><option value="priority">Priority</option></select>
         Sort <select value={sort} onChange={e => pick({ sort: e.target.value as SortBy })} aria-label="Sort by" className={sel}><option value="newest">Newest</option><option value="oldest">Oldest</option><option value="due">Due date</option></select>
         <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search" aria-label="Search todos" className={`${sel} flex-1 min-w-0`} />
         {open.length > 0 && !picking && <button onClick={() => setPicking(true)} className={`${sel} cursor-pointer hover:text-text-primary`}>Select</button>}
@@ -111,6 +167,9 @@ export function TodoTab({ visible, onDiscuss, onCard }: { visible: boolean; onDi
           <span className="px-1 font-semibold text-text-primary">{picked.size} selected</span>
           <button onClick={() => setPicked(new Set(picked.size === open.length ? [] : open.map(t => t.id)))} className={ghost}>{picked.size === open.length ? 'None' : 'All'}</button>
           <span className="flex-1" />
+          {PRIORITIES.map(x => (
+            <button key={x.p} disabled={!picked.size} onClick={async () => { await window.api.todos.setPriority([...picked], x.p); stopPicking() }} aria-label={`Set ${x.name}`} title={`Set ${x.name}`} className={`${ghost} disabled:opacity-40`}>{x.icon}</button>
+          ))}
           <button onClick={moveToTomorrow} disabled={!picked.size} className={`${primary} disabled:opacity-50`}>Move to tomorrow</button>
           <button onClick={stopPicking} className={`${ghost} text-text-muted`}>Cancel</button>
         </div>

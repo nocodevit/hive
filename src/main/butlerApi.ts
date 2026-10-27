@@ -7,7 +7,7 @@
 import { existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 
-export const BUTLER_ROUTES = ['/agents', '/chat/tail', '/chat/send', '/chat/start', '/feishu/probe', '/feishu/chat-search', '/feishu/try', '/pending', '/routines/run', '/jira/read', '/todos', '/todos/add', '/todos/status', '/todos/note', '/cards', '/cards/show', '/cards/edit', '/cards/close', '/cards/reopen'] as const
+export const BUTLER_ROUTES = ['/agents', '/chat/tail', '/chat/send', '/chat/start', '/feishu/probe', '/feishu/chat-search', '/feishu/try', '/pending', '/routines/run', '/jira/read', '/todos', '/todos/add', '/todos/status', '/todos/note', '/todos/priority', '/cards', '/cards/show', '/cards/edit', '/cards/close', '/cards/reopen'] as const
 
 export function isButlerRoute(url: string): boolean {
   const path = url.split('?')[0]

@@ -1,7 +1,7 @@
 import { test, expect, ElectronApplication, Page } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import { join } from 'path'
-import { execSync } from 'child_process'
+import { execSync, spawnSync } from 'child_process'
 import { mkdirSync, rmSync, existsSync, writeFileSync, chmodSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 
@@ -74,6 +74,31 @@ test('select several, Move to tomorrow: due changes, created stays', async () =>
   await expect(panel().getByRole('group', { name: 'Today' })).toContainText('回 Lin UAT')
   const lines = readFileSync(join(BUTLER, 'todos.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
   expect(lines.filter(l => l.op === 'due')).toHaveLength(2)
+})
+
+test('priority: ⚡ 要命 storms to the top, change it from the chip, Butler sets it too', async () => {
+  await panel().getByRole('tab', { name: /Todo/ }).click()
+  const pick = panel().getByRole('radiogroup', { name: 'Pick priority' })
+  await expect(pick.getByRole('radio', { name: '冒烟' })).toHaveAttribute('aria-checked', 'true')
+  await pick.getByRole('radio', { name: '要命' }).click()
+  await panel().getByLabel('New todo').fill('Claro 合同今天必须回')
+  await panel().getByRole('button', { name: 'Add', exact: true }).click()
+  await expect(pick.getByRole('radio', { name: '冒烟' })).toHaveAttribute('aria-checked', 'true')
+  const today = panel().getByRole('group', { name: 'Today' })
+  await expect(today.getByLabel(/^Todo: /).first()).toHaveAccessibleName('Todo: Claro 合同今天必须回')
+  await expect(today.getByRole('button', { name: 'Priority 要命: Claro 合同今天必须回' })).toContainText('要命')
+  await panel().screenshot({ path: test.info().outputPath('todo-storm.png') })
+
+  await today.getByRole('button', { name: 'Priority 冒烟: 回 Lin UAT' }).click()
+  await panel().getByRole('menu', { name: 'Priority' }).getByRole('menuitemradio', { name: /冻着/ }).click()
+  await expect(today.getByRole('button', { name: 'Priority 冻着: 回 Lin UAT' })).toBeVisible()
+  await expect(today.getByLabel(/^Todo: /).last()).toHaveAccessibleName('Todo: 回 Lin UAT')
+
+  const cli = spawnSync('python3', [join(__dirname, '..', 'resources', 'butler', 'hive'), 'todo', 'add', 'Butler 记的急事', '--pri', '1'], { env: { ...process.env, HIVE_DATA_DIR }, encoding: 'utf8' })
+  expect(cli.status).toBe(0)
+  await expect(today.getByRole('button', { name: 'Priority 要命: Butler 记的急事' })).toBeVisible()
+  const lines = readFileSync(join(BUTLER, 'todos.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
+  expect(lines.filter(l => l.op === 'priority')).toHaveLength(1)
 })
 
 test('group by source; "+" on an Approve card makes a todo about it', async () => {

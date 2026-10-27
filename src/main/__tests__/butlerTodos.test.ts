@@ -11,6 +11,21 @@ const setup = () => {
 }
 
 describe('todos', () => {
+  it('priority: 冒烟 by default, set on add, changed later with a history line; only open ones', () => {
+    const { s } = setup()
+    const a = s.add({ title: 'Claro 合同', priority: 1 })!
+    const b = s.add({ title: '整理文档' })!
+    expect(a.priority).toBe(1)
+    expect(s.get(b.id)!.priority).toBe(2)
+    expect(s.setPriority(b.id, 3)).toBe(true)
+    expect(s.setPriority(b.id, 3)).toBe(false)
+    expect(s.setPriority(b.id, 9 as any)).toBe(false)
+    expect(s.get(b.id)!).toMatchObject({ priority: 3 })
+    expect(s.get(b.id)!.events.at(-1)!.text).toBe('🔥 冒烟 → 🧊 冻着')
+    s.setStatus(a.id, 'done')
+    expect(s.setPriority(a.id, 2)).toBe(false)
+  })
+
   it('moving to tomorrow changes the due date only, and says so in the history', () => {
     const { s } = setup()
     const a = s.add({ title: 'Reply Lin', due: '2026-10-26' })!

@@ -312,10 +312,11 @@ const api = {
   },
   todos: {
     list: () => ipcRenderer.invoke('todos:list'),
-    add: (input: { title: string; due?: string }) => ipcRenderer.invoke('todos:add', input),
+    add: (input: { title: string; due?: string; priority?: 1 | 2 | 3 }) => ipcRenderer.invoke('todos:add', input),
     setStatus: (id: string, status: 'open' | 'done' | 'dropped') => ipcRenderer.invoke('todos:setStatus', id, status) as Promise<boolean>,
     note: (id: string, text: string) => ipcRenderer.invoke('todos:note', id, text) as Promise<boolean>,
     setDue: (ids: string[], due: string) => ipcRenderer.invoke('todos:setDue', ids, due) as Promise<number>,
+    setPriority: (ids: string[], p: 1 | 2 | 3) => ipcRenderer.invoke('todos:setPriority', ids, p) as Promise<number>,
     fromApproval: (id: string, note?: string) => ipcRenderer.invoke('todos:fromApproval', id, note),
     onChange: (cb: () => void) => {
       const handler = () => cb()

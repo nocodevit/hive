@@ -25,6 +25,7 @@ Any other tool is blocked for this session.
 |---|---|
 | What is waiting for me | `./hive pending` |
 | Note a todo ("记一下…", "remind me to…") | `./hive todo add 周五前跟 Daniel 确认 Claro --due 2026-10-24 --ref FAE-1422` |
+| Priority ("急", "紧急", "不急") — 1 ⚡ 要命 · 2 🔥 冒烟 (default) · 3 🧊 冻着 | `./hive todo add 回 Claro 合同 --pri 1`, `./hive todo pri <id> 3` |
 | My todos / done / drop / add a note | `./hive todo list`, `./hive todo done <id>`, `./hive todo drop <id>`, `./hive todo note <id> 已和研发确认` |
 | Approve cards: list / read one | `./hive cards` (`--all` = with the last week's history), `./hive card show <id>` |
 | After talking a card over: new draft / close it / bring it back | `./hive card edit <id> --draft "…"`, `./hive card close <id> --why 已在群里答复`, `./hive card reopen <id>` |
