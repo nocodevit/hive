@@ -60,3 +60,29 @@ describe('updater (v2.4.0)', () => {
     })
   })
 })
+
+import { cumulativeNotes, releasesListUrl } from '../version'
+
+describe('release notes for everything skipped', () => {
+  const rel = (v: string, body: string, extra = {}) => ({ tag_name: `v${v}`, body, published_at: `2026-10-${v.split('.')[2].padStart(2, '0')}T00:00:00Z`, ...extra })
+  const list = [rel('2.38.0', '- 🎃 skin'), rel('2.37.7', '- priorities'), rel('2.37.6', '- cards'), rel('2.37.3', '- old'), rel('2.37.9', 'draft', { draft: true }), rel('2.39.0', 'future')]
+
+  it('jumping 2.37.3 → 2.38.0 shows 2.38.0, 2.37.7 and 2.37.6, newest first, each under its version', () => {
+    const md = cumulativeNotes(list, '2.37.3', 'v2.38.0')
+    expect(md.match(/^## [\d.]+/gm)).toEqual(['## 2.38.0', '## 2.37.7', '## 2.37.6'])
+    expect(md).toContain('- priorities')
+    expect(md).not.toContain('- old')
+    expect(md).not.toContain('draft')
+    expect(md).not.toContain('future')
+  })
+
+  it('one version skipped is just that one; nothing newer is empty', () => {
+    expect(cumulativeNotes(list, '2.37.7', '2.38.0').match(/^## /gm)).toHaveLength(1)
+    expect(cumulativeNotes(list, '2.38.0', '2.38.0')).toBe('')
+  })
+
+  it('the list sits next to /latest, on GitHub or a loopback rehearsal server', () => {
+    expect(releasesListUrl('https://api.github.com/repos/nocodevit/hive/releases/latest')).toBe('https://api.github.com/repos/nocodevit/hive/releases?per_page=100')
+    expect(releasesListUrl('http://127.0.0.1:9911/releases/latest')).toBe('http://127.0.0.1:9911/releases?per_page=100')
+  })
+})
