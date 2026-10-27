@@ -1,15 +1,869 @@
 # Changelog
 
-All notable changes per released version. Entries mirror the `(vX.Y.Z)` tag
-in the git commit title; dates are the commit date.
-
-This log was back-filled from git history at v1.7.28.
+All notable changes per released version, newest first. From v1.7.127 on,
+each entry is that version's GitHub release notes — the same text Hive's
+update window shows, merged for every version you skip. Older entries were
+back-filled from git history at v1.7.28.
 
 ---
 
-## [Unreleased]
+## [2.38.1] — 2026-10-28
 
-- *nothing yet*
+- Update window: notes for **every version you skipped**, newest first, one section each — jumping from 2.27 to 2.38 now shows all of it, not just the newest release's notes. Title says how many updates you're getting.
+- CHANGELOG.md is complete again: every release since 1.7.127, the same text as the release pages.
+
+---
+
+## [2.38.0] — 2026-10-27
+
+- 🎃 Halloween limited skin (Oct 24 – Nov 2): gold pumpkin + night violet, drifting ghosts, a ghost peeking over the chat input, bats, and waves of 1–3 spiders every 10–60 s that stop on the chat, look around and run off to spin a web in a corner. Puts itself on at the first launch in season; Settings › Theme palette switches back to any palette. After Nov 2 your previous palette comes back by itself.
+- Reduced motion: no movement, webs only.
+
+---
+
+## [2.37.7] — 2026-10-27
+
+- Todo priorities: ⚡ 要命 (storm row, always on top) / 🔥 冒烟 / 🧊 冻着 — set on add, from the row chip, in bulk, or ./hive todo pri
+
+---
+
+## [2.37.6] — 2026-10-27
+
+- Butler: ./hive cards, ./hive card show / edit / close / reopen — rewrites a draft after you talk it over, closes a card with a reason, brings one back. Sending stays on the card.
+- Discuss carries the card id; cards show "updated by Butler"; History shows "Closed by Butler" and why
+- Recording bar motion: shrinks back with a fade, 🎙 rides the edge, press feedback, quiet breathing, reduced-motion aware
+
+---
+
+## [2.37.5] — 2026-10-26
+
+- Hold 🎙 to talk: the ＋/🎙 pair becomes a recording bar with a live waveform; release to finish, release on ✕ (or Esc) to cancel
+- ＋ attaches files (their paths go into the input)
+- Todo: select several → Move to tomorrow (due date only)
+
+---
+
+## [2.37.4] — 2026-10-26
+
+- Discuss ▾: Butler by default, or any agent in any project
+- Todo: Discuss and View on each row; details open as a card
+
+---
+
+## [2.37.3] — 2026-10-25
+
+- Chat: "Loading last session…" with a spinner while the past session is read, and after Resume until it is on screen
+- Includes 2.37.2: no freeze at start (past sessions read on a worker thread, head / tail only)
+
+---
+
+## [2.37.2] — 2026-10-25
+
+- Hive no longer freezes at start: past chat sessions are read on a worker thread, and only the start / end of each log (they reach 100MB+). 43 agents: from ~1 min of blocked UI to ~0.4s in the background
+
+---
+
+## [2.37.1] — 2026-10-25
+
+- Approve cards redesigned: grouped Needs your call / Ready to send, filter by source, sender avatar + source + age, chat bubbles (their message, what Butler already sent, Butler's reply — click to edit), one action row, ⌘↵ to send
+
+---
+
+## [2.37.0] — 2026-10-23
+
+- Butler › Todo: follow-ups with their whole story — what came in, what Butler and you did, when. Group by created / source / due, sort, search; Completed keeps the history
+- Butler notes what it promised to follow up (Feishu "其余已转告", a card you discussed, Jira follow-ups it drafted); + on any Approve card; "记一下…" in Chat
+- ? in Butler: what to say in Chat, 中 / EN (system language first), Try sends it
+- Header switches show red / amber when on but not working
+
+---
+
+## [2.36.8] — 2026-10-22
+
+- Approve: when Butler already sent the facts, the card shows what was sent and what is your call; Reply opens an empty box
+- Includes 2.36.7: Discuss shows in the Butler chat as your message
+
+---
+
+## [2.36.7] — 2026-10-22
+
+- Discuss (Approve cards, History, Today plan items) shows in the Butler chat as your message, even while the chat is starting
+
+---
+
+## [2.36.6] — 2026-10-22
+
+Feishu answer-for-me, three cases only:
+1. Can't answer / your decision → nothing is sent; you get a card
+2. Can answer → answered, and you are told
+3. Partly → the facts from Feishu / Jira / this chat go out with "其余已转告 Megan，稍后回复"; the rest is a card
+
+---
+
+## [2.36.5] — 2026-10-22
+
+- Feishu: no decline line either — a guarded topic is silence + a card for you
+- An approved reply never carries two assistant tags
+
+---
+
+## [2.36.4] — 2026-10-22
+
+- Feishu: while a message waits for you, nothing is sent to them — no "我需要和…确认" lines. Private topics still get the polite decline; an agreed proposal gets 👍
+- Today: plan items can go to the Butler chat (💬)
+
+---
+
+## [2.36.3] — 2026-10-22
+
+- Today: every plan item has 💬 to take it to the Butler chat
+- Includes 2.36.2: the Butler chat no longer loses its history at start
+
+---
+
+## [2.36.2] — 2026-10-22
+
+- Fix: the Butler chat lost its history at every Hive start. The phone Butler now runs in its own folder and can no longer rewrite it
+- Feishu: small talk held for you is answered in Butler's own words and the sender's language
+
+---
+
+## [2.36.1] — 2026-10-22
+
+- Feishu: when every fact is checked, the analysis is sent right away; only the judgment (e.g. escalate or not) comes to you
+- Skill updates: Overwrite / Keep mine / Merge, or save the new version beside yours
+- Every Approve card has 💬 Discuss: take it to the Butler chat instead of replying
+
+---
+
+## [2.36.0] — 2026-10-22
+
+- Butler skills have versions and a changelog. If you rewrote a skill and Hive ships a new version, you are asked once: Overwrite with new, Keep mine, or Save mine as a copy — with what changed
+- Handle Jira: engineering follow-up (PR / task / version) only for product issues in the active sprint
+- Feishu cards show the sender's whole message
+- Skills are refreshed at every start
+
+---
+
+## [2.35.9] — 2026-10-22
+
+- Jira cards in Approve and History link to their ticket (P4-6926 ↗)
+
+---
+
+## [2.35.8] — 2026-10-22
+
+- Feishu: Butler never answers another AI assistant's message (two assistants could loop forever)
+- One holding reply per person per chat; later messages join the card already waiting for you
+- At most 3 Butler messages per chat per hour by default
+
+---
+
+## [2.35.7] — 2026-10-21
+
+- Jira: connect through Stargate or directly (Jira URL + token) — Settings › Jira › Connection, Auto uses Stargate first
+- Approving a Jira comment or reassign card now carries it out
+- Butler can read Jira without Stargate (./hive jira)
+
+---
+
+## [2.35.6] — 2026-10-21
+
+- Run any routine now: Run in Today › Routines, or tell Butler "handle my Jira" (./hive run jira); a failed routine shows why
+- Evening report as Needs you / Open / Done
+- Chat: a long word wraps when the panel is narrow
+
+---
+
+## [2.35.5] — 2026-10-21
+
+- Today: ignore a plan item (✕). It leaves Today; an email task's email is marked read. Tick only what is really done.
+
+---
+
+## [2.35.4] — 2026-10-21
+
+- Butler chat no longer loses its history: the phone Butler gets its own session, and the desk chat resumes its own
+- Feishu calendar cards are read (title + time), so Butler can check the calendar
+- Default reply prefix is half-width: [Assistant · Name 的 AI 代理]
+- Resume shows Resuming… and can't be pressed twice; buttons sink when pressed
+
+---
+
+## [2.35.3] — 2026-10-21
+
+- Today redesigned: day arrows (past days and their summary), status chips, next meeting, plan with progress, folded rows
+- Feishu: scans right after Hive opens; Scan now button
+- Feishu: a reply that hands a question to you is held, so you get a card
+- Header switches: 📱 💬 🎙; Sessions sorted by newest activity
+
+---
+
+## [2.35.2] — 2026-10-21
+
+- Window title is "Hive" (the Dock menu showed a stale v0.4.0-beta)
+- Removed a disabled Pause button left from an old plan
+
+---
+
+## [2.35.1] — 2026-10-21
+
+- 📱 Mobile Butler, 💬 Feishu answer-for-me and 🎙 Hola Butler are switches in the title bar
+- Sessions: newest chat activity first within each status, with time since
+
+---
+
+## [2.35.0] — 2026-10-21
+
+- Title bar across the window again (location + Butler), like the mockup
+- Today: every routine shows ran / failed / next / missed / off
+- Approve: this week's history, each can be taken to the Butler chat
+- Voice: what the mic hears shows in full in the input box
+- Feishu: Re-authorize button
+- Agent names and view tabs are normal weight; only the selected one is bold
+
+---
+
+## [2.34.1] — 2026-10-21
+
+#### Settings › Jira (new)
+- Your company's Jira specifics — projects and their roles, final statuses, who owns what, the dev lead, thresholds, what labels mean — are now **settings**, not a skill.
+- **Set up from Jira**: Butler looks at your Jira with read-only access and drafts them; you check each line and save.
+- The jira-knowledge skill is now general knowledge that ships with Hive.
+
+Everything from 2.34.0 (Feishu direct messages, meetings, People list, daily Jira, morning/evening, notifications, settings navigation, mailbox consent, quick switches) is included.
+
+#### Install
+- Apple Silicon: `Hive-2.34.1-arm64.dmg`. Signed, not notarized — first launch: right-click → Open.
+- From 2.27+: Check for Updates → Install & Restart.
+
+---
+
+## [2.34.0] — 2026-10-21
+
+#### Feishu answer-for-me
+- Now sees **direct messages** (before, only groups were read).
+- Small talk is answered; private / personal / sensitive / confidential questions get a polite "not mine to share".
+- Meetings: proposes free times from your calendar and, when they say ok, **creates the Feishu meeting** with a video link and a 15-minute reminder.
+- "ok" with nothing proposed gets a 👍. Several lines from one person get one reply.
+- **People** list: tell Butler who is your manager, your team, other teams.
+- A ticket whose status is wrong becomes a "Jira → status" card for you to apply.
+
+#### Jira (daily)
+- Closes requests whose product issue shipped, drafts questions for stuck requests, asks the dev lead for a missing engineering task, suggests handing tickets to their owner, and lists stuck / old tickets in Today — set up per person, nothing changes without you except the clear-cut close.
+
+#### Your day
+- Morning: today's meetings + a plan from what waits for you and Jira.
+- Evening: what agents **and Butler** did, plus the @mentions of you (the separate @mention routine is gone).
+
+#### Notifications (new)
+- Mac notifications (on by default), quiet hours, per-event switches; when you're away, push to your phone via Telegram (guided setup). Phone Butler opens with what's waiting.
+
+#### Also
+- App Settings has a left navigation.
+- Adding a mailbox asks for consent first (Butler reads and drafts; sends only after your OK).
+- 📱 / 💬 quick switches next to the Butler button.
+
+#### Install
+- Apple Silicon: `Hive-2.34.0-arm64.dmg`. Signed, not notarized — first launch: right-click → Open.
+- From 2.27+: Check for Updates → Install & Restart.
+
+---
+
+## [2.33.7] — 2026-10-21
+
+#### Feishu answer-for-me (代管)
+
+- Knows who is asking (manager, your report, colleague, other department) and where (direct or group), and sorts the question: chit-chat, product status, product knowledge, help for your team, new request, meeting, needs more info.
+- Checks what people claim before agreeing ("X already supports Y") — against Jira, docs, the knowledge base and code you can access.
+- Anything it is unsure about, corrections, and messages from your manager go to you first. Six guardrails always come to you: prices, approvals, private chats, personal / sensitive / confidential info — each with an example; add your own topics with keywords.
+- Meeting requests use your free / busy (never meeting titles). Several lines from one person get one answer. "ok" agrees to what Butler proposed, otherwise it just gets a 👍.
+- Keeps a record of every case and what you did with it, for later learning.
+
+#### Email
+
+- A question for you never sits behind Send any more: such emails show "Needs you" with Discuss and a short answer box; the reply box is exactly the email that goes out.
+
+#### Butler
+
+- Uses the tools your own Claude setup has (e.g. Jira, knowledge base) — one allow-list for everything Butler does.
+- Phone Butler keeps working when Hive's window is closed (since 2.33.6); a second Hive launch now brings the running one forward.
+
+#### Install
+
+- Apple Silicon: `Hive-2.33.7-arm64.dmg`. Signed, not notarized — first launch: right-click → Open.
+- From 2.27+: Check for Updates → Install & Restart.
+
+---
+
+## [2.33.6] — 2026-10-21
+
+#### Fixes
+
+- **Butler said "Hive is not running" while Hive was open.** Closing Hive's window (Hive stays in the Dock on macOS) cut the phone Butler off. Butler now keeps reaching Hive until you quit it, and starting an agent from the phone reopens the window if needed.
+- Opening Hive a second time no longer cuts Butler off from the first one.
+- If Butler still can't reach Hive, it now says whether Hive is open or closed, and Hive keeps a log in `~/.hive/port-lock.log` to send us.
+- The version shown in the title bar now always matches Check for Updates.
+
+#### Since 2.33.1
+
+- Name your assistant (reply prefix and self-introduction); Butler setup shown again after upgrading, with your old settings filled in; resumed chats show their status dots.
+- About you: full field set, Tab fills the example, new **Extra** field. Setup wizard fits the screen.
+- Email password guide in English; every Daily routine item explained; 24-hour time boxes; "Skill ›" links open each routine's skill.
+
+#### Install
+
+- Apple Silicon: `Hive-2.33.6-arm64.dmg`. Signed, not notarized — first launch: right-click → Open.
+- From 2.27+: Check for Updates → Install & Restart.
+
+---
+
+## [2.33.1] — 2026-10-20
+
+#### Butler — your assistant inside Hive
+
+Top-right **Butler** button → a panel with **Chat**, **Sessions**, **Approve** and **Today**. Pin it to the top of the project list.
+
+- **Setup wizard**: theme, voice, about you, phone, email, Feishu, calendar, daily routine. Skip anything; resume later from the panel.
+- **About me + Skills**: one persona for everything Butler writes for you; each job (morning plan, evening report, inbox, email replies, Feishu answers, Jira) follows an editable skill. Change a skill by just describing the change.
+- **Email**: several accounts (腾讯企业邮箱, QQ, 163, Gmail, other). Butler sorts new mail and drafts replies — **nothing is sent until you press Send** in Approve. The card shows the real recipient.
+- **Daily routine** (macOS): morning plan, inbox sorting, Feishu digest, evening report — runs even when Hive is closed.
+- **Feishu answer-for-me (代管)**: sign in with Feishu once; Butler replies as you, every message marked with your prefix. Dates, prices, promises, approvals and customers come to you first. Recall within 24 h.
+- **Calendar**: Feishu calendar + Mac Calendar feed the morning plan.
+- **“Hola Butler”**: on-device wake word; say “Hola Butler, 告诉 Missy …” and confirm the 3-second forward.
+- **Ready-to-send text** (emails, messages) shows as a card with one Copy.
+- **Phone control** (since 2.28): Claude app → Code → Hive Butler.
+
+#### Install
+
+- Apple Silicon: `Hive-2.33.1-arm64.dmg`. Signed, not notarized — first launch: right-click → Open.
+- From 2.27+: Check for Updates → Install & Restart.
+
+---
+
+## [2.28.3] — 2026-10-19
+
+#### Control Hive from your phone (Butler)
+
+New in Settings → **Remote Control**: *Allow remote control from my phone (Butler)*, off by default.
+
+Turn it on and Hive keeps a Claude Code session called **Hive Butler** running on this Mac with Remote Control. On your phone, open the Claude app → **Code** and tap "Hive Butler". From there you can ask in plain words who is running, what an agent last said, or have a message typed into the chat of the agent you name.
+
+- The first time, Claude Code asks whether it may run in Hive's Butler folder. Hive shows **Trust and continue** in Settings and waits for your click. Turning the switch off withdraws it; turning it on again asks again. Hive also follows Claude Code's own trust setting for that folder.
+- The Butler only reads agent status and chats and sends messages to the agent you name. It never starts an agent's chat on its own, never guesses between agents with the same name (it asks you), and cannot edit files.
+- With the switch on, the same session comes back after Hive restarts, so your phone keeps one "Hive Butler" and its history.
+- Needs Claude Code signed in with a claude.ai subscription account, the same account as on your phone.
+
+#### /goal replies as a card
+
+The confirmation after `/goal …` now renders as a card (numbered rules, folded when long) instead of a wall of text, and a typed `/goal` shows as a compact pill.
+
+#### Install
+
+- Apple Silicon only: `Hive-2.28.3-arm64.dmg`. Signed, not notarized — if macOS blocks the first launch, right-click the app → Open.
+- From v2.27.0 or later: **Check for Updates → Install & Restart** does it for you.
+
+---
+
+## [2.27.0] — 2026-10-13
+
+#### Updates install themselves
+
+"Download & Install" used to open the disk image and leave you to drag Hive into Applications — which fails while Hive is running.
+
+From this version on: Hive downloads the update, checks it (valid signature, newer version, signed by the same developer), and the button becomes **Install & Restart**. One click: Hive closes, replaces itself and reopens. If it can't do that on your machine, it says why, opens the installer as before, and offers **Quit Hive** so the manual drag works.
+
+> **This one time you still install by hand**: the installing is done by the version you already have. Quit Hive, then drag the new one into Applications. Every update after this is automatic.
+
+#### Resume where you left off
+
+When you open Hive, it now lists the agents whose chats were still open when it last closed (or crashed): project, agent, the last thing you asked it, its context %, and whether resuming will compact first. Everything is ticked by default, with **Select all**; nothing starts until you press **Resume**. Chats you closed yourself are not listed. "Not now" drops the list.
+
+Together with the above: updating stops your running chats, and the relaunched Hive offers to bring them back.
+
+#### Fixes
+
+- Projects whose folder path contains `_`, `.` or a space: Hive looked for their saved Claude sessions in the wrong place, so Resume started a new session and showed no context %. Fixed.
+
+#### Install
+
+- Apple Silicon only: `Hive-2.27.0-arm64.dmg`. Signed, not notarized — if macOS blocks the first launch, right-click the app → Open.
+
+---
+
+## [2.25.2] — 2026-10-13
+
+#### The bug
+
+A `/goal` with nothing left to do could not be stopped — or even talked to — from Hive.
+
+`/goal` keeps Claude going with a Stop hook: every time Claude tries to end its turn, the hook answers "not done" and Claude goes again, all inside **one** turn. Anything you sent meanwhile was only queued behind that loop, `/goal clear` included. So a finished-but-unmet goal kept spinning, burning tokens, and your messages never arrived. Because the goal lives in the session, it also came back after `/compact` and after restarting the chat.
+
+#### The fix
+
+- **Your message gets through.** `/goal clear` now takes effect immediately during any running turn. Once a goal is just spinning (sent back twice in a row without doing anything), any message you send interrupts the loop and is handled right away. While the goal is still doing real work, an ordinary message waits as before, so a running command is not cut off half-way.
+- **A way out you can see.** When a loop is stuck, the chat shows a notice explaining what is happening, with a **Clear goal** button — also for goals Hive is not tracking as a handoff (set by hand, or left over from before a restart).
+- **No more wall of repeats.** Each "not done" round used to appear as another copy of the goal text, styled like your own message. They are now one collapsed line: `↻ Goal not met yet … (×N)`.
+- **Command replies are shown.** Claude Code's own answers to slash commands — "Goal set", "Goal cleared", "No goal set" — were never displayed in the live chat. They are now.
+
+#### Also since v2.25.0
+
+- The auto-send pill is labelled **Auto send**.
+
+#### Install
+
+- Apple Silicon only: `Hive-2.25.2-arm64.dmg`. Signed, not notarized — if macOS blocks the first launch, right-click the app → Open.
+- Existing installs will offer this update on their own (Hive → Check for Updates…).
+
+---
+
+## [2.25.0] — 2026-10-12
+
+First GitHub release since v2.15.4. Highlights of what changed (v2.20.5 → v2.25.0); earlier versions are in the commit history.
+
+#### New look — one canvas, floating cards
+- The whole window uses one background; the agent list, the main panel and the file panel are rounded cards with even gutters and no divider lines. Every column has the same header.
+- Chat follows the app theme (light = white card). Replies are set in the UI font, monospace only for code, commands and numbers. Your messages are right-aligned bubbles.
+- The composer is one rounded box: text on top, controls below (voice, auto-send, Streaming, context, Compact, ⋮, Send/Stop), with a neon outline in the palette color.
+- All three palettes (Neon Purple, Tech Blue, Future Pink) now recolor the chat too, and the Prime style works with Future Pink.
+
+#### Voice input
+- **Mixed 中文 / English in one sentence**: with an OpenAI API key (App Settings → Voice Input), each spoken sentence is transcribed by OpenAI (`gpt-4o-mini-transcribe` by default, `gpt-transcribe` selectable). Without a key, or if the call fails, it falls back to the macOS recognizer and tells you.
+- **Auto-send** (off by default): when you stop talking, a short countdown sends what you dictated. Speaking again, typing or clicking the countdown cancels. The mic keeps listening afterwards.
+- With a key, your speech is uploaded to OpenAI for transcription; recordings are deleted from disk right after.
+
+#### Butler API — drive Hive from another Claude session
+Local-only HTTP routes (127.0.0.1, token-protected) to list agents, read a chat's last messages, type into a specific agent's chat and start a chat. Meant for a `claude remote-control` / Dispatch session on the same Mac, so you can ask "who is done?" or hand an agent an instruction from your phone. See `docs/butler-api.md`.
+
+#### Fixes
+- **/compact silently did nothing** when Claude Code queued a "background tasks have no completion record" notice ahead of it: Hive stopped at the notice's empty result and never ran the compact. It now waits for the real compact result.
+- Voice helper is always shut down when Hive quits; a helper that dies resets the mic button instead of leaving it on "listening".
+
+#### Install
+- Apple Silicon only: `Hive-2.25.0-arm64.dmg`.
+- The app is signed but **not notarized**. If macOS blocks the first launch: right-click the app → Open, or allow it in System Settings → Privacy & Security.
+- macOS may ask again for microphone / speech-recognition permission.
+
+---
+
+## [2.15.4] — 2026-08-26
+
+#### The bug
+
+You: *context 都 81% 了, 你在 handsoff 里没有 compact 啊！你什么时候 compact？*
+
+Auto-compact was NEVER firing on claude-opus-5. Ever. /goal loops just ran to 81%+ ctx while the supervisor sat silent.
+
+#### Root cause
+
+Verified in \`~/.hive/chat-logs\`: recent \`claude-opus-5\` \`system:init\` events **dropped the \`contextSize\` field entirely**. Now emit only:
+\`\`\`json
+{"type":"system","subtype":"init","session_id":"...","model":"claude-opus-5"}
+\`\`\`
+
+Handoff supervisor in [handoff.ts](src/main/handoff.ts) read \`event.contextSize\`, got \`undefined\`, kept \`h.contextSizeTokens = 0\` (initial value). Then the auto-compact gate:
+\`\`\`ts
+if (h && h.contextSizeTokens > 0 && h.lastInputTokens > 0) {
+  if (shouldTriggerAutoCompact(pct, ...)) tryAutoCompact(runId)
+}
+\`\`\`
+**\`contextSizeTokens > 0\` always failed** → \`tryAutoCompact\` was **never called even once**.
+
+The renderer's ctx% bar had the same bug months ago but was fixed inline: *if contextSize absent, infer from model name — haiku=200K, everything else=1M*. That inference was never mirrored into the main-process supervisor. Classic main/renderer drift.
+
+#### Fix
+
+New shared helper \`resolveContextSizeTokens(explicit, model)\` in \`src/shared/context-size.ts\`:
+1. Prefer the explicit \`contextSize\` string when present
+2. Otherwise infer from model: \`haiku → 200K\`, everything else \`→ 1M\`
+3. Return 0 only when both are absent (supervisor bails cleanly)
+
+Handoff supervisor now calls this helper. **Single source of truth** so main and renderer can't drift on this rule again.
+
+#### Test
+
+New \`context-size-resolve.test.ts\` with 9 pins:
+- Explicit \`'1M'\`/\`'200K'\` honored
+- \`claude-opus-5\` with no \`contextSize\` → 1M (the real-world fix)
+- \`claude-sonnet-5\`, \`claude-fable-5\`, \`claude-opus-4-7\` → 1M
+- \`claude-haiku-*\` → 200K (case-insensitive)
+- Both absent → 0 (fail-safe)
+- Malformed explicit + valid model → falls back to model
+- **End-to-end user scenario**: \`810_000 tokens / 1_000_000 = 0.81 > 0.70\` threshold → \`shouldTriggerAutoCompact\` returns true
+
+**1222/1222** unit tests + TypeScript clean.
+
+#### Install
+
+Download DMG (\`arm64\` for Apple Silicon, plain for Intel), or click **Check for Updates…** in the app menu.
+
+Unsigned; on first launch, right-click → Open.
+
+---
+
+## [2.15.3] — 2026-08-26
+
+#### The bug
+
+You: *为什么 compact 总是不成功*.
+
+Dug into \`~/.hive/compact-log.jsonl\` — **30 entries** with \`ok=true, durationMs≈3000, resultUsd=$0\`. Latest was today at 13:47 on \`cube-new-wendy\`.
+
+#### Root cause
+
+Claude's \`/compact\` slash command in \`--print --resume\` mode **occasionally returns \`{subtype:'success', is_error:false}\` in ~3s at cost=\$0** — proof the LLM summarization API was never called. Empirically happens when the session is already-compacted, too small, or when \`--resume\` loads an already-compact view.
+
+Hive interpreted \`subtype==='success' && !is_error\` as \`ok=true\`, broadcast \`✅ /compact done in 3s · session resumed\`, and the renderer's ctx% reset fired. But ctx actually didn't change — nothing was compacted — so on the next \`assistant.usage\` event ctx% snapped back to the pre-compact value. You saw *"✅ says success, then ctx% doesn't drop"* → concluded compact is broken.
+
+#### Fix
+
+New pure predicate \`isCompactNoop(resultEvent, durationMs)\` returns true iff \`cost === 0 && duration < 10s\`. \`runCompactViaPrint\`:
+- Detects no-op after receiving the "success" result
+- Flips \`finalOk=false\`, sets \`error='no-op (LLM never called — session may be already-compacted or too small)'\`
+- Adds \`noop: true\` flag to return + log
+- Captures \`result.result\` text (first 500 chars) in \`~/.hive/compact-log.jsonl\` for future debug
+
+Callers (\`compactSession\` + \`forceCompact\` + \`Compact+Fork\`) already handle \`{ok:false}\` — they broadcast a truthful:
+
+\`❌ /compact no-op (LLM never called — session may be already-compacted or too small) (3.1s) — context UNCHANGED, session resumed\`
+
+Renderer's text-branch already matches \`/compact\` + \`context UNCHANGED\` (the failure-path settler), so \`compactStartedAt\`/\`compactStuck\` clear cleanly AND \`setLatestInputTokens(0)\` does NOT fire (only triggers on \`/compact done\` or \`Compacted\` text). Ctx% stays at the real value — no misleading 0% flash.
+
+#### Tests
+
+New \`compact-noop.test.ts\` with 7 pins on the pure predicate:
+- Fires on real-world pattern (usd=0, dur=3s)
+- Fires on any zero-cost <10s result
+- Does NOT fire on real compact (cost > 0)
+- Does NOT fire on fast-but-costed result (edge)
+- Fail-safe on missing/malformed/null cost fields
+- Fail-safe on null/undefined result event
+
+**1213/1213** unit tests + TypeScript clean.
+
+#### Install
+
+Download DMG (\`arm64\` for Apple Silicon, plain for Intel), or click **Check for Updates…** in the app menu.
+
+Unsigned; on first launch, right-click → Open.
+
+---
+
+## [2.15.2] — 2026-08-26
+
+#### The bug
+
+During /compact, typing a message shows the *Draft saved — will send after compact completes* chip. Compact finishes. Chip disappears. **Message never actually sent — silently lost.**
+
+#### Bug forensics (why it broke)
+
+`git blame` on the auto-flush useEffect points to \`c962c380\` (v1.7.120, 2026-05-23) — that's when the pendingDraft mechanism was born, and \`deps=[compactInProgress]\` has been the same since.
+
+**Why it worked before v2.13.0**: not because deps were right — because there was only ONE path that cleared \`compactStartedAt\`: HIVE's own stderr line \`✅ /compact done in Xs · session resumed\`. HIVE emits this in \`compactSession()\` **after** \`startChat()\` has returned, so by the time the useEffect fires the new --print child is fully registered and its stdin pipe is ready. \`chat.send\` hits an alive process. Works.
+
+**Why v2.13.0 broke it**: I added a SECOND clear path — the \`isCompactSummaryEvent\` user-event branch. That event comes from the **new** claude child's own stream, and can arrive in a narrow window where the child has spawned but its stdin pipe isn't ready or \`sessions.get(id)\` still returns stale state. \`sendUserMessage\` returns \`{ok:false, error:'no_session'|'not_in_print_mode'}\`.
+
+**The kill shot**: the useEffect body was
+\`\`\`ts
+window.api.chat.send(id, draft).finally(() => setSending(false))
+\`\`\`
+— it never checked \`res.ok\`. When send failed in that window, \`pendingDraft\` had already been cleared unconditionally. Message silently LOST.
+
+#### Fix (two layers)
+
+1. **Deps** widened to \`[compactInProgress, exited, pendingDraft]\` so the effect re-runs on any of the three, not just \`compactInProgress\` — needed so that step 2's restore actually triggers a retry.
+2. **Result-check + restore**: on \`{ok:false}\` or a promise rejection, restore \`pendingDraft\`. The restore triggers a re-render, which re-runs the effect (because \`pendingDraft\` is in deps), which retries the send. Once the new child is truly ready, retry succeeds and the flush completes cleanly.
+
+Also covers IPC transport errors (promise rejection path).
+
+#### Tests
+
+New regression tests in \`compact-pending-draft-flush.test.tsx\`:
+- \`chatSend\` returns \`{ok:false}\` first call, \`{ok:true}\` second — asserts \`chatSend\` called twice, draft eventually delivered
+- \`chatSend\` rejects (transport error) first call, resolves second — same retry behavior
+- Plus the earlier tests: no-fire during compact, no-fire without pendingDraft, no double-fire on spurious re-render, correct fire when new session comes alive
+
+**1206/1206** unit tests green.
+
+#### Install
+
+Download DMG (\`arm64\` for Apple Silicon, plain for Intel), or click **Check for Updates…** in the app menu.
+
+Unsigned; on first launch, right-click → Open.
+
+---
+
+## [2.15.1] — 2026-08-25
+
+#### Two fixes
+
+##### 1. Handoff turn counter stuck at 0 during /goal loops
+
+**Bug**: Banner showed \`Handoff running · 1h 11m · turn 0 · \$0.00\` even after Missy had pushed 2 MRs.
+
+**Root cause**: The supervisor only incremented \`turnCount\` on \`type: 'result'\` events. But Claude's \`/goal\` autonomous loop emits **ONE** \`result\` at the very end (an hour later) and **many** \`assistant\` events during the loop. So hour-long handoffs with 20 LLM turns showed \`turn 0\` until the whole thing settled.
+
+**Fix**: Count \`assistant\` events as turn boundaries (each = one LLM round-trip = user's mental model of "turn"). \`result\` still carries the cost, just no longer the turn count. Also fixed: banner now updates on cost-only advance so the final \`\$\` value refreshes when the \`/goal\` settles.
+
+##### 2. Pink base surfaces back to dark grey
+
+You called v2.15.0 out: *粉应该搭配深灰 (dark theme)* and *agent 的背景和 chat 的背景不协调统一*. The pink-tinted bases went muddy on top of pink and clashed with the Crush-locked chat pane.
+
+**Fix**: Base surfaces are now neutral dark grey (Pepper family). Only accents / borders / text-muted / sidebar-active carry the pink hue — the classic cyberpunk pattern where pink pops **harder** against grey than against pink-tinted grey.
+
+| Token | v2.15.0 | v2.15.1 |
+|---|---|---|
+| \`--bg-primary\` | \`#120515\` (dark pink) | \`#1a181c\` (neutral grey) |
+| \`--bg-hover\` | \`#3d1745\` | \`#332f3a\` |
+| \`--border-default\` | \`#4a1858\` | \`#3a2f38\` |
+| \`--text-muted\` | \`#e59bc6\` (vivid pink) | \`#b8a3ac\` (grey-pink) |
+| \`--bg-terminal\` (chat pane) | \`#2a0a1e\` | \`#201F26\` (Crush Pepper, restored) |
+
+Accents unchanged: **\`--accent #ff2eaa\`**, **\`--accent-muted #ff007f\`** — still hot neon fuchsia.
+
+Agent column and chat pane now match perfectly.
+
+#### Testing
+
+- \`handoff-supervisor.test.ts\` rewritten: 20 assistants + 1 final result → turn=20 (was turn=1). Result-only events no longer count toward turn.
+- \`palette-bg-overrides.test.ts\` inverted back: dark palettes MUST NOT override \`--bg-terminal\`.
+- \`pink-neon-palette.spec.ts\` asserts base surfaces have chroma < 20 (proves neutral grey), accents have R > 200 + R-G ≥ 100 (proves neon punch), chat bg exactly Pepper (32, 31, 38).
+
+**1200/1200** unit + **2/2** pink e2e green.
+
+#### Install
+
+Download DMG (\`arm64\` for Apple Silicon, plain for Intel), or click **Check for Updates…** in the app menu — you'll get the shiny new update window from v2.14.0 too.
+
+Unsigned; on first launch, right-click → Open.
+
+---
+
+## [2.15.0] — 2026-08-25
+
+#### Two color changes
+
+##### 1. Future Pink reworked to neon fuchsia
+
+Old palette read as warm-plum / brown because every dark bg had `R > G > B` (warm) channel ratios and `--text-muted` was `#b48aa0` — a desaturated mauve that reads as taupe on OLED. You called it out: *太棕了, 要那种霓光粉*.
+
+Every dark-mode hex reworked so `R > B > G` (cool-pink lean, never warm-plum):
+
+| Token | Before | After |
+|---|---|---|
+| `--accent` | `#f472b6` | `#ff2eaa` (hot neon fuchsia) |
+| `--accent-muted` | `#db2777` | `#ff007f` (Barbie neon) |
+| `--text-muted` | `#b48aa0` (mauve/taupe) | `#e59bc6` (bright bubblegum) |
+| `--border-default` | `#422538` | `#4a1858` (pinker, higher chroma) |
+| `--bg-hover` | `#3d1f31` | `#3d1745` (chroma bumped) |
+| swatch / tagline | `#f472b6` · Hot magenta | `#ff2eaa` · Neon fuchsia · vaporwave forward |
+
+Light mode retuned too: `--text-muted` `#83506a` → `#b06888` (pinker), accent punched to `#e6008a`.
+
+##### 2. Chat surface follows palette
+
+Previously `--bg-terminal` (the chat pane background) was pinned to Crush Pepper `#201F26` across every palette, so switching to Future Pink or Tech Blue left the chat pane looking like a warm-grey island against the themed shell. With explicit approval to deviate from the Crush lock:
+
+| Palette | `--bg-terminal` |
+|---|---|
+| Neon Purple (default) | `#201F26` (Pepper — unchanged) |
+| Tech Blue | `#0b1424` (deep blue-black) |
+| Future Pink | `#2a0a1e` (deep neon-pink) |
+
+Other Crush colors used inside chat (Sriracha user bubbles, Julep buttons, Squid/Ash text, Dolly/Mochi tabs) STAY at their locked hexes. Only the surface background is themed.
+
+#### Testing
+
+- `palette-bg-overrides.test.ts` inverted: dark palettes MUST override `--bg-terminal`, light must NOT.
+- New `e2e/pink-neon-palette.spec.ts`: real Electron launch, reads computed CSS vars off `:root`, asserts:
+  - Every bg / border / text-muted / accent token has `R > G` AND `B >= G` (cool-pink lean, no warm-brown quadrant)
+  - Accents have `R > 200` AND `R - G >= 100` (neon-punch invariant)
+  - `--bg-terminal` has shifted away from Pepper `#201F26`
+  - Screenshots saved for eyeball verification.
+
+**1199/1199** unit + **3/3** pink e2e green.
+
+#### Install
+
+Download DMG (`arm64` for Apple Silicon, plain for Intel), or click **Check for Updates…** in the app menu.
+
+Unsigned; on first launch, right-click → Open to bypass Gatekeeper.
+
+---
+
+## [2.14.0] — 2026-08-25
+
+#### The bug
+
+Check-for-Updates was a native macOS NSAlert. Four separate bugs, all rooted in the wrong primitive:
+
+1. Release notes rendered as **raw markdown** (`## Fix`, `**bold**` shown as literal chars).
+2. Long notes were sliced to 800 characters with `(truncated)` at the end — no way to scroll.
+3. Clicking **View release notes** *closed* the dialog before the browser opened.
+4. Choosing **Download & Reveal** gave **zero feedback** — silence for 30+ seconds until Finder auto-mounted the DMG.
+
+#### The fix
+
+Replaced `dialog.showMessageBox` with a self-owned `BrowserWindow` for the "new version available" flow. Native dialog is only kept for the tiny *up to date* / *check failed* states where markdown and scroll don't matter.
+
+##### New window
+- **Header** — `v2.13.0 → v2.14.0` version diff + release title
+- **Body** — full markdown release notes rendered via `marked`, dark-themed, scrollable
+- **Footer buttons**
+  - `View on GitHub ↗` — opens browser, window stays open
+  - `Later` — snoozes this tag
+  - `Download & Install` — inline progress bar (per-chunk bytes + %), auto-opens DMG when done
+
+Ships with `marked` (~40KB) as a runtime dependency.
+
+##### Tests
+22 new unit tests on the pure HTML renderer covering markdown conversion, no-truncation, scroll wiring, XSS escaping, button presence, and the "don't close on link click" invariant. **1197 / 1197** unit tests green.
+
+#### Install
+
+Download the DMG (`arm64` for Apple Silicon, plain for Intel), or click **Check for Updates…** in the app menu — this is the last release you'll ever see the old dialog for.
+
+Unsigned; on first launch, right-click → Open to bypass Gatekeeper.
+
+---
+
+## [2.13.0] — 2026-08-25
+
+#### Fix
+
+**ctx% now resets the instant `/compact` finishes** — no longer waits for the next assistant turn.
+
+##### The bug
+After `/compact` finished, the top status bar kept showing the pre-compact context % (e.g. 68%) until you typed your first message and Claude echoed back an `assistant.usage` event. The compact was done but the UI lied.
+
+##### Root cause
+v2.5.3 tried to reset by string-matching `/compact done` in the stream text. Current Claude CLI emits `<local-command-stdout>Compacted </local-command-stdout>` instead — the string match never fired.
+
+##### Fix
+Reset now piggybacks on the `compact_boundary` event (`isCompactSummary: true`), which is the earliest 100%-reliable "compact finished" signal from Claude's stream. When it lands:
+- `ctx%` drops to 0 immediately
+- `compactStartedAt` clears
+- Ctx-nag banner dismissal resets so the next 80% crossing warns again
+
+Next `assistant.usage` event refreshes ctx% to the real post-compact value.
+
+Belt-and-suspenders: text-match branch also updated to recognize `Compacted ` alongside historical `/compact done`.
+
+#### Install
+Download the DMG for your Mac (`arm64` for Apple Silicon, plain for Intel), or click **Check for Updates…** in the app menu if you're on v2.10.0+.
+
+Unsigned; on first launch, right-click → Open to bypass Gatekeeper.
+
+---
+
+## [2.12.0] — 2026-08-24
+
+Second Prime pass. Every remaining surface now reads as Prime when you toggle it in App Settings → Visual style.
+
+#### What's new
+- Buttons / inputs / tabs / StatusPill / modals all get Prime CSS overlays (mono font, accent glow, sharp corners)
+- Focus ring already accent-colored (v2.10.0)
+- KPI headline digits pick up accent text-shadow glow
+- Sidebar selected row picks up accent inner glow
+- Context menus get accent border + hover
+- New e2e/prime-4-combos.spec.ts captures all 4 (theme × palette) combos into test-results/
+
+#### Try it
+Menu → Hive → Check for Updates (v2.10.0 → v2.12.0 = auto-mount DMG improvement + full Prime).
+Then: App Settings → **Visual style** → toggle **Prime**. Palette picker below narrows to Neon Purple + Tech Blue (Prime doesn't support Pink — warm hue fights the HUD vocabulary).
+
+---
+
+## [2.10.0] — 2026-08-24
+
+#### Accent visual system + updater auto-mount
+
+##### Visual polish (Accent)
+- **Elevation scale** — 3 shadow tiers wired everywhere (cards / dropdowns / modals). Theme-aware.
+- **Motion tokens** — 120/220/380ms + smooth curve. \`card-lift\` utility gives interactive cards a 1px translate + shadow bump on hover.
+- **Focus ring** — accent-colored global \`:focus-visible\` replaces macOS default blue.
+- **StatusPill component** — one shared implementation replaces the ad-hoc status spans (working / waiting / idle / handoff / danger).
+- Modals promoted from generic \`shadow-2xl\` to semantic \`shadow-e3\`.
+
+##### Updater (this is what you're using right now!)
+Menu → Hive → **Check for Updates…** now:
+1. Downloads the DMG to \`~/Downloads\` 
+2. **Auto-mounts** the DMG (Finder opens the drag-Hive-to-Applications overlay directly — no double-click step)
+3. Follow-up dialog explains: drag Hive → Applications → quit → relaunch
+
+##### Overview improvements
+- Close X button + Esc keybinding (webkit-app-region: no-drag so it responds on 1st click)
+- Closed section: flat sorted wrap chips (not per-project rows), sorted by project A-Z + agent A-Z
+- Loaded session panes counter uses \`activeTerminals\` (immediate) — no lag after clicking Resume
+- Renamed labels: "Open sessions" → "Session panes", "Idle" → "Ready", "Sleeping" → "Closed"
+
+##### Other
+- Chat font size now global in App Settings (was per-project)
+- Chat input auto-grows to 5 lines then scrolls
+- Overview grouped by project A-Z, agents A-Z within
+- Random pixel avatar for new agents
+- Waiting status color: amber → sky blue
+- Prime style scaffolding shipped (App Settings → Visual style · Accent | Prime; Prime is a HUD/CRT overlay, currently minimal until v2.11)
+
+##### Installation
+Drag \`Hive.app\` from the DMG into \`/Applications\`. Replace existing when asked. First launch: right-click → Open (unsigned; macOS asks once).
+
+---
+
+## [2.8.4] — 2026-08-24
+
+#### v2.8.x rollup — Accent Round 2 UI craft + Overview clarity
+
+First public v2.x release. Bundles every fix since v1.7.159.
+
+##### Highlights
+- **Overview page** — new app-level dashboard across all projects + agents (KPI cards, Working now, Loaded/Closed sessions, project grid)
+- **Prime/Accent styles + palettes** (Neon Purple / Tech Blue / Future Pink), palette overlays now shift full hue family (bg/border/sidebar)
+- **Random pixel avatars** for new agents
+- **Chat font size** — global slider in App Settings (11-20px, live scale)
+- **Time-since chip** on every agent row
+- **Agent row status left-border** (working/waiting/idle at a glance)
+- **Overview grouped by project** with pure A-Z sort
+- Font system single-family: Inter Tight body + heading + Space Grotesk as `font-display` only
+- All emoji in context menus → SVG glyphs
+- Project tabs → Linear-style underline
+- Dept-card border → design token (was hardcoded purple)
+
+##### Installation
+Drag \`Hive.app\` from the DMG into \`/Applications\`. First launch: right-click → Open (unsigned app; macOS will ask once).
+
+---
+
+## [1.7.159] — 2026-08-13
+
+macOS Apple Silicon (M1/M2/M3/M4/M5) build.
+
+#### Install
+1. Download `Hive-1.7.159-arm64.zip` below.
+2. Unzip → drag `Hive.app` into `/Applications`.
+3. First launch: right-click → Open (Gatekeeper — build is unsigned).
+4. If it still refuses:
+   ```bash
+   xattr -dr com.apple.quarantine /Applications/Hive.app
+   ```
+
+#### Fixes since v1.7.150
+- **v1.7.159** — 5h/7d bar now shows aggregate (was reporting the current-model 0% by mistake — see #33)
+- **v1.7.158** — MCP tool permissions (`mcp__server__tool`) now persist across sessions; new "Allow forever" button writes correct bare-name format (#32)
+- **v1.7.157** — Deleting an agent now shows a two-step confirmation modal with full blast radius (#31)
+- **v1.7.156** — Renaming an agent no longer kills the live chat (#30)
+- **v1.7.155** — Warning-retry dismissal + full-grid prompt detection (part of the 5h/7d fix, #29)
+- **v1.7.154** — Compact+Resume no longer flashes StartChooser mid-flight (#28)
+- **v1.7.152/153** — PTY master fd leak fully closed (#26 / #27)
+
+#### SHA-256
+`98f1ce6b2d9db9de7fb2f8ac3676fdac84f56a4e44c71bd2c23441bc3c5ff2d1`
+
+#### Requirements
+- macOS 11 Big Sur or later
+- Apple Silicon (arm64) — M1 / M2 / M3 / M4 / M5. Intel not built here.
+- Node.js 20+ on PATH (Hive spawns `claude` from your shell env)
+- `claude` CLI installed (`claude --version` should work in your terminal)
 
 ---
 

@@ -20,7 +20,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { homedir } from 'node:os'
 import { showReleaseNotes } from './release-notes-window.js'
-import { compareVersions, releasesApiUrl } from './version'
+import { compareVersions, cumulativeNotes, releasesApiUrl, releasesListUrl, type ReleaseNote } from './version'
 
 export { compareVersions }
 
@@ -67,10 +67,19 @@ export function saveState(state: UpdaterState): void {
  * or parse failure (caller decides how to surface).
  */
 export function fetchLatestRelease(): Promise<GitHubRelease | null> {
+  return fetchJson<GitHubRelease>(RELEASES_API, j => typeof j?.tag_name === 'string' && Array.isArray(j.assets))
+}
+
+/** Every release (newest 100), for the notes of the versions in between; null when unreachable. */
+export function fetchReleaseList(): Promise<ReleaseNote[] | null> {
+  return fetchJson<ReleaseNote[]>(releasesListUrl(RELEASES_API), j => Array.isArray(j))
+}
+
+function fetchJson<T>(url: string, ok: (j: any) => boolean): Promise<T | null> {
   return new Promise(resolve => {
     try {
       const req = net.request({
-        url: RELEASES_API,
+        url,
         redirect: 'follow'
       })
       req.setHeader('User-Agent', 'Hive-updater')
@@ -84,12 +93,8 @@ export function fetchLatestRelease(): Promise<GitHubRelease | null> {
         res.on('data', (chunk) => { body += chunk.toString() })
         res.on('end', () => {
           try {
-            const parsed = JSON.parse(body) as GitHubRelease
-            if (typeof parsed?.tag_name === 'string' && Array.isArray(parsed.assets)) {
-              resolve(parsed)
-            } else {
-              resolve(null)
-            }
+            const parsed = JSON.parse(body)
+            resolve(ok(parsed) ? parsed as T : null)
           } catch {
             resolve(null)
           }
@@ -161,6 +166,9 @@ export async function checkForUpdates(silent = false): Promise<void> {
 
   const asset = pickDmgAsset(release)
   const tagStripped = release.tag_name.replace(/^v/, '')
+  // Notes for every version skipped since the one running, not just the newest.
+  const list = await fetchReleaseList()
+  const notes = (list && cumulativeNotes(list, currentVersion, release.tag_name)) || release.body || ''
 
   // v2.14.0: swap dialog.showMessageBox for a self-owned BrowserWindow.
   // The native NSAlert route lost markdown, lost scrolling, closed on
@@ -171,8 +179,11 @@ export async function checkForUpdates(silent = false): Promise<void> {
   showReleaseNotes({
     currentVersion,
     latestVersion: tagStripped,
-    releaseTitle: release.name || `Hive v${tagStripped}`,
-    bodyMarkdown: release.body || '',
+    releaseTitle: (() => {
+      const n = (notes.match(/^## /gm) || []).length
+      return n > 1 ? `Hive v${tagStripped} · ${n} updates since v${currentVersion}` : release.name || `Hive v${tagStripped}`
+    })(),
+    bodyMarkdown: notes,
     releaseUrl: release.html_url,
     dmg: asset ? { url: asset.url, name: asset.name, size: asset.size } : null,
     onLater: () => {
