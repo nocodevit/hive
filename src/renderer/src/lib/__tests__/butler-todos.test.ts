@@ -12,6 +12,13 @@ describe('butler-todos', () => {
     expect(groupTodos(list, 'source', 'newest', NOW).map(g => g.label)).toEqual(['Chat', 'Feishu', 'Jira'])
     expect(groupTodos(list, 'due', 'newest', NOW).map(g => [g.label, g.items.map(x => x.id)])).toEqual([['Overdue', ['b']], ['Due today', ['d']], ['This week', ['c']], ['No due date', ['a']]])
   })
+  it('⚡ 要命 is always on top and 🧊 冻着 at the bottom; group by priority', () => {
+    const l = [t('x', { createdAt: at(23, 9) }), t('frozen', { createdAt: at(23, 10), priority: 3 }), t('fire', { createdAt: at(20), priority: 1 })]
+    expect(sortTodos(l, 'newest').map(x => x.id)).toEqual(['fire', 'x', 'frozen'])
+    expect(sortTodos(l, 'oldest').map(x => x.id)).toEqual(['fire', 'x', 'frozen'])
+    expect(groupTodos(l, 'priority', 'newest', NOW).map(g => [g.label, g.items.map(x => x.id)])).toEqual([['⚡ 要命', ['fire']], ['🔥 冒烟', ['x']], ['🧊 冻着', ['frozen']]])
+    expect(todoDiscussText(l[2])).toContain('- [要命] fire')
+  })
   it('sorts newest / oldest / by due', () => {
     expect(sortTodos(list, 'oldest').map(x => x.id)).toEqual(['d', 'c', 'b', 'a'])
     expect(sortTodos(list, 'due').map(x => x.id)).toEqual(['b', 'd', 'c', 'a'])

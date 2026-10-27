@@ -107,8 +107,8 @@ def main():
     cs = sub.add_parser('cards'); cs.add_argument('--all', action='store_true')
     cd = sub.add_parser('card'); cd.add_argument('what', choices=['show', 'edit', 'close', 'reopen']); cd.add_argument('id')
     cd.add_argument('--draft'); cd.add_argument('--why')
-    t = sub.add_parser('todo'); t.add_argument('what', choices=['add', 'list', 'done', 'drop', 'note']); t.add_argument('args', nargs='*')
-    t.add_argument('--due'); t.add_argument('--ref'); t.add_argument('--all', action='store_true')
+    t = sub.add_parser('todo'); t.add_argument('what', choices=['add', 'list', 'done', 'drop', 'note', 'pri']); t.add_argument('args', nargs='*')
+    t.add_argument('--due'); t.add_argument('--ref'); t.add_argument('--pri', type=int, choices=[1, 2, 3], default=2); t.add_argument('--all', action='store_true')
     j = sub.add_parser('jira'); j.add_argument('what', choices=['search', 'get', 'transitions', 'me']); j.add_argument('arg', nargs='?', default='')
     j.add_argument('--fields', default='summary,status,assignee,updated,labels,fixVersions,issuelinks'); j.add_argument('--max', type=int, default=20)
     r = sub.add_parser('run'); r.add_argument('routine', choices=['jira', 'jira-check', 'sort-inbox', 'morning-plan', 'evening-report'])
@@ -140,11 +140,12 @@ def main():
             rows = data['todos']
             if not rows: print('No open todos.'); return
             for x in rows:
-                print(f"{x['id'][:8]}  {'[x] ' if x['status'] == 'done' else '[-] ' if x['status'] == 'dropped' else ''}{x['title']}{'  · due ' + x['due'] if x['due'] else ''}  ({x['source']}, {x['steps']} steps)")
+                pri = {1: '⚡要命 ', 3: '🧊冻着 '}.get(x.get('priority', 2), '')
+                print(f"{x['id'][:8]}  {pri}{'[x] ' if x['status'] == 'done' else '[-] ' if x['status'] == 'dropped' else ''}{x['title']}{'  · due ' + x['due'] if x['due'] else ''}  ({x['source']}, {x['steps']} steps)")
             return
         if args.what == 'add':
             title = ' '.join(args.args).strip()
-            status, data = call('POST', '/todos/add', {'title': title, 'due': args.due, 'ref': args.ref})
+            status, data = call('POST', '/todos/add', {'title': title, 'due': args.due, 'ref': args.ref, 'priority': args.pri})
             if status != 200: fail(status, data)
             print(f"Noted {data['todo']['id'][:8]}: {data['todo']['title']}" + (f" (due {data['todo']['due']})" if data['todo']['due'] else ''))
             return
@@ -152,10 +153,13 @@ def main():
         tid, rest = args.args[0], ' '.join(args.args[1:])
         if args.what == 'note':
             status, data = call('POST', '/todos/note', {'id': tid, 'text': rest})
+        elif args.what == 'pri':
+            if rest.strip() not in ('1', '2', '3'): sys.exit('Priority 1 (⚡ 要命), 2 (🔥 冒烟) or 3 (🧊 冻着): ./hive todo pri <id> 1')
+            status, data = call('POST', '/todos/priority', {'id': tid, 'priority': int(rest.strip())})
         else:
             status, data = call('POST', '/todos/status', {'id': tid, 'status': 'done' if args.what == 'done' else 'dropped'})
         if status != 200: fail(status, data)
-        print({'note': 'Added to its history.', 'done': 'Done.', 'drop': 'Dropped.'}[args.what])
+        print({'note': 'Added to its history.', 'done': 'Done.', 'drop': 'Dropped.', 'pri': 'Priority set.'}[args.what])
         return
 
     if args.cmd == 'jira':

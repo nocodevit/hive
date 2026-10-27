@@ -118,7 +118,8 @@ declare global {
       todos: {
         list: () => Promise<import('../renderer/src/lib/butler-todos').TodoView[]>
         setDue: (ids: string[], due: string) => Promise<number>
-        add: (input: { title: string; due?: string }) => Promise<import('../renderer/src/lib/butler-todos').TodoView | null>
+        setPriority: (ids: string[], p: 1 | 2 | 3) => Promise<number>
+        add: (input: { title: string; due?: string; priority?: 1 | 2 | 3 }) => Promise<import('../renderer/src/lib/butler-todos').TodoView | null>
         setStatus: (id: string, status: 'open' | 'done' | 'dropped') => Promise<boolean>
         note: (id: string, text: string) => Promise<boolean>
         fromApproval: (id: string, note?: string) => Promise<import('../renderer/src/lib/butler-todos').TodoView | null>

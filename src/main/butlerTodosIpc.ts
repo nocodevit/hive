@@ -4,7 +4,7 @@
 
 import type { IpcMain } from 'electron'
 import type { Approval } from './approvals'
-import type { TodoInput, TodoSource, TodoStatus, TodoStore } from './butlerTodos'
+import { isPriority, type TodoInput, type TodoSource, type TodoStatus, type TodoStore } from './butlerTodos'
 
 const str = (p: Record<string, unknown> | undefined, k: string) => (typeof p?.[k] === 'string' ? (p[k] as string) : '')
 const clip = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' : s)
@@ -49,7 +49,7 @@ export function registerTodosIpc(d: {
   h('todos:list', () => d.store().all())
   h('todos:add', (_e, input: unknown) => {
     const i = (input && typeof input === 'object' ? input : {}) as TodoInput
-    return done(d.store().add({ title: String(i.title ?? ''), due: i.due, source: i.source ?? 'manual', who: 'owner' }))
+    return done(d.store().add({ title: String(i.title ?? ''), due: i.due, priority: i.priority, source: i.source ?? 'manual', who: 'owner' }))
   })
   h('todos:setStatus', (_e, id: unknown, status: unknown) =>
     typeof id === 'string' && (status === 'open' || status === 'done' || status === 'dropped') ? done(d.store().setStatus(id, status as TodoStatus)) : false)
@@ -57,6 +57,11 @@ export function registerTodosIpc(d: {
     if (!Array.isArray(ids) || typeof due !== 'string') return 0
     const s = d.store()
     return done(ids.filter(id => typeof id === 'string' && s.setDue(id, due)).length)
+  })
+  h('todos:setPriority', (_e, ids: unknown, p: unknown) => {
+    if (!Array.isArray(ids) || !isPriority(p)) return 0
+    const s = d.store()
+    return done(ids.filter(id => typeof id === 'string' && s.setPriority(id, p)).length)
   })
   h('todos:note', (_e, id: unknown, text: unknown) =>
     typeof id === 'string' && typeof text === 'string' && text.trim() ? done(d.store().event(id, { who: 'owner', kind: 'note', text })) : false)
