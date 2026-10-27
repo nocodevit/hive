@@ -10,7 +10,7 @@
 // No renderer code has to know about the specific hue values — everything
 // downstream reads through the semantic CSS vars.
 
-export const PALETTES = ['neon-purple', 'tech-blue', 'future-pink'] as const
+export const PALETTES = ['neon-purple', 'tech-blue', 'future-pink', 'halloween'] as const
 export type Palette = (typeof PALETTES)[number]
 
 // v2.9.0: Style is orthogonal to Palette. Accent = the calm shipping look
@@ -54,9 +54,45 @@ const PALETTE_STORAGE_KEY = 'hive:palette'
 /// Read the persisted palette from localStorage; falls back to the default
 /// if none saved or the saved value is stale (e.g. an old build shipped a
 /// palette id we no longer recognize).
-export function loadPalette(): Palette {
+export function loadPalette(now = new Date()): Palette {
   const saved = localStorage.getItem(PALETTE_STORAGE_KEY)
-  return isPalette(saved) ? saved : 'neon-purple'
+  const p = isPalette(saved) ? saved : 'neon-purple'
+  // Out of season the limited skin hands back what the owner had before it.
+  if (p === 'halloween' && !isHalloweenSeason(now)) {
+    const before = localStorage.getItem(HALLOWEEN_BEFORE_KEY)
+    const back = isPalette(before) && before !== 'halloween' ? before : 'neon-purple'
+    localStorage.setItem(PALETTE_STORAGE_KEY, back)
+    return back
+  }
+  return p
+}
+
+// ── 🎃 Halloween: a limited skin, Oct 24 – Nov 2 ─────────────────────
+const HALLOWEEN_BEFORE_KEY = 'hive:palette-before-halloween'
+
+export function isHalloweenSeason(now = new Date()): boolean {
+  const m = now.getMonth(), d = now.getDate()
+  return (m === 9 && d >= 24) || (m === 10 && d <= 2)
+}
+
+/** Palettes the picker offers today (the limited skin only in season). */
+export function availablePalettes(now = new Date()): Palette[] {
+  return PALETTES.filter(p => p !== 'halloween' || isHalloweenSeason(now))
+}
+
+/**
+ * Once per season, the first launch in season switches to Halloween and
+ * remembers the palette it replaced. After that the owner's choice stands —
+ * Settings › Theme palette switches back to anything.
+ */
+export function halloweenTakeover(current: Palette, now = new Date()): Palette {
+  if (!isHalloweenSeason(now)) return current
+  const key = `hive:halloween-${now.getFullYear()}`
+  if (localStorage.getItem(key)) return current
+  localStorage.setItem(key, '1')
+  if (current === 'halloween') return current
+  localStorage.setItem(HALLOWEEN_BEFORE_KEY, current)
+  return 'halloween'
 }
 
 /// Persist + apply a palette to the DOM. Removing the attribute for the
@@ -125,5 +161,11 @@ export const PALETTE_META: Record<Palette, PaletteMeta> = {
     name: 'Future Pink',
     swatch: '#ff2eaa',
     tagline: 'Neon fuchsia · vaporwave forward',
+  },
+  halloween: {
+    id: 'halloween',
+    name: '🎃 Halloween',
+    swatch: '#ffb020',
+    tagline: 'Limited · gold pumpkin + night violet · ghosts & spiders · until Nov 2',
   },
 }
