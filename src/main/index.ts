@@ -977,16 +977,17 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       }
       if (req.method === 'GET' && url.pathname === '/todos') {
         const all = url.searchParams.get('all') === '1'
-        return reply(200, { ok: true, todos: todos.all().filter(t => all || t.status === 'open').map(t => ({ id: t.id, title: t.title, status: t.status, due: t.due ?? '', source: t.source, createdAt: t.createdAt, steps: t.events.length })) })
+        return reply(200, { ok: true, todos: todos.all().filter(t => all || t.status === 'open').map(t => ({ id: t.id, title: t.title, status: t.status, due: t.due ?? '', priority: t.priority, source: t.source, createdAt: t.createdAt, steps: t.events.length })) })
       }
       const body = req.method === 'POST' ? await readJsonBody(req).catch(() => null) : null
       if (url.pathname === '/todos/add') {
-        const t = todos.add({ title: String(body?.title ?? ''), due: body?.due, source: 'chat', who: 'owner', refs: typeof body?.ref === 'string' && /^[A-Z][A-Z0-9]+-\d+$/.test(body.ref) ? { jiraKey: body.ref } : {}, note: body?.note })
-        return t ? reply(200, { ok: true, todo: { id: t.id, title: t.title, due: t.due ?? '' } }) : reply(400, { ok: false, error: 'empty_title' })
+        const t = todos.add({ title: String(body?.title ?? ''), due: body?.due, priority: Number(body?.priority) as any, source: 'chat', who: 'owner', refs: typeof body?.ref === 'string' && /^[A-Z][A-Z0-9]+-\d+$/.test(body.ref) ? { jiraKey: body.ref } : {}, note: body?.note })
+        return t ? reply(200, { ok: true, todo: { id: t.id, title: t.title, due: t.due ?? '', priority: t.priority } }) : reply(400, { ok: false, error: 'empty_title' })
       }
       const t = pick(body?.id)
       if (!t) return reply(404, { ok: false, error: 'no_such_todo' })
       if (url.pathname === '/todos/status' && ['open', 'done', 'dropped'].includes(body?.status)) { todos.setStatus(t.id, body.status, 'owner'); return reply(200, { ok: true, id: t.id }) }
+      if (url.pathname === '/todos/priority') return todos.setPriority(t.id, Number(body?.priority) as any, 'owner') || t.priority === Number(body?.priority) ? reply(200, { ok: true, id: t.id }) : reply(400, { ok: false, error: 'bad_priority' })
       if (url.pathname === '/todos/note' && typeof body?.text === 'string' && body.text.trim()) { todos.event(t.id, { who: 'owner', kind: 'note', text: body.text }); return reply(200, { ok: true, id: t.id }) }
       return reply(400, { ok: false, error: 'bad_request' })
     }
