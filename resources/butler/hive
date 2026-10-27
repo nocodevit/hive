@@ -9,7 +9,7 @@
   ./hive chat-search --q "words"
   ./hive feishu-try --text "message" [--sender OPEN_ID] [--chat CHAT_ID]   (nothing is sent)
 """
-import argparse, json, os, subprocess, sys, urllib.error, urllib.request
+import argparse, json, os, subprocess, sys, urllib.error, urllib.parse, urllib.request
 
 HIVE_DIR = os.environ.get('HIVE_DATA_DIR') or os.path.expanduser('~/.hive')
 
@@ -86,6 +86,11 @@ def fail(status, data):
         'start_timeout': 'The chat did not come up within 3 minutes (it may still be compacting). Check again with ./hive agents.',
         'no_window': 'Hive has no window to start the chat in.',
         'empty_text': 'Nothing to send.',
+        'no_such_card': 'No card with that id (or the prefix matches more than one). See ./hive cards --all.',
+        'needs_owner_answer': 'That card is waiting for the owner\'s answer; it has no draft to edit.',
+        'not_pending': 'That card is no longer waiting (sent or closed already).',
+        'not_closed': 'Only a closed (dismissed) card can be reopened.',
+        'why_required': 'Say why it can be closed: --why "…"',
         'bad_token': 'Hive rejected the token (~/.hive/api-token). Try again; if it persists, restart Hive.',
     }.get(err, err)
     print(f'FAILED: {msg}')
@@ -99,6 +104,9 @@ def main():
     sub = p.add_subparsers(dest='cmd', required=True)
     a = sub.add_parser('agents'); a.add_argument('--project')
     sub.add_parser('pending')
+    cs = sub.add_parser('cards'); cs.add_argument('--all', action='store_true')
+    cd = sub.add_parser('card'); cd.add_argument('what', choices=['show', 'edit', 'close', 'reopen']); cd.add_argument('id')
+    cd.add_argument('--draft'); cd.add_argument('--why')
     t = sub.add_parser('todo'); t.add_argument('what', choices=['add', 'list', 'done', 'drop', 'note']); t.add_argument('args', nargs='*')
     t.add_argument('--due'); t.add_argument('--ref'); t.add_argument('--all', action='store_true')
     j = sub.add_parser('jira'); j.add_argument('what', choices=['search', 'get', 'transitions', 'me']); j.add_argument('arg', nargs='?', default='')
@@ -168,6 +176,38 @@ def main():
         run = data['run']
         print(f"{data['name']}: {'done' if run['ok'] else 'failed — ' + run.get('error', '')}")
         if data.get('text'): print(data['text'])
+        return
+
+    if args.cmd == 'cards':
+        status, data = call('GET', '/cards' + ('?all=1' if args.all else ''))
+        if status != 200: fail(status, data)
+        if not data['cards']: print('No cards waiting.'); return
+        for x in data['cards']:
+            state = '' if x['status'] == 'pending' else f"[{x['status']}] "
+            ask = f"  · asks: {x['question']}" if x['question'] else ''
+            print(f"{x['id'][:8]}  {state}{x['title']}  ({x['subtitle']}){ask}")
+        return
+
+    if args.cmd == 'card':
+        if args.what == 'show':
+            status, data = call('GET', '/cards/show?id=' + urllib.parse.quote(args.id))
+            if status != 200: fail(status, data)
+            x = data['card']
+            print(f"{x['id']}  {x['title']}  [{x['status']}]\n{x['subtitle']}")
+            for label, key in (('They said', 'their'), ('What they want', 'about'), ('Already sent', 'sent'), ('Your call', 'topic'), ('Butler asks', 'question'), ('Draft', 'draft'), ('Link', 'url')):
+                if x.get(key): print(f"\n{label}:\n{x[key]}")
+            if x.get('closed'): print(f"\nClosed by {x['closed']['by']}" + (f": {x['closed'].get('why')}" if x['closed'].get('why') else ''))
+            return
+        if args.what == 'edit':
+            if not args.draft: sys.exit('Give the new draft: ./hive card edit <id> --draft "…"')
+            status, data = call('POST', '/cards/edit', {'id': args.id, 'draft': args.draft})
+        elif args.what == 'close':
+            if not args.why: sys.exit('Say why: ./hive card close <id> --why "…"')
+            status, data = call('POST', '/cards/close', {'id': args.id, 'why': args.why})
+        else:
+            status, data = call('POST', '/cards/reopen', {'id': args.id})
+        if status != 200: fail(status, data)
+        print({'edit': 'Draft updated — the owner sends it from the card.', 'close': 'Closed (kept in History).', 'reopen': 'Back in Approve.'}[args.what])
         return
 
     if args.cmd == 'pending':
