@@ -109,7 +109,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   }
   const edit = (it: ApprovalCard) => { setEditing(it.id); setText(it.draft) }
 
-  if (!items.length) return <div className="text-[12px] text-text-muted px-1">Nothing to approve</div>
+  if (!items.length) return <div className="text-[12px] text-text-muted px-1">{document.documentElement.dataset.palette === 'halloween' ? '👻 全清了，鬼都没有' : 'Nothing to approve'}</div>
   const counts = items.reduce<Record<string, number>>((m, it) => { const k = srcKey(it.kind); m[k] = (m[k] ?? 0) + 1; return m }, {})
   const shown = filter === 'all' ? items : items.filter(it => srcKey(it.kind) === filter)
   const groups = [{ label: 'Needs your call', list: shown.filter(needsYou) }, { label: 'Ready to send', list: shown.filter(it => !needsYou(it)) }]

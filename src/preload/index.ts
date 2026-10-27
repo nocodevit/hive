@@ -564,6 +564,8 @@ const { webUtils } = require('electron')
 
 contextBridge.exposeInMainWorld('api', {
   ...api,
+  // Seasonal skins stay out of tests unless a test asks for one (HIVE_HALLOWEEN=1).
+  seasonal: { halloween: process.env.NODE_ENV !== 'test' || process.env.HIVE_HALLOWEEN === '1' },
   getFilePath: (file: File) => {
     try { return webUtils.getPathForFile(file) } catch { return null }
   }

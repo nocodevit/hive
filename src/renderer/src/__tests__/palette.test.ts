@@ -5,11 +5,11 @@
 // swatch typo would silently render an empty-looking picker.
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PALETTES, PALETTE_META, type Palette, loadPalette, applyPalette } from '../palette'
+import { PALETTES, PALETTE_META, type Palette, loadPalette, applyPalette, availablePalettes, halloweenTakeover, isHalloweenSeason } from '../palette'
 
 describe('palette', () => {
-  it('lists the three shipped palettes in the expected order', () => {
-    expect(PALETTES).toEqual(['neon-purple', 'tech-blue', 'future-pink'])
+  it('lists the shipped palettes in the expected order (Halloween is the seasonal one)', () => {
+    expect(PALETTES).toEqual(['neon-purple', 'tech-blue', 'future-pink', 'halloween'])
   })
 
   it('has a metadata entry for every listed palette', () => {
@@ -83,5 +83,37 @@ describe('loadPalette / applyPalette', () => {
   it('load→apply→load round-trip preserves the palette', () => {
     applyPalette('tech-blue')
     expect(loadPalette()).toBe('tech-blue')
+  })
+})
+
+describe('🎃 Halloween, a limited skin', () => {
+  beforeEach(() => localStorage.clear())
+  const oct27 = new Date(2026, 9, 27), nov2 = new Date(2026, 10, 2, 23), nov3 = new Date(2026, 10, 3), oct23 = new Date(2026, 9, 23)
+
+  it('is in season Oct 24 – Nov 2 only, and only then in the picker', () => {
+    expect([oct23, new Date(2026, 9, 24), oct27, nov2, nov3].map(d => isHalloweenSeason(d))).toEqual([false, true, true, true, false])
+    expect(availablePalettes(oct27)).toContain('halloween')
+    expect(availablePalettes(nov3)).not.toContain('halloween')
+  })
+
+  it('puts itself on once per season and remembers what it replaced; the owner can switch back', () => {
+    expect(halloweenTakeover('tech-blue', oct27)).toBe('halloween')
+    applyPalette('halloween')
+    applyPalette('future-pink')
+    expect(halloweenTakeover('future-pink', oct27)).toBe('future-pink')
+    expect(halloweenTakeover('neon-purple', nov3)).toBe('neon-purple')
+  })
+
+  it('after the season it hands back the palette from before', () => {
+    halloweenTakeover('tech-blue', oct27)
+    applyPalette('halloween')
+    expect(loadPalette(oct27)).toBe('halloween')
+    expect(loadPalette(nov3)).toBe('tech-blue')
+    expect(localStorage.getItem('hive:palette')).toBe('tech-blue')
+  })
+
+  it('next year it comes back once more', () => {
+    halloweenTakeover('tech-blue', oct27)
+    expect(halloweenTakeover('tech-blue', new Date(2027, 9, 25))).toBe('halloween')
   })
 })
