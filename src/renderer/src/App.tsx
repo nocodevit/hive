@@ -42,7 +42,8 @@ import { BUILTIN_TEMPLATES, clampChatFontSize, CHAT_FONT_SIZE_MIN, CHAT_FONT_SIZ
 import { NoteTag, NOTE_TAG_COLORS } from './noteTag'
 import { NUDGE_MESSAGE, nudgeTargets } from './nudge'
 import { projectListState } from './projectListState'
-import { PALETTES, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
+import { HalloweenFX } from './components/HalloweenFX'
+import { availablePalettes, halloweenTakeover, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
 import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
 import { pickLRUToEvict } from './lru-terminals'
@@ -87,7 +88,12 @@ export default function App() {
   })
   // v2.6.0: accent-palette overlay. Layered on top of light/dark theme.
   // 'neon-purple' = default (no data-palette attribute), matches historic look.
-  const [palette, setPalette] = useState<Palette>(() => loadPalette())
+  // 🎃 In season, the first launch of this version puts on the Halloween skin (once);
+  // Settings › Theme palette switches back to anything.
+  const [palette, setPalette] = useState<Palette>(() => {
+    const p = loadPalette()
+    return window.api?.seasonal?.halloween ? halloweenTakeover(p) : p
+  })
   // v2.9.0: visual STYLE (accent | prime), orthogonal to palette.
   // Prime is a full CRT/HUD language swap; accent = shipping look.
   const [style, setStyle] = useState<Style>(() => loadStyle())
@@ -1003,8 +1009,13 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen bg-sidebar-bg text-text-primary">
+      {palette === 'halloween' && <HalloweenFX />}
       {/* Title bar across the window: traffic lights, where you are, Butler (ui-preview-butler.html). */}
       <div className="drag-region h-[44px] flex-shrink-0 flex items-center gap-2 pl-[88px] pr-3">
+        {palette === 'halloween' && (
+          <span aria-label="Halloween limited skin" title="Limited skin · until Nov 2 · Settings › Theme palette to switch back"
+            className="no-drag flex-shrink-0 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide text-[#1a0f00] bg-gradient-to-r from-[#ffb020] to-[#ff8a1f]">🎃 HALLOWEEN</span>
+        )}
         <span className="flex-1 min-w-0 truncate text-[12px] font-medium text-text-muted" aria-label="Location">
           {[selectedProject?.name, selectedAgent?.name].filter(Boolean).join(' / ')}
         </span>
@@ -3470,8 +3481,8 @@ export default function App() {
                 attribute change. */}
             <div data-settings-section="Palette" aria-label="Palette section" className="scroll-mt-2">
               <label className="block text-xs font-heading font-semibold text-text-muted uppercase tracking-wider mb-2">Theme palette</label>
-              <div className="grid grid-cols-3 gap-2.5">
-                {PALETTES.map((id) => {
+              <div className="grid grid-cols-2 gap-2.5">
+                {availablePalettes().map((id) => {
                   const meta = PALETTE_META[id]
                   const selected = palette === id
                   // v2.9.0: fade + disable palettes incompatible with the

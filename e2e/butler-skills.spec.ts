@@ -101,7 +101,7 @@ test('Try runs the skill and shows the output', async () => {
 
 test('Describe a change → chips + example → Accept saves an override; Reset removes it', async () => {
   await page.getByLabel('Describe a change').fill('别太正式')
-  await page.getByRole('button', { name: 'Go' }).click()
+  await page.getByRole('button', { name: 'Go', exact: true }).click()
   const card = page.getByLabel('Proposed change')
   await expect(card.getByText('✓ checks')).toBeVisible()
   await expect(card.getByText('PR 提了，在等 review。')).toBeVisible()

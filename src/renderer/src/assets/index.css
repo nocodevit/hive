@@ -184,6 +184,42 @@
     --sidebar-bg: #131114;
     --sidebar-active: #2d1f2c;
   }
+  /* ---------- 🎃 Halloween (limited, Oct 24 – Nov 2) ----------
+     Night violet ground, witch-violet selection, pumpkin gold only on
+     primary actions / badges / working dots — never on body text.
+     Night in light theme too: a pumpkin skin is a night skin. */
+  [data-palette='halloween'],
+  [data-palette='halloween'][data-theme='light'] {
+    --bg-primary: #120a1f;
+    --bg-secondary: #1b1030;
+    --bg-tertiary: #241640;
+    --bg-hover: #2f1d52;
+    --bg-active: #3b2668;
+    --bg-terminal: #160c28;
+
+    --border-default: #3a2560;
+    --border-subtle: #281a44;
+
+    --text-primary: #f3ecff;
+    --text-secondary: #c8b8e6;
+    --text-muted: #8a77ad;
+    --text-on-purple: #1a0f00;
+
+    --accent: #ffb020;
+    --accent-hover: #ffc24d;
+    --accent-subtle: #2f1d52;
+    --accent-muted: #9b5cff;
+
+    --status-working: #ffb020;
+    --status-waiting: #9b5cff;
+    --status-done: #7a6a99;
+    --status-danger: #ff5a3c;
+
+    --sidebar-bg: #0e0718;
+    --sidebar-active: #2a1848;
+    color-scheme: dark;
+  }
+
   [data-palette='future-pink'][data-theme='light'] {
     --bg-primary: #fff5fb;
     --bg-secondary: #ffffff;
