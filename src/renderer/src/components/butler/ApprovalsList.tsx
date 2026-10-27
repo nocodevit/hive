@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { DiscussButton, type OnDiscuss } from './DiscussButton'
 
-export type ApprovalCard = { id: string; kind: string; title: string; subtitle: string; draft: string; action: string; payload?: Record<string, unknown>; createdAt?: number }
+export type ApprovalCard = { id: string; kind: string; title: string; subtitle: string; draft: string; action: string; payload?: Record<string, unknown>; createdAt?: number; edited?: { at: number } }
 
 const ICON: Record<string, string> = { email: '✉️', feishu: '💬', jira: '🎫' }
 const iconOf = (kind: string) => ICON[kind.split('.')[0]] ?? '📝'
@@ -34,7 +34,7 @@ export function discussText(it: ApprovalCard): string {
   const p = it.payload
   return [
     'Help me decide how to answer this email. Do not send anything.',
-    it.title,
+    `${it.title} · card ${it.id}`,
     str(p, 'about') ? `What it wants: ${str(p, 'about')}` : '',
     `You need from me: ${str(p, 'question')}`,
     '',
@@ -48,8 +48,8 @@ export function discussText(it: ApprovalCard): string {
 export function cardDiscussText(it: ApprovalCard): string {
   const p = it.payload
   return [
-    'Help me think this through. Do not send or change anything until I confirm.',
-    `${it.title} · ${it.subtitle}`,
+    'Help me think this through. Do not send or change anything until I confirm. Once we agree on the wording, put it on the card (./hive card edit) and I send it from Approve.',
+    `${it.title} · ${it.subtitle} · card ${it.id}`,
     str(p, 'key') ? `Jira: ${str(p, 'key')}${str(p, 'url') ? ` (${str(p, 'url')})` : ''}` : '',
     str(p, 'chatName') ? `Feishu chat: ${str(p, 'chatName')}` : '',
     str(p, 'topic') ? `Why it waits for me: ${str(p, 'topic')}` : '',
@@ -159,7 +159,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
           ) : it.draft.trim() ? (
             <button onClick={() => edit(it)} aria-label={`Draft for ${it.title}`} title="Click to edit"
               className="self-end max-w-[92%] text-left rounded-[12px_4px_12px_12px] bg-accent-subtle px-2.5 py-1.5 text-[12.5px] text-text-primary cursor-text hover:ring-1 hover:ring-accent/40">
-              <span className="block text-[10.5px] font-semibold text-accent">{jira ? 'Comment' : "Butler's reply"} · click to edit</span>
+              <span className="block text-[10.5px] font-semibold text-accent">{jira ? 'Comment' : "Butler's reply"} · {it.edited ? <span aria-label="Updated by Butler">updated {whenLabel(it.edited.at)} · </span> : null}click to edit</span>
               <span className="whitespace-pre-wrap">{it.draft}</span>
             </button>
           ) : null)}
@@ -211,7 +211,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   )
 }
 
-export type HistoryCard = { id: string; kind: string; title: string; subtitle: string; draft: string; payload?: Record<string, unknown>; status: string; createdAt: number; resolvedAt?: number; error?: string }
+export type HistoryCard = { id: string; kind: string; title: string; subtitle: string; draft: string; payload?: Record<string, unknown>; status: string; createdAt: number; resolvedAt?: number; error?: string; closed?: { by: 'owner' | 'butler'; why?: string } }
 
 const OUTCOME: Record<string, { text: string; cls: string }> = {
   approved: { text: 'Done', cls: 'text-status-working' },
@@ -233,7 +233,7 @@ export function historyDiscussText(it: HistoryCard): string {
   const sent = it.status === 'approved' ? (it.kind.startsWith('jira') ? 'What was applied' : 'What was sent') : 'What Butler proposed'
   return [
     'Follow up on this Butler item with me. Do not send or change anything until I confirm.',
-    `${it.title} · ${it.subtitle}`,
+    `${it.title} · ${it.subtitle} · card ${it.id}`,
     `Outcome: ${o} · ${new Date(it.resolvedAt ?? it.createdAt).toLocaleString('en-GB')}${it.error ? ` · error: ${it.error}` : ''}`,
     str(p, 'key') ? `Jira: ${str(p, 'key')}` : '',
     str(p, 'chatName') ? `Feishu chat: ${str(p, 'chatName')}` : '',
@@ -258,7 +258,7 @@ export function ApprovalHistory({ onDiscuss }: { onDiscuss?: OnDiscuss }) {
       <summary className="cursor-pointer text-[12px] font-semibold text-text-muted">History · {items.length} this week</summary>
       <div className="mt-1 flex flex-col">
         {items.map(it => {
-          const o = OUTCOME[it.status] ?? { text: it.status, cls: 'text-text-muted' }
+          const o = it.closed?.by === 'butler' ? { text: 'Closed by Butler', cls: 'text-text-muted' } : OUTCOME[it.status] ?? { text: it.status, cls: 'text-text-muted' }
           return (
             <details key={it.id} className="py-1 border-t border-border first:border-t-0">
               <summary className="flex items-center gap-2 cursor-pointer text-[12px] list-none">
@@ -269,6 +269,7 @@ export function ApprovalHistory({ onDiscuss }: { onDiscuss?: OnDiscuss }) {
               </summary>
               <div className="mt-1 flex items-center gap-2 min-w-0"><span className="text-[11px] text-text-muted truncate">{it.subtitle}</span><JiraLink payload={it.payload} /></div>
               <div className="mt-1 rounded-lg bg-bg-secondary px-2.5 py-2 text-[12px] text-text-primary whitespace-pre-wrap">{it.draft}</div>
+              {it.closed?.why && <div className="mt-1 text-[11.5px] text-text-secondary" aria-label="Why closed">Why: {it.closed.why}</div>}
               {it.error && <div className="mt-1 text-[11px] text-red-400 font-mono">{it.error}</div>}
               {onDiscuss && (
                 <DiscussButton label={`Discuss ${it.title}`} text={() => historyDiscussText(it)} onDiscuss={onDiscuss} className="mt-1.5" />
