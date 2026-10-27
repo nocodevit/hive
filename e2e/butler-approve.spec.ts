@@ -1,7 +1,7 @@
 import { test, expect, ElectronApplication, Page } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import { join } from 'path'
-import { execSync } from 'child_process'
+import { execSync, spawnSync } from 'child_process'
 import { mkdirSync, rmSync, existsSync, writeFileSync, chmodSync, readFileSync } from 'fs'
 import { tmpdir } from 'os'
 
@@ -21,6 +21,12 @@ const FAKE = join(ROOT, 'fake-claude')
 
 let app: ElectronApplication
 let page: Page
+
+/** The real ./hive CLI Butler runs, against this test's Hive. */
+const hive = (...args: string[]) => {
+  const r = spawnSync('python3', [join(PROJECT_ROOT, 'resources', 'butler', 'hive'), ...args], { env: { ...process.env, HIVE_DATA_DIR }, encoding: 'utf8' })
+  return { ok: r.status === 0, out: `${r.stdout}${r.stderr}` }
+}
 
 const card = (id: string, kind: string, title: string, subtitle: string, draft: string, payload: Record<string, unknown>, action: string) =>
   ({ id, kind, title, subtitle, draft, payload, action, status: 'pending', createdAt: 1 })
@@ -152,6 +158,37 @@ test('Discuss ▾ lists Butler first, then agents by project', async () => {
   await expect(menu.getByRole('group', { name: 'PSLE' }).getByRole('menuitem', { name: 'Discuss with Planner' })).toContainText('resumes')
   await page.keyboard.press('Escape')
   await expect(menu).toHaveCount(0)
+})
+
+test('Butler keeps cards right: ./hive card edit / close / reopen; sending stays on the card', async () => {
+  const list = hive('cards')
+  expect(list.ok).toBe(true)
+  expect(list.out).toContain('Daniel Vargas Millan')
+  expect(hive('card', 'show', 'fs-1').out).toContain('roaming CDRs split by country')
+
+  expect(hive('card', 'edit', 'fs-1', '--draft', 'Thanks Daniel — Monday reports split by country from next month.').ok).toBe(true)
+  const daniel = page.getByLabel('Reply: Daniel Vargas Millan · On another topic, I have a requirement f…')
+  await expect(daniel.getByLabel('Draft for Daniel Vargas Millan · On another topic, I have a requirement f…')).toContainText('Monday reports split by country')
+  await expect(daniel.getByLabel('Updated by Butler')).toBeVisible()
+  const saved = JSON.parse(readFileSync(join(BUTLER, 'approvals.json'), 'utf8')).find((x: any) => x.id === 'fs-1')
+  expect(saved.status).toBe('pending')
+
+  const ana = hive('card', 'edit', 'new-q', '--draft', 'x')
+  expect(ana.ok).toBe(false)
+  expect(ana.out).toContain("waiting for the owner's answer")
+
+  expect(hive('card', 'close', 'jira-c').out).toContain('Say why')
+  expect(hive('card', 'close', 'jira-c', '--why', '已在 Jira 里答复').ok).toBe(true)
+  await expect(page.getByRole('button', { name: 'Comment P4-6926 · comment' })).toHaveCount(0)
+  const history = page.getByRole('group', { name: 'Approve history' })
+  await history.locator('summary').first().click()
+  const row = history.getByRole('group').filter({ hasText: 'P4-6926 · comment' })
+  await expect(row).toContainText('Closed by Butler')
+  await row.getByText('P4-6926 · comment').click()
+  await expect(row.getByLabel('Why closed')).toHaveText('Why: 已在 Jira 里答复')
+
+  expect(hive('card', 'reopen', 'jira-c').ok).toBe(true)
+  await expect(page.getByRole('button', { name: 'Comment P4-6926 · comment' })).toBeVisible()
 })
 
 test('needs-you card: what it wants + question; Discuss opens the Butler chat', async () => {

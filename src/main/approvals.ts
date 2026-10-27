@@ -30,6 +30,10 @@ export interface Approval {
   createdAt: number
   resolvedAt?: number
   error?: string
+  /** Last draft rewrite by Butler (./hive card edit), shown on the card. */
+  edited?: { at: number; by: 'butler' }
+  /** Who dismissed it and why (Butler must say why: ./hive card close --why). */
+  closed?: { by: 'owner' | 'butler'; why?: string }
 }
 
 export type Executor = (item: Approval) => Promise<{ ok: boolean; error?: string }>
@@ -107,11 +111,33 @@ export function createApprovals(deps: ApprovalsDeps) {
       }
     },
 
-    reject(id: string): boolean {
+    reject(id: string, by: 'owner' | 'butler' = 'owner', why?: string): boolean {
       const item = items.find(i => i.id === id)
       if (!item || item.status !== 'pending') return false
       item.status = 'rejected'
       item.resolvedAt = now()
+      item.closed = { by, ...(why?.trim() ? { why: why.trim().slice(0, 300) } : {}) }
+      save()
+      return true
+    },
+
+    /** Butler rewrote the draft after talking it over; the owner still sends it. */
+    editDraft(id: string, draft: string): boolean {
+      const item = items.find(i => i.id === id)
+      if (!item || item.status !== 'pending' || !draft.trim() || running.has(id)) return false
+      item.draft = draft
+      item.edited = { at: now(), by: 'butler' }
+      save()
+      return true
+    },
+
+    /** A dismissed card back to pending (it is kept a week after it was closed). */
+    reopen(id: string): boolean {
+      const item = items.find(i => i.id === id)
+      if (!item || item.status !== 'rejected') return false
+      item.status = 'pending'
+      delete item.resolvedAt
+      delete item.closed
       save()
       return true
     },

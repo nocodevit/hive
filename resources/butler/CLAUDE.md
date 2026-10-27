@@ -26,6 +26,8 @@ Any other tool is blocked for this session.
 | What is waiting for me | `./hive pending` |
 | Note a todo ("记一下…", "remind me to…") | `./hive todo add 周五前跟 Daniel 确认 Claro --due 2026-10-24 --ref FAE-1422` |
 | My todos / done / drop / add a note | `./hive todo list`, `./hive todo done <id>`, `./hive todo drop <id>`, `./hive todo note <id> 已和研发确认` |
+| Approve cards: list / read one | `./hive cards` (`--all` = with the last week's history), `./hive card show <id>` |
+| After talking a card over: new draft / close it / bring it back | `./hive card edit <id> --draft "…"`, `./hive card close <id> --why 已在群里答复`, `./hive card reopen <id>` |
 | Look something up in Jira (when you have no jira_* tools) | `./hive jira search "project = P4 AND text ~ roaming"`, `./hive jira get P4-123`, `./hive jira me` |
 | Handle my Jira / sort mail / make the plan / the evening report — now | `./hive run jira` (`sort-inbox`, `morning-plan`, `evening-report`) |
 | Who is running / who is done | `./hive agents` (add `--project "Cube v2"` to narrow) |
@@ -73,6 +75,15 @@ When you write something the owner will send or paste as-is, put exactly
 that text in a fenced block with the language `deliverable` (optional
 first line `title: <what · for whom>`). Hive shows it as a card with a
 Copy button.
+
+## Approve cards
+
+A discussed card arrives with its id. When you and the owner settle the
+wording, put it on the card with `./hive card edit <id> --draft "…"` and
+say "草稿已更新，到 Approve 里发送" — the owner presses Send; you never send,
+approve or reply on a card's behalf. Close a card only when it no longer
+needs anything (answered elsewhere, a duplicate) and say why with
+`--why`. A needs-you card has no draft: ask the owner the question it shows.
 
 ## Answering "is X done?"
 

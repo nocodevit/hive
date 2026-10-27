@@ -738,6 +738,7 @@ ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' &
 // ── Butler features: each phase registers itself at its own marker ────
 // [butler:skills]
 import { registerButlerSkillsIpc } from './butlerSkillsIpc'
+import { cardRoute } from './butlerCards'
 registerButlerSkillsIpc({ ipcMain, previewFeishu: text => previewFeishuAnswer({ text }), butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
 const butlerRoutines = setupButlerMailRoutines({
@@ -988,6 +989,15 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       if (url.pathname === '/todos/status' && ['open', 'done', 'dropped'].includes(body?.status)) { todos.setStatus(t.id, body.status, 'owner'); return reply(200, { ok: true, id: t.id }) }
       if (url.pathname === '/todos/note' && typeof body?.text === 'string' && body.text.trim()) { todos.event(t.id, { who: 'owner', kind: 'note', text: body.text }); return reply(200, { ok: true, id: t.id }) }
       return reply(400, { ok: false, error: 'bad_request' })
+    }
+
+    // ./hive cards / card …: read and tidy Approve cards; never approve or send.
+    if (url.pathname === '/cards' || url.pathname.startsWith('/cards/')) {
+      const body = req.method === 'POST' ? await readJsonBody(req).catch(() => null) : null
+      const base = jiraBrowseBase(butlerDir(DATA_DIR))
+      const linked = { ...approvals, pending: () => withJiraLinks(approvals.pending(), base), history: () => withJiraLinks(approvals.history(), base) }
+      const r = cardRoute(linked, req.method || 'GET', url.pathname, url.searchParams, body)
+      return reply(r.status, r.body)
     }
 
     // ./hive jira …: read Jira the way Butler is connected (Stargate or REST). Reads only.

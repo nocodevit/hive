@@ -9,7 +9,9 @@
       "Bash(./hive pending:*)",
       "Bash(./hive run:*)",
       "Bash(./hive jira:*)",
-      "Bash(./hive todo:*)"
+      "Bash(./hive todo:*)",
+      "Bash(./hive cards:*)",
+      "Bash(./hive card:*)"
     ],
     "deny": [
       "Edit",
