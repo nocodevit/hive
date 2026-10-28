@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.38.8] — 2026-10-28
+
+- 🎃 The Halloween three: a new ghost — a sheet tented by its raised hands (the cloth falls straight from the fingertips, folds fan down, the hands flex), a mummy that shambles slowly along the bottom of the window every 1.5–4 min (one amber eye, arms out, loose bandages flapping), and Frankenstein's monster, whose head rises from the bottom edge every 2–5 min, neck bolts sparking, then sinks back. Reduced motion: neither the mummy nor the monster appears.
+
+---
+
 ## [2.38.7] — 2026-10-28
 
 - 🎙 Recording bar rebuilt to the micro-interactions spec (📘6 长按变录音条), for **tap and hold** alike: the pair stretches across the toolbar (stopping before Send), ＋ turns 45° into ✕, 🎙 rides to the right end, a red dot pulses beside a 0:03 timer, and a live waveform scrolls in from the right (canvas, every frame; a faint breathing line when you're quiet).
