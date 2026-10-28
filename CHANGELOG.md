@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.38.2] — 2026-10-28
+
+- 🎃 Scarier ghosts: hollow eyes with red embers, a wailing mouth, a torn tail. They wander the whole window (a new spot every 4–8 s, fading in and out), and every 45–120 s one lunges at you — it swells to fill the screen, eyes flare, the screen flickers dark — then it's gone. Reduced motion: they stay still.
+
+---
+
 ## [2.38.1] — 2026-10-28
 
 - Update window: notes for **every version you skipped**, newest first, one section each — jumping from 2.27 to 2.38 now shows all of it, not just the newest release's notes. Title says how many updates you're getting.
