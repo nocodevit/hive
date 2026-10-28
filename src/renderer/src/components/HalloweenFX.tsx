@@ -10,8 +10,14 @@ import { useEffect } from 'react'
 
 const CSS = `
 .hfx { position: fixed; inset: 0; pointer-events: none; z-index: 9990; overflow: hidden }
-.hfx-ghost { position: absolute; width: 70px; opacity: .1; animation: hfx-drift 14s ease-in-out infinite }
-@keyframes hfx-drift { 0%, 100% { transform: translate(0, 0) } 50% { transform: translate(-26px, -14px) } }
+.hfx-ghost { position: absolute; left: 0; top: 0; width: 78px; will-change: transform, opacity }
+.hfx-ghost svg { display: block; width: 100%; animation: hfx-sway 3.4s ease-in-out infinite; filter: drop-shadow(0 0 14px rgba(239,233,255,.35)) }
+@keyframes hfx-sway { 0%, 100% { transform: rotate(-6deg) translateY(0) } 50% { transform: rotate(6deg) translateY(-8px) } }
+.hfx-ghost .eye { animation: hfx-glow 2.6s ease-in-out infinite }
+@keyframes hfx-glow { 0%, 100% { opacity: .55 } 50% { opacity: 1 } }
+.hfx-ghost.scare svg { filter: drop-shadow(0 0 30px rgba(255,40,40,.8)) }
+.hfx-ghost.scare .eye { animation: none; opacity: 1 }
+.hfx-dim { position: absolute; inset: 0; background: #000; opacity: 0 }
 .hfx-peek { position: fixed; width: 40px; opacity: 0; z-index: 9991; pointer-events: none }
 .hfx-peek.up { animation: hfx-peek 2.2s ease-in-out forwards }
 @keyframes hfx-peek { 0% { transform: translateY(36px); opacity: 0 } 25%, 75% { transform: translateY(0); opacity: .95 } 100% { transform: translateY(36px); opacity: 0 } }
@@ -25,10 +31,15 @@ const CSS = `
 .hfx-web path { fill: none; stroke: #e9ddff; stroke-width: .9; stroke-dasharray: 160; stroke-dashoffset: 160; animation: hfx-spin 1.6s ease-out forwards }
 .hfx-web path:nth-child(n+2) { animation-delay: .35s; animation-duration: 1.4s }
 @keyframes hfx-spin { to { stroke-dashoffset: 0 } }
-@media (prefers-reduced-motion: reduce) { .hfx *, .hfx-peek, .hfx-spider, .hfx-spider span { animation: none !important } .hfx-web path { stroke-dashoffset: 0 } }
+@media (prefers-reduced-motion: reduce) { .hfx *, .hfx-ghost svg, .hfx-peek, .hfx-spider, .hfx-spider span { animation: none !important } .hfx-web path { stroke-dashoffset: 0 } }
 `
 
-const GHOST = '<svg viewBox="0 0 60 70"><path fill="#efe9ff" d="M30 2C14 2 4 14 4 30v36l8-6 8 6 10-6 10 6 8-6 8 6V30C56 14 46 2 30 2z"/><circle cx="22" cy="28" r="4" fill="#120a1f"/><circle cx="38" cy="28" r="4" fill="#120a1f"/></svg>'
+// Hollow eye sockets with red embers, a wailing mouth, a torn tail.
+const GHOST = '<svg viewBox="0 0 60 78"><defs><radialGradient id="hfxEye"><stop offset="0" stop-color="#ff3b3b"/><stop offset=".55" stop-color="#b00010"/><stop offset="1" stop-color="#120a1f" stop-opacity="0"/></radialGradient></defs>'
+  + '<path fill="#efe9ff" fill-opacity=".92" d="M30 2C13 2 3 15 3 32v38l5-7 4 10 6-8 5 11 7-10 6 11 5-11 6 8 4-10 5 7V32C57 15 47 2 30 2z"/>'
+  + '<ellipse cx="20" cy="29" rx="6.5" ry="9" fill="#120a1f"/><ellipse cx="40" cy="29" rx="6.5" ry="9" fill="#120a1f"/>'
+  + '<circle class="eye" cx="20" cy="31" r="4" fill="url(#hfxEye)"/><circle class="eye" cx="40" cy="31" r="4" fill="url(#hfxEye)"/>'
+  + '<path fill="#120a1f" d="M22 46c2-6 14-6 16 0 1 6-3 13-8 13s-9-7-8-13z"/></svg>'
 const PEEK = '<svg viewBox="0 0 60 70"><path fill="#efe9ff" d="M30 2C14 2 4 14 4 30v36l8-6 8 6 10-6 10 6 8-6 8 6V30C56 14 46 2 30 2z"/><circle cx="22" cy="28" r="4" fill="#120a1f"/><circle cx="38" cy="28" r="4" fill="#120a1f"/><ellipse cx="30" cy="42" rx="5" ry="6" fill="#120a1f"/></svg>'
 const WEB = '<svg viewBox="0 0 120 120"><path d="M0 0 L120 0 M0 0 L0 120 M0 0 L110 45 M0 0 L80 80 M0 0 L45 110"/><path d="M28 0 Q24 10 26 11 Q12 18 11 26 Q8 26 0 28"/><path d="M58 0 Q50 20 52 23 Q36 34 23 52 Q20 50 0 58"/><path d="M90 0 Q78 30 81 34 Q58 52 34 81 Q30 78 0 90"/></svg>'
 
@@ -49,13 +60,69 @@ export function HalloweenFX() {
     const later = (fn: () => void, ms: number) => { const t = window.setTimeout(() => { timers.delete(t); fn() }, ms); timers.add(t) }
     const extra: HTMLElement[] = []
 
-    for (const [l, t, delay] of [['22%', '62%', 0], ['88%', '26%', -5]] as const) {
-      const g = document.createElement('div')
-      g.className = 'hfx-ghost'
-      Object.assign(g.style, { left: l, top: t, animationDelay: `${delay}s` })
-      g.innerHTML = GHOST
-      layer.appendChild(g)
+    // Two ghosts that wander the whole window, fading in and out; now and then one lunges at you.
+    const dim = document.createElement('div')
+    dim.className = 'hfx-dim'
+    layer.appendChild(dim)
+    type Ghost = { el: HTMLDivElement; x: number; y: number; busy: boolean }
+    const ghosts: Ghost[] = [0, 1].map(i => {
+      const el = document.createElement('div')
+      el.className = 'hfx-ghost'
+      el.innerHTML = GHOST
+      el.querySelector('svg')!.style.animationDelay = `${-i * 1.7}s`
+      layer.appendChild(el)
+      const g = { el, x: window.innerWidth * (i ? 0.75 : 0.2), y: window.innerHeight * (i ? 0.3 : 0.6), busy: false }
+      el.style.transform = `translate(${g.x}px, ${g.y}px)`
+      el.style.opacity = '.14'
+      return g
+    })
+    const wander = (g: Ghost) => {
+      if (!g.busy) {
+        const W = window.innerWidth, H = window.innerHeight
+        const nx = rand(20, W - 100), ny = rand(50, H - 120)
+        const mx = (g.x + nx) / 2 + rand(-160, 160), my = (g.y + ny) / 2 + rand(-120, 120)
+        const dur = rand(4000, 8000)
+        g.el.animate([
+          { transform: `translate(${g.x}px, ${g.y}px)`, opacity: g.el.style.opacity },
+          { transform: `translate(${mx}px, ${my}px)`, opacity: rand(0.04, 0.1) },
+          { transform: `translate(${nx}px, ${ny}px)`, opacity: rand(0.12, 0.24) }
+        ], { duration: dur, easing: 'ease-in-out', fill: 'forwards' })
+        g.x = nx; g.y = ny
+        later(() => { g.el.style.transform = `translate(${nx}px, ${ny}px)`; wander(g) }, dur)
+      } else later(() => wander(g), 1000)
     }
+    const scare = () => {
+      const g = ghosts[Math.floor(Math.random() * ghosts.length)]
+      if (!g.busy) {
+        g.busy = true
+        g.el.getAnimations().forEach(a => a.cancel())
+        const W = window.innerWidth, H = window.innerHeight
+        const cx = W / 2 - 39, cy = H / 2 - 60
+        g.el.classList.add('scare')
+        g.el.animate([
+          { transform: `translate(${g.x}px, ${g.y}px) scale(1)`, opacity: 0.2 },
+          { transform: `translate(${cx}px, ${cy}px) scale(1.4)`, opacity: 0.35, offset: 0.55 },
+          { transform: `translate(${cx}px, ${cy - 30}px) scale(5.5)`, opacity: 0.7, offset: 0.85 },
+          { transform: `translate(${cx}px, ${cy - 40}px) scale(7)`, opacity: 0 }
+        ], { duration: 1500, easing: 'cubic-bezier(.6,0,.9,.4)', fill: 'forwards' })
+        dim.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 0.45, offset: 0.8 }, { opacity: 0.1, offset: 0.86 }, { opacity: 0.35, offset: 0.9 }, { opacity: 0 }], { duration: 1500 })
+        later(() => {
+          g.el.classList.remove('scare')
+          g.el.getAnimations().forEach(a => a.cancel())
+          g.x = Math.random() < 0.5 ? -90 : window.innerWidth + 10
+          g.y = rand(60, window.innerHeight - 140)
+          g.el.style.transform = `translate(${g.x}px, ${g.y}px)`
+          g.el.style.opacity = '0'
+          g.busy = false
+        }, 1550)
+      }
+      later(scare, rand(45000, 120000))
+    }
+    if (!reduce) {
+      ghosts.forEach((g, i) => later(() => wander(g), 600 + i * 1500))
+      later(scare, rand(20000, 45000))
+    }
+    ;(window as unknown as { __hiveGhostScare?: () => void }).__hiveGhostScare = () => { scare() }
 
     // The chat input, when a chat is open: where the ghost peeks and the spiders stop.
     const input = () => document.querySelector<HTMLElement>('[data-testid="hive-chat-input"]')
@@ -155,6 +222,7 @@ export function HalloweenFX() {
       for (const e of extra) e.remove()
       document.querySelectorAll('.hfx-spider').forEach(e => e.remove())
       delete (window as unknown as { __hiveSpiders?: () => void }).__hiveSpiders
+      delete (window as unknown as { __hiveGhostScare?: () => void }).__hiveGhostScare
     }
   }, [])
   return null
