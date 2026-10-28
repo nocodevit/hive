@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.38.3] — 2026-10-28
+
+- 🎃 Timing: a ghost lunges at you every 2–5 minutes (was 45–120 s); spider waves come twice as often, every 5–30 s.
+
+---
+
 ## [2.38.2] — 2026-10-28
 
 - 🎃 Scarier ghosts: hollow eyes with red embers, a wailing mouth, a torn tail. They wander the whole window (a new spot every 4–8 s, fading in and out), and every 45–120 s one lunges at you — it swells to fill the screen, eyes flare, the screen flickers dark — then it's gone. Reduced motion: they stay still.
