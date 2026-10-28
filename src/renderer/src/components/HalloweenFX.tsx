@@ -50,7 +50,8 @@ const CSS = `
 @keyframes hfx-peek { 0% { transform: translateY(36px); opacity: 0 } 25%, 75% { transform: translateY(0); opacity: .95 } 100% { transform: translateY(36px); opacity: 0 } }
 .hfx-bat { position: absolute; font-size: 16px; opacity: .55 }
 .hfx-spider { position: fixed; left: 0; top: 0; z-index: 9995; font-size: 64px; margin: -32px 0 0 -32px; pointer-events: none; will-change: transform;
-  filter: drop-shadow(0 0 1.5px rgba(239,233,255,.95)) drop-shadow(0 0 10px rgba(155,92,255,.85)) drop-shadow(0 6px 6px rgba(0,0,0,.7)) }
+  /* No glow: a contact shadow right under the body, and a soft cast shadow down-right, as if lit from above-left. */
+  filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.75)) drop-shadow(5px 12px 7px rgba(0,0,0,.5)) }
 .hfx-spider span { display: inline-block; animation: hfx-scuttle .09s steps(2) infinite }
 .hfx-spider.still span { animation: none }
 @keyframes hfx-scuttle { 0% { transform: rotate(-9deg) } 100% { transform: rotate(9deg) } }
