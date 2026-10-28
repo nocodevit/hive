@@ -15,9 +15,32 @@ and you can check on the team and give orders from your phone.
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-purple.svg)](LICENSE)
 [![macOS · Apple Silicon](https://img.shields.io/badge/macOS-Apple%20Silicon-blue.svg)](#install)
 
-[**Download**](https://github.com/nocodevit/hive/releases/latest) · [Features](#features) · [Install](#install) · [中文](docs/README.zh-CN.md)
+[**Download**](https://github.com/nocodevit/hive/releases/latest) · [Features](#features) · [What's new](#whats-new) · [Install](#install) · [中文](docs/README.zh-CN.md)
 
 </div>
+
+---
+
+## 🎃 Halloween limited skin — Oct 24 to Nov 2
+
+<img src="docs/screenshot-halloween.png" alt="Hive in the Halloween skin: spiders, ghosts, a mummy and Frankenstein's monster around the Butler Todo panel" />
+
+Update in season and Hive puts on a night-violet and pumpkin-gold skin, once. The window gets a cast:
+
+- **Ghosts** — a sheet tented by raised hands — drift around the window, fading in and out.
+- **Spiders** dash in every so often, stop on the chat to look around, then run into a corner and spin a web that fades a minute or two later.
+- A **mummy** shambles along the bottom; **Frankenstein's monster** peeks up from the edge, neck bolts sparking.
+- Every few minutes a **ghost or the pumpkin fiend** lunges at you — the pumpkin bites.
+
+None of it takes a click (it's all click-through). Switch back any time in *Settings › Theme palette*; after Nov 2 your previous palette returns by itself. With *Reduce motion* on, nothing moves.
+
+## What's new
+
+- **2.39** — A motion pass: sending shows a spinner then ✓ and the card slides away; Dismiss and Drop are instant with **Undo**; ticking a todo draws the ✓ and strikes it through; tabs, counts and menus animate. Feishu cards say who sent the message. The pumpkin fiend.
+- **2.38** — The Halloween skin. The update window shows **every version you skipped**, not just the newest. A recording bar for voice input (tap or hold: timer, live waveform, slide to cancel).
+- **2.37** — Butler's **Todo** gets three priorities (⚡ 要命 storms to the top / 🔥 冒烟 / 🧊 冻着), multi-select and *Move to tomorrow*. **Discuss** sends a card or todo to Butler or to any agent in any project. Butler can read and tidy Approve cards from its chat (it never sends for you).
+
+Every release: [CHANGELOG.md](CHANGELOG.md) · [Releases](https://github.com/nocodevit/hive/releases)
 
 ---
 
@@ -50,18 +73,25 @@ Running several Claude Code sessions at once usually means a wall of terminal ta
 - Batch proposals you approve (or auto-approve), batch history, activity log, stuck detection, optional daily report.
 - Staging branch workflow: a task is only "done" after its work is committed, rebased and pushed.
 
-### Butler: control Hive from your phone
+### Butler: your assistant inside Hive
+- **Approve** — drafts Butler wrote (email, Feishu, Jira) wait as cards: what they said, what was already sent, the draft. You send, edit, discuss or dismiss; Butler never sends without you.
+- **Todo** — what it promised to follow up, with the whole story per item; three priorities, due dates, multi-select.
+- **Today** — the day's plan from your calendar (Feishu and/or macOS) and routines.
+- **Feishu answer-for-me** (optional) — answers what it can from the facts, tells you; anything that's your call becomes a card and nothing is sent.
+
+### Butler on your phone
 - App Settings → **Remote Control** → *Allow remote control from my phone (Butler)*. Off by default.
 - Hive runs a Claude Code session with Remote Control in its own folder; open the Claude app → **Code** → "Hive Butler".
 - It lists agents and their status, reads an agent's latest output, and types your message into the chat of the agent you name, word for word. It never guesses between agents with the same name, never starts a chat you didn't ask for, and cannot edit files. ([details](docs/butler-api.md))
 
 ### Voice input
 - Speak into the chat box; text appears as you talk and can be sent automatically when you pause.
+- Tap 🎙 for hands-free, or hold it: the button stretches into a recording bar with a timer and a live waveform; slide left to cancel.
 - With your own OpenAI API key, Chinese and English mixed in one sentence come out right; without one, macOS on-device recognition is used. ([details](docs/voice-input.md))
 
 ### Everything else
 - Project dashboard (todos scanned from your markdown, agent board, project stage from git activity), work logs per agent, file explorer with markdown preview.
-- Themes: purple, blue and pink palettes, light and dark, plus the "Prime" style.
+- Themes: purple, blue and pink palettes, light and dark, plus the "Prime" style — and the seasonal 🎃 Halloween skin.
 - Updates install themselves: *Check for Updates → Install & Restart* (signature and developer are verified first). ([details](docs/self-update.md))
 
 ## Install

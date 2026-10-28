@@ -7,6 +7,13 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.39.4] — 2026-10-29
+
+- 🎃 Lunges hit harder: at full size the ghost (or the gaping pumpkin) freezes for a beat (0.2 s) before it vanishes / snaps its jaws.
+- README: the Halloween skin, a "What's new" section, and Butler as it is today (Approve, Todo, Today, Feishu answer-for-me).
+
+---
+
 ## [2.39.3] — 2026-10-29
 
 - 🎃 The pumpkin fiend joins the lunges: a carved jack-o'-lantern with a sinister grin (fangs of pumpkin flesh, candlelight through the gaps) rushes at you from far away, its jaw drops wide, then snaps shut with a shake while the screen flashes orange. Each lunge is now a ghost or the pumpkin, at random (every 2–5 min). Reduced motion: no lunges.
