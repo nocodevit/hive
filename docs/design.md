@@ -249,6 +249,19 @@ Dot placement: bottom-right corner of avatar/icon, with 2px border matching pare
 | Button press (`:active`): sink 1px, scale 0.97, inset shadow | 80ms | motion-ease |
 | Async button (Resume, Send…): spinner + "…ing" label, disabled until done | — | — |
 
+### Motion system (v2.39, micro-interactions skill)
+Library: `motion` (`motion/react`). Tokens and shared pieces live in `src/renderer/src/lib/motion.tsx`.
+
+| Token | Value | Use |
+|---|---|---|
+| `SMOOTH` (spring.smooth) | spring 0.35s, no bounce | layout moves, expand/collapse, sliding indicators |
+| `SNAPPY` (spring.snappy) | spring 0.25s, light bounce | state changes, numbers rolling |
+| `FADE_IN` / `FADE_OUT` | 150ms ease-out / 120ms ease-in | entries / exits (exit is always faster) |
+
+Rules: animate only transform / opacity (height via `layout` or `AnimatePresence mode="popLayout"`); every animation is interruptible; leaving items finish their exit before removal; numbers use tabular figures; `MotionConfig reducedMotion="user"` around panels (CSS keyframes fall back to a 150ms fade). Professional tone: no bounce on cards or data.
+
+Patterns in use: list rows (`row`: fade+scale in, siblings slide), menus (`popover(origin)` / `.hive-pop-in`), count badges (`CountBadge`: roll + bump), Undo toast (`offerUndo`: instant remove + 5s Undo with a draining line), async buttons (label kept invisible so width never jumps, spinner → ✓), Butler tab background (`layoutId`), sent message rise (`.hive-sent-in`), recording bar (VoiceGroup, spec 📘6).
+
 ### Keyframes
 ```css
 @keyframes slide-in {

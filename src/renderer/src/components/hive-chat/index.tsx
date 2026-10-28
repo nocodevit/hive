@@ -1405,7 +1405,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       return
     }
     setSending(true)
-    addEntry({ kind: 'user', text })
+    // fresh: rises out of the input box as it lands (replayed history doesn't).
+    addEntry({ kind: 'user', text, fresh: true } as any)
     setInput(''); resetInputHeight()
     // Surface a failed send instead of silently swallowing it. After a
     // Resume, replaySessionHistory shows the conversation from the local
@@ -4204,8 +4205,8 @@ function ActionToolbar({
           >⋮</button>
           </CrushTooltip>
           {menuOpen && (
-            <div style={{
-              position: 'absolute' as const,
+            <div className="hive-pop-in" style={{
+              position: 'absolute' as const, transformOrigin: 'bottom right',
               right: 0, bottom: 'calc(100% + 4px)',
               background: CHAT.bg,
               border: 'none',

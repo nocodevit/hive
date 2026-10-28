@@ -131,6 +131,7 @@ declare global {
         history: () => Promise<ApprovalItem[]>
         approve: (id: string, draft?: string) => Promise<{ ok: boolean; error?: string }>
         reject: (id: string) => Promise<boolean>
+        reopen: (id: string) => Promise<boolean>
         onChange: (cb: (pending: ApprovalItem[]) => void) => () => void
       }
       // [butler:skills]

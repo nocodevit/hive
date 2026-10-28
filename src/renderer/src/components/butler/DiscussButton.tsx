@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { popover } from '../../lib/motion'
 
 /** Who a discussion goes to: Butler (no target), or one agent's chat. */
 export interface DiscussTarget { agentId: string; agent: string; projectId: string; project: string; activity: 'working' | 'waiting' | 'off' }
@@ -30,8 +32,8 @@ export function DiscussButton({ label, text, onDiscuss, compact = false, classNa
     <span ref={ref} className={`relative inline-flex ${className}`}>
       <button onClick={() => go()} aria-label={label} title="Discuss with Butler" className={`${base} ${compact ? 'w-7 justify-center' : 'pl-2 pr-1 gap-1'} rounded-r-none`}>💬{compact ? '' : ' Discuss'}</button>
       <button onClick={() => setOpen(o => !o)} aria-label={`${label} with…`} aria-expanded={open} title="Discuss with an agent" className={`${base} w-5 justify-center rounded-l-none text-[10px] text-text-muted`}>▾</button>
-      {open && (
-        <div role="menu" aria-label="Discuss with" className="absolute z-30 bottom-full mb-1 left-0 w-[240px] max-h-[320px] overflow-y-auto rounded-xl bg-bg-secondary border border-border shadow-lg p-1">
+      <AnimatePresence>{open && (
+        <motion.div {...popover('bottom left')} role="menu" aria-label="Discuss with" className="absolute z-30 bottom-full mb-1 left-0 w-[240px] max-h-[320px] overflow-y-auto rounded-xl bg-bg-secondary border border-border shadow-lg p-1">
           <button role="menuitem" onClick={() => go()} className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[12.5px] text-text-primary hover:bg-bg-hover cursor-pointer">🎩 <b className="font-semibold">Butler</b><span className="ml-auto text-[10.5px] text-text-muted">default</span></button>
           {projects.map(p => (
             <div key={p} role="group" aria-label={p}>
@@ -46,8 +48,8 @@ export function DiscussButton({ label, text, onDiscuss, compact = false, classNa
               ))}
             </div>
           ))}
-        </div>
-      )}
+        </motion.div>
+      )}</AnimatePresence>
     </span>
   )
 }
