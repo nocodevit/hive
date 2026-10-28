@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.39.1] — 2026-10-28
+
+- 🕷 Spiders look real: no glow; a tight contact shadow under the body and a soft shadow cast down-right, as if lit from above.
+
+---
+
 ## [2.39.0] — 2026-10-28
 
 - ✨ Motion pass (micro-interactions skill), so every action shows it worked:
