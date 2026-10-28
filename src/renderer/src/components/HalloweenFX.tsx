@@ -64,6 +64,11 @@ export function HalloweenFX() {
     const dim = document.createElement('div')
     dim.className = 'hfx-dim'
     layer.appendChild(dim)
+    // Ghosts keep out of the Butler panel's way: they still pass behind it, but barely visible there.
+    const overPanel = (x: number, y: number) => {
+      const r = document.querySelector('[aria-label="Butler panel"]')?.getBoundingClientRect()
+      return !!r && x + 70 > r.left && x < r.right && y + 80 > r.top && y < r.bottom
+    }
     type Ghost = { el: HTMLDivElement; x: number; y: number; busy: boolean }
     const ghosts: Ghost[] = [0, 1].map(i => {
       const el = document.createElement('div')
@@ -73,19 +78,20 @@ export function HalloweenFX() {
       layer.appendChild(el)
       const g = { el, x: window.innerWidth * (i ? 0.75 : 0.2), y: window.innerHeight * (i ? 0.3 : 0.6), busy: false }
       el.style.transform = `translate(${g.x}px, ${g.y}px)`
-      el.style.opacity = '.14'
+      el.style.opacity = overPanel(g.x, g.y) ? '.04' : '.14'
       return g
     })
     const wander = (g: Ghost) => {
       if (!g.busy) {
         const W = window.innerWidth, H = window.innerHeight
         const nx = rand(20, W - 100), ny = rand(50, H - 120)
+        const land = overPanel(nx, ny) ? rand(0.03, 0.05) : rand(0.12, 0.24)
         const mx = (g.x + nx) / 2 + rand(-160, 160), my = (g.y + ny) / 2 + rand(-120, 120)
         const dur = rand(4000, 8000)
         g.el.animate([
           { transform: `translate(${g.x}px, ${g.y}px)`, opacity: g.el.style.opacity },
           { transform: `translate(${mx}px, ${my}px)`, opacity: rand(0.04, 0.1) },
-          { transform: `translate(${nx}px, ${ny}px)`, opacity: rand(0.12, 0.24) }
+          { transform: `translate(${nx}px, ${ny}px)`, opacity: land }
         ], { duration: dur, easing: 'ease-in-out', fill: 'forwards' })
         g.x = nx; g.y = ny
         later(() => { g.el.style.transform = `translate(${nx}px, ${ny}px)`; wander(g) }, dur)

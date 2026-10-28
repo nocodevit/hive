@@ -7,6 +7,13 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.38.5] — 2026-10-28
+
+- Todo rows match the design: one line for the title and its tier (⚡ 要命 sits on the right and never wraps), the source moves to the second line, Discuss and View become small 💬▾ / › icons. The 要命 storm is brighter (red → amber glow, as in the mockup).
+- 🎃 Ghosts fade almost out while they pass behind the Butler panel, so the text stays readable.
+
+---
+
 ## [2.38.4] — 2026-10-28
 
 - 🕷 Spider waves come half as often as before: every 20–120 s (2.38.3 had them every 5–30 s by mistake). Ghost lunges stay at every 2–5 minutes.
