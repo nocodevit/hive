@@ -566,7 +566,7 @@ ipcMain.handle('chat:listUnclosed', async () => {
   const open = readOpenChats(DATA_DIR)
   if (!open.length) return []
   const details = new Map<string, Awaited<ReturnType<typeof unclosedDetail>>>()
-  for (const rec of open) details.set(rec.agentId, await unclosedDetail(rec))
+  await Promise.all(open.map(async rec => { details.set(rec.agentId, await unclosedDetail(rec)) }))
   return buildUnclosedRows(data, open, listLiveChatAgentIds(), rec => details.get(rec.agentId)!)
 })
 // The user has answered the prompt (resumed some, skipped the rest): keep
@@ -739,6 +739,7 @@ ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' &
 // [butler:skills]
 import { registerButlerSkillsIpc } from './butlerSkillsIpc'
 import { cardRoute } from './butlerCards'
+import { tailLines } from './fileSlices'
 registerButlerSkillsIpc({ ipcMain, previewFeishu: text => previewFeishuAnswer({ text }), butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
 const butlerRoutines = setupButlerMailRoutines({
@@ -922,12 +923,9 @@ function butlerRows() {
 }
 
 /** Last ~2MB of a log, dropping the (probably cut) first line. */
+// Reads only the last 2MB from disk (not the whole 100MB+ log), dropping the cut first line.
 function readLogTailLines(path: string): string[] {
-  const size = statSync(path).size
-  const start = Math.max(0, size - BUTLER_TAIL_BYTES)
-  const buf = readFileSync(path).subarray(start)
-  const lines = buf.toString('utf-8').split('\n')
-  return start > 0 ? lines.slice(1) : lines
+  return tailLines(path, BUTLER_TAIL_BYTES)
 }
 
 function readJsonBody(req: IncomingMessage): Promise<any> {
