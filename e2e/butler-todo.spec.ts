@@ -101,6 +101,18 @@ test('priority: ⚡ 要命 storms to the top, change it from the chip, Butler se
   expect(lines.filter(l => l.op === 'priority')).toHaveLength(1)
 })
 
+test('Drop is instant with an Undo toast; Undo puts it back', async () => {
+  await panel().getByRole('tab', { name: /Todo/ }).click()
+  await panel().getByLabel('New todo').fill('临时要丢的事')
+  await panel().getByRole('button', { name: 'Add', exact: true }).click()
+  await panel().getByRole('button', { name: 'View 临时要丢的事' }).click()
+  await panel().getByRole('button', { name: 'Drop 临时要丢的事' }).click()
+  await expect(panel().getByRole('group', { name: 'Today' }).getByLabel('Todo: 临时要丢的事')).toHaveCount(0)
+  const toast = panel().getByRole('status').filter({ hasText: 'Dropped · 临时要丢的事' })
+  await toast.getByRole('button', { name: 'Undo' }).click()
+  await expect(panel().getByRole('group', { name: 'Today' }).getByLabel('Todo: 临时要丢的事')).toBeVisible()
+})
+
 test('group by source; "+" on an Approve card makes a todo about it', async () => {
   await panel().getByRole('tab', { name: /Approve/ }).click()
   const card = panel().getByLabel('Reply: Pod · SOW 改动是否进 P4')

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import HiveChat from '../hive-chat'
+import { MotionConfig, motion } from 'motion/react'
+import { CountBadge, SMOOTH, UndoToasts } from '../../lib/motion'
 import { orderSessions, sessionCounts, sinceLabel, type SessionRow } from '../../lib/butler-sessions'
 import { setupProgress, type SetupMark } from '../../lib/butler-setup'
 import { ApprovalHistory, ApprovalsList, type ApprovalCard } from './ApprovalsList'
@@ -112,6 +114,7 @@ export function ButlerPanel(p: Props) {
     : { top: 44, right: 10, bottom: 10, left: p.pageLeft }
 
   return (
+    <MotionConfig reducedMotion="user">
     <div
       role="complementary"
       aria-label="Butler panel"
@@ -151,9 +154,11 @@ export function ButlerPanel(p: Props) {
           const count = t === 'sessions' ? n.waiting : t === 'approve' ? approvals.length : t === 'todo' ? openTodos : 0
           return (
             <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}
-              className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer inline-flex items-center gap-1 ${tab === t ? 'bg-accent-subtle text-accent' : 'text-text-muted hover:text-text-primary'}`}>
-              {TAB_LABEL[t]}
-              {count > 0 && <span className={`min-w-[16px] h-4 px-1 rounded-full ${t === 'todo' ? 'bg-accent' : 'bg-red-500'} text-white text-[10px] font-bold inline-flex items-center justify-center`}>{count}</span>}
+              className={`relative px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer inline-flex items-center gap-1 transition-colors ${tab === t ? 'text-accent' : 'text-text-muted hover:text-text-primary'}`}>
+              {/* The selected background slides from tab to tab. */}
+              {tab === t && <motion.span layoutId="butler-tab-bg" transition={SMOOTH} className="absolute inset-0 rounded-lg bg-accent-subtle" aria-hidden />}
+              <span className="relative">{TAB_LABEL[t]}</span>
+              <CountBadge count={count} className={`min-w-[16px] h-4 px-1 rounded-full ${t === 'todo' ? 'bg-accent' : 'bg-red-500'} text-white text-[10px] font-bold inline-flex items-center justify-center`} />
             </button>
           )
         })}
@@ -243,6 +248,8 @@ export function ButlerPanel(p: Props) {
           {rows.length === 0 && <div className="text-[12px] text-text-muted px-1">No agents yet</div>}
         </div>
       )}
+      <UndoToasts />
     </div>
+    </MotionConfig>
   )
 }

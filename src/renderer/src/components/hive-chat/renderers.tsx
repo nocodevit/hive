@@ -2019,7 +2019,9 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
   const isSub = (entry as any).isSubagent === true
   let row: React.ReactNode = null
   switch (entry.kind) {
-    case 'user': row = <UserMessage text={entry.text} onRecall={isSub ? undefined : onRecall} isSubagent={isSub} />; break
+    case 'user': row = <UserMessage text={entry.text} onRecall={isSub ? undefined : onRecall} isSubagent={isSub} />
+      if ((entry as { fresh?: boolean }).fresh) row = <div className="hive-sent-in" data-sent>{row}</div>
+      break
     case 'assistant': row = <AssistantMessage text={entry.text} onChoose={isSub ? undefined : onChoose} onRespond={isSub ? undefined : onRespond} />; break
     case 'tool_call': row = <ToolBlock name={entry.name} input={entry.input} result={result} />; break
     case 'tool_result': row = null; break

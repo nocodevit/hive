@@ -7,6 +7,19 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.39.0] — 2026-10-28
+
+- ✨ Motion pass (micro-interactions skill), so every action shows it worked:
+  - **Approve**: Send / Reply shows a spinner (the button keeps its width), then ✓, then the card leaves and the ones below slide up. New cards fade in.
+  - **Dismiss / Drop** are instant, with an **Undo** toast for 5 s (a draining line; swipe it away).
+  - **Todo**: ticking draws the ✓ and strikes the title through, then it moves to Completed (the count bumps). New rows fade in, rows glide to their new place when priority or due date changes, the due date rolls, View opens smoothly.
+  - **Butler tabs**: the selected background slides from tab to tab; the Todo / Approve counts roll to their new number and bump.
+  - **Menus** (Discuss ▾, priority, ⋮) grow from their button.
+  - **Chat**: a message you send rises out of the input box.
+  - Everything follows "Reduce motion" (fades only).
+
+---
+
 ## [2.38.8] — 2026-10-28
 
 - 🎃 The Halloween three: a new ghost — a sheet tented by its raised hands (the cloth falls straight from the fingertips, folds fan down, the hands flex), a mummy that shambles slowly along the bottom of the window every 1.5–4 min (one amber eye, arms out, loose bandages flapping), and Frankenstein's monster, whose head rises from the bottom edge every 2–5 min, neck bolts sparking, then sinks back. Reduced motion: neither the mummy nor the monster appears.

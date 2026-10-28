@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { forwardRef, useEffect, useRef, useState } from 'react'
 import { DiscussButton, type OnDiscuss } from './DiscussButton'
+import { AnimatePresence, motion } from 'motion/react'
+import { offerUndo, popover, row, SMOOTH, SNAPPY } from '../../lib/motion'
 import { groupTodos, isOverdue, PRIORITIES, priMeta, priOf, SOURCE_LABEL, sortTodos, todoDiscussText, tomorrow, whenShort, type GroupBy, type Priority, type SortBy, type TodoView } from '../../lib/butler-todos'
 
 const PREF = 'hive:todo-view'
@@ -39,16 +41,30 @@ function PriorityChip({ t }: { t: TodoView }) {
         className={`h-6 px-1.5 rounded-md text-[11px] inline-flex items-center gap-1 whitespace-nowrap cursor-pointer ${tone}`}>
         <span className={p === 1 ? 'hive-storm-bolt' : ''} aria-hidden>{m.icon}</span>{p !== 2 && m.name}
       </button>
-      {open && (
-        <div role="menu" aria-label="Priority" className="absolute z-30 right-0 top-full mt-1 w-[150px] rounded-xl bg-bg-secondary border border-border shadow-lg p-1">
+      <AnimatePresence>{open && (
+        <motion.div {...popover('top right')} role="menu" aria-label="Priority" className="absolute z-30 right-0 top-full mt-1 w-[150px] rounded-xl bg-bg-secondary border border-border shadow-lg p-1">
           {PRIORITIES.map(x => (
             <button key={x.p} role="menuitemradio" aria-checked={x.p === p} onClick={() => { setOpen(false); void window.api.todos.setPriority([t.id], x.p) }}
               className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-[12.5px] hover:bg-bg-hover cursor-pointer ${x.p === p ? 'text-text-primary font-semibold' : 'text-text-secondary'}`}>
               <span aria-hidden>{x.icon}</span>{x.name}<span className="ml-auto text-[10.5px] text-text-muted">{x.hint}</span>
             </button>
           ))}
-        </div>
-      )}
+        </motion.div>
+      )}</AnimatePresence>
+    </span>
+  )
+}
+
+/** Done tick: the ✓ draws itself (200 ms). A real checkbox underneath for keyboard and screen readers. */
+function DoneBox({ checked, label, onChange }: { checked: boolean; label: string; onChange: (v: boolean) => void }) {
+  return (
+    <span className="relative inline-grid place-items-center w-4 h-4 flex-shrink-0">
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)} aria-label={label}
+        className="peer appearance-none w-4 h-4 m-0 rounded-[5px] border-[1.5px] border-text-muted/60 checked:border-accent checked:bg-accent transition-colors duration-150 cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent" />
+      <svg viewBox="0 0 16 16" aria-hidden className="pointer-events-none absolute inset-0 w-4 h-4">
+        <motion.path d="M4 8.4l2.6 2.6L12 5.4" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"
+          initial={false} animate={{ pathLength: checked ? 1 : 0, opacity: checked ? 1 : 0 }} transition={{ duration: 0.2, ease: 'easeOut' }} />
+      </svg>
     </span>
   )
 }
@@ -57,24 +73,35 @@ const primary = 'h-7 px-3 rounded-lg bg-accent text-text-on-purple text-[12px] f
 const ghost = 'h-7 px-2 rounded-lg text-[12px] text-text-secondary hover:bg-bg-hover inline-flex items-center gap-1 cursor-pointer'
 
 /** One todo: a line with Discuss and View; View opens its whole story (who did what, when) as a card. */
-function Item({ t, onDiscuss, onCard, picked }: { t: TodoView; onDiscuss?: OnDiscuss; onCard: () => void; picked?: { on: boolean; toggle: () => void } }) {
+// forwardRef: it is a direct child of <AnimatePresence mode="popLayout">, which positions leaving rows by ref.
+const Item = forwardRef<HTMLDivElement, { t: TodoView; onDiscuss?: OnDiscuss; onCard: () => void; picked?: { on: boolean; toggle: () => void } }>(function Item({ t, onDiscuss, onCard, picked }, ref) {
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
+  // Ticked: ✓ draws, a line strikes through the title, then it leaves for Completed.
+  const [finishing, setFinishing] = useState(false)
   const closed = t.status !== 'open'
   const set = (s: 'open' | 'done' | 'dropped') => { void window.api.todos.setStatus(t.id, s) }
+  const finish = () => { setFinishing(true); window.setTimeout(() => set('done'), 450) }
+  const drop = () => { set('dropped'); offerUndo(`Dropped · ${t.title}`, () => { void window.api.todos.setStatus(t.id, 'open') }) }
   // Source lives in the second line, so the first line is just the title and its tier (as in the mockup).
   const sub = [SOURCE_LABEL[t.source], t.events[0]?.text !== t.title ? t.events[0]?.text : `${t.createdBy === 'owner' ? 'You' : 'Butler'} · ${whenShort(t.createdAt)}`].join(' · ')
   return (
-    <div className={`rounded-xl bg-bg-primary ${priOf(t) === 1 && !closed ? 'hive-storm' : ''} ${open || picked?.on ? 'ring-1 ring-border' : ''} ${picked?.on ? 'ring-accent' : ''}`} aria-label={`Todo: ${t.title}`}>
+    <motion.div ref={ref} {...row} className={`rounded-xl bg-bg-primary ${priOf(t) === 1 && !closed ? 'hive-storm' : ''} ${open || picked?.on ? 'ring-1 ring-border' : ''} ${picked?.on ? 'ring-accent' : ''}`} aria-label={`Todo: ${t.title}`}>
       <div className="flex items-center gap-2.5 pl-2.5 pr-1.5 py-1.5 text-[13px]">
         {picked
           ? <input type="checkbox" checked={picked.on} onChange={picked.toggle} aria-label={`Select: ${t.title}`} className="accent-accent cursor-pointer" />
-          : <input type="checkbox" checked={t.status === 'done'} onChange={e => set(e.target.checked ? 'done' : 'open')} aria-label={`Done: ${t.title}`} className="accent-accent cursor-pointer" />}
+          : <DoneBox checked={t.status === 'done' || finishing} label={`Done: ${t.title}`} onChange={v => (v ? finish() : (setFinishing(false), set('open')))} />}
         <div className="flex-1 min-w-0">
-          <span className={`block truncate ${closed ? 'text-text-muted line-through' : priOf(t) === 1 ? 'text-text-primary font-semibold' : priOf(t) === 3 ? 'text-text-secondary' : 'text-text-primary'}`}>{t.title}</span>
+          <span className={`relative block truncate transition-colors duration-200 ${closed ? 'text-text-muted line-through' : finishing ? 'text-text-muted' : priOf(t) === 1 ? 'text-text-primary font-semibold' : priOf(t) === 3 ? 'text-text-secondary' : 'text-text-primary'}`}>
+            {t.title}
+            {finishing && !closed && <motion.i aria-hidden className="absolute left-0 right-0 top-1/2 h-px bg-current origin-left" initial={{ scaleX: 0 }} animate={{ scaleX: 1 }} transition={{ duration: 0.25, ease: 'easeOut' }} />}
+          </span>
           <span className="block text-[11px] text-text-muted truncate">{sub}</span>
         </div>
-        {t.due && <span className={`flex-shrink-0 font-mono text-[11px] ${isOverdue(t) ? 'text-status-waiting' : 'text-text-muted'}`}>{t.due.slice(5)}</span>}
+        {/* Due date rolls to its new value (Move to tomorrow). */}
+        {t.due && <span className={`relative flex-shrink-0 overflow-hidden font-mono text-[11px] ${isOverdue(t) ? 'text-status-waiting' : 'text-text-muted'}`} style={{ fontVariantNumeric: 'tabular-nums' }}>
+          <AnimatePresence initial={false} mode="popLayout"><motion.span key={t.due} className="inline-block" initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} transition={SNAPPY}>{t.due.slice(5)}</motion.span></AnimatePresence>
+        </span>}
         <PriorityChip t={t} />
         {onDiscuss && <DiscussButton compact label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
         <button onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`View ${t.title}`} title="View its story"
@@ -82,8 +109,8 @@ function Item({ t, onDiscuss, onCard, picked }: { t: TodoView; onDiscuss?: OnDis
           <span className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>›</span>
         </button>
       </div>
-      {open && (
-        <div className="border-t border-border">
+      <AnimatePresence initial={false}>{open && (
+        <motion.div key="story" className="border-t border-border overflow-hidden" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={SMOOTH}>
           <ol className="mx-2.5 mt-2.5 ml-[17px] border-l border-border pl-3.5 flex flex-col gap-1.5" aria-label="History">
             {t.events.map((e, i) => (
               <li key={i} className="relative text-[12px] text-text-secondary leading-snug">
@@ -102,13 +129,13 @@ function Item({ t, onDiscuss, onCard, picked }: { t: TodoView; onDiscuss?: OnDis
             {!closed ? <button onClick={() => set('done')} aria-label={`Mark ${t.title} done`} className={primary}>Done</button>
               : <button onClick={() => set('open')} aria-label={`Reopen ${t.title}`} className={primary}>Reopen</button>}
             <span className="flex-1" />
-            {!closed && <button onClick={() => set('dropped')} aria-label={`Drop ${t.title}`} className={`${ghost} text-text-muted`}>Drop</button>}
+            {!closed && <button onClick={drop} aria-label={`Drop ${t.title}`} className={`${ghost} text-text-muted`}>Drop</button>}
           </div>
-        </div>
-      )}
-    </div>
+        </motion.div>
+      )}</AnimatePresence>
+    </motion.div>
   )
-}
+})
 
 /** Butler › Todo: open ones grouped (created / source / due), Completed below with their history. */
 export function TodoTab({ visible, onDiscuss, onCard }: { visible: boolean; onDiscuss?: OnDiscuss; onCard: () => void }) {
@@ -179,13 +206,13 @@ export function TodoTab({ visible, onDiscuss, onCard }: { visible: boolean; onDi
       {groupTodos(open, group, sort).map(g => (
         <div key={g.label} className="flex flex-col gap-1.5" role="group" aria-label={g.label}>
           <div className="px-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted">{g.label} · {g.items.length}</div>
-          {g.items.map(t => <Item key={t.id} t={t} onDiscuss={onDiscuss} onCard={onCard} picked={picking ? { on: picked.has(t.id), toggle: () => toggle(t.id) } : undefined} />)}
+          <AnimatePresence initial={false} mode="popLayout">{g.items.map(t => <Item key={t.id} t={t} onDiscuss={onDiscuss} onCard={onCard} picked={picking ? { on: picked.has(t.id), toggle: () => toggle(t.id) } : undefined} />)}</AnimatePresence>
         </div>
       ))}
       {closed.length > 0 && (
         <details className="border-t border-border pt-2" aria-label="Completed">
-          <summary className="cursor-pointer px-1 text-[12px] font-semibold text-text-muted">Completed · {closed.length}</summary>
-          <div className="mt-1.5 flex flex-col gap-1.5">{closed.map(t => <Item key={t.id} t={t} onDiscuss={onDiscuss} onCard={onCard} />)}</div>
+          <summary className="cursor-pointer px-1 text-[12px] font-semibold text-text-muted">Completed · <motion.span key={closed.length} className="inline-block" initial={{ scale: 1.3 }} animate={{ scale: 1 }} transition={SNAPPY} style={{ fontVariantNumeric: 'tabular-nums' }}>{closed.length}</motion.span></summary>
+          <div className="mt-1.5 flex flex-col gap-1.5"><AnimatePresence initial={false} mode="popLayout">{closed.map(t => <Item key={t.id} t={t} onDiscuss={onDiscuss} onCard={onCard} />)}</AnimatePresence></div>
         </details>
       )}
     </div>

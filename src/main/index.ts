@@ -734,6 +734,8 @@ ipcMain.handle('approvals:history', () => jiraLinks(approvals.history()))
 ipcMain.handle('approvals:approve', (_e, id: unknown, draft: unknown) =>
   typeof id === 'string' ? approvals.approve(id, typeof draft === 'string' ? draft : undefined) : { ok: false, error: 'bad_id' })
 ipcMain.handle('approvals:reject', (_e, id: unknown) => typeof id === 'string' && approvals.reject(id))
+// Undo a Dismiss (the toast's Undo): the card goes back to pending.
+ipcMain.handle('approvals:reopen', (_e, id: unknown) => typeof id === 'string' && approvals.reopen(id))
 
 // ── Butler features: each phase registers itself at its own marker ────
 // [butler:skills]

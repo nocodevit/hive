@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { AnimatePresence, motion } from 'motion/react'
+import { FADE_IN, offerUndo, row, SNAPPY } from '../../lib/motion'
 import { DiscussButton, type OnDiscuss } from './DiscussButton'
 
 export type ApprovalCard = { id: string; kind: string; title: string; subtitle: string; draft: string; action: string; payload?: Record<string, unknown>; createdAt?: number; edited?: { at: number } }
@@ -82,6 +84,12 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   const [error, setError] = useState<Record<string, string>>({})
   const [noted, setNoted] = useState<Record<string, boolean>>({})
   const [filter, setFilter] = useState<string>('all')
+  // A card that just went out stays a moment to show ✓, then leaves (rows below slide up).
+  const [held, setHeld] = useState<Record<string, ApprovalCard>>({})
+  const view = useMemo(() => {
+    const ids = new Set(items.map(i => i.id))
+    return [...items, ...Object.values(held).filter(h => !ids.has(h.id))].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0))
+  }, [items, held])
   // "+ Todo", and Discuss (a card taken to the chat is a follow-up): the card becomes a todo with its refs.
   const toTodo = (id: string, note?: string) => { void window.api.todos.fromApproval(id, note).then(t => { if (t) setNoted(n => ({ ...n, [id]: true })) }).catch(() => {}) }
   const discuss = (it: ApprovalCard, text: string, to?: Parameters<OnDiscuss>[1]) => { onDiscuss?.(text, to); toTodo(it.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed in Chat') }
@@ -95,7 +103,15 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
     const r = await window.api.approvals.approve(it.id, editing === it.id ? text : undefined)
     setBusy(null)
     if (!r.ok) setError(e => ({ ...e, [it.id]: r.error || 'failed' }))
-    else setEditing(null)
+    else {
+      setEditing(null)
+      setHeld(h => ({ ...h, [it.id]: it }))
+      window.setTimeout(() => setHeld(h => { const n = { ...h }; delete n[it.id]; return n }), 700)
+    }
+  }
+  const dismiss = (it: ApprovalCard) => {
+    void window.api.approvals.reject(it.id)
+    offerUndo(`Dismissed · ${nameOf(it)}`, () => { void window.api.approvals.reopen(it.id) })
   }
   const answer = async (it: ApprovalCard) => {
     const a = (answers[it.id] ?? '').trim()
@@ -109,9 +125,9 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   }
   const edit = (it: ApprovalCard) => { setEditing(it.id); setText(it.draft) }
 
-  if (!items.length) return <div className="text-[12px] text-text-muted px-1">{document.documentElement.dataset.palette === 'halloween' ? '👻 全清了，鬼都没有' : 'Nothing to approve'}</div>
-  const counts = items.reduce<Record<string, number>>((m, it) => { const k = srcKey(it.kind); m[k] = (m[k] ?? 0) + 1; return m }, {})
-  const shown = filter === 'all' ? items : items.filter(it => srcKey(it.kind) === filter)
+  if (!view.length) return <div className="text-[12px] text-text-muted px-1">{document.documentElement.dataset.palette === 'halloween' ? '👻 全清了，鬼都没有' : 'Nothing to approve'}</div>
+  const counts = view.reduce<Record<string, number>>((m, it) => { const k = srcKey(it.kind); m[k] = (m[k] ?? 0) + 1; return m }, {})
+  const shown = filter === 'all' ? view : view.filter(it => srcKey(it.kind) === filter)
   const groups = [{ label: 'Needs your call', list: shown.filter(needsYou) }, { label: 'Ready to send', list: shown.filter(it => !needsYou(it)) }]
   const primary = 'h-7 px-3 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold inline-flex items-center gap-1.5 shadow-sm cursor-pointer disabled:opacity-50'
   const ghost = 'h-7 px-2 rounded-lg text-[12px] text-text-secondary hover:bg-bg-hover inline-flex items-center gap-1 cursor-pointer disabled:opacity-60'
@@ -124,7 +140,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
     const sent = str(it.payload, 'sent')
     const jira = it.kind.startsWith('jira')
     return (
-      <div key={it.id} aria-label={`${decide ? 'Needs you' : it.action}: ${it.title}`}
+      <motion.div key={it.id} {...row} aria-label={`${decide ? 'Needs you' : it.action}: ${it.title}`}
         className={`flex-shrink-0 rounded-[14px] bg-bg-secondary border border-border border-l-[3px] ${needsYou(it) ? 'border-l-amber-500' : 'border-l-accent'} shadow-sm hover:shadow-md transition-shadow overflow-hidden`}>
         <div className="flex items-center gap-2.5 px-3 pt-2.5 pb-1.5">
           <span aria-hidden className="w-7 h-7 rounded-full flex-shrink-0 inline-flex items-center justify-center text-[11px] font-bold text-white" style={{ background: `hsl(${hueOf(name)} 70% 50%)` }}>{jira ? '🎫' : initials(name)}</span>
@@ -176,8 +192,15 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
             </>
           ) : (
             <>
-              <button disabled={busy === it.id} onClick={() => approve(it)} aria-label={`${it.action} ${it.title}`} className={primary}>
-                {busy === it.id ? '…' : it.action}{editing === it.id && <kbd className="text-[10px] opacity-70 bg-white/20 rounded px-1 font-sans">⌘↵</kbd>}
+              {/* Loading: the label stays (invisible) so the width never jumps; a spinner, then ✓ when it went out. */}
+              <button disabled={busy === it.id || !!held[it.id]} onClick={() => approve(it)} aria-label={`${it.action} ${it.title}`} className={`${primary} relative`}>
+                <span className={`inline-flex items-center gap-1.5 transition-opacity duration-150 ${busy === it.id || held[it.id] ? 'opacity-0' : ''}`}>
+                  {it.action}{editing === it.id && <kbd className="text-[10px] opacity-70 bg-white/20 rounded px-1 font-sans">⌘↵</kbd>}
+                </span>
+                <AnimatePresence initial={false}>
+                  {busy === it.id && <motion.span key="spin" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: FADE_IN }} exit={{ opacity: 0 }} className="absolute inset-0 grid place-items-center" aria-label="Sending"><i className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" /></motion.span>}
+                  {held[it.id] && <motion.span key="ok" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1, transition: SNAPPY }} className="absolute inset-0 grid place-items-center text-[14px]" aria-label="Sent">✓</motion.span>}
+                </AnimatePresence>
               </button>
               {editing !== it.id && it.draft.trim() && <button onClick={() => edit(it)} aria-label={`Edit ${it.title}`} className={ghost}>✎ Edit</button>}
               {onDiscuss && <DiscussButton label={`Discuss ${it.title}`} text={() => cardDiscussText(it)} onDiscuss={(t, to) => discuss(it, t, to)} />}
@@ -185,9 +208,9 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
           )}
           {!decide && <button onClick={() => toTodo(it.id)} disabled={noted[it.id]} aria-label={`Add ${it.title} to Todo`} className={`${ghost} ${noted[it.id] ? 'text-accent' : ''}`}>{noted[it.id] ? '✓ In Todo' : '＋ Todo'}</button>}
           <span className="flex-1" />
-          <button onClick={() => window.api.approvals.reject(it.id)} aria-label={`Reject ${it.title}`} className={`${ghost} text-text-muted`}>{decide ? '✕' : 'Dismiss'}</button>
+          <button onClick={() => dismiss(it)} aria-label={`Reject ${it.title}`} className={`${ghost} text-text-muted`}>{decide ? '✕' : 'Dismiss'}</button>
         </div>
-      </div>
+      </motion.div>
     )
   }
 
@@ -204,7 +227,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
       {groups.filter(g => g.list.length).map(g => (
         <div key={g.label} className="flex flex-col gap-2" role="group" aria-label={g.label}>
           <div className="flex items-center gap-2 px-0.5 pt-1 text-[11px] font-semibold uppercase tracking-wider text-text-muted after:content-[''] after:flex-1 after:h-px after:bg-border">{g.label} · {g.list.length}</div>
-          {g.list.map(card)}
+          <AnimatePresence initial={false} mode="popLayout">{g.list.map(card)}</AnimatePresence>
         </div>
       ))}
     </>
