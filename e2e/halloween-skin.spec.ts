@@ -66,14 +66,16 @@ test('the ghosts wander the window, and one lunges at you now and then', async (
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-ghost.scare').length), { timeout: 4000 }).toBe(0)
 })
 
-test('a spider wave: they run, stop, and a web is spun in a corner; clicks go through', async () => {
-  await page.evaluate(() => (window as any).__hiveSpiders())
+test('a spider wave: they run, stop, a web is spun in a corner and later fades away; clicks go through', async () => {
+  // Webs last 1–2 minutes in the app; a test cannot wait that long.
+  await page.evaluate(() => { (window as any).__hiveWebLifeMs = 2500; (window as any).__hiveSpiders() })
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-spider').length)).toBeGreaterThan(0)
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-web').length), { timeout: 8000 }).toBeGreaterThan(0)
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-spider').length), { timeout: 8000 }).toBe(0)
-  // Nothing of it takes clicks.
   const blocks = await page.evaluate(() => [...document.querySelectorAll('.hfx, .hfx-web, .hfx-peek')].some(e => getComputedStyle(e).pointerEvents !== 'none'))
   expect(blocks).toBe(false)
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-web').length), { timeout: 15000 }).toBe(0)
+  await page.evaluate(() => { delete (window as any).__hiveWebLifeMs })
   await page.getByRole('button', { name: 'App Settings' }).click()
 })
 

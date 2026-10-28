@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.38.6] — 2026-10-28
+
+- 🕸 A spider's web hangs on for a minute or two, then slowly fades away (4 s) and the corner is free for the next spider.
+
+---
+
 ## [2.38.5] — 2026-10-28
 
 - Todo rows match the design: one line for the title and its tier (⚡ 要命 sits on the right and never wraps), the source moves to the second line, Discuss and View become small 💬▾ / › icons. The 要命 storm is brighter (red → amber glow, as in the mockup).
