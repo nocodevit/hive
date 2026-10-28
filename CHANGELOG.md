@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.39.3] — 2026-10-29
+
+- 🎃 The pumpkin fiend joins the lunges: a carved jack-o'-lantern with a sinister grin (fangs of pumpkin flesh, candlelight through the gaps) rushes at you from far away, its jaw drops wide, then snaps shut with a shake while the screen flashes orange. Each lunge is now a ghost or the pumpkin, at random (every 2–5 min). Reduced motion: no lunges.
+
+---
+
 ## [2.39.2] — 2026-10-28
 
 - Feishu cards say **who** sent the message: the title leads with the person ("霍传俊 · …"), the group goes in the subtitle ("Feishu · 产品小队 · …"); notifications and the follow-up todo name them too. (New cards; existing ones are left as they are.)
