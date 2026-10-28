@@ -329,6 +329,7 @@ const api = {
     history: () => ipcRenderer.invoke('approvals:history') as Promise<ApprovalItem[]>,
     approve: (id: string, draft?: string) => ipcRenderer.invoke('approvals:approve', id, draft) as Promise<{ ok: boolean; error?: string }>,
     reject: (id: string) => ipcRenderer.invoke('approvals:reject', id) as Promise<boolean>,
+    reopen: (id: string) => ipcRenderer.invoke('approvals:reopen', id) as Promise<boolean>,
     onChange: (cb: (pending: ApprovalItem[]) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, p: ApprovalItem[]) => cb(p)
       ipcRenderer.on('approvals:changed', handler)
