@@ -11,9 +11,9 @@ const sel = 'px-1.5 py-0.5 rounded-md bg-bg-primary border border-border text-[1
 /** ⚡ 要命: a storm on the row — lightning flashes across it, the bolt flickers, the edge glows. Off with reduced motion. */
 const STORM_CSS = `
 @keyframes hive-storm-flash { 0%, 86%, 100% { opacity: 0 } 87% { opacity: .7 } 88% { opacity: 0 } 90% { opacity: .45 } 91.5% { opacity: 0 } }
-@keyframes hive-storm-glow { 0%, 100% { box-shadow: 0 0 0 1px rgba(239,68,68,.55), 0 0 10px rgba(239,68,68,.18) } 50% { box-shadow: 0 0 0 1px rgba(251,191,36,.8), 0 0 18px rgba(251,191,36,.32) } }
+@keyframes hive-storm-glow { 0%, 100% { box-shadow: 0 0 0 1px rgba(255,90,60,.6), 0 0 8px rgba(255,90,60,.15) } 50% { box-shadow: 0 0 0 1px rgba(255,176,32,.9), 0 0 18px rgba(255,176,32,.35) } }
 @keyframes hive-storm-bolt { 0%, 84%, 100% { transform: none; filter: none } 86% { transform: translate(-1px, 1px) rotate(-8deg) scale(1.25); filter: drop-shadow(0 0 6px #fde047) brightness(1.6) } 88% { transform: translate(1px, -1px) rotate(6deg) } 90% { transform: scale(1.15); filter: drop-shadow(0 0 4px #fde047) } 92% { transform: none; filter: none } }
-.hive-storm { position: relative; overflow: hidden; background-image: linear-gradient(100deg, rgba(239,68,68,.10), rgba(251,191,36,.06) 60%, transparent); animation: hive-storm-glow 2.4s ease-in-out infinite }
+.hive-storm { position: relative; overflow: hidden; background-image: linear-gradient(100deg, rgba(255,90,60,.18), rgba(255,176,32,.09) 60%, transparent); animation: hive-storm-glow 2.4s ease-in-out infinite }
 .hive-storm::after { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit; opacity: 0;
   background: linear-gradient(115deg, transparent 30%, rgba(255,255,255,.9) 44%, rgba(253,224,71,.55) 48%, transparent 62%); animation: hive-storm-flash 5s linear infinite }
 .hive-storm-bolt { display: inline-block; animation: hive-storm-bolt 5s linear infinite }
@@ -32,11 +32,11 @@ function PriorityChip({ t }: { t: TodoView }) {
     return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', close) }
   }, [open])
   // 冒烟 is the normal case: barely there until hovered, so only 要命 / 冻着 catch the eye.
-  const tone = p === 1 ? 'bg-red-500/15 text-red-400 font-bold' : p === 3 ? 'bg-sky-400/10 text-sky-300/80' : 'text-text-muted opacity-25 hover:opacity-100 focus-visible:opacity-100'
+  const tone = p === 1 ? 'bg-[rgba(255,90,60,.18)] text-[#ff8a6b] font-bold' : p === 3 ? 'bg-sky-400/10 text-sky-300/80' : 'text-text-muted opacity-25 hover:opacity-100 focus-visible:opacity-100'
   return (
-    <span ref={ref} className="relative">
+    <span ref={ref} className="relative flex-shrink-0">
       <button onClick={() => t.status === 'open' && setOpen(o => !o)} aria-label={`Priority ${m.name}: ${t.title}`} aria-expanded={open} title={`${m.name} · ${m.hint}`}
-        className={`h-6 px-1.5 rounded-md text-[11px] inline-flex items-center gap-1 cursor-pointer ${tone}`}>
+        className={`h-6 px-1.5 rounded-md text-[11px] inline-flex items-center gap-1 whitespace-nowrap cursor-pointer ${tone}`}>
         <span className={p === 1 ? 'hive-storm-bolt' : ''} aria-hidden>{m.icon}</span>{p !== 2 && m.name}
       </button>
       {open && (
@@ -62,7 +62,8 @@ function Item({ t, onDiscuss, onCard, picked }: { t: TodoView; onDiscuss?: OnDis
   const [note, setNote] = useState('')
   const closed = t.status !== 'open'
   const set = (s: 'open' | 'done' | 'dropped') => { void window.api.todos.setStatus(t.id, s) }
-  const sub = t.events[0]?.text !== t.title ? t.events[0]?.text : `${t.createdBy === 'owner' ? 'You' : 'Butler'} · ${whenShort(t.createdAt)}`
+  // Source lives in the second line, so the first line is just the title and its tier (as in the mockup).
+  const sub = [SOURCE_LABEL[t.source], t.events[0]?.text !== t.title ? t.events[0]?.text : `${t.createdBy === 'owner' ? 'You' : 'Butler'} · ${whenShort(t.createdAt)}`].join(' · ')
   return (
     <div className={`rounded-xl bg-bg-primary ${priOf(t) === 1 && !closed ? 'hive-storm' : ''} ${open || picked?.on ? 'ring-1 ring-border' : ''} ${picked?.on ? 'ring-accent' : ''}`} aria-label={`Todo: ${t.title}`}>
       <div className="flex items-center gap-2.5 pl-2.5 pr-1.5 py-1.5 text-[13px]">
@@ -73,12 +74,12 @@ function Item({ t, onDiscuss, onCard, picked }: { t: TodoView; onDiscuss?: OnDis
           <span className={`block truncate ${closed ? 'text-text-muted line-through' : priOf(t) === 1 ? 'text-text-primary font-semibold' : priOf(t) === 3 ? 'text-text-secondary' : 'text-text-primary'}`}>{t.title}</span>
           <span className="block text-[11px] text-text-muted truncate">{sub}</span>
         </div>
+        {t.due && <span className={`flex-shrink-0 font-mono text-[11px] ${isOverdue(t) ? 'text-status-waiting' : 'text-text-muted'}`}>{t.due.slice(5)}</span>}
         <PriorityChip t={t} />
-        <span className="px-1.5 py-0.5 rounded-md bg-bg-secondary text-[10px] font-semibold text-text-secondary">{SOURCE_LABEL[t.source]}</span>
-        {t.due && <span className={`font-mono text-[11px] ${isOverdue(t) ? 'text-status-waiting' : 'text-text-muted'}`}>{t.due.slice(5)}</span>}
-        {onDiscuss && <DiscussButton label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
-        <button onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`View ${t.title}`} className={`${ghost} ${open ? 'bg-bg-hover text-text-primary' : ''}`}>
-          View <span className={`text-[10px] transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>›</span>
+        {onDiscuss && <DiscussButton compact label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
+        <button onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`View ${t.title}`} title="View its story"
+          className={`flex-shrink-0 w-7 h-7 rounded-lg inline-flex items-center justify-center text-[15px] text-text-muted hover:bg-bg-hover hover:text-text-primary cursor-pointer ${open ? 'bg-bg-hover text-text-primary' : ''}`}>
+          <span className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>›</span>
         </button>
       </div>
       {open && (
