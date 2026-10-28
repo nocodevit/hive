@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.38.4] — 2026-10-28
+
+- 🕷 Spider waves come half as often as before: every 20–120 s (2.38.3 had them every 5–30 s by mistake). Ghost lunges stay at every 2–5 minutes.
+
+---
+
 ## [2.38.3] — 2026-10-28
 
 - 🎃 Timing: a ghost lunges at you every 2–5 minutes (was 45–120 s); spider waves come twice as often, every 5–30 s.
