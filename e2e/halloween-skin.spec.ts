@@ -89,7 +89,8 @@ test('the pumpkin fiend lunges at you and bites: jaw drops, then snaps shut', as
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-pumpkin.bite').length), { timeout: 2000 }).toBe(1)
   await page.waitForFunction(() => { const j = document.querySelector('.hfx-pumpkin .jaw'); return !!j && getComputedStyle(j).transform !== 'none' }, null, { timeout: 2000 })
   await page.screenshot({ path: test.info().outputPath('pumpkin-bite.png') })
-  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-pumpkin.snap').length), { timeout: 2000 }).toBe(1)
+  // It holds there gaping for a beat (0.2 s) before the jaws snap.
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-pumpkin.snap').length), { timeout: 3000 }).toBe(1)
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-pumpkin').length), { timeout: 3000 }).toBe(0)
 })
 

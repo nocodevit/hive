@@ -14,9 +14,32 @@
 [![GitHub stars](https://img.shields.io/github/stars/nocodevit/hive?style=social)](https://github.com/nocodevit/hive/stargazers)
 [![License: AGPL-3.0](https://img.shields.io/badge/License-AGPL%203.0-purple.svg)](../LICENSE)
 
-[**下载**](https://github.com/nocodevit/hive/releases/latest) · [功能](#功能) · [安装](#安装) · [English](../README.md)
+[**下载**](https://github.com/nocodevit/hive/releases/latest) · [功能](#功能) · [最近更新](#最近更新) · [安装](#安装) · [English](../README.md)
 
 </div>
+
+---
+
+## 🎃 万圣节限定皮肤 · 10/24 – 11/2
+
+<img src="screenshot-halloween.png" alt="Hive 万圣节皮肤：Butler Todo 面板周围的蜘蛛、阿飘、木乃伊和科学怪人" />
+
+万圣节期间升级后，Hive 会自动换上夜紫 + 金南瓜的限定皮肤（只换一次），窗口里多了一群"住客"：
+
+- **阿飘**：举着双手把床单撑成帐篷，在窗口里四处飘、忽隐忽现。
+- **蜘蛛**：时不时窜进来，停在 Chat 上张望一下，再钻进角落织一张网，网过一两分钟慢慢消失。
+- **木乃伊**沿着窗口底边蹒跚走过；**科学怪人**从底边探出半个头，脖子上的螺栓冒电火花。
+- 每隔几分钟，**阿飘或南瓜怪**会突然扑到你眼前——南瓜怪还会咬一口。
+
+它们都不挡点击。随时可以在 *Settings › Theme palette* 换回其他主题；11/2 之后会自动换回你原来的配色。打开"减少动态效果"时它们都不动。
+
+## 最近更新
+
+- **2.39** — 动效：发送先转圈再 ✓，卡片滑走、下面的补位；Dismiss / Drop 立刻生效并可**撤销**；Todo 打勾会画出 ✓ 并划掉；Tab、数字、菜单都有动画。飞书卡片会写明是谁发的。南瓜怪。
+- **2.38** — 万圣节皮肤。更新窗口会显示**你跳过的每个版本**的说明，而不只是最新一版。语音输入录音条（点按或长按：计时、实时波形、左滑取消）。
+- **2.37** — Butler **Todo** 三档优先级（⚡ 要命 雷暴置顶 / 🔥 冒烟 / 🧊 冻着）、多选、*移到明天*。**Discuss** 可以把卡片或 todo 发给 Butler，也能直接发给任何项目的 agent。Butler 可以在聊天里查看、整理审批卡片（但从不替你发送）。
+
+所有版本：[CHANGELOG.md](../CHANGELOG.md) · [Releases](https://github.com/nocodevit/hive/releases)
 
 ---
 
@@ -49,18 +72,25 @@
 - 批次提案由你批准（或自动批准），有批次历史、活动日志、卡住检测，可选每日报告。
 - staging 分支流程：任务的改动必须 commit、rebase、push 之后才算完成。
 
-### Butler：用手机控制 Hive
+### Butler：Hive 里的助理
+- **Approve**：Butler 写好的回复（邮件、飞书、Jira）以卡片等你处理——对方说了什么、已经发了什么、草稿。你来发送、修改、讨论或忽略；没有你，Butler 不会发出去。
+- **Todo**：它答应跟进的事，每条带完整经过；三档优先级、截止日、多选。
+- **Today**：根据日历（飞书和/或 macOS）和例行任务排出的当天计划。
+- **飞书代答**（可选）：能用事实回答的就回答并告诉你；需要你拍板的变成卡片，什么都不发。
+
+### 在手机上用 Butler
 - App Settings → **Remote Control** → *Allow remote control from my phone (Butler)*，默认关闭。
 - Hive 在自己的目录里运行一个开了 Remote Control 的 Claude Code 会话；手机打开 Claude App → **Code** →「Hive Butler」。
 - 它能列出 agent 和状态、读某个 agent 的最新输出、把你的话原样发进你点名的 agent 的聊天里。同名时不会乱猜，不会自己启动你没要求的聊天，也不能改文件。（[详细说明](butler-api.md)）
 
 ### 语音输入
 - 对着聊天框说话，边说边出字；可以设置停顿后自动发送。
+- 点一下 🎙 免提听写，或者按住：按钮拉长成录音条，显示计时和实时波形，左滑取消。
 - 填入你自己的 OpenAI API key，一句话里中英文混说也能准确识别；不填就用 macOS 本机识别。（[详细说明](voice-input.md)）
 
 ### 其他
 - 项目面板（从 markdown 里扫出 todo、agent 看板、根据 git 活跃度判断项目阶段）、每个 agent 的工作日志、带 markdown 预览的文件浏览器。
-- 主题：紫、蓝、粉三种配色，浅色和深色，还有「Prime」风格。
+- 主题：紫、蓝、粉三种配色，浅色和深色，还有「Prime」风格，以及季节限定的 🎃 万圣节皮肤。
 - 自动更新：*Check for Updates → Install & Restart*，安装前会先校验签名和开发者。（[详细说明](self-update.md)）
 
 ## 安装

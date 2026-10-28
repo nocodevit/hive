@@ -195,17 +195,23 @@ export function HalloweenFX() {
       p.style.left = `${W / 2 - PUMPKIN_W / 2}px`
       p.style.top = `${H / 2 - PUMPKIN_W / 2 - 20}px`
       layer.appendChild(p)
+      // Rush in, mouth opening (0.77 s) → right up close, jaws wide (0.56 s) → FREEZE 0.2 s, gaping → SNAP (screen flashes orange, it shakes) → gone.
+      const RUSH = 770, SWELL = 560, HOLD = 200, CHOMP = 170, GONE = 150, T = RUSH + SWELL + HOLD + CHOMP + GONE
+      const at = (ms: number) => ms / T
       p.animate([
-        { transform: 'translateY(40px) scale(.15)', opacity: 0 },
-        { transform: 'translateY(0) scale(1)', opacity: 0.9, offset: 0.45 },
-        { transform: 'translateY(-20px) scale(3.4)', opacity: 1, offset: 0.78 },
-        { transform: 'translateY(-30px) scale(4)', opacity: 0 }
-      ], { duration: 1700, easing: 'cubic-bezier(.6,0,.9,.4)', fill: 'forwards' })
+        { transform: 'translateY(40px) scale(.15)', opacity: 0, easing: 'cubic-bezier(.6,0,.9,.4)' },
+        { transform: 'translateY(0) scale(1)', opacity: 0.9, offset: at(RUSH), easing: 'cubic-bezier(.6,0,.9,.4)' },
+        { transform: 'translateY(-20px) scale(3.4)', opacity: 1, offset: at(RUSH + SWELL), easing: 'ease-in-out' },
+        { transform: 'translateY(-22px) scale(3.45) rotate(-1deg)', opacity: 1, offset: at(RUSH + SWELL + HOLD / 2), easing: 'ease-in-out' },
+        { transform: 'translateY(-20px) scale(3.4)', opacity: 1, offset: at(RUSH + SWELL + HOLD + CHOMP), easing: 'ease-in' },
+        { transform: 'translateY(-30px) scale(3.8)', opacity: 0 }
+      ], { duration: T, fill: 'forwards' })
       later(() => p.classList.add('bite'), 600)
-      later(() => { p.classList.remove('bite'); p.classList.add('snap') }, 1220)
+      later(() => { p.classList.remove('bite'); p.classList.add('snap') }, RUSH + SWELL + HOLD)
       dim.style.background = 'radial-gradient(circle at 50% 50%, rgba(255,110,20,.35), rgba(0,0,0,.75))'
-      dim.animate([{ opacity: 0 }, { opacity: 0, offset: 0.7 }, { opacity: 0.9, offset: 0.74 }, { opacity: 0.2, offset: 0.8 }, { opacity: 0.6, offset: 0.85 }, { opacity: 0 }], { duration: 1700 })
-      later(() => { p.remove(); dim.style.background = '' }, 1800)
+      const s0 = at(RUSH + SWELL + HOLD)
+      dim.animate([{ opacity: 0 }, { opacity: 0, offset: s0 }, { opacity: 0.9, offset: s0 + 0.02 }, { opacity: 0.2, offset: s0 + 0.05 }, { opacity: 0.6, offset: s0 + 0.08 }, { opacity: 0 }], { duration: T })
+      later(() => { p.remove(); dim.style.background = '' }, T + 100)
     }
     const scare = () => {
       // Who lunges this time: a ghost or the pumpkin fiend.
@@ -217,13 +223,19 @@ export function HalloweenFX() {
         const W = window.innerWidth, H = window.innerHeight
         const cx = W / 2 - GHOST_W / 2, cy = H / 2 - 70
         g.el.classList.add('scare')
+        // Rush in (0.83 s) → swell to fill the screen (0.45 s) → FREEZE 0.2 s, staring, the screen flickering dark → gone (0.15 s).
+        const RUSH = 825, SWELL = 450, HOLD = 200, GONE = 150, T = RUSH + SWELL + HOLD + GONE
+        const big = `translate(${cx}px, ${cy - 30}px)`
         g.el.animate([
-          { transform: `translate(${g.x}px, ${g.y}px) scale(1)`, opacity: 0.2 },
-          { transform: `translate(${cx}px, ${cy}px) scale(1.4)`, opacity: 0.35, offset: 0.55 },
-          { transform: `translate(${cx}px, ${cy - 30}px) scale(5.5)`, opacity: 0.7, offset: 0.85 },
-          { transform: `translate(${cx}px, ${cy - 40}px) scale(7)`, opacity: 0 }
-        ], { duration: 1500, easing: 'cubic-bezier(.6,0,.9,.4)', fill: 'forwards' })
-        dim.animate([{ opacity: 0 }, { opacity: 0, offset: 0.6 }, { opacity: 0.45, offset: 0.8 }, { opacity: 0.1, offset: 0.86 }, { opacity: 0.35, offset: 0.9 }, { opacity: 0 }], { duration: 1500 })
+          { transform: `translate(${g.x}px, ${g.y}px) scale(1)`, opacity: 0.2, easing: 'cubic-bezier(.6,0,.9,.4)' },
+          { transform: `translate(${cx}px, ${cy}px) scale(1.4)`, opacity: 0.35, offset: RUSH / T, easing: 'cubic-bezier(.6,0,.9,.4)' },
+          { transform: `${big} scale(5.5)`, opacity: 0.75, offset: (RUSH + SWELL) / T, easing: 'ease-in-out' },
+          { transform: `${big} scale(5.6) rotate(-1.5deg)`, opacity: 0.78, offset: (RUSH + SWELL + HOLD / 2) / T, easing: 'ease-in-out' },
+          { transform: `${big} scale(5.5) rotate(1deg)`, opacity: 0.75, offset: (RUSH + SWELL + HOLD) / T, easing: 'ease-in' },
+          { transform: `translate(${cx}px, ${cy - 40}px) scale(6.5)`, opacity: 0 }
+        ], { duration: T, fill: 'forwards' })
+        const h0 = (RUSH + SWELL) / T, hd = HOLD / T
+        dim.animate([{ opacity: 0 }, { opacity: 0, offset: h0 }, { opacity: 0.45, offset: h0 + hd * 0.08 }, { opacity: 0.1, offset: h0 + hd * 0.25 }, { opacity: 0.4, offset: h0 + hd * 0.45 }, { opacity: 0.15, offset: h0 + hd * 0.75 }, { opacity: 0.35, offset: h0 + hd }, { opacity: 0 }], { duration: T })
         later(() => {
           g.el.classList.remove('scare')
           g.el.getAnimations().forEach(a => a.cancel())
@@ -232,7 +244,7 @@ export function HalloweenFX() {
           g.el.style.transform = `translate(${g.x}px, ${g.y}px)`
           g.el.style.opacity = '0'
           g.busy = false
-        }, 1550)
+        }, T + 50)
       }
       later(scare, rand(120000, 300000))
     }
