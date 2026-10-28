@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.39.2] — 2026-10-28
+
+- Feishu cards say **who** sent the message: the title leads with the person ("霍传俊 · …"), the group goes in the subtitle ("Feishu · 产品小队 · …"); notifications and the follow-up todo name them too. (New cards; existing ones are left as they are.)
+
+---
+
 ## [2.39.1] — 2026-10-28
 
 - 🕷 Spiders look real: no glow; a tight contact shadow under the body and a soft shadow cast down-right, as if lit from above.

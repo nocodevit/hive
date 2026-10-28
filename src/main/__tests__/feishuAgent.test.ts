@@ -327,6 +327,20 @@ describe('feishu agent', () => {
     expect(t.fs.sent).toEqual([])
   })
 
+  it('a group card leads with who sent it; the group goes in the subtitle', async () => {
+    const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"cannot-answer","level":"hold","confidence":"low","reply":"","sources":[],"claims":[]}' })
+    ;(t.deps as any).senderName = async (id: string) => (id === 'ou_huo' ? '霍传俊' : '')
+    const agent = createFeishuAgent(t.deps)
+    agent.setSettings({ enabled: true, waitBeforeReplyMs: 0 })
+    t.advance(1000)
+    t.fs.add('g1', 'ou_huo', '@_user_1 已完成上次评论内容的回复和补充，请您 review', undefined, [{ key: '@_user_1', id: SELF, name: 'Mei' }])
+    await agent.tick()
+    const [card] = t.approvals.pending()
+    expect(card.title.startsWith('霍传俊 · ')).toBe(true)
+    expect(card.subtitle).toContain('Team')
+    expect(card.payload).toMatchObject({ senderId: 'ou_huo', senderName: '霍传俊', chatName: 'Team' })
+  })
+
   it('locked topic overrides an "answer": holding reply + follow-up approval; approving replies to the original', async () => {
     const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"product-status","level":"auto","confidence":"high","reply":"周五上线","sources":[],"claims":[]}' })
     t.advance(1000)
