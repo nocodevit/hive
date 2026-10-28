@@ -1258,6 +1258,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       const text = ev.detail.text.trim()
       if (!text) return
       setInput(prev => joinVoiceText(prev, text))
+      // The sentence lands: the input box glows once, so you see where it went.
+      textareaRef.current?.parentElement?.animate(
+        [{ boxShadow: '0 0 0 1px var(--chat-accent), 0 0 14px color-mix(in srgb, var(--chat-accent) 45%, transparent)' }, { boxShadow: '0 0 0 1px transparent, 0 0 0 transparent' }],
+        { duration: 600, easing: 'ease-out' })
     }
     window.addEventListener('hive:voice-final', handler)
     return () => window.removeEventListener('hive:voice-final', handler)
@@ -2324,9 +2328,11 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
               <ActionToolbar
                 leading={<>
                   <VoiceGroup agentId={id.startsWith('chat-') ? id.slice(5) : id}
-                    onAttach={paths => setInput(v => `${v}${v && !/\s$/.test(v) ? ' ' : ''}${paths.map(x => (/\s/.test(x) ? `"${x}"` : x)).join(' ')} `)} />
-                  <AutoSendPill on={autoSend.enabled} />
-                  {autoSendAt !== null && <AutoSendCountdown at={autoSendAt} onCancel={() => voiceStep({ kind: 'typed' })} />}
+                    onAttach={paths => setInput(v => `${v}${v && !/\s$/.test(v) ? ' ' : ''}${paths.map(x => (/\s/.test(x) ? `"${x}"` : x)).join(' ')} `)}
+                    slot={<>
+                      <AutoSendPill on={autoSend.enabled} />
+                      {autoSendAt !== null && <AutoSendCountdown at={autoSendAt} onCancel={() => voiceStep({ kind: 'typed' })} />}
+                    </>} />
                   <StreamingPill on={streamingMode} onToggle={toggleStreamingMode} />
                 </>}
                 trailing={composerTrailing}
@@ -4249,7 +4255,7 @@ function VoicePartial() {
   }, [])
   if (!state.listening || !state.partial) return null
   return (
-    <div aria-label="Hearing" aria-live="polite" style={{ fontFamily: FONT_PROSE, fontSize: 13, lineHeight: 1.45, color: CHAT.muted, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+    <div aria-label="Hearing" aria-live="polite" style={{ fontFamily: FONT_PROSE, fontSize: 13, lineHeight: 1.45, color: CHAT.muted, whiteSpace: 'pre-wrap', wordBreak: 'break-word', animation: 'hvg-in 150ms ease-out' }}>
       🎙 {state.partial}
     </div>
   )

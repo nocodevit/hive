@@ -153,62 +153,98 @@ test('a cloud failure is shown; a helper that dies resets the button', async () 
   await page.getByRole('button', { name: 'Stop listening' }).click()
 })
 
-test('hold 🎙: the pair becomes a recording bar with a waveform; let go keeps the words, let go on ✕ drops them', async () => {
+const dbs = [-55, -30, -18, -25, -40, -22]
+const bar = () => page.getByRole('group', { name: 'Recording' })
+const wavePixels = () => bar().getByRole('img', { name: 'Live waveform' }).evaluate((c: HTMLCanvasElement) => {
+  const d = c.getContext('2d')!.getImageData(0, 0, c.width, c.height).data
+  let n = 0
+  for (let i = 3; i < d.length; i += 4) if (d[i] > 0) n++
+  return n
+})
+
+test('tap 🎙: the bar opens across the row with a timer and a live waveform; ■ stops and keeps the words', async () => {
   const input = page.getByTestId('hive-chat-input')
   await input.fill('')
   const before = (await calls()).length
+  await page.getByRole('button', { name: 'Voice input' }).click()
+  await expect(bar()).toBeVisible()
+  await expect.poll(async () => (await calls()).slice(before).map(c => c.op)).toEqual(['start'])
+  // Stretched nearly across the toolbar row, not a fixed little pill.
+  await expect.poll(() => bar().evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(300)
+  await expect(bar().getByLabel('Recording time')).toHaveText(/^0:0\d$/)
+  for (const db of dbs) await line(`level:${db}`)
+  await expect.poll(wavePixels).toBeGreaterThan(50)
+  await expect(bar()).toContainText('Tap ■ to stop')
+  await page.waitForTimeout(600)
+  await page.getByTestId('hive-chat-input').locator('xpath=ancestor::div[3]').screenshot({ path: test.info().outputPath('recording-bar.png') })
+  await line('final:点一下说的话')
+  await expect(input).toHaveValue('点一下说的话')
+  await bar().getByRole('button', { name: 'Stop listening' }).click()
+  await expect(page.getByRole('button', { name: 'Voice input' })).toBeVisible()
+  expect((await calls()).slice(before).map(c => c.op)).toEqual(['start', 'stop'])
+  await expect(input).toHaveValue('点一下说的话')
+})
+
+test('hold 🎙: release keeps the words; slide left past a third → "Release to cancel" drops them; under 1 s is too short', async () => {
+  const input = page.getByTestId('hive-chat-input')
+  await input.fill('')
   const mic = page.getByRole('button', { name: 'Voice input' })
   const box = (await mic.boundingBox())!
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  const before = (await calls()).length
+  await mic.hover()
   await page.mouse.down()
-  const bar = page.getByRole('group', { name: 'Recording' })
-  await expect(bar).toBeVisible()
-  await expect(bar.getByRole('button', { name: 'Cancel recording' })).toBeVisible()
-  await expect.poll(async () => (await calls()).slice(before).map(c => c.op)).toEqual(['start'])
-  for (const db of [-55, -30, -18, -25]) await line(`level:${db}`)
-  await expect(bar.getByRole('img', { name: 'Live waveform' })).toBeVisible()
-  await expect(page.getByText('Release to finish')).toBeVisible()
+  await expect(bar()).toBeVisible()
+  await expect(bar().getByRole('button', { name: 'Cancel recording' })).toBeVisible()
+  await expect(bar()).toContainText('Release to finish')
+  for (const db of dbs) await line(`level:${db}`)
   await line('final:按住说的话')
   await expect(input).toHaveValue('按住说的话')
+  await expect(bar().getByLabel('Recording time')).toHaveText(/^0:0[1-9]$/, { timeout: 3000 })
   await page.mouse.up()
-  await expect(bar).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Voice input' })).toBeVisible()
   expect((await calls()).slice(before).map(c => c.op)).toEqual(['start', 'stop'])
 
-  // Hold again, slide onto ✕, let go: listening stops and nothing more lands.
+  // Slide left: past a third of the bar it arms cancel.
   const mark = (await calls()).length
   await page.getByRole('button', { name: 'Voice input' }).hover()
   await page.mouse.down()
-  await expect(bar).toBeVisible()
+  await expect(bar()).toBeVisible()
+  const w = await bar().evaluate(el => el.getBoundingClientRect().width)
+  await page.mouse.move(box.x + box.width / 2 + 120, box.y + box.height / 2)
+  await page.mouse.move(box.x + box.width / 2 + 120 - w / 2, box.y + box.height / 2, { steps: 5 })
+  await expect(bar()).toContainText('Release to cancel')
   await line('partial:不要了')
-  const x = (await bar.getByRole('button', { name: 'Cancel recording' }).boundingBox())!
-  await page.mouse.move(x.x + x.width / 2, x.y + x.height / 2, { steps: 4 })
-  await expect(page.getByText('Release to cancel')).toBeVisible()
   await page.mouse.up()
-  await expect(bar).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Voice input' })).toBeVisible()
   await expect.poll(async () => (await calls()).slice(mark).map(c => c.op)).toEqual(['start', 'stop'])
   await line('final:不要了')
   await expect(input).toHaveValue('按住说的话')
-  await expect(page.getByLabel('Hearing')).toBeHidden()
+
+  // A blip under a second is dropped, with a word why.
+  await page.getByRole('button', { name: 'Voice input' }).hover()
+  await page.mouse.down()
+  await expect(bar()).toBeVisible()
+  await page.mouse.up()
+  await expect(page.getByRole('status').filter({ hasText: 'Too short' })).toBeVisible()
 })
 
-test('let go: the bar shrinks back with its waveform fading, not cut off; reduced motion turns the animation off', async () => {
-  const mic = page.getByRole('button', { name: 'Voice input' })
-  await mic.hover()
+test('let go: the bar shrinks back (clip, not width) and reduced motion keeps only fades', async () => {
+  await page.getByRole('button', { name: 'Voice input' }).hover()
   await page.mouse.down()
-  const bar = page.getByRole('group', { name: 'Recording' })
-  await expect(bar).toBeVisible()
-  await expect.poll(() => bar.evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(250)
+  await expect(bar()).toBeVisible()
+  await page.waitForTimeout(1100)
   await page.mouse.up()
-  const group = page.getByRole('group', { name: 'Attach and voice' })
-  // Mid-shrink the waveform is still there (fading), then it goes.
-  expect(await group.evaluate(el => el.getBoundingClientRect().width)).toBeGreaterThan(70)
-  await expect(group.getByRole('img', { name: 'Live waveform' })).toHaveCount(0)
-  await expect.poll(() => group.evaluate(el => el.getBoundingClientRect().width)).toBeLessThan(70)
-
+  const ended = page.getByRole('group', { name: 'Recording ended' })
+  await expect(ended).toBeAttached()
+  expect(await ended.evaluate(el => getComputedStyle(el).transitionProperty)).toContain('clip-path')
+  await expect(ended).toHaveCount(0)
   await page.emulateMedia({ reducedMotion: 'reduce' })
-  expect(await group.evaluate(el => getComputedStyle(el).transitionDuration)).toMatch(/^0s/)
+  await page.getByRole('button', { name: 'Voice input' }).click()
+  await expect(bar()).toBeVisible()
+  expect(await bar().evaluate(el => getComputedStyle(el).transitionProperty)).toBe('opacity')
+  await bar().getByRole('button', { name: 'Stop listening' }).click()
   await page.emulateMedia({ reducedMotion: 'no-preference' })
+  await expect(page.getByRole('button', { name: 'Voice input' })).toBeVisible()
 })
 
 test('＋ attaches files: their paths go into the input', async () => {

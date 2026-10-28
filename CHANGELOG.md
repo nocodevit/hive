@@ -7,6 +7,16 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.38.7] — 2026-10-28
+
+- 🎙 Recording bar rebuilt to the micro-interactions spec (📘6 长按变录音条), for **tap and hold** alike: the pair stretches across the toolbar (stopping before Send), ＋ turns 45° into ✕, 🎙 rides to the right end, a red dot pulses beside a 0:03 timer, and a live waveform scrolls in from the right (canvas, every frame; a faint breathing line when you're quiet).
+  - Hold ≥ 250 ms; release keeps the words; slide left past a third (or onto ✕) → "Release to cancel"; under 1 s is dropped ("Too short"); 60 s ends it, the last 10 s counting down in amber.
+  - Tap = hands-free: ■ stops and keeps, ✕ / Esc drop. Auto send and its countdown stay usable inside the bar.
+  - Only transform / opacity / clip-path animate; opening uses spring.smooth, closing spring.bouncy; errors shake the bar once and show in red; the live text fades in, and a finished sentence makes the input glow as it lands. Reduced motion: fades only.
+- Butler and the resume prompt read only the last 2 MB of a chat log from disk (not the whole 100 MB+ file), and look up open chats in parallel.
+
+---
+
 ## [2.38.6] — 2026-10-28
 
 - 🕸 A spider's web hangs on for a minute or two, then slowly fades away (4 s) and the corner is free for the next spider.
