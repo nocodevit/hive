@@ -5,7 +5,7 @@ import { useEffect } from 'react'
  * the way (pointer-events: none): two ghosts drifting in empty space, one
  * peeking over the chat input, a bat now and then, and every 20–120 s a wave of
  * 1–3 spiders that dash in, stop on the chat to look around, then run into a
- * corner and spin a web there. Reduced motion: no movement, the webs only.
+ * corner and spin a web there; a web fades away after a minute or two. Reduced motion: no movement, the webs only.
  */
 
 const CSS = `
@@ -177,6 +177,14 @@ export function HalloweenFX() {
       document.body.appendChild(w)
       extra.push(w)
       webbed.set(c, w)
+      // A web hangs on for a minute or two, then fades away and the corner is free again.
+      later(() => {
+        if (webbed.get(c) !== w) return
+        webbed.delete(c)
+        const fade = w.animate([{ opacity: 0.5 }, { opacity: 0 }], { duration: 4000, easing: 'ease-in', fill: 'forwards' })
+        fade.onfinish = () => w.remove()
+        later(() => w.remove(), 4200)
+      }, (window as unknown as { __hiveWebLifeMs?: number }).__hiveWebLifeMs ?? rand(60000, 120000))
     }
 
     const dash = () => {
