@@ -66,8 +66,27 @@ test('the ghosts wander the window, and one lunges at you now and then', async (
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-ghost.scare').length), { timeout: 4000 }).toBe(0)
 })
 
+test('the mummy shambles along the bottom; Frankenstein\'s monster rises, sparks, and sinks back', async () => {
+  await page.evaluate(() => (window as any).__hiveMummy())
+  const mummyX = () => page.evaluate(() => { const m = document.querySelector('.hfx-mummy'); return m ? Math.round(m.getBoundingClientRect().x) : null })
+  const x0 = await mummyX()
+  expect(x0).not.toBeNull()
+  await expect.poll(async () => Math.abs((await mummyX())! - x0!), { timeout: 5000 }).toBeGreaterThan(60)
+  const mb = await page.evaluate(() => document.querySelector('.hfx-mummy')!.getBoundingClientRect().bottom)
+  expect(Math.abs(mb - (await page.evaluate(() => window.innerHeight)))).toBeLessThan(12)
+  await page.evaluate(() => (window as any).__hiveFrank())
+  await page.waitForTimeout(1600)
+  const top = await page.evaluate(() => document.querySelector('.hfx-frank')!.getBoundingClientRect().top)
+  expect(top).toBeLessThan(await page.evaluate(() => window.innerHeight - 60))
+  await page.screenshot({ path: test.info().outputPath('trio.png') })
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-frank').length), { timeout: 6000 }).toBe(0)
+  await page.evaluate(() => document.querySelectorAll('.hfx-mummy').forEach(m => m.remove()))
+})
+
 test('a spider wave: they run, stop, a web is spun in a corner and later fades away; clicks go through', async () => {
   // Webs last 1–2 minutes in the app; a test cannot wait that long.
+  await page.evaluate(() => (window as any).__hiveClearWebs())
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-web').length)).toBe(0)
   await page.evaluate(() => { (window as any).__hiveWebLifeMs = 2500; (window as any).__hiveSpiders() })
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-spider').length)).toBeGreaterThan(0)
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-web').length), { timeout: 8000 }).toBeGreaterThan(0)
