@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 /**
  * 🎃 The Halloween skin's night life, drawn over the whole window and never in
  * the way (pointer-events: none): two ghosts drifting in empty space, one
- * peeking over the chat input, a bat now and then, and every 10–60 s a wave of
+ * peeking over the chat input, a bat now and then, and every 5–30 s a wave of
  * 1–3 spiders that dash in, stop on the chat to look around, then run into a
  * corner and spin a web there. Reduced motion: no movement, the webs only.
  */
@@ -116,11 +116,11 @@ export function HalloweenFX() {
           g.busy = false
         }, 1550)
       }
-      later(scare, rand(45000, 120000))
+      later(scare, rand(120000, 300000))
     }
     if (!reduce) {
       ghosts.forEach((g, i) => later(() => wander(g), 600 + i * 1500))
-      later(scare, rand(20000, 45000))
+      later(scare, rand(60000, 180000))
     }
     ;(window as unknown as { __hiveGhostScare?: () => void }).__hiveGhostScare = () => { scare() }
 
@@ -212,7 +212,7 @@ export function HalloweenFX() {
       const n = 1 + Math.floor(Math.random() * 3)
       for (let i = 0; i < n; i++) later(dash, i === 0 ? 0 : i * rand(250, 700))
     }
-    const waveLoop = () => { wave(); later(waveLoop, rand(10000, 60000)) }
+    const waveLoop = () => { wave(); later(waveLoop, rand(5000, 30000)) }
     later(waveLoop, 3000)
     ;(window as unknown as { __hiveSpiders?: () => void }).__hiveSpiders = wave
 
