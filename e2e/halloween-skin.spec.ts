@@ -59,7 +59,8 @@ test('the ghosts wander the window, and one lunges at you now and then', async (
     const b = await where()
     return Math.max(...b.map((p, i) => Math.hypot(p[0] - a[i][0], p[1] - a[i][1])))
   }, { timeout: 15000 }).toBeGreaterThan(80)
-  await page.evaluate(() => (window as any).__hiveGhostScare())
+  // A lunge is a ghost or the pumpkin fiend; take the ghost path here (the pumpkin has its own test).
+  await page.evaluate(() => { const r = Math.random; Math.random = () => 0.9; (window as any).__hiveGhostScare(); Math.random = r })
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-ghost.scare').length)).toBe(1)
   await page.waitForFunction(() => { const g = document.querySelector('.hfx-ghost.scare'); return !!g && g.getBoundingClientRect().width > 250 }, null, { timeout: 3000 })
   await page.screenshot({ path: test.info().outputPath('ghost-scare.png') })
@@ -81,6 +82,15 @@ test('the mummy shambles along the bottom; Frankenstein\'s monster rises, sparks
   await page.screenshot({ path: test.info().outputPath('trio.png') })
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-frank').length), { timeout: 6000 }).toBe(0)
   await page.evaluate(() => document.querySelectorAll('.hfx-mummy').forEach(m => m.remove()))
+})
+
+test('the pumpkin fiend lunges at you and bites: jaw drops, then snaps shut', async () => {
+  await page.evaluate(() => (window as any).__hivePumpkin())
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-pumpkin.bite').length), { timeout: 2000 }).toBe(1)
+  await page.waitForFunction(() => { const j = document.querySelector('.hfx-pumpkin .jaw'); return !!j && getComputedStyle(j).transform !== 'none' }, null, { timeout: 2000 })
+  await page.screenshot({ path: test.info().outputPath('pumpkin-bite.png') })
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-pumpkin.snap').length), { timeout: 2000 }).toBe(1)
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-pumpkin').length), { timeout: 3000 }).toBe(0)
 })
 
 test('a spider wave: they run, stop, a web is spun in a corner and later fades away; clicks go through', async () => {
