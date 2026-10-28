@@ -287,7 +287,7 @@ export interface FeishuAgentDeps {
     add: (i: Pick<Approval, 'kind' | 'title' | 'subtitle' | 'draft' | 'payload' | 'action'>) => Approval
     register: (kind: string, exec: (item: Approval) => Promise<{ ok: boolean; error?: string }>) => void
     get: (id: string) => Approval | undefined
-    update: (id: string, patch: Partial<Pick<Approval, 'title' | 'payload' | 'draft'>>) => boolean
+    update: (id: string, patch: Partial<Pick<Approval, 'title' | 'subtitle' | 'payload' | 'draft'>>) => boolean
   }
   notify: (title: string, body: string) => void
   /** Agents' status and latest progress, as text for the prompt. */
@@ -631,7 +631,12 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       return { messageId: job.messageId, result: 'skipped', why: 'acknowledged' }
     }
 
-    const { relation, answer, draft, guard, gate } = await decide(job, history, self)
+    const { relation, answer, draft, guard, gate, senderName } = await decide(job, history, self)
+    // Who sent it: the card leads with the person, the chat goes in the subtitle (a group name alone says nothing).
+    if (senderName) state.senders[job.senderId] = senderName
+    const who = senderName || state.senders[job.senderId] || ''
+    const lead = who || job.chatName || 'Feishu'
+    const where = !job.p2p && job.chatName ? ` · ${job.chatName}` : ''
 
     // Status fixes the answer found (verified against code / releases): one card each for the owner.
     for (const f of answer?.jiraFixes ?? []) deps.approvals.add(jiraFixApproval(f, `from Feishu · ${job.chatName || 'chat'}`))
@@ -644,25 +649,25 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       if (!r.ok) return { messageId: job.messageId, result: 'failed', error: r.error }
       const item = deps.approvals.add({
         kind: FOLLOWUP_KIND,
-        title: `${job.chatName || 'Feishu'} · ${clip(answer.ownerQuestion, 40)}`,
-        subtitle: `Feishu · facts sent, your call · ${clip(answer.ownerQuestion, 60)}`,
+        title: `${lead} · ${clip(answer.ownerQuestion, 40)}`,
+        subtitle: `Feishu${where} · facts sent, your call · ${clip(answer.ownerQuestion, 60)}`,
         draft: '',
-        payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, senderId: job.senderId, question: job.text, topic: answer.ownerQuestion, relation, category: answer.category, claims: answer.claims, sent: text },
+        payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, senderId: job.senderId, senderName: who, question: job.text, topic: answer.ownerQuestion, relation, category: answer.category, claims: answer.claims, sent: text },
         action: 'Reply'
       })
       cases.add({ ...decided, sent: text, approvalId: item.id, outcome: 'pending' })
       state.followups.push({ approvalId: item.id, createdAt: now(), reminded: false })
       // Promised a follow-up ("其余已转告"): it is a todo, with what came in and what went out.
-      const todo = deps.todos?.add({ title: `${job.chatName || 'Feishu'} · ${clip(answer.ownerQuestion, 80)}`, source: 'feishu', who: 'butler', refs: { approvalId: item.id, chatId: job.chatId, messageId: job.messageId }, note: `${job.chatName || 'Feishu'}: ${clip(job.text, 400)}`, link: `approval:${item.id}` })
+      const todo = deps.todos?.add({ title: `${lead} · ${clip(answer.ownerQuestion, 80)}`, source: 'feishu', who: 'butler', refs: { approvalId: item.id, chatId: job.chatId, messageId: job.messageId }, note: `${who || 'They'}${where ? ` in ${job.chatName}` : ''}: ${clip(job.text, 400)}`, link: `approval:${item.id}` })
       if (todo) deps.todos!.event(todo.id, { who: 'butler', kind: 'action', text: `Butler sent the facts: ${clip(text, 300)}`, link: `approval:${item.id}` })
-      deps.notify('Feishu · your call', `${job.chatName || 'Feishu'} · ${clip(answer.ownerQuestion, 60)}`)
+      deps.notify('Feishu · your call', `${lead}${where} · ${clip(answer.ownerQuestion, 60)}`)
       return { messageId: job.messageId, result: 'answered' }
     }
     if (gate.level === 'auto') {
       const r = await reply(token, job, draft, 'answer')
       if (r.ok) cases.add({ ...decided, sent: draft, outcome: 'auto' })
       if (r.ok && answer?.proposal) state.proposals[job.chatId] = { to: job.senderId, ...answer.proposal, at: now() }
-      if (r.ok) deps.notify('Feishu · answered for you', `${job.chatName || 'Feishu'} · ${clip(draft, 80)}`)
+      if (r.ok) deps.notify('Feishu · answered for you', `${lead}${where} · ${clip(draft, 80)}`)
       return r.ok ? { messageId: job.messageId, result: 'answered' } : { messageId: job.messageId, result: 'failed', error: r.error }
     }
     const topic = gate.reasons[0] || 'unsure'
@@ -670,7 +675,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const open = state.followups.map(f => deps.approvals.get(f.approvalId)).find(a => a?.status === 'pending' && a.payload?.chatId === job.chatId && a.payload?.senderId === job.senderId)
     if (open) {
       const q = `${String(open.payload.question ?? '')}\n${job.text}`.trim()
-      deps.approvals.update(open.id, { payload: { ...open.payload, question: q }, title: `${job.chatName || 'Feishu'} · ${clip(q.replace(/\s+/g, ' '), 40)}` })
+      deps.approvals.update(open.id, { payload: { ...open.payload, question: q }, title: `${lead} · ${clip(q.replace(/\s+/g, ' '), 40)}` })
       cases.add({ ...decided, sent: '', approvalId: open.id, outcome: 'pending' })
       return { messageId: job.messageId, result: 'skipped', why: 'added_to_card' }
     }
@@ -678,10 +683,10 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     // (2) can answer → answered above; (3) partly → the checked facts went out above (split), the rest is a card.
     const item = deps.approvals.add({
       kind: FOLLOWUP_KIND,
-      title: `${job.chatName || 'Feishu'} · ${clip(job.text.replace(/\s+/g, ' '), 40)}`,
-      subtitle: `Feishu follow-up · ${clip(gate.reasons.join(' · ') || topic, 60)}`,
+      title: `${lead} · ${clip(job.text.replace(/\s+/g, ' '), 40)}`,
+      subtitle: `Feishu${where} · ${clip(gate.reasons.join(' · ') || topic, 60)}`,
       draft: draft.startsWith(prefix()) ? draft.slice(prefix().length) : draft,
-      payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, senderId: job.senderId, question: job.text, topic, relation, category: answer?.category ?? 'cannot-answer', claims: answer?.claims ?? [] },
+      payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, senderId: job.senderId, senderName: who, question: job.text, topic, relation, category: answer?.category ?? 'cannot-answer', claims: answer?.claims ?? [] },
       action: 'Reply'
     })
     cases.add({ ...decided, sent: '', approvalId: item.id, outcome: 'pending' })
