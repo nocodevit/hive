@@ -150,12 +150,14 @@ describe('scheduler (fake launchctl)', () => {
     const t = setup()
     const errors = await t.s.apply(defaultRoutineSettings())
     expect(errors).toEqual({})
-    expect(t.s.installed()).toEqual({ 'morning-plan': true, 'sort-inbox': true, 'jira-check': false, 'evening-report': true })
+    expect(t.s.installed()).toEqual({ 'morning-plan': true, 'sort-inbox': true, 'jira-check': false, dispatch: true, 'evening-report': true })
     expect(t.calls).toEqual([
       ['bootout', 'gui/501/com.hive.butler.morning-plan'],
       ['bootstrap', 'gui/501', join(t.root, 'LaunchAgents', 'com.hive.butler.morning-plan.plist')],
       ['bootout', 'gui/501/com.hive.butler.sort-inbox'],
       ['bootstrap', 'gui/501', join(t.root, 'LaunchAgents', 'com.hive.butler.sort-inbox.plist')],
+      ['bootout', 'gui/501/com.hive.butler.dispatch'],
+      ['bootstrap', 'gui/501', join(t.root, 'LaunchAgents', 'com.hive.butler.dispatch.plist')],
       ['bootout', 'gui/501/com.hive.butler.evening-report'],
       ['bootstrap', 'gui/501', join(t.root, 'LaunchAgents', 'com.hive.butler.evening-report.plist')]
     ])
@@ -171,6 +173,18 @@ describe('scheduler (fake launchctl)', () => {
     expect(await t.s.sync(defaultRoutineSettings())).toEqual(['morning-plan'])
     expect(t.calls.map(c => c[0])).toEqual(['bootout', 'bootstrap'])
     expect(readFileSync(t.s.plistPath('morning-plan'), 'utf8')).toContain('--butler-routine=morning-plan')
+    expect(existsSync(t.s.plistPath('jira-check'))).toBe(false)
+  })
+  it('sync: a routine new in this version, on by default, is installed on the next start; one turned off is not', async () => {
+    const t = setup()
+    const s = defaultRoutineSettings()
+    s.routines.dispatch.enabled = false
+    await t.s.apply(s)
+    expect(existsSync(t.s.plistPath('dispatch'))).toBe(false)
+    // An older Hive saved settings without Dispatch: read back, it comes on (the default) and sync installs it.
+    t.calls.length = 0
+    expect(await t.s.sync(defaultRoutineSettings())).toEqual(['dispatch'])
+    expect(existsSync(t.s.plistPath('dispatch'))).toBe(true)
     expect(existsSync(t.s.plistPath('jira-check'))).toBe(false)
   })
   it('sync: a retired routine (the old @mention digest) is booted out and its plist removed', async () => {
@@ -191,10 +205,12 @@ describe('scheduler (fake launchctl)', () => {
     s.routines['sort-inbox'].enabled = false
     s.routines['morning-plan'].enabled = false
     s.routines['evening-report'].enabled = false
+    s.routines.dispatch.enabled = false
     await t.s.apply(s)
     expect(t.calls).toEqual([
       ['bootout', 'gui/501/com.hive.butler.morning-plan'],
       ['bootout', 'gui/501/com.hive.butler.sort-inbox'],
+      ['bootout', 'gui/501/com.hive.butler.dispatch'],
       ['bootout', 'gui/501/com.hive.butler.evening-report']
     ])
     expect(existsSync(t.s.plistPath('sort-inbox'))).toBe(false)

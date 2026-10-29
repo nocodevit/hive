@@ -6,6 +6,7 @@ export interface TodoView {
   id: string; title: string; createdAt: number; createdBy: 'owner' | 'butler' | 'agent'; source: TodoSource
   due?: string; refs: { approvalId?: string; chatId?: string; messageId?: string; jiraKey?: string; mailKey?: string; agentId?: string }
   status: 'open' | 'done' | 'dropped'; closedAt?: number; events: TodoEventView[]; priority?: Priority
+  assignee?: { agentId: string; agent: string; project: string }
 }
 
 export type Priority = 1 | 2 | 3

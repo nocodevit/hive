@@ -41,6 +41,8 @@ export interface RoutineRunDeps {
   handleJira?: () => Promise<string | null>
   /** What waits for the owner now (pending approvals), one line each. */
   waiting?: () => string[]
+  /** One Dispatch pass (butlerDispatch.runDispatch): what was given to whom, one line each. */
+  dispatch?: (runClaude: RoutineClaude) => Promise<string>
   /** "Butler today" lines since a time ('' when nothing). */
   butlerToday?: (since: number) => string
   now?: () => number
@@ -258,6 +260,13 @@ export function createRoutineRunner(deps: RoutineRunDeps) {
         const bad = r.find(x => x.error)
         if (bad && r.every(x => x.error)) throw new Error(bad.error)
       } else if (id === 'jira-check') await jiraCheck(t)
+      else if (id === 'dispatch') {
+        if (!deps.dispatch) throw new Error('Dispatch is not set up')
+        const text = await deps.dispatch(deps.runClaude)
+        const jdir = journalDir(deps.folder()), today = localDate(t)
+        const prev = splitSections(readJournalText(jdir, today)).get('Dispatch')
+        if (!/^Nothing/.test(text)) setJournalSection(jdir, today, 'Dispatch', `${prev ? prev + '\n\n' : ''}**${hhmm(new Date(t))}**\n${text}`)
+      }
     } catch (e) {
       rec.ok = false
       rec.error = (e instanceof Error ? e.message : String(e)).slice(0, 500)

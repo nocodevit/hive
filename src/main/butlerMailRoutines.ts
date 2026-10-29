@@ -20,7 +20,7 @@ import { createButlerMail } from './butlerMail'
 import { createMailClients } from './butlerMailClients'
 import { createClaudeRunner } from './butlerClaude'
 import { createRoutineScheduler, readRoutineSettings } from './butlerRoutines'
-import { agentDays, createRoutineRunner, type AgentInfo, type RoutineRunner } from './butlerRoutineRun'
+import { agentDays, createRoutineRunner, type AgentInfo, type RoutineRunDeps, type RoutineRunner } from './butlerRoutineRun'
 import type { RoutineRunRecord } from '../shared/butler-routines'
 import { startRoutineMode, type RoutineMode } from './butlerRoutineMode'
 import { registerButlerMailIpc } from './butlerMailIpc'
@@ -51,6 +51,7 @@ export interface ButlerMailRoutinesDeps {
   /** Another normal Hive launch: show (or reopen) the window. */
   reopen?: () => void
   onRoutineRun?: (rec: RoutineRunRecord) => void
+  dispatch?: RoutineRunDeps['dispatch']
 }
 
 export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: RoutineMode; runner: RoutineRunner; jiraCall: () => Call | null } {
@@ -108,6 +109,7 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
       return (await runHandleJira({ folder, call, write: p => runClaude(`${p}\n\n# The owner's Jira (settings)\n${readJiraMd(folder)}`), approvals: d.approvals, followUp: card => { d.todos?.add(todoFromApproval(card, 'butler')) } }, cfg)).text
     },
     onRun: d.onRoutineRun,
+    dispatch: d.dispatch,
     // State and journal live at the plain path; only a claude run (runClaude's
     // cwd is d.folder) installs the Butler files.
     folder: () => folder,

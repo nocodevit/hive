@@ -37,6 +37,16 @@
       "hash": "4e551d7213ed20ea"
     }
   ],
+  "dispatch": [
+    {
+      "version": 1,
+      "date": "2026-10-29",
+      "changes": [
+        "First version"
+      ],
+      "hash": "e2b6d3f4959f4384"
+    }
+  ],
   "evening-report": [
     {
       "version": 1,

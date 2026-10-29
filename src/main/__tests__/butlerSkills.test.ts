@@ -11,7 +11,7 @@ import { registerButlerSkillsIpc } from '../butlerSkillsIpc'
 
 const RESOURCES = join(__dirname, '..', '..', '..', 'resources', 'butler')
 const SHIPPED = join(RESOURCES, 'skills')
-const IDS = ['answer-feishu', 'evening-report', 'handle-jira', 'morning-plan', 'reply-email', 'sort-inbox']
+const IDS = ['answer-feishu', 'dispatch', 'evening-report', 'handle-jira', 'morning-plan', 'reply-email', 'sort-inbox']
 /** Every shipped skill: the task skills above + references. */
 const ALL_IDS = [...IDS, 'jira-knowledge'].sort()
 

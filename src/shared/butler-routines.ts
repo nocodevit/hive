@@ -1,9 +1,9 @@
 // Butler daily routines: ids, default schedules and the shapes main and
 // renderer share. Weekdays use launchd numbering: 1 = Monday … 7 = Sunday.
 
-export type RoutineId = 'morning-plan' | 'sort-inbox' | 'jira-check' | 'evening-report'
+export type RoutineId = 'morning-plan' | 'sort-inbox' | 'jira-check' | 'evening-report' | 'dispatch'
 
-export const ROUTINE_IDS: RoutineId[] = ['morning-plan', 'sort-inbox', 'jira-check', 'evening-report']
+export const ROUTINE_IDS: RoutineId[] = ['morning-plan', 'sort-inbox', 'jira-check', 'dispatch', 'evening-report']
 /** Routines Hive no longer has: their LaunchAgents are removed (the @mention digest is part of the evening report now). */
 export const RETIRED_ROUTINE_IDS = ['feishu-digest'] as const
 
@@ -25,7 +25,8 @@ export const ROUTINE_NAME: Record<RoutineId, string> = {
   'morning-plan': 'Morning plan',
   'sort-inbox': 'Sort inbox',
   'jira-check': 'Jira',
-  'evening-report': 'Evening report'
+  'evening-report': 'Evening report',
+  dispatch: 'Dispatch'
 }
 
 /** One line each: what it does → where the result goes. */
@@ -33,7 +34,8 @@ export const ROUTINE_DESC: Record<RoutineId, string> = {
   'morning-plan': "Today's meetings and a plan from mail, Jira, agents → Today",
   'sort-inbox': 'Sorts new mail, drafts replies → Approve',
   'jira-check': 'Closes, nudges and lists your tickets → Today, Approve',
-  'evening-report': 'What agents and Butler did, @mentions of you → Today'
+  'evening-report': 'What agents and Butler did, @mentions of you → Today',
+  dispatch: 'Gives open todos to the agent that fits (sure + free: sent; else asks you) → Todo, Approve'
 }
 
 /** The skill that decides how each routine works (Settings → Skills). */
@@ -41,7 +43,8 @@ export const ROUTINE_SKILL: Record<RoutineId, string | null> = {
   'morning-plan': 'morning-plan',
   'sort-inbox': 'sort-inbox',
   'jira-check': 'handle-jira',
-  'evening-report': 'evening-report'
+  'evening-report': 'evening-report',
+  dispatch: 'dispatch'
 }
 
 export function defaultRoutineSettings(): RoutineSettings {
@@ -51,7 +54,8 @@ export function defaultRoutineSettings(): RoutineSettings {
       'morning-plan': { enabled: true, schedule: { kind: 'times', times: ['08:30'] } },
       'sort-inbox': { enabled: true, schedule: { kind: 'interval', everyMin: 30, fromHour: 9, toHour: 19 } },
       'jira-check': { enabled: false, schedule: { kind: 'times', times: ['09:00'] } },
-      'evening-report': { enabled: true, schedule: { kind: 'times', times: ['19:00'] } }
+      'evening-report': { enabled: true, schedule: { kind: 'times', times: ['19:00'] } },
+      dispatch: { enabled: true, schedule: { kind: 'interval', everyMin: 60, fromHour: 9, toHour: 19 } }
     }
   }
 }
