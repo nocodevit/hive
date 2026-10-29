@@ -80,6 +80,13 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   const [editing, setEditing] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  // Assign cards: the owner's own requirements, added to the brief when it goes out.
+  const [reqs, setReqs] = useState<Record<string, string>>({})
+  const assign = (it: ApprovalCard) => {
+    const brief = (editing === it.id ? text : it.draft).trim()
+    const req = (reqs[it.id] ?? '').trim()
+    void approve(it, req ? `${brief}\n\nRequirements from the owner: ${req}` : brief)
+  }
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Record<string, string>>({})
   const [noted, setNoted] = useState<Record<string, boolean>>({})
@@ -95,12 +102,12 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   const discuss = (it: ApprovalCard, text: string, to?: Parameters<OnDiscuss>[1]) => { onDiscuss?.(text, to); toTodo(it.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed in Chat') }
   useEffect(() => { if (editing && !items.some(i => i.id === editing)) setEditing(null) }, [items, editing])
 
-  const approve = async (it: ApprovalCard) => {
+  const approve = async (it: ApprovalCard, draft?: string) => {
     // No draft (the owner's call): Reply opens an empty box instead of sending nothing.
-    if (!it.draft.trim() && editing !== it.id) { setEditing(it.id); setText(''); return }
-    if (editing === it.id && !text.trim()) return
+    if (draft === undefined && !it.draft.trim() && editing !== it.id) { setEditing(it.id); setText(''); return }
+    if (draft === undefined && editing === it.id && !text.trim()) return
     setBusy(it.id)
-    const r = await window.api.approvals.approve(it.id, editing === it.id ? text : undefined)
+    const r = await window.api.approvals.approve(it.id, draft ?? (editing === it.id ? text : undefined))
     setBusy(null)
     if (!r.ok) setError(e => ({ ...e, [it.id]: r.error || 'failed' }))
     else {
@@ -147,6 +154,12 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
           <div className="flex-1 min-w-0">
             <div className="text-[13px] font-semibold text-text-primary truncate">{name}</div>
             <div className="flex items-center gap-1.5 min-w-0 text-[11px] text-text-muted"><span className="truncate">{restOf(it) || it.subtitle}</span>{jira && <JiraLink payload={it.payload} />}</div>
+            {it.kind === 'dispatch.assign' && (
+              <div aria-label="Why this agent" className="mt-0.5 text-[11.5px] text-text-secondary leading-snug">
+                {it.subtitle.replace(/^Assign · /, '')}
+                {Array.isArray(it.payload?.alternatives) && (it.payload!.alternatives as string[]).length > 0 && <span className="text-text-muted"> · also could: {(it.payload!.alternatives as string[]).join(', ')}</span>}
+              </div>
+            )}
           </div>
           <span className="px-1.5 py-0.5 rounded-md bg-bg-primary text-[10.5px] font-semibold text-text-secondary whitespace-nowrap">{SOURCE[srcKey(it.kind)] ?? '📝'}</span>
           {it.createdAt ? <span className="font-mono text-[11px] text-text-muted/70">{ago(it.createdAt)}</span> : null}
@@ -182,7 +195,20 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
           {error[it.id] && <div className="text-[11px] text-red-400 font-mono">{error[it.id]}</div>}
         </div>
         <div className="flex items-center gap-1 px-2.5 py-2 border-t border-border bg-bg-primary/40">
-          {decide ? (
+          {it.kind === 'dispatch.assign' ? (
+            <>
+              <input value={reqs[it.id] ?? ''} onChange={e => setReqs(x => ({ ...x, [it.id]: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') assign(it) }} aria-label={`Requirements for ${it.title}`} placeholder="Requirements (optional)…"
+                className="flex-1 min-w-[140px] h-7 rounded-lg bg-bg-secondary border border-border px-2.5 text-[12px] text-text-primary focus:outline-none focus:border-accent" />
+              <button disabled={busy === it.id || !!held[it.id]} onClick={() => assign(it)} aria-label={`Assign ${it.title}`} className={`${primary} relative`}>
+                <span className={`transition-opacity duration-150 ${busy === it.id || held[it.id] ? 'opacity-0' : ''}`}>Assign</span>
+                <AnimatePresence initial={false}>
+                  {busy === it.id && <motion.span key="spin" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: FADE_IN }} exit={{ opacity: 0 }} className="absolute inset-0 grid place-items-center" aria-label="Sending"><i className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" /></motion.span>}
+                  {held[it.id] && <motion.span key="ok" initial={{ opacity: 0, scale: 0.6 }} animate={{ opacity: 1, scale: 1, transition: SNAPPY }} className="absolute inset-0 grid place-items-center text-[14px]" aria-label="Sent">✓</motion.span>}
+                </AnimatePresence>
+              </button>
+            </>
+          ) : decide ? (
             <>
               <input value={answers[it.id] ?? ''} onChange={e => setAnswers(x => ({ ...x, [it.id]: e.target.value }))}
                 onKeyDown={e => { if (e.key === 'Enter') answer(it) }} aria-label="Your answer to Butler" placeholder="Answer Butler — it writes the reply"
@@ -206,9 +232,9 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
               {onDiscuss && <DiscussButton label={`Discuss ${it.title}`} text={() => cardDiscussText(it)} onDiscuss={(t, to) => discuss(it, t, to)} />}
             </>
           )}
-          {!decide && <button onClick={() => toTodo(it.id)} disabled={noted[it.id]} aria-label={`Add ${it.title} to Todo`} className={`${ghost} ${noted[it.id] ? 'text-accent' : ''}`}>{noted[it.id] ? '✓ In Todo' : '＋ Todo'}</button>}
+          {!decide && it.kind !== 'dispatch.assign' && <button onClick={() => toTodo(it.id)} disabled={noted[it.id]} aria-label={`Add ${it.title} to Todo`} className={`${ghost} ${noted[it.id] ? 'text-accent' : ''}`}>{noted[it.id] ? '✓ In Todo' : '＋ Todo'}</button>}
           <span className="flex-1" />
-          <button onClick={() => dismiss(it)} aria-label={`Reject ${it.title}`} className={`${ghost} text-text-muted`}>{decide ? '✕' : 'Dismiss'}</button>
+          <button onClick={() => dismiss(it)} aria-label={`Reject ${it.title}`} className={`${ghost} text-text-muted`}>{decide ? '✕' : it.kind === 'dispatch.assign' ? 'Cancel' : 'Dismiss'}</button>
         </div>
       </motion.div>
     )

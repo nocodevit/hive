@@ -19,9 +19,9 @@ Work reaches the agent best placed to do it, with a clear brief, without the own
   2. **Role** — bug or feature → Engineering; test / acceptance → QA; copy, spec → Product; design → Design.
   3. **What it did lately** — its last task touched the same area (it has the context).
   4. **The owner's habits** — when the owner moved similar work to someone before, follow that.
-- Status is not a reason to pick someone else: Hive handles a busy agent (it asks the owner instead of interrupting).
+- Status is not a reason to pick someone else: the card tells the owner when the agent is busy.
 - **Confident yes** — one agent clearly fits on project and role, or the owner named it. **No** — two or more fit about equally, the project is unclear, or the text is thin.
-- Then `./hive assign "<task>" --agent <name> --project <project> --why "<one line>" --confident yes|no [--todo <id>] [--alt <runner-up>]`. Hive sends it now (sure + free) or puts a card in Approve (not sure / busy).
+- Then `./hive assign "<task>" --agent <name> --project <project> --why "<one line>" --confident yes|no [--todo <id>] [--alt <runner-up>]`. Hive puts an Assign card in Approve; the owner adds requirements and sends it, or cancels.
 - No agent fits → `./hive nofit <todo-id> --why "<what kind of agent it needs>"`. Never create an agent.
 
 ## Ask me first
@@ -40,4 +40,4 @@ The `--why` is one plain line the owner can check at a glance: "touched checkout
 
 ## Output
 
-One line to the owner: "已交给 Ada（Acme Web）：修 checkout bug" or "建议交给 Ada，已放到 Approve 等你确认（她正在忙）".
+One line to the owner: "建议交给 Ada（Acme Web）：修 checkout bug，已放到 Approve 等你确认".

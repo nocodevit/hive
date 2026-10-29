@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.40.1] — 2026-10-29
+
+- 🧭 Dispatch never sends on its own: every pick is an **Assign card** — who, why, how sure Butler is (or "busy right now"), runners-up, the brief (click to edit) and a box for **your requirements**. **Assign** sends it with your requirements added; **Cancel** drops it (Undo for 5 s).
+
+---
+
 ## [2.40.0] — 2026-10-29
 
 - 🧭 **Butler gives work to the right agent.** Ask in the Butler chat ("帮我把 checkout 的 bug 修了"), Discuss a card or todo, or let the new hourly **Dispatch** routine look at open todos nobody has yet. Butler picks by project, role and what each agent did lately (the `dispatch` skill — tune it in Settings › Skills), then Hive applies one rule:
