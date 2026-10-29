@@ -105,6 +105,7 @@ def main():
     a = sub.add_parser('agents'); a.add_argument('--project')
     sub.add_parser('pending')
     cs = sub.add_parser('cards'); cs.add_argument('--all', action='store_true')
+    cal = sub.add_parser('calendar'); cal.add_argument('when', nargs='?', default='today'); cal.add_argument('--days', type=int, default=1)
     cd = sub.add_parser('card'); cd.add_argument('what', choices=['show', 'edit', 'close', 'reopen']); cd.add_argument('id')
     cd.add_argument('--draft'); cd.add_argument('--why')
     t = sub.add_parser('todo'); t.add_argument('what', choices=['add', 'list', 'done', 'drop', 'note', 'pri']); t.add_argument('args', nargs='*')
@@ -180,6 +181,31 @@ def main():
         run = data['run']
         print(f"{data['name']}: {'done' if run['ok'] else 'failed — ' + run.get('error', '')}")
         if data.get('text'): print(data['text'])
+        return
+
+    if args.cmd == 'calendar':
+        import datetime
+        w = args.when.strip().lower()
+        today = datetime.date.today()
+        day = {'today': today, '今天': today, 'tomorrow': today + datetime.timedelta(days=1), '明天': today + datetime.timedelta(days=1)}.get(w)
+        if day is None:
+            try: day = datetime.date.fromisoformat(w)
+            except ValueError: sys.exit('Which day? today / tomorrow / YYYY-MM-DD, e.g. ./hive calendar 2026-10-30 --days 5')
+        status, data = call('GET', f"/calendar?date={day.isoformat()}&days={max(1, min(14, args.days))}")
+        if status != 200: fail(status, data)
+        s = data['settings']
+        if not s.get('feishu') and not s.get('mac'):
+            print('No calendar is connected in Hive (Butler settings › Calendar).'); return
+        why = {'signed_out': 'not signed in — Re-authorize Feishu in Butler settings', 'helper_missing': 'the Mac Calendar helper is missing'}
+        hm = lambda ms: datetime.datetime.fromtimestamp(ms / 1000).strftime('%H:%M')
+        for d in data['days']:
+            print(f"{d['date']}:")
+            for e in d['events']:
+                when = 'all day' if e['allDay'] else f"{hm(e['start'])}–{hm(e['end'])}"
+                print(f"  {when}  {e['title']}{'  @ ' + e['location'] if e.get('location') else ''}  [{e['source']}]")
+            if not d['events']: print('  (nothing)')
+            for src, err in (d.get('errors') or {}).items():
+                print(f"  ⚠ {'Feishu' if src == 'feishu' else 'Mac Calendar'} could not be read: {why.get(err, err)}")
         return
 
     if args.cmd == 'cards':

@@ -227,3 +227,16 @@ test('the selected tab background slides with the tab; menus grow from their tri
   await page.keyboard.press('Escape')
   await expect(menu).toHaveCount(0)
 })
+
+test('./hive calendar reads the day through Hive (not lark-cli) and says why a calendar could not be read', async () => {
+  const today = hive('calendar')
+  expect(today.ok).toBe(true)
+  expect(today.out).toMatch(/^\d{4}-\d{2}-\d{2}:/m)
+  // The test Hive is not signed in to Feishu: it says so, and how to fix it.
+  expect(today.out).toContain('Feishu could not be read: not signed in')
+  const week = hive('calendar', 'tomorrow', '--days', '3')
+  expect(week.out.match(/^\d{4}-\d{2}-\d{2}:/gm)).toHaveLength(3)
+  expect(hive('calendar', 'someday').out).toContain('Which day?')
+  writeFileSync(join(BUTLER, 'calendar.json'), JSON.stringify({ feishu: false, mac: false }))
+  expect(hive('calendar').out).toContain('No calendar is connected')
+})
