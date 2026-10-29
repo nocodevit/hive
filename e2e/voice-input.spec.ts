@@ -2,7 +2,7 @@ import { test, expect, ElectronApplication, Page } from '@playwright/test'
 import { _electron as electron } from 'playwright'
 import { join } from 'path'
 import { execSync } from 'child_process'
-import { mkdirSync, rmSync, existsSync } from 'fs'
+import { mkdirSync, rmSync, existsSync, readFileSync, readdirSync } from 'fs'
 import { tmpdir, homedir } from 'os'
 
 /**
@@ -329,4 +329,19 @@ test('auto-send: counts down after the last sentence, cancels on speech or typin
 
   await page.getByRole('button', { name: 'Stop listening' }).click()
   await expect(page.getByRole('button', { name: 'Voice input' })).toBeVisible()
+})
+
+test('⋮ → Switch model: pick Haiku, confirm — the running session gets set_model, the chat says so, the pick sticks', async () => {
+  await page.getByRole('button', { name: 'More session actions' }).click()
+  await page.getByRole('button', { name: /Switch model/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Switch model' })
+  await expect(dialog).toContainText('Switches now, in this conversation')
+  await dialog.getByRole('radio', { name: /Haiku 5\.5/ }).click()
+  await dialog.getByRole('button', { name: 'Switch to Haiku 5.5' }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByText('Switched to Haiku 5.5 — the conversation continues.')).toBeVisible()
+  const models = JSON.parse(readFileSync(join(HIVE_DATA_DIR, 'chat-models.json'), 'utf8'))
+  expect(Object.values(models)).toContain('claude-haiku-5-5')
+  const logs = readdirSync(join(HIVE_DATA_DIR, 'chat-logs')).map(f => readFileSync(join(HIVE_DATA_DIR, 'chat-logs', f), 'utf8')).join('\n')
+  expect(logs).toContain('"subtype":"set_model","model":"claude-haiku-5-5"')
 })

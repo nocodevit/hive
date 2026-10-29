@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, accentTint, redact, configureRedact } from './crush-styles'
 import { VoiceGroup } from './VoiceGroup'
+import { ModelSwitchModal, modelLabel } from './ModelSwitch'
 import { joinVoiceText } from '../../lib/voice-text'
 import { hookLoopStep, HOOK_LOOP_IDLE, stopHookFeedback, goalCheckLine, GOAL_LOOP_STUCK_AFTER } from '../../../../shared/goal-loop'
 import { autoSendStep, AUTO_SEND_IDLE, useAutoSendPrefs, setAutoSendPrefs, type VoiceEvent } from '../../lib/voice-autosend'
@@ -118,6 +119,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     return () => { cancelled = true; off1?.(); off2?.() }
   }, [id])
   // Status-bar state (above + below input)
+  const [modelSwitch, setModelSwitch] = useState<{ saved: string | null } | null>(null)
   const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
   const [contextSize, setContextSize] = useState<string>('') // "1M"
   // Per-window rate-limit state. Each rate_limit_event carries one
@@ -753,7 +755,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
 
         if (e?.type === 'message_start') {
           const m = e.message?.model as string | undefined
-          if (m && !modelName) setModelName(m)
+          if (m) setModelName(prev => (prev === m ? prev : m))
           acc.currentMsgId = e.message?.id ?? ''
           setThinking({ since: Date.now() })
           return
@@ -2021,6 +2023,18 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
          below — see line ~1264. RateLimitBar is no longer rendered as a
          standalone strip; the merge cuts ~22px of wasted vertical space. */}
 
+      {modelSwitch && (
+        <ModelSwitchModal current={modelName} saved={modelSwitch.saved} live={exited === null && !!sessionId}
+          onCancel={() => setModelSwitch(null)}
+          onConfirm={async model => {
+            setModelSwitch(null)
+            const r = await window.api.chat.setModel(id, model).catch(e => ({ ok: false, live: false, error: String(e) }))
+            if (!r.ok) { addEntry({ kind: 'system', text: `Model switch failed: ${r.error || 'unknown'}` }); return }
+            if (model && r.live) setModelName(model)
+            addEntry({ kind: 'system', text: !model ? 'Model: back to the agent default — used from the next start.'
+              : r.live ? `Switched to ${modelLabel(model)} — the conversation continues.` : `Model set to ${modelLabel(model)} — used when this chat starts.` })
+          }} />
+      )}
       {/* Input area — four variants in priority order:
           - exited !== null          → "session closed, start new" panel
           - rcState === 'active'     → RC pairing panel
@@ -2370,6 +2384,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 else addEntry({ kind: 'system', text: `Remote control failed: ${res.error}` })
               }}
               onClose={() => setCloseConfirming(true)}
+              onSwitchModel={async () => setModelSwitch({ saved: await window.api.chat.getModel(id).catch(() => null) })}
               onHandoff={() => setHandoffModalOpen(true)}
               sessionActive={exited === null && !!sessionId}
             />
@@ -4081,8 +4096,9 @@ export function CrushTooltip({ text, children, side = 'top', block = false }: {
  */
 function ActionToolbar({
   usedTokens, contextSize, onCompact, compacting, onFork, onResume, onNewSession, onRemoteControl, onClose, onHandoff, sessionActive,
-  modelKnown, onViewContext, leading, trailing
+  modelKnown, onViewContext, leading, trailing, onSwitchModel
 }: {
+  onSwitchModel?: () => void
   leading?: React.ReactNode
   trailing?: React.ReactNode
   usedTokens: number
@@ -4191,6 +4207,7 @@ function ActionToolbar({
           <CrushTooltip text="More session actions · Resume / Fork / Remote / Close">
           <button
             onClick={() => setMenuOpen(o => !o)}
+            aria-label="More session actions" aria-expanded={menuOpen}
             style={{
               background: CHAT.surface2,
               border: 'none',
@@ -4219,6 +4236,7 @@ function ActionToolbar({
               <MenuItem icon="🥴" label="Handoff…" desc="autonomous /goal loop" onClick={() => { setMenuOpen(false); onHandoff() }} hover="Hand a goal off to the agent and walk away. It runs claude -p /goal in the background with cost/turn/wall-time circuit breakers. Stop button always visible while running." />
               <div style={{ height: 1, background: CRUSH.Charcoal, margin: '3px 0' }} />
               <MenuItem icon="≡" label="Compact + Fork" desc="summary → new sid" onClick={() => { setMenuOpen(false); onFork() }} disabled={!sessionActive} hover="Summarise current context, fork to a NEW session id. Old jsonl is left untouched; live session id changes." />
+              {onSwitchModel && <MenuItem icon="◇" label="Switch model…" desc="keeps the conversation" onClick={() => { setMenuOpen(false); onSwitchModel() }} hover="Pick another model for this chat. A running chat switches in place: the conversation and its context carry on. The pick sticks to this chat." />}
               <MenuItem icon="↻" label="Restart Session" desc="kill + resume" onClick={() => { setMenuOpen(false); onResume() }} hover="Kill the live --print child and immediately re-spawn with --resume <sid>. Same session id, same jsonl. Auto-compacts first if context > 50%. Useful for hard-refresh; not a no-op." />
               <MenuItem icon="✦" label="Start New Session" desc="clean slate, no memory" onClick={() => { setMenuOpen(false); onNewSession() }} />
               <MenuItem icon="⌽" label="Remote Control" desc="/remote-control" onClick={() => { setMenuOpen(false); onRemoteControl() }} />

@@ -191,7 +191,7 @@ import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './
 import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
-import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage, chatEventBus } from './chat'
+import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage, chatEventBus, stopChat } from './chat'
 import type { getPrevSessionInfo } from './chat-recent-sessions'
 import { prevSessionInfo } from './sessionInfo'
 import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
@@ -1075,6 +1075,18 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
         || latestChatLogPath(join(DATA_DIR, 'chat-logs'), found.row.agentId)
       const items = logPath && existsSync(logPath) ? parseChatTail(readLogTailLines(logPath), n) : []
       return reply(200, { ok: true, agent: found.row, items })
+    }
+
+    // ./hive stop: close an agent's chat, as Close Session in the window does. One that is
+    // mid-turn is left alone unless --force (closing would cut its work off).
+    if (req.method === 'POST' && url.pathname === '/chat/stop') {
+      const body = await readJsonBody(req)
+      const found = resolveAgent(rows, { agentId: body.agentId, project: body.project, agent: body.agent })
+      if (!found.ok) return reply(404, found)
+      if (!found.row.chatLive) return reply(200, { ok: true, alreadyStopped: true, agent: found.row })
+      if (found.row.activity === 'working' && body.force !== true) return reply(409, { ok: false, error: 'busy', agent: found.row })
+      stopChat(`chat-${found.row.agentId}`)
+      return reply(200, { ok: true, agent: found.row })
     }
 
     if (req.method === 'POST' && (url.pathname === '/chat/send' || url.pathname === '/chat/start')) {

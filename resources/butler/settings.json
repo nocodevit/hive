@@ -5,6 +5,7 @@
       "Bash(./hive tail:*)",
       "Bash(./hive send:*)",
       "Bash(./hive start:*)",
+      "Bash(./hive stop:*)",
       "Bash(./hive chat-search:*)",
       "Bash(./hive pending:*)",
       "Bash(./hive run:*)",

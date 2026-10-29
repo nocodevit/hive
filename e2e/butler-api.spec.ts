@@ -183,3 +183,14 @@ test('todos: Butler notes one from the chat, adds a note, closes it by its id pr
   expect((await (await call('/todos')).json()).todos).toEqual([])
   expect((await (await call('/todos?all=1')).json()).todos[0]).toMatchObject({ status: 'done', steps: 3 })
 })
+
+test('stop: closes an idle chat (as Close Session does); a closed one says so; a working one needs force', async () => {
+  // Robin's chat was started above and is idle now.
+  await expect.poll(async () => (await (await call('/agents')).json()).agents.find((a: any) => a.agent === 'Robin').chatLive, { timeout: 30000 }).toBe(true)
+  expect((await post('/chat/stop', { project: 'Butler E2E', agent: 'nobody' })).status).toBe(404)
+  const r = await (await post('/chat/stop', { project: 'Butler E2E', agent: 'Robin' })).json()
+  expect(r.ok).toBe(true)
+  expect(r.alreadyStopped).toBeUndefined()
+  await expect.poll(async () => (await (await call('/agents')).json()).agents.find((a: any) => a.agent === 'Robin').chatLive, { timeout: 15000 }).toBe(false)
+  expect(await (await post('/chat/stop', { project: 'Butler E2E', agent: 'Robin' })).json()).toMatchObject({ ok: true, alreadyStopped: true })
+})

@@ -284,6 +284,8 @@ declare global {
         startRemoteControl: (id: string) => Promise<{ ok: boolean; sid?: string; error?: string }>
         resumeFromRemoteControl: (id: string) => Promise<{ ok: boolean; sid?: string; error?: string }>
         interrupt: (id: string) => Promise<{ ok: boolean; error?: string }>
+        setModel: (id: string, model: string | null) => Promise<{ ok: boolean; live: boolean; error?: string }>
+        getModel: (id: string) => Promise<string | null>
         compact: (id: string) => Promise<{ ok: boolean; error?: string }>
         resumeSmart: (id: string) => Promise<{ ok: boolean; sid?: string; compacted?: boolean; error?: string }>
         startWithSummary: (id: string) => Promise<{ ok: boolean; error?: string }>

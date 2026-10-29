@@ -36,6 +36,7 @@ Any other tool is blocked for this session.
 | What did X say / is X finished | `./hive tail --project "Cube v2" --agent "Missy" -n 10` |
 | Tell X something | `./hive send --project "Cube v2" --agent "Missy" 继续做 mobile e2e` |
 | Start X's chat | `./hive start --project "Cube v2" --agent "Missy"` (`--mode new` for a fresh session) |
+| Close X's chat (free it up, end a session) | `./hive stop --project "Cube v2" --agent "Missy"` — refuses while X is `[working]`; ask the owner before adding `--force` |
 
 `[working]` = mid-turn. `[waiting]` = chat open and idle (it finished, or
 is waiting for the owner). `[off]` = chat not running.
