@@ -25,6 +25,8 @@ export interface TodoRefs {
   agentId?: string
 }
 
+export interface TodoAssignee { agentId: string; agent: string; project: string }
+
 export interface TodoEvent {
   at: number
   who: TodoWho
@@ -44,6 +46,8 @@ export interface Todo {
   /** yyyy-MM-dd */
   due?: string
   priority: TodoPriority
+  /** The agent it was given to (Butler dispatch), if any. */
+  assignee?: TodoAssignee
   refs: TodoRefs
   status: TodoStatus
   closedAt?: number
@@ -56,6 +60,7 @@ type Line =
   | { op: 'status'; id: string; status: TodoStatus; at: number; who: TodoWho }
   | { op: 'due'; id: string; due: string; at: number; who: TodoWho }
   | { op: 'priority'; id: string; priority: TodoPriority; at: number; who: TodoWho }
+  | { op: 'assign'; id: string; assignee: TodoAssignee; why: string; at: number; who: TodoWho }
 
 const SOURCES: TodoSource[] = ['chat', 'feishu', 'jira', 'email', 'agent', 'manual']
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -91,6 +96,12 @@ export function createTodoStore(dir: string, now: () => number = Date.now) {
         if (!t) continue
         t.events.push({ at: l.at, who: l.who, kind: 'action', text: t.due ? `Due ${t.due} → ${l.due}` : `Due ${l.due}` })
         t.due = l.due
+      } else if (l.op === 'assign') {
+        const t = byId.get(l.id)
+        if (!t || !l.assignee?.agentId) continue
+        const who = `${l.assignee.agent}${l.assignee.project ? ` (${l.assignee.project})` : ''}`
+        t.events.push({ at: l.at, who: l.who, kind: 'action', text: `Assigned to ${who}${l.why ? ` — ${l.why}` : ''}` })
+        t.assignee = l.assignee
       } else if (l.op === 'priority') {
         const t = byId.get(l.id)
         if (!t || !isPriority(l.priority)) continue
@@ -139,6 +150,13 @@ export function createTodoStore(dir: string, now: () => number = Date.now) {
       const t = get(id)
       if (!t || t.status !== 'open' || !DATE.test(due) || t.due === due) return false
       write({ op: 'due', id, due, at: now(), who })
+      return true
+    },
+    /** Given to an agent (Butler dispatch): kept on the todo, told in its story. */
+    assign(id: string, assignee: TodoAssignee, why = '', who: TodoWho = 'butler'): boolean {
+      const t = get(id)
+      if (!t || t.status !== 'open' || !assignee.agentId) return false
+      write({ op: 'assign', id, assignee: { agentId: assignee.agentId, agent: clip(assignee.agent, 80), project: clip(assignee.project, 80) }, why: clip(why, 300), at: now(), who })
       return true
     },
     setPriority(id: string, priority: TodoPriority, who: TodoWho = 'owner'): boolean {

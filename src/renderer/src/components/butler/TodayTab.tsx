@@ -109,7 +109,7 @@ export function TodayTab({ visible, onDiscuss }: { visible: boolean; onDiscuss?:
 
   const now = new Date()
   const states = routines && isToday
-    ? ROUTINE_IDS.map(id => ({ id, ...routineToday(routines.settings.routines[id], routines.settings.weekdays, routines.lastRuns[id], now) }))
+    ? ROUTINE_IDS.filter(id => routines.settings.routines[id]).map(id => ({ id, ...routineToday(routines.settings.routines[id], routines.settings.weekdays, routines.lastRuns[id], now) }))
     : []
   const active = states.filter(s => s.state !== 'off')
   const ran = active.filter(s => s.state === 'ran').length

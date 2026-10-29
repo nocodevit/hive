@@ -5,7 +5,7 @@ import { DiscussButton, type OnDiscuss } from './DiscussButton'
 
 export type ApprovalCard = { id: string; kind: string; title: string; subtitle: string; draft: string; action: string; payload?: Record<string, unknown>; createdAt?: number; edited?: { at: number } }
 
-const ICON: Record<string, string> = { email: '✉️', feishu: '💬', jira: '🎫' }
+const ICON: Record<string, string> = { email: '✉️', feishu: '💬', jira: '🎫', dispatch: '🧭' }
 const iconOf = (kind: string) => ICON[kind.split('.')[0]] ?? '📝'
 const DECIDE = 'email.decide'
 const str = (p: Record<string, unknown> | undefined, k: string) => (typeof p?.[k] === 'string' ? (p[k] as string) : '')
@@ -68,7 +68,7 @@ const restOf = (it: ApprovalCard) => it.title.split(' · ').slice(1).join(' · '
 const initials = (n: string) => { const w = n.replace(/[^\p{L}\p{N} ]/gu, ' ').trim().split(/\s+/); return ((w[0]?.[0] ?? '?') + (w.length > 1 ? w[w.length - 1][0] : '')).toUpperCase() }
 const HUES = [199, 24, 152, 262, 340, 45, 190, 280]
 const hueOf = (n: string) => HUES[[...n].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % HUES.length]
-const SOURCE: Record<string, string> = { feishu: '💬 Feishu', email: '✉️ Email', jira: '🎫 Jira' }
+const SOURCE: Record<string, string> = { feishu: '💬 Feishu', email: '✉️ Email', jira: '🎫 Jira', dispatch: '🧭 Assign' }
 const srcKey = (kind: string) => kind.split('.')[0]
 const ago = (ms?: number) => { if (!ms || Date.now() - ms > 365 * 86_400_000) return ''; const m = Math.max(0, Math.round((Date.now() - ms) / 60000)); return m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d` }
 /** A card the owner must decide (a question, or the facts went out and a call is left) vs one ready to send. */
@@ -167,7 +167,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
           )}
           {!decide && (editing === it.id ? (
             <label className="flex flex-col gap-1">
-              <span className="text-[11px] font-semibold text-text-muted">{jira ? 'Comment · added to the ticket' : 'Reply · sent exactly as written'} · ⌘↵ to send</span>
+              <span className="text-[11px] font-semibold text-text-muted">{it.kind === 'dispatch.assign' ? `Brief · goes to ${str(it.payload, 'agent')} as written` : jira ? 'Comment · added to the ticket' : 'Reply · sent exactly as written'} · ⌘↵ to send</span>
               <textarea value={text} onChange={e => setText(e.target.value)} aria-label="Reply" rows={5} autoFocus
                 onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) void approve(it) }}
                 className="w-full rounded-lg bg-bg-primary border border-border px-2.5 py-2 text-[12.5px] text-text-primary focus:outline-none focus:border-accent resize-y" />
@@ -175,7 +175,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
           ) : it.draft.trim() ? (
             <button onClick={() => edit(it)} aria-label={`Draft for ${it.title}`} title="Click to edit"
               className="self-end max-w-[92%] text-left rounded-[12px_4px_12px_12px] bg-accent-subtle px-2.5 py-1.5 text-[12.5px] text-text-primary cursor-text hover:ring-1 hover:ring-accent/40">
-              <span className="block text-[10.5px] font-semibold text-accent">{jira ? 'Comment' : "Butler's reply"} · {it.edited ? <span aria-label="Updated by Butler">updated {whenLabel(it.edited.at)} · </span> : null}click to edit</span>
+              <span className="block text-[10.5px] font-semibold text-accent">{it.kind === 'dispatch.assign' ? `Brief to ${str(it.payload, 'agent')}` : jira ? 'Comment' : "Butler's reply"} · {it.edited ? <span aria-label="Updated by Butler">updated {whenLabel(it.edited.at)} · </span> : null}click to edit</span>
               <span className="whitespace-pre-wrap">{it.draft}</span>
             </button>
           ) : null)}

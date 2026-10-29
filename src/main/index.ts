@@ -741,11 +741,13 @@ ipcMain.handle('approvals:reopen', (_e, id: unknown) => typeof id === 'string' &
 // [butler:skills]
 import { registerButlerSkillsIpc } from './butlerSkillsIpc'
 import { cardRoute } from './butlerCards'
+import { createDispatcher, runDispatch } from './butlerDispatch'
 import { tailLines } from './fileSlices'
 registerButlerSkillsIpc({ ipcMain, previewFeishu: text => previewFeishuAnswer({ text }), butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
 const butlerRoutines = setupButlerMailRoutines({
   todos,
+  dispatch: runClaude => runDispatch({ folder: butlerDir(DATA_DIR), todos: () => todos, agents: agentsWithLastTask, dispatcher, runClaude }),
   onRoutineRun: rec => {
     if (!rec.ok) void notifications.emit({ kind: 'routineFailed', key: `routine:${rec.id}`, title: `${ROUTINE_NAME[rec.id]} failed`, body: rec.error || '', target: { kind: 'routines' } })
   },
@@ -849,15 +851,26 @@ ipcMain.handle('butler:setPinned', (_e, v: unknown) => { butler.setPinned(v === 
 ipcMain.handle('butler:agents', () => butlerRows())
 // Discuss with an agent instead of Butler: start its chat when it is off (as a click on it would),
 // then the context goes in as the owner's own message.
-ipcMain.handle('chat:discussWith', async (e, agentId: unknown, text: unknown) => {
-  if (typeof agentId !== 'string' || typeof text !== 'string' || !text.trim()) return { ok: false, error: 'bad_input' }
+/** Agents with what each one last worked on (dispatch picks by it). */
+function agentsWithLastTask() {
+  return butlerRows().map(r => {
+    const log = getChatSessionInfo(`chat-${r.agentId}`)?.logPath || latestChatLogPath(join(DATA_DIR, 'chat-logs'), r.agentId)
+    let lastTask = ''
+    try { if (log && existsSync(log)) lastTask = lastUserText(readLogTailLines(log), 200) } catch { /* unreadable */ }
+    return { ...r, lastTask }
+  })
+}
+/** Put text into an agent's chat as the owner's message, resuming the chat first when it is off. */
+async function deliverToAgent(agentId: string, text: string, sender?: Electron.WebContents): Promise<{ ok: boolean; error?: string }> {
+  if (!text.trim()) return { ok: false, error: 'bad_input' }
   const row = butlerRows().find(r => r.agentId === agentId)
   if (!row) return { ok: false, error: 'no_such_agent' }
   const chatId = `chat-${agentId}`
   const deadline = Date.now() + 60_000
   let asked = 0
   while (!getChatSessionInfo(chatId)?.live && Date.now() < deadline) {
-    if (Date.now() - asked > 5000) { e.sender.send('butler:startAgent', { agentId, mode: 'resume' }); asked = Date.now() }
+    const to = sender ?? BrowserWindow.getAllWindows()[0]?.webContents
+    if (to && Date.now() - asked > 5000) { to.send('butler:startAgent', { agentId, mode: 'resume' }); asked = Date.now() }
     await new Promise(r => setTimeout(r, 500))
   }
   for (let i = 0; i < 20; i++) {
@@ -866,6 +879,13 @@ ipcMain.handle('chat:discussWith', async (e, agentId: unknown, text: unknown) =>
     await new Promise(res => setTimeout(res, 500))
   }
   return { ok: false, error: 'no_session' }
+}
+ipcMain.handle('chat:discussWith', async (e, agentId: unknown, text: unknown) =>
+  typeof agentId === 'string' && typeof text === 'string' ? deliverToAgent(agentId, text, e.sender) : { ok: false, error: 'bad_input' })
+// Butler dispatch: work goes to the agent that fits (see butlerDispatch.ts for the rule).
+const dispatcher = createDispatcher({
+  rows: () => butlerRows(), deliver: (id, text) => deliverToAgent(id, text), approvals, todos: () => todos,
+  notify: (title, body) => { try { new Notification({ title, body }).show() } catch { /* none */ } }
 })
 ipcMain.handle('butler:retry', () => { butler.retry(); return butler.getState() })
 
@@ -952,7 +972,8 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
     const rows = butlerRows()
 
     if (req.method === 'GET' && url.pathname === '/agents') {
-      return reply(200, { ok: true, agents: rows })
+      if (url.searchParams.get('detail') !== '1') return reply(200, { ok: true, agents: rows })
+      return reply(200, { ok: true, agents: agentsWithLastTask() })
     }
 
     // ./hive pending: what waits for the owner (a phone gets no pushes).
@@ -1000,6 +1021,24 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       const dates = Array.from({ length: n }, (_, i) => new Date(base.getFullYear(), base.getMonth(), base.getDate() + i, 12))
       const days = await Promise.all(dates.map(d => butlerCalendar.getDayAgenda(d)))
       return reply(200, { ok: true, settings: butlerCalendar.getSettings(), days })
+    }
+
+    // ./hive assign: give work to an agent — sent now when Butler is sure and the agent is free, else a card.
+    if (req.method === 'POST' && url.pathname === '/dispatch/assign') {
+      const b = await readJsonBody(req).catch(() => null)
+      const r = await dispatcher.assign({ task: String(b?.task ?? ''), agent: String(b?.agent ?? ''), project: typeof b?.project === 'string' ? b.project : undefined,
+        why: String(b?.why ?? ''), confident: b?.confident === true, todoId: typeof b?.todoId === 'string' ? (todos.all().find(t => t.id === b.todoId || t.id.startsWith(b.todoId))?.id ?? b.todoId) : undefined,
+        alternatives: Array.isArray(b?.alternatives) ? b.alternatives.map(String) : [] })
+      if (r.ok) todosChanged()
+      return reply(r.ok ? 200 : r.error === 'send_failed' ? 502 : 400, r)
+    }
+    if (req.method === 'POST' && url.pathname === '/dispatch/nofit') {
+      const b = await readJsonBody(req).catch(() => null)
+      const t = todos.all().find(x => typeof b?.todoId === 'string' && (x.id === b.todoId || x.id.startsWith(b.todoId)))
+      if (!t) return reply(404, { ok: false, error: 'no_such_todo' })
+      dispatcher.noFit(t.id, String(b?.why ?? ''))
+      todosChanged()
+      return reply(200, { ok: true })
     }
 
     // ./hive cards / card …: read and tidy Approve cards; never approve or send.

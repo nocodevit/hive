@@ -6,7 +6,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, writeFile
 import { join } from 'path'
 import type { JournalDay, JournalItem } from '../shared/butler-routines'
 
-export const JOURNAL_SECTIONS = ['Plan', 'Feishu', 'Jira', 'Summary'] as const
+export const JOURNAL_SECTIONS = ['Plan', 'Feishu', 'Jira', 'Dispatch', 'Summary'] as const
 export type JournalSection = typeof JOURNAL_SECTIONS[number]
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/

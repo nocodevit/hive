@@ -240,3 +240,19 @@ test('./hive calendar reads the day through Hive (not lark-cli) and says why a c
   writeFileSync(join(BUTLER, 'calendar.json'), JSON.stringify({ feishu: false, mac: false }))
   expect(hive('calendar').out).toContain('No calendar is connected')
 })
+
+test('dispatch: ./hive agents --detail; a not-sure ./hive assign becomes an Assign card with the brief; the todo says so', async () => {
+  const detail = hive('agents', '--detail')
+  expect(detail.out).toContain('PSLE / Planner')
+  const added = hive('todo', 'add', '整理验收清单')
+  const id = added.out.match(/Noted (\S+):/)![1]
+  const r = hive('assign', '整理验收清单', '--agent', 'Planner', '--why', 'Product in PSLE', '--confident', 'no', '--todo', id)
+  expect(r.ok).toBe(true)
+  expect(r.out).toContain('ASKED THE OWNER')
+  await page.getByRole('tab', { name: /Approve/ }).click()
+  const card = page.getByLabel('Assign: → Planner · 整理验收清单')
+  await expect(card).toBeVisible()
+  await expect(card.getByLabel('Draft for → Planner · 整理验收清单')).toContainText('Brief to Planner')
+  await expect(card.getByLabel('Draft for → Planner · 整理验收清单')).toContainText('Why you: Product in PSLE')
+  expect(hive('assign', 'x', '--agent', 'Nobody').out).toContain('No agent with that name')
+})
