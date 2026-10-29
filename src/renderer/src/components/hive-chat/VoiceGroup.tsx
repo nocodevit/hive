@@ -23,7 +23,9 @@ import { CHAT, CRUSH, FONT_MONO, FONT_PROSE } from './crush-styles'
 const LONG_MS = 250
 const MIN_MS = 1000
 const MAX_MS = 60_000
+// Two separate round buttons (28 + 6 gap + 28); they only merge into one bar while recording.
 const PAIR_W = 62
+const DOT = 28
 const SMOOTH = 'cubic-bezier(0.2, 0.8, 0.2, 1)'   // spring.smooth
 const BOUNCY = 'cubic-bezier(0.34, 1.56, 0.64, 1)' // spring.bouncy
 const OPEN_MS = 420, CLOSE_MS = 540
@@ -39,6 +41,8 @@ const CSS = `
 @keyframes hvg-shake { 0%, 100% { transform: translateX(0) } 20%, 60% { transform: translateX(-4px) } 40%, 80% { transform: translateX(4px) } }
 @keyframes hvg-in { from { opacity: 0 } to { opacity: 1 } }
 .hvg-dot { animation: hvg-dot 1.1s ease-in-out infinite }
+.hvg-dotbtn { background: var(--chat-surface-2) }
+.hvg-dotbtn:hover { background: color-mix(in srgb, var(--chat-accent) 14%, var(--chat-surface-2)); color: var(--chat-ink) }
 .hvg-shake { animation: hvg-shake 300ms ease-in-out }
 @media (prefers-reduced-motion: reduce) {
   .hvg, .hvg * { transition-property: opacity !important; transition-duration: 150ms !important; transition-timing-function: linear !important; animation: none !important }
@@ -259,6 +263,8 @@ export function VoiceGroup({ agentId, onAttach, slot }: { agentId: string; onAtt
     display: 'inline-flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
     fontFamily: FONT_PROSE, fontSize: 13, color: CHAT.muted, padding: 0, touchAction: 'none', userSelect: 'none'
   }
+  // Each button its own circle on the chat surface; hover lifts it.
+  const dotStyle: React.CSSProperties = { width: DOT, height: DOT, background: undefined }
   const micHandlers = {
     onPointerDown: down, onPointerUp: up, onPointerMove: move, onPointerCancel: pointerCancel,
     onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
@@ -273,11 +279,11 @@ export function VoiceGroup({ agentId, onAttach, slot }: { agentId: string; onAtt
     <span ref={rootRef} className="hvg" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <style>{CSS}</style>
       <span role="group" aria-label="Attach and voice" key={`pair-${shake}`} className={shake && !mounted ? 'hvg-shake' : ''}
-        style={{ display: 'inline-flex', alignItems: 'center', height: 28, width: PAIR_W, padding: 1, borderRadius: 999, background: CHAT.surface2, opacity: mounted ? 0 : 1, transition: 'opacity 120ms' }}>
-        <button onClick={attach} aria-label="Attach files" title="Attach files" tabIndex={mounted ? -1 : 0} style={{ ...btn, fontSize: 17 }}>＋</button>
+        style={{ display: 'inline-flex', alignItems: 'center', gap: PAIR_W - 2 * DOT, height: 28, width: PAIR_W, opacity: mounted ? 0 : 1, transition: 'opacity 120ms' }}>
+        <button onClick={attach} aria-label="Attach files" title="Attach files" tabIndex={mounted ? -1 : 0} className="hvg-dotbtn" style={{ ...btn, ...dotStyle, fontSize: 17 }}>＋</button>
         {/* Stays mounted under the bar while you hold it: it owns the captured pointer, so the release still arrives here. */}
-        <button {...micHandlers} aria-label="Voice input" aria-hidden={mounted || undefined} tabIndex={mounted ? -1 : 0} title="Voice input · tap for hands-free, hold to talk"
-          style={{ ...btn, background: arming ? 'color-mix(in srgb, var(--chat-accent) 30%, transparent)' : 'transparent',
+        <button {...micHandlers} aria-label="Voice input" aria-hidden={mounted || undefined} tabIndex={mounted ? -1 : 0} title="Voice input · tap for hands-free, hold to talk" className="hvg-dotbtn"
+          style={{ ...btn, ...dotStyle, background: arming ? 'color-mix(in srgb, var(--chat-accent) 30%, var(--chat-surface-2))' : undefined,
             transform: arming ? 'scale(0.86)' : 'scale(1)', transition: arming ? `transform ${LONG_MS}ms linear, background ${LONG_MS}ms linear` : `transform 160ms ${SMOOTH}` }}>🎙</button>
       </span>
 
