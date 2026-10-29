@@ -992,6 +992,16 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       return reply(400, { ok: false, error: 'bad_request' })
     }
 
+    // ./hive calendar [date] [--days N]: the owner's day as Hive reads it (Feishu and/or Mac Calendar, as set up). Read only.
+    if (req.method === 'GET' && url.pathname === '/calendar') {
+      const raw = url.searchParams.get('date') || ''
+      const base = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? new Date(`${raw}T12:00:00`) : new Date()
+      const n = Math.max(1, Math.min(14, Number(url.searchParams.get('days')) || 1))
+      const dates = Array.from({ length: n }, (_, i) => new Date(base.getFullYear(), base.getMonth(), base.getDate() + i, 12))
+      const days = await Promise.all(dates.map(d => butlerCalendar.getDayAgenda(d)))
+      return reply(200, { ok: true, settings: butlerCalendar.getSettings(), days })
+    }
+
     // ./hive cards / card …: read and tidy Approve cards; never approve or send.
     if (url.pathname === '/cards' || url.pathname.startsWith('/cards/')) {
       const body = req.method === 'POST' ? await readJsonBody(req).catch(() => null) : null
