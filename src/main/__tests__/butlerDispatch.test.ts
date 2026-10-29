@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { createApprovals } from '../approvals'
 import { createTodoStore } from '../butlerTodos'
-import { createDispatcher, dispatchMode, parseDecisions, runDispatch, DISPATCH_KIND } from '../butlerDispatch'
+import { createDispatcher, dispatchReason, parseDecisions, runDispatch, withRequirements, DISPATCH_KIND } from '../butlerDispatch'
 import type { AgentRow } from '../butlerApi'
 
 const agent = (agentId: string, name: string, project: string, activity: AgentRow['activity'], role = 'Engineering'): AgentRow =>
@@ -21,24 +21,20 @@ const setup = (rows: AgentRow[]) => {
 }
 
 describe('dispatch rule', () => {
-  it('sends only when Butler is sure and the agent is free; otherwise the owner confirms', () => {
-    expect(dispatchMode(true, 'waiting')).toBe('send')
-    expect(dispatchMode(true, 'off')).toBe('send')
-    expect(dispatchMode(true, 'working')).toBe('card')
-    expect(dispatchMode(false, 'waiting')).toBe('card')
+  it('nothing goes out on its own: every pick is a card that says how sure Butler is, or that the agent is busy', async () => {
+    expect(dispatchReason(true, 'waiting')).toBe('sure')
+    expect(dispatchReason(false, 'off')).toBe('not_sure')
+    expect(dispatchReason(true, 'working')).toBe('busy')
+    const s = setup([agent('a1', 'Ada', 'Acme Web', 'waiting')])
+    const r = await s.dispatcher.assign({ task: 'Fix the checkout bug', agent: 'ada', why: 'touched checkout last week', confident: true })
+    expect(r).toMatchObject({ ok: true, mode: 'card', reason: 'sure' })
+    expect(s.sent).toEqual([])
+    expect(s.approvals.pending()[0].subtitle).toContain('Butler is sure')
   })
 
-  it('sure + free: the brief goes to the agent now and the todo says who has it', async () => {
-    const s = setup([agent('a1', 'Ada', 'Acme Web', 'waiting')])
-    const todo = s.todos.add({ title: 'Fix the checkout bug' })!
-    const r = await s.dispatcher.assign({ task: 'Fix the checkout bug', agent: 'ada', why: 'touched checkout last week', confident: true, todoId: todo.id })
-    expect(r).toMatchObject({ ok: true, mode: 'sent' })
-    expect(s.sent).toHaveLength(1)
-    expect(s.sent[0].text).toContain('Fix the checkout bug')
-    expect(s.sent[0].text).toContain('Why you: touched checkout last week')
-    expect(s.todos.get(todo.id)).toMatchObject({ assignee: { agentId: 'a1', agent: 'Ada', project: 'Acme Web' } })
-    expect(s.todos.get(todo.id)!.events.at(-1)!.text).toBe('Assigned to Ada (Acme Web) — touched checkout last week')
-    expect(s.approvals.pending()).toHaveLength(0)
+  it('the owner\u2019s requirements go after the brief; none leaves it as is', () => {
+    expect(withRequirements('Fix it.', '  by tonight ')).toBe('Fix it.\n\nRequirements from the owner: by tonight')
+    expect(withRequirements('Fix it.', ' ')).toBe('Fix it.')
   })
 
   it('busy or not sure: a card with the brief; nothing is sent until the owner presses Assign', async () => {
@@ -63,7 +59,7 @@ describe('dispatch rule', () => {
     const s = setup([agent('a1', 'Ada', 'Acme Web', 'waiting'), agent('a3', 'Ada', 'Mobile', 'waiting')])
     expect(await s.dispatcher.assign({ task: 'x', agent: 'Ada', why: '', confident: true })).toMatchObject({ ok: false, error: 'ambiguous' })
     expect(await s.dispatcher.assign({ task: 'x', agent: 'Ad', why: '', confident: true })).toMatchObject({ ok: false, error: 'no_such_agent' })
-    expect(await s.dispatcher.assign({ task: 'x', agent: 'Ada', project: 'mobile', why: '', confident: true })).toMatchObject({ ok: true, mode: 'sent', agent: { agentId: 'a3' } })
+    expect(await s.dispatcher.assign({ task: 'x', agent: 'Ada', project: 'mobile', why: '', confident: true })).toMatchObject({ ok: true, mode: 'card', agent: { agentId: 'a3' } })
   })
 })
 
@@ -83,10 +79,11 @@ describe('the Dispatch routine', () => {
     const text = await runDispatch(deps)
     expect(prompts[0]).toContain('dispatch skill')
     expect(prompts[0]).toContain('last task: checkout page')
-    expect(text).toContain('Fix the checkout bug → Ada')
+    expect(text).toContain('Fix the checkout bug → Ada (waiting for your OK in Approve)')
     expect(text).toContain('Test the new signup flow → Linus (waiting for your OK in Approve)')
     expect(text).toContain('Reply to the landlord: no agent fits')
-    expect(s.sent.map(x => x.agentId)).toEqual(['a1'])
+    expect(s.sent).toEqual([])
+    expect(s.approvals.pending().map(c => c.payload.agentId)).toEqual(['a1', 'a2'])
     expect(s.todos.get(c.id)!.events.at(-1)!.text).toBe('No agent fits this one — the owner’s own call')
     // Looked at once: the next pass leaves them alone.
     expect(await runDispatch(deps)).toBe('Nothing new to assign')
