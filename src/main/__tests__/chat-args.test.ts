@@ -79,4 +79,11 @@ describe('buildChatArgs', () => {
     expect(a[a.indexOf('--agent') + 1]).toBe('hive-agent-1778381101991')
     expect(a[a.indexOf('-n') + 1]).toBe('Alex')
   })
+
+  it('a model picked in the chat (⋮ → Switch model) goes in as --model, after the agent', () => {
+    const a = buildChatArgs({ agent: 'hive-a1', model: 'claude-sonnet-5-5', resumeSid: 'abc' })
+    expect(a.slice(a.indexOf('--model'), a.indexOf('--model') + 2)).toEqual(['--model', 'claude-sonnet-5-5'])
+    expect(a.indexOf('--model')).toBeGreaterThan(a.indexOf('--agent'))
+    expect(buildChatArgs({ agent: 'hive-a1' })).not.toContain('--model')
+  })
 })

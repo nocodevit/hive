@@ -86,6 +86,7 @@ def fail(status, data):
         'start_timeout': 'The chat did not come up within 3 minutes (it may still be compacting). Check again with ./hive agents.',
         'no_window': 'Hive has no window to start the chat in.',
         'empty_text': 'Nothing to send.',
+        'busy': 'That agent is in the middle of a task; closing now would cut it off. Ask the owner, then add --force.',
         'no_such_card': 'No card with that id (or the prefix matches more than one). See ./hive cards --all.',
         'needs_owner_answer': 'That card is waiting for the owner\'s answer; it has no draft to edit.',
         'not_pending': 'That card is no longer waiting (sent or closed already).',
@@ -115,9 +116,10 @@ def main():
     r = sub.add_parser('run'); r.add_argument('routine', choices=['jira', 'jira-check', 'sort-inbox', 'morning-plan', 'evening-report'])
     c = sub.add_parser('chat-search'); c.add_argument('--q', required=True)
     f = sub.add_parser('feishu-try'); f.add_argument('--text', required=True); f.add_argument('--sender'); f.add_argument('--chat')
-    for name in ('tail', 'send', 'start'):
+    for name in ('tail', 'send', 'start', 'stop'):
         s = sub.add_parser(name)
         s.add_argument('--id'); s.add_argument('--project'); s.add_argument('--agent')
+        if name == 'stop': s.add_argument('--force', action='store_true')
         if name == 'tail': s.add_argument('-n', type=int, default=10)
         if name == 'send': s.add_argument('text', nargs='+')
         if name == 'start': s.add_argument('--mode', choices=['resume', 'new'], default='resume')
@@ -305,6 +307,12 @@ def main():
         print(f"SENT to {a['project']} / {a['agent']}: {text}")
         if data.get('queuedBehindRunningTurn'):
             print('(it is mid-turn; this message is queued behind the current turn)')
+    elif args.cmd == 'stop':
+        status, data = call('POST', '/chat/stop', {**t, 'force': args.force})
+        if status != 200 or not data.get('ok'): fail(status, data)
+        a = data['agent']
+        print(f"{'ALREADY CLOSED' if data.get('alreadyStopped') else 'CLOSED'}: {a['project']} / {a['agent']}")
+
     elif args.cmd == 'start':
         status, data = call('POST', '/chat/start', {**t, 'mode': args.mode})
         if status != 200 or not data.get('ok'): fail(status, data)
