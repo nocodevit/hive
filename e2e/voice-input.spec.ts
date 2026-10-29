@@ -162,6 +162,15 @@ const wavePixels = () => bar().getByRole('img', { name: 'Live waveform' }).evalu
   return n
 })
 
+test('idle: ＋ and 🎙 are two separate round buttons (they only merge while recording)', async () => {
+  const pair = page.getByRole('group', { name: 'Attach and voice' })
+  const a = (await pair.getByRole('button', { name: 'Attach files' }).boundingBox())!
+  const m = (await pair.getByRole('button', { name: 'Voice input' }).boundingBox())!
+  expect(m.x - (a.x + a.width)).toBeGreaterThanOrEqual(4)
+  expect(await pair.evaluate(el => getComputedStyle(el).backgroundColor)).toMatch(/rgba\(0, 0, 0, 0\)|transparent/)
+  await page.getByTestId('hive-chat-input').locator('xpath=ancestor::div[3]').screenshot({ path: test.info().outputPath('idle-pair.png') })
+})
+
 test('tap 🎙: the bar opens across the row with a timer and a live waveform; ■ stops and keeps the words', async () => {
   const input = page.getByTestId('hive-chat-input')
   await input.fill('')

@@ -7,6 +7,12 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.39.6] — 2026-10-29
+
+- ＋ (attach) and 🎙 (voice) are two separate round buttons again; they only merge into one bar while you record.
+
+---
+
 ## [2.39.5] — 2026-10-29
 
 - Butler can read your calendar: `./hive calendar` (today), `./hive calendar tomorrow`, `./hive calendar 2026-10-30 --days 5` — through Hive's own Feishu / Mac Calendar access, as set up in Butler settings, instead of falling back to lark-cli. If a calendar can't be read, it says which and how to fix it (e.g. re-authorize Feishu).
