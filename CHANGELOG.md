@@ -7,6 +7,13 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.40.2] — 2026-10-29
+
+##### 🎃 Halloween skin
+- The Send button is now a ghost in a hole: press it (or Enter) and a ghost pops out as your message goes, then ducks back a second later. Other skins keep the usual ↑.
+
+---
+
 ## [2.40.1] — 2026-10-29
 
 - 🧭 Dispatch never sends on its own: every pick is an **Assign card** — who, why, how sure Butler is (or "busy right now"), runners-up, the brief (click to edit) and a box for **your requirements**. **Assign** sends it with your requirements added; **Cancel** drops it (Undo for 5 s).
