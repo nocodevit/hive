@@ -186,6 +186,8 @@ const api = {
       ipcRenderer.invoke('chat:startRemoteControl', { id }) as Promise<{ ok: boolean; sid?: string; error?: string }>,
     resumeFromRemoteControl: (id: string) =>
       ipcRenderer.invoke('chat:resumeFromRemoteControl', { id }) as Promise<{ ok: boolean; sid?: string; error?: string }>,
+    setModel: (id: string, model: string | null) => ipcRenderer.invoke('chat:setModel', id, model) as Promise<{ ok: boolean; live: boolean; error?: string }>,
+    getModel: (id: string) => ipcRenderer.invoke('chat:getModel', id) as Promise<string | null>,
     interrupt: (id: string) =>
       ipcRenderer.invoke('chat:interrupt', { id }) as Promise<{ ok: boolean; error?: string }>,
     compact: (id: string) =>

@@ -7,6 +7,13 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.39.7] — 2026-10-29
+
+- **Switch model** from the chat's ⋮ menu: pick Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1 (or the agent's default) and confirm. A running chat switches in place — the conversation and its context carry on, no restart — and the pick sticks to that chat.
+- Butler can close an agent's chat: `./hive stop --project … --agent …` (as Close Session does). It won't close one that is mid-task unless you agree (`--force`).
+
+---
+
 ## [2.39.6] — 2026-10-29
 
 - ＋ (attach) and 🎙 (voice) are two separate round buttons again; they only merge into one bar while you record.

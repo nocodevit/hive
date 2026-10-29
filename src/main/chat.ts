@@ -56,6 +56,47 @@ interface StartOpts {
   resumeSid?: string     // --resume <sid>; preserves context.
   forkSession?: boolean  // pair with resumeSid: --fork-session creates a NEW session-id
                          //   inheriting old context. Used by 'Start with summary'.
+  model?: string         // --model: the chat's own pick (⋮ → Switch model), over the agent's default
+}
+
+// ── Per-chat model (⋮ → Switch model) ──────────────────────────────────
+// A model picked in the chat sticks to that chat (chat-models.json) and is
+// passed as --model on every start; "Agent default" removes it.
+const MODEL_RE = /^[a-z0-9][a-z0-9.-]{1,60}$/
+function chatModelsFile(): string { return join(dataDir(), 'chat-models.json') }
+function readChatModels(): Record<string, string> {
+  try { const j = JSON.parse(readFileSync(chatModelsFile(), 'utf8')); return j && typeof j === 'object' ? j : {} } catch { return {} }
+}
+export function chatModelFor(id: string): string | undefined {
+  const m = readChatModels()[id]
+  return typeof m === 'string' && MODEL_RE.test(m) ? m : undefined
+}
+function saveChatModel(id: string, model: string | null): void {
+  const all = readChatModels()
+  if (model) all[id] = model; else delete all[id]
+  try { writeFileSync(chatModelsFile(), JSON.stringify(all, null, 2)) } catch { /* best-effort */ }
+}
+
+/**
+ * Switch the model of a running chat in place: the stream-json `set_model`
+ * control request (verified 10-29: the next reply comes from the new model and
+ * it still has the conversation). Saved for the chat's next start too. When the
+ * chat isn't running, only the saved pick changes. null = back to the agent's default
+ * (the running session keeps its model until it restarts).
+ */
+export function setChatModel(id: string, model: string | null): { ok: boolean; live: boolean; error?: string } {
+  if (model !== null && !MODEL_RE.test(model)) return { ok: false, live: false, error: 'bad_model' }
+  saveChatModel(id, model)
+  const session = sessions.get(id)
+  if (!model || !session?.child || session.mode !== 'print') return { ok: true, live: false }
+  const frame = { type: 'control_request', request_id: `hive-model-${Date.now()}`, request: { subtype: 'set_model', model } }
+  try {
+    session.child.stdin.write(JSON.stringify(frame) + '\n')
+    try { appendFileSync(session.logPath, JSON.stringify({ _direction: 'stdin', ...frame }) + '\n') } catch {}
+    return { ok: true, live: true }
+  } catch (e) {
+    return { ok: false, live: false, error: String(e) }
+  }
 }
 
 interface ChatSession {
@@ -761,6 +802,7 @@ export function buildChatArgs(opts: StartOpts): string[] {
     '--verbose'
   ]
   if (opts.agent) args.push('--agent', opts.agent)
+  if (opts.model) args.push('--model', opts.model)
   if (opts.name) args.push('-n', opts.name)
   if (opts.resumeSid) {
     args.push('--resume', opts.resumeSid)
@@ -773,7 +815,7 @@ export function buildChatArgs(opts: StartOpts): string[] {
 
 export function startChat(id: string, opts: StartOpts = {}) {
   if (sessions.has(id) && sessions.get(id)?.child !== null) return
-  const args = buildChatArgs(opts)
+  const args = buildChatArgs({ ...opts, model: opts.model ?? chatModelFor(id) })
 
   // Mirror Term's rebase-on-start: fetch + rebase onto first of
   // develop/main/master that the remote has. Only if explicitly enabled
@@ -1696,6 +1738,9 @@ export function registerChatIpc() {
     }
     return smartStartChat(id, { cwd, agent, name, continueSession, rebaseOnStart, resumeSid, forkSession })
   })
+  ipcMain.handle('chat:setModel', (_e, id: unknown, model: unknown) =>
+    typeof id === 'string' && (model === null || typeof model === 'string') ? setChatModel(id, model as string | null) : { ok: false, live: false, error: 'bad_input' })
+  ipcMain.handle('chat:getModel', (_e, id: unknown) => (typeof id === 'string' ? chatModelFor(id) ?? null : null))
   // Off the main thread (sessionInfo.ts): past sessions are big files.
   ipcMain.handle('chat:getPrevSessionInfo', (_e, { cwd, chatId }) => prevSessionInfo(cwd, chatId))
   ipcMain.handle('chat:getRecentSessions', (_e, { cwd, limit }) => recentSessions(cwd, limit ?? 5))
