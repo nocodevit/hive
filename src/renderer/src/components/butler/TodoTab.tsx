@@ -102,6 +102,9 @@ const Item = forwardRef<HTMLDivElement, { t: TodoView; onDiscuss?: OnDiscuss; on
         {t.due && <span className={`relative flex-shrink-0 overflow-hidden font-mono text-[11px] ${isOverdue(t) ? 'text-status-waiting' : 'text-text-muted'}`} style={{ fontVariantNumeric: 'tabular-nums' }}>
           <AnimatePresence initial={false} mode="popLayout"><motion.span key={t.due} className="inline-block" initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} transition={SNAPPY}>{t.due.slice(5)}</motion.span></AnimatePresence>
         </span>}
+        {/* Given to an agent (Butler dispatch): who has it. */}
+        {t.assignee && <span aria-label={`Assigned to ${t.assignee.agent}`} title={`Assigned to ${t.assignee.agent}${t.assignee.project ? ` · ${t.assignee.project}` : ''}`}
+          className="flex-shrink-0 max-w-[96px] truncate px-1.5 py-0.5 rounded-md bg-accent-subtle text-[11px] font-semibold text-accent">→ {t.assignee.agent}</span>}
         <PriorityChip t={t} />
         {onDiscuss && <DiscussButton compact label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
         <button onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`View ${t.title}`} title="View its story"

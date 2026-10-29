@@ -103,7 +103,10 @@ def fail(status, data):
 def main():
     p = argparse.ArgumentParser(prog='hive')
     sub = p.add_subparsers(dest='cmd', required=True)
-    a = sub.add_parser('agents'); a.add_argument('--project')
+    a = sub.add_parser('agents'); a.add_argument('--project'); a.add_argument('--detail', action='store_true')
+    asg = sub.add_parser('assign'); asg.add_argument('task', nargs='+'); asg.add_argument('--agent', required=True); asg.add_argument('--project')
+    asg.add_argument('--why', default=''); asg.add_argument('--confident', choices=['yes', 'no'], default='no'); asg.add_argument('--todo'); asg.add_argument('--alt', action='append', default=[])
+    nf = sub.add_parser('nofit'); nf.add_argument('todo'); nf.add_argument('--why', default='')
     sub.add_parser('pending')
     cs = sub.add_parser('cards'); cs.add_argument('--all', action='store_true')
     cal = sub.add_parser('calendar'); cal.add_argument('when', nargs='?', default='today'); cal.add_argument('--days', type=int, default=1)
@@ -113,7 +116,7 @@ def main():
     t.add_argument('--due'); t.add_argument('--ref'); t.add_argument('--pri', type=int, choices=[1, 2, 3], default=2); t.add_argument('--all', action='store_true')
     j = sub.add_parser('jira'); j.add_argument('what', choices=['search', 'get', 'transitions', 'me']); j.add_argument('arg', nargs='?', default='')
     j.add_argument('--fields', default='summary,status,assignee,updated,labels,fixVersions,issuelinks'); j.add_argument('--max', type=int, default=20)
-    r = sub.add_parser('run'); r.add_argument('routine', choices=['jira', 'jira-check', 'sort-inbox', 'morning-plan', 'evening-report'])
+    r = sub.add_parser('run'); r.add_argument('routine', choices=['jira', 'jira-check', 'sort-inbox', 'morning-plan', 'evening-report', 'dispatch'])
     c = sub.add_parser('chat-search'); c.add_argument('--q', required=True)
     f = sub.add_parser('feishu-try'); f.add_argument('--text', required=True); f.add_argument('--sender'); f.add_argument('--chat')
     for name in ('tail', 'send', 'start', 'stop'):
@@ -125,13 +128,35 @@ def main():
         if name == 'start': s.add_argument('--mode', choices=['resume', 'new'], default='resume')
     args = p.parse_args()
 
+    if args.cmd == 'assign':
+        status, data = call('POST', '/dispatch/assign', {'task': ' '.join(args.task), 'agent': args.agent, 'project': args.project, 'why': args.why,
+                                                         'confident': args.confident == 'yes', 'todoId': args.todo, 'alternatives': args.alt}, timeout=120)
+        if status != 200 or not data.get('ok'):
+            if data.get('error') == 'ambiguous':
+                print('FAILED: more than one agent has that name — add --project:')
+                for c in data.get('candidates') or []: print('  ' + row(c))
+                sys.exit(1)
+            fail(status, {'error': {'no_such_agent': 'No agent with that name.', 'empty_task': 'Say what the task is.', 'no_such_todo': 'No todo with that id.',
+                                    'send_failed': f"Could not reach the agent: {data.get('detail', '')}"}.get(data.get('error'), data.get('error', ''))})
+        a = data['agent']
+        if data['mode'] == 'sent': print(f"ASSIGNED: sent to {a['project']} / {a['agent']} — tell the owner in one line.")
+        else: print(f"ASKED THE OWNER: card in Approve → {a['agent']} ({'busy right now' if data['reason'] == 'busy' else 'not sure it fits'}). Nothing was sent yet.")
+        return
+
+    if args.cmd == 'nofit':
+        status, data = call('POST', '/dispatch/nofit', {'todoId': args.todo, 'why': args.why})
+        if status != 200: fail(status, data)
+        print('Noted on the todo: no agent fits. Tell the owner.')
+        return
+
     if args.cmd == 'agents':
-        status, data = call('GET', '/agents')
+        status, data = call('GET', '/agents' + ('?detail=1' if args.detail else ''))
         if status != 200: fail(status, data)
         rows = [x for x in data['agents'] if not args.project or x['project'] == args.project]
         order = {'working': 0, 'waiting': 1, 'off': 2}
         for x in sorted(rows, key=lambda x: (order[x['activity']], x['project'], x['agent'])):
             print(row(x))
+            if args.detail and x.get('lastTask'): print(f"      last task: {x['lastTask']}")
         n = {k: sum(1 for x in rows if x['activity'] == k) for k in order}
         print(f"-- {len(rows)} agents: {n['working']} working, {n['waiting']} waiting (chat open, idle), {n['off']} off")
         return

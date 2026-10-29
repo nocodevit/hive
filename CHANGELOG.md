@@ -7,6 +7,17 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.40.0] — 2026-10-29
+
+- 🧭 **Butler gives work to the right agent.** Ask in the Butler chat ("帮我把 checkout 的 bug 修了"), Discuss a card or todo, or let the new hourly **Dispatch** routine look at open todos nobody has yet. Butler picks by project, role and what each agent did lately (the `dispatch` skill — tune it in Settings › Skills), then Hive applies one rule:
+  - **sure and the agent is free** → the brief goes to it now (an agent that's off is resumed); the todo shows "→ Ada" and the story says why;
+  - **not sure, or the agent is busy** → an **Assign** card in Approve with the reason, runners-up and the brief (edit it), sent only when you press Assign;
+  - **no agent fits** → noted on the todo and you're told; it never creates agents.
+- New `./hive assign`, `./hive nofit`, `./hive agents --detail`, `./hive run dispatch`.
+- A routine added in a new version (like Dispatch) is installed on the next start when it's on.
+
+---
+
 ## [2.39.7] — 2026-10-29
 
 - **Switch model** from the chat's ⋮ menu: pick Opus 5.5 / Sonnet 5.5 / Haiku 5.5 / Fable 5.1 (or the agent's default) and confirm. A running chat switches in place — the conversation and its context carry on, no restart — and the pick sticks to that chat.

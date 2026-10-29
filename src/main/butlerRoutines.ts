@@ -210,7 +210,9 @@ export function createRoutineScheduler(deps: SchedulerDeps) {
       const changed: RoutineId[] = []
       for (const id of ROUTINE_IDS) {
         const path = plistPath(id)
-        if (!existsSync(path)) continue
+        // Not installed: a routine new in this version (or one whose install failed) is put in
+        // when it is on; one the owner turned off stays off.
+        if (!existsSync(path) && !s.routines[id]?.enabled) continue
         const text = plistFor(s, id)
         let cur = ''
         try { cur = readFileSync(path, 'utf8') } catch { /* unreadable: rewrite */ }
