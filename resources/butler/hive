@@ -139,8 +139,7 @@ def main():
             fail(status, {'error': {'no_such_agent': 'No agent with that name.', 'empty_task': 'Say what the task is.', 'no_such_todo': 'No todo with that id.',
                                     'send_failed': f"Could not reach the agent: {data.get('detail', '')}"}.get(data.get('error'), data.get('error', ''))})
         a = data['agent']
-        if data['mode'] == 'sent': print(f"ASSIGNED: sent to {a['project']} / {a['agent']} — tell the owner in one line.")
-        else: print(f"ASKED THE OWNER: card in Approve → {a['agent']} ({'busy right now' if data['reason'] == 'busy' else 'not sure it fits'}). Nothing was sent yet.")
+        print(f"ASKED THE OWNER: Assign card in Approve → {a['project']} / {a['agent']}. Nothing is sent until the owner presses Assign (they can add requirements). Tell them in one line.")
         return
 
     if args.cmd == 'nofit':

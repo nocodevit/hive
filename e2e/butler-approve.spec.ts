@@ -254,5 +254,13 @@ test('dispatch: ./hive agents --detail; a not-sure ./hive assign becomes an Assi
   await expect(card).toBeVisible()
   await expect(card.getByLabel('Draft for → Planner · 整理验收清单')).toContainText('Brief to Planner')
   await expect(card.getByLabel('Draft for → Planner · 整理验收清单')).toContainText('Why you: Product in PSLE')
+  // Sure and free still asks: the owner adds requirements and assigns, or cancels.
+  expect(hive('assign', '补充 Jira 验收标准', '--agent', 'Planner', '--confident', 'yes').out).toContain('Nothing is sent until the owner presses Assign')
+  const sure = page.getByLabel('Assign: → Planner · 补充 Jira 验收标准')
+  await expect(sure).toContainText('Butler is sure')
+  await expect(sure.getByLabel('Requirements for → Planner · 补充 Jira 验收标准')).toBeVisible()
+  await sure.screenshot({ path: test.info().outputPath('assign-card.png') })
+  await sure.getByRole('button', { name: 'Reject → Planner · 补充 Jira 验收标准' }).click()
+  await expect(sure).toHaveCount(0)
   expect(hive('assign', 'x', '--agent', 'Nobody').out).toContain('No agent with that name')
 })

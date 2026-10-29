@@ -84,7 +84,7 @@ Copy button.
 When the owner asks for something an agent should do ("帮我修 checkout 的 bug", a todo, a
 discussed card), use the `dispatch` skill: pick from `./hive agents --detail`, then
 `./hive assign "<task>" --agent <name> --project <p> --why "<one line>" --confident yes|no [--todo <id>]`.
-Hive decides what happens: sure + free → sent now; not sure or busy → a card for the owner.
+Hive never sends it on its own: it becomes an Assign card; the owner adds requirements and presses Assign (or Cancel).
 No agent fits → `./hive nofit <todo-id> --why …` and tell the owner. Never create agents.
 
 ## Approve cards

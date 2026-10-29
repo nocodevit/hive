@@ -1,13 +1,12 @@
 // Butler dispatch: give a piece of work to the agent that fits it.
 //
 // Butler (or the hourly Dispatch routine) picks the agent and says how sure it
-// is; this code decides what happens, so the rule never depends on the model:
-//   confident and the agent is free (waiting / off) → the brief goes to it now
-//     (an agent that is off is resumed first, as a click would);
-//   not confident, or the agent is mid-task          → an Approve card: the
-//     owner checks the pick (or chooses another) and the brief, then Assigns;
-//   no agent fits                                     → nothing is sent; the
-//     todo says so and Butler tells the owner.
+// is. Nothing goes to an agent without the owner (owner, 10-29: "变成卡片，让用户
+// 决定 ok 还是 cancel，然后一个输入框，输入要求"):
+//   every pick → an Assign card: who, why, how sure (or "busy right now"), the
+//     brief, and a box for the owner's own requirements; Assign sends it (an
+//     agent that is off is resumed first), Cancel drops it;
+//   no agent fits → nothing is sent; the todo says so and Butler tells the owner.
 // A todo it came from is linked to the agent and its story records each step.
 
 import { readFileSync, writeFileSync } from 'fs'
@@ -43,15 +42,19 @@ export interface AssignInput {
 }
 
 export type AssignResult =
-  | { ok: true; mode: 'sent'; agent: AgentRow }
-  | { ok: true; mode: 'card'; agent: AgentRow; cardId: string; reason: 'not_sure' | 'busy' }
+  | { ok: true; mode: 'card'; agent: AgentRow; cardId: string; reason: 'sure' | 'not_sure' | 'busy' }
   | { ok: false; error: 'no_such_agent' | 'ambiguous' | 'empty_task' | 'no_such_todo' | 'send_failed'; detail?: string; candidates?: AgentRow[] }
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 
-/** Confident and free → send; otherwise the owner confirms. */
-export function dispatchMode(confident: boolean, activity: AgentRow['activity']): 'send' | 'card' {
-  return confident && activity !== 'working' ? 'send' : 'card'
+/** What the card says about the pick: the agent is busy, or how sure Butler is. */
+export function dispatchReason(confident: boolean, activity: AgentRow['activity']): 'sure' | 'not_sure' | 'busy' {
+  return activity === 'working' ? 'busy' : confident ? 'sure' : 'not_sure'
+}
+
+/** The brief as sent: the owner's requirements (the card's box), when given, go last. */
+export function withRequirements(brief: string, requirements: string): string {
+  return requirements.trim() ? `${brief.trim()}\n\nRequirements from the owner: ${requirements.trim()}` : brief
 }
 
 /** What the agent receives: the task, why it is theirs, and how to report back. */
@@ -97,23 +100,18 @@ export function createDispatcher(deps: DispatchDeps) {
     const { row, candidates } = findAgent(deps.rows(), input.agent, input.project)
     if (!row) return { ok: false, error: candidates.length > 1 ? 'ambiguous' : 'no_such_agent', candidates }
     const brief = briefText(task, input.why)
-    if (dispatchMode(input.confident, row.activity) === 'send') {
-      const sent = await deps.deliver(row.agentId, brief)
-      if (!sent.ok) return { ok: false, error: 'send_failed', detail: sent.error }
-      linkTodo(input.todoId, row, input.why)
-      deps.notify?.('Butler assigned', `${label(row)} · ${clip(task, 60)}`)
-      return { ok: true, mode: 'sent', agent: row }
-    }
-    const reason = row.activity === 'working' ? 'busy' : 'not_sure'
+    const reason = dispatchReason(input.confident, row.activity)
+    const how = reason === 'busy' ? `${row.agent} is busy right now` : reason === 'sure' ? 'Butler is sure' : 'Butler is not sure'
     const card = deps.approvals.add({
       kind: DISPATCH_KIND,
       title: `→ ${row.agent} · ${clip(task.replace(/\s+/g, ' '), 40)}`,
-      subtitle: `Assign · ${row.project || 'no project'} · ${reason === 'busy' ? `${row.agent} is busy right now` : 'Butler is not sure'}${input.why ? ` · ${clip(input.why, 60)}` : ''}`,
+      subtitle: `Assign · ${row.project || 'no project'} · ${how}${input.why ? ` · ${clip(input.why, 60)}` : ''}`,
       draft: brief,
       payload: { agentId: row.agentId, agent: row.agent, project: row.project, todoId: input.todoId, why: input.why, task, reason, alternatives: (input.alternatives ?? []).slice(0, 4) },
       action: 'Assign'
     })
-    if (input.todoId) deps.todos().event(input.todoId, { who: 'butler', kind: 'action', text: `Suggested ${label(row)} — waiting for your OK (${reason === 'busy' ? 'busy' : 'not sure'})`, link: `approval:${card.id}` })
+    if (input.todoId) deps.todos().event(input.todoId, { who: 'butler', kind: 'action', text: `Suggested ${label(row)} — waiting for your OK`, link: `approval:${card.id}` })
+    deps.notify?.('Butler suggests', `${label(row)} · ${clip(task, 60)}`)
     return { ok: true, mode: 'card', agent: row, cardId: card.id, reason }
   }
 
@@ -178,7 +176,7 @@ export async function runDispatch(d: DispatchRunDeps): Promise<string> {
     seen.push(t.id)
     if (!dec.agent) { d.dispatcher.noFit(t.id, dec.why ?? ''); lines.push(`- ${t.title}: no agent fits`); continue }
     const r = await d.dispatcher.assign({ task: t.title, agent: dec.agent, project: dec.project, why: dec.why ?? '', confident: dec.confident === true, todoId: t.id, alternatives: dec.alt ?? [] })
-    lines.push(r.ok ? `- ${t.title} → ${r.agent.agent}${r.mode === 'card' ? ' (waiting for your OK in Approve)' : ''}` : `- ${t.title}: could not assign (${'error' in r ? r.error : ''})`)
+    lines.push(r.ok ? `- ${t.title} → ${r.agent.agent} (waiting for your OK in Approve)` : `- ${t.title}: could not assign (${'error' in r ? r.error : ''})`)
   }
   try { writeFileSync(seenFile, JSON.stringify(seen.slice(-500))) } catch { /* best-effort */ }
   return lines.join('\n') || 'Nothing to assign'
