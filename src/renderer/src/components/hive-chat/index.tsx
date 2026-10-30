@@ -1007,6 +1007,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
       // (fires when --permission-prompt-tool stdio is set and the tool
       // isn't in settings.allow). Capture it and show a modal; claude
       // is blocked on stdin until we reply via respondPermission.
+      // claude withdrew a question / permission ask (the turn was interrupted,
+      // e.g. ./hive dismiss from the phone): take its card down.
+      if (ev.type === 'control_cancel_request') {
+        const requestId = (ev as any).request_id
+        setPendingQuestion(q => (q && (!requestId || q.requestId === requestId) ? null : q))
+        setPendingPermissions(prev => (requestId ? prev.filter(p => p.requestId !== requestId) : []))
+        return
+      }
       if (ev.type === 'control_request') {
         const req = (ev as any).request
         const requestId = (ev as any).request_id

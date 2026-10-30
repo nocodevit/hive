@@ -184,6 +184,27 @@ test('todos: Butler notes one from the chat, adds a note, closes it by its id pr
   expect((await (await call('/todos?all=1')).json()).todos[0]).toMatchObject({ status: 'done', steps: 3 })
 })
 
+test('dismiss: an agent stuck on a question for the owner stops waiting, and the next send reaches it', async () => {
+  await expect.poll(async () => (await (await call('/agents')).json()).agents.find((a: any) => a.agent === 'Robin').chatLive, { timeout: 30000 }).toBe(true)
+  expect((await post('/chat/dismiss', { project: 'Butler E2E', agent: 'nobody' })).status).toBe(404)
+  const items = async (): Promise<Array<{ role: string; text: string }>> => (await (await call('/chat/tail?project=Butler%20E2E&agent=Robin&n=30')).json()).items
+  const after = async (mark: string) => { const all = await items(); const i = all.map(x => x.text).lastIndexOf(mark); return i < 0 ? [] : all.slice(i + 1) }
+  const ask = 'Use the AskUserQuestion tool to ask me which color I prefer: red or blue. Do nothing else.'
+  expect((await post('/chat/send', { project: 'Butler E2E', agent: 'Robin', text: ask })).status).toBe(200)
+  await expect.poll(async () => (await after(ask)).some(x => x.role === 'tool' && x.text.startsWith('AskUserQuestion')), { timeout: 90000 }).toBe(true)
+  // Stuck: the turn does not end while the question waits for the owner.
+  const card = page.getByPlaceholder(/Or type your own answer/)
+  await expect(card).toBeVisible({ timeout: 15000 })
+  expect((await after(ask)).some(x => x.role === 'result')).toBe(false)
+  const r = await (await post('/chat/dismiss', { project: 'Butler E2E', agent: 'Robin' })).json()
+  expect(r).toMatchObject({ ok: true, agent: { agent: 'Robin' } })
+  await expect.poll(async () => (await after(ask)).some(x => x.role === 'result'), { timeout: 30000 }).toBe(true)
+  await expect(card).toHaveCount(0, { timeout: 10000 })
+  const next = 'Reply with exactly: dismiss-ok-marker'
+  expect((await post('/chat/send', { project: 'Butler E2E', agent: 'Robin', text: next })).status).toBe(200)
+  await expect.poll(async () => (await after(next)).some(x => x.role === 'assistant' && x.text.includes('dismiss-ok-marker')), { timeout: 90000 }).toBe(true)
+})
+
 test('stop: closes an idle chat (as Close Session does); a closed one says so; a working one needs force', async () => {
   // Robin's chat was started above and is idle now.
   await expect.poll(async () => (await (await call('/agents')).json()).agents.find((a: any) => a.agent === 'Robin').chatLive, { timeout: 30000 }).toBe(true)

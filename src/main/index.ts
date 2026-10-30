@@ -191,7 +191,7 @@ import { findTaskGroupForAgentInData, findAgentCwd, formatHiveMessage } from './
 import { isSubagentActiveForCwd } from './subagent-activity'
 import { patternForAllowRule } from './permission-rule-format'
 import { generateReportScript } from './utils'
-import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage, chatEventBus, stopChat } from './chat'
+import { registerChatIpc, killAllChatChildren, listLiveChatAgentIds, getChatSessionInfo, sendExternalUserMessage, chatEventBus, stopChat, interruptSession } from './chat'
 import type { getPrevSessionInfo } from './chat-recent-sessions'
 import { prevSessionInfo } from './sessionInfo'
 import { createSpeechLineHandler, startSpeechHelper, resolveUtterance, buildVocabPrompt, pickModel } from './voiceTranscribe'
@@ -1114,6 +1114,19 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
         || latestChatLogPath(join(DATA_DIR, 'chat-logs'), found.row.agentId)
       const items = logPath && existsSync(logPath) ? parseChatTail(readLogTailLines(logPath), n) : []
       return reply(200, { ok: true, agent: found.row, items })
+    }
+
+    // ./hive dismiss: an agent stuck on a question / permission card for the owner
+    // stops waiting (same as Esc), so the next ./hive send reaches it. Hive does not
+    // check that it is waiting (a pending question still counts as mid-turn); the
+    // caller looks first with ./hive tail.
+    if (req.method === 'POST' && url.pathname === '/chat/dismiss') {
+      const body = await readJsonBody(req)
+      const found = resolveAgent(rows, { agentId: body.agentId, project: body.project, agent: body.agent })
+      if (!found.ok) return reply(404, found)
+      if (!found.row.chatLive) return reply(409, { ok: false, error: 'no_session', agent: found.row })
+      const r = interruptSession(`chat-${found.row.agentId}`)
+      return reply(r.ok ? 200 : 409, { ...r, agent: found.row })
     }
 
     // ./hive stop: close an agent's chat, as Close Session in the window does. One that is
