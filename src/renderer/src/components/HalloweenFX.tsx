@@ -2,8 +2,8 @@ import { useEffect } from 'react'
 
 /**
  * 🎃 The Halloween skin's night life, drawn over the whole window and never in
- * the way (pointer-events: none): two ghosts drifting in empty space, one
- * peeking over the chat input, a bat now and then, and every 20–120 s a wave of
+ * the way (pointer-events: none): a ghost peeking over the chat input, a ghost
+ * or monster lunging at you now and then, and every 20–120 s a wave of
  * 1–3 spiders that dash in, stop on the chat to look around, then run into a
  * corner and spin a web there; a web fades away after a minute or two. Reduced motion: no movement, the webs only.
  */
@@ -12,6 +12,7 @@ const CSS = `
 .hfx { position: fixed; inset: 0; pointer-events: none; z-index: 9990; overflow: hidden }
 .hfx-ghost { position: absolute; left: 0; top: 0; width: 90px; will-change: transform, opacity }
 .hfx-ghost svg { display: block; width: 100%; animation: hfx-sway 3.4s ease-in-out infinite; filter: drop-shadow(0 0 14px rgba(239,233,255,.35)) }
+.hfx-ghost:not(.scare) svg, .hfx-ghost:not(.scare) .eye, .hfx-ghost:not(.scare) .hand, .hfx-ghost:not(.scare) .hem { animation-play-state: paused }
 @keyframes hfx-sway { 0%, 100% { transform: rotate(-6deg) translateY(0) } 50% { transform: rotate(6deg) translateY(-8px) } }
 .hfx-ghost .eye, .hfx-frank .eye { animation: hfx-glow 2.6s ease-in-out infinite }
 .hfx-ghost .hand { animation: hfx-hand 2.6s ease-in-out infinite; transform-box: fill-box; transform-origin: 50% 100% }
@@ -57,7 +58,6 @@ const CSS = `
 .hfx-peek { position: fixed; width: 40px; opacity: 0; z-index: 9991; pointer-events: none }
 .hfx-peek.up { animation: hfx-peek 2.2s ease-in-out forwards }
 @keyframes hfx-peek { 0% { transform: translateY(36px); opacity: 0 } 25%, 75% { transform: translateY(0); opacity: .95 } 100% { transform: translateY(36px); opacity: 0 } }
-.hfx-bat { position: absolute; font-size: 16px; opacity: .55 }
 .hfx-spider { position: fixed; left: 0; top: 0; z-index: 9995; font-size: 64px; margin: -32px 0 0 -32px; pointer-events: none; will-change: transform;
   /* No glow: a contact shadow right under the body, and a soft cast shadow down-right, as if lit from above-left. */
   filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.75)) drop-shadow(5px 12px 7px rgba(0,0,0,.5)) }
@@ -149,43 +149,21 @@ export function HalloweenFX() {
     const later = (fn: () => void, ms: number) => { const t = window.setTimeout(() => { timers.delete(t); fn() }, ms); timers.add(t) }
     const extra: HTMLElement[] = []
 
-    // Two ghosts that wander the whole window, fading in and out; now and then one lunges at you.
+    // No ghosts drift about (owner, 10-30); one waits unseen off-screen and only shows up to lunge.
     const dim = document.createElement('div')
     dim.className = 'hfx-dim'
     layer.appendChild(dim)
-    // Ghosts keep out of the Butler panel's way: they still pass behind it, but barely visible there.
-    const overPanel = (x: number, y: number) => {
-      const r = document.querySelector('[aria-label="Butler panel"]')?.getBoundingClientRect()
-      return !!r && x + 70 > r.left && x < r.right && y + 80 > r.top && y < r.bottom
-    }
     type Ghost = { el: HTMLDivElement; x: number; y: number; busy: boolean }
-    const ghosts: Ghost[] = [0, 1].map(i => {
+    const ghosts: Ghost[] = [0].map(() => {
       const el = document.createElement('div')
       el.className = 'hfx-ghost'
       el.innerHTML = GHOST
-      el.querySelector('svg')!.style.animationDelay = `${-i * 1.7}s`
       layer.appendChild(el)
-      const g = { el, x: window.innerWidth * (i ? 0.75 : 0.2), y: window.innerHeight * (i ? 0.3 : 0.6), busy: false }
+      const g = { el, x: -GHOST_W, y: window.innerHeight / 2, busy: false }
       el.style.transform = `translate(${g.x}px, ${g.y}px)`
-      el.style.opacity = overPanel(g.x, g.y) ? '.04' : '.14'
+      el.style.opacity = '0'
       return g
     })
-    const wander = (g: Ghost) => {
-      if (!g.busy) {
-        const W = window.innerWidth, H = window.innerHeight
-        const nx = rand(20, W - 100), ny = rand(50, H - 120)
-        const land = overPanel(nx, ny) ? rand(0.03, 0.05) : rand(0.12, 0.24)
-        const mx = (g.x + nx) / 2 + rand(-160, 160), my = (g.y + ny) / 2 + rand(-120, 120)
-        const dur = rand(4000, 8000)
-        g.el.animate([
-          { transform: `translate(${g.x}px, ${g.y}px)`, opacity: g.el.style.opacity },
-          { transform: `translate(${mx}px, ${my}px)`, opacity: rand(0.04, 0.1) },
-          { transform: `translate(${nx}px, ${ny}px)`, opacity: land }
-        ], { duration: dur, easing: 'ease-in-out', fill: 'forwards' })
-        g.x = nx; g.y = ny
-        later(() => { g.el.style.transform = `translate(${nx}px, ${ny}px)`; wander(g) }, dur)
-      } else later(() => wander(g), 1000)
-    }
     // The pumpkin fiend rushes at you from far away, mouth opening as it comes, and bites at the glass.
     const pumpkin = () => {
       const p = document.createElement('div')
@@ -249,7 +227,6 @@ export function HalloweenFX() {
       later(scare, rand(120000, 300000))
     }
     if (!reduce) {
-      ghosts.forEach((g, i) => later(() => wander(g), 600 + i * 1500))
       later(scare, rand(60000, 180000))
     }
     ;(window as unknown as { __hiveGhostScare?: () => void }).__hiveGhostScare = () => { scare() }
@@ -313,22 +290,6 @@ export function HalloweenFX() {
       later(peekLoop, 7000)
     }
     later(peekLoop, 4000)
-
-    const batLoop = () => {
-      if (!reduce) {
-        const b = document.createElement('span')
-        b.className = 'hfx-bat'
-        b.textContent = '🦇'
-        const y = rand(40, window.innerHeight * 0.4)
-        b.style.top = `${y}px`
-        layer.appendChild(b)
-        const a = b.animate([{ transform: `translateX(${window.innerWidth + 20}px)` }, { transform: `translate(-40px, ${rand(-20, 40)}px)` }], { duration: rand(6000, 9000), easing: 'linear' })
-        a.onfinish = () => b.remove()
-        later(() => b.remove(), 10000)
-      }
-      later(batLoop, rand(30000, 90000))
-    }
-    later(batLoop, rand(8000, 20000))
 
     const webbed = new Map<Corner, HTMLElement>()
     const spinWeb = (c: Corner) => {

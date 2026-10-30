@@ -51,14 +51,10 @@ test('first launch in season: the skin is on — badge, night colors, ghosts', a
   await page.screenshot({ path: test.info().outputPath('halloween.png') })
 })
 
-test('the ghosts wander the window, and one lunges at you now and then', async () => {
-  const where = () => page.evaluate(() => [...document.querySelectorAll('.hfx-ghost')].map(g => { const r = g.getBoundingClientRect(); return [Math.round(r.x), Math.round(r.y)] }))
-  const a = await where()
-  expect(a).toHaveLength(2)
-  await expect.poll(async () => {
-    const b = await where()
-    return Math.max(...b.map((p, i) => Math.hypot(p[0] - a[i][0], p[1] - a[i][1])))
-  }, { timeout: 15000 }).toBeGreaterThan(80)
+test('no ghosts drift about and no bats fly by; a ghost only shows up to lunge at you', async () => {
+  const shown = () => page.evaluate(() => [...document.querySelectorAll<HTMLElement>('.hfx-ghost')].filter(g => getComputedStyle(g).opacity !== '0').length)
+  expect(await shown()).toBe(0)
+  expect(await page.evaluate(() => document.querySelectorAll('.hfx-bat').length)).toBe(0)
   // A lunge is a ghost or the pumpkin fiend; take the ghost path here (the pumpkin has its own test).
   await page.evaluate(() => { const r = Math.random; Math.random = () => 0.9; (window as any).__hiveGhostScare(); Math.random = r })
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-ghost.scare').length)).toBe(1)
