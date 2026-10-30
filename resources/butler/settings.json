@@ -6,6 +6,7 @@
       "Bash(./hive send:*)",
       "Bash(./hive start:*)",
       "Bash(./hive stop:*)",
+      "Bash(./hive dismiss:*)",
       "Bash(./hive assign:*)",
       "Bash(./hive nofit:*)",
       "Bash(./hive chat-search:*)",

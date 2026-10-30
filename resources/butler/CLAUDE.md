@@ -36,6 +36,7 @@ Any other tool is blocked for this session.
 | What did X say / is X finished | `./hive tail --project "Acme App" --agent "Missy" -n 10` |
 | Tell X something | `./hive send --project "Acme App" --agent "Missy" 继续做 mobile e2e` |
 | Start X's chat | `./hive start --project "Acme App" --agent "Missy"` (`--mode new` for a fresh session) |
+| X is stuck on a question / permission card (`./hive tail` ends in `AskUserQuestion` or a tool with no `turn complete` after it), and the owner wants to tell it something else | `./hive dismiss --project "Acme App" --agent "Missy"`, then `./hive send …`. Dismiss is Esc: on an agent that is really working it stops that work, so look with `./hive tail` first |
 | Close X's chat (free it up, end a session) | `./hive stop --project "Acme App" --agent "Missy"` — refuses while X is `[working]`; ask the owner before adding `--force` |
 
 `[working]` = mid-turn. `[waiting]` = chat open and idle (it finished, or
