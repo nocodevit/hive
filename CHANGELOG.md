@@ -7,6 +7,13 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.40.4] — 2026-10-30
+
+##### 📱 Butler
+- **`./hive dismiss`**: when an agent is stuck waiting for your answer (a question or a permission card), Butler on your phone can tell it to stop waiting, then send it new instructions with `./hive send`. The card in the window goes away too.
+
+---
+
 ## [2.40.3] — 2026-10-30
 
 ##### 🎃 Halloween skin
