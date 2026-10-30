@@ -7,6 +7,14 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.40.3] — 2026-10-30
+
+##### 🎃 Halloween skin
+- **Send is a jack-o'-lantern**: press it (or Enter) and its face lights up, it hops, and a wisp of smoke rises as your message goes.
+- Calmer: no more ghosts drifting around the window, no ghost peeking over the input, no bat flying across. A ghost or the pumpkin fiend still lunges at you now and then.
+
+---
+
 ## [2.40.2] — 2026-10-29
 
 ##### 🎃 Halloween skin
