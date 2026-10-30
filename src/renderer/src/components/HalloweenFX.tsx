@@ -2,8 +2,7 @@ import { useEffect } from 'react'
 
 /**
  * 🎃 The Halloween skin's night life, drawn over the whole window and never in
- * the way (pointer-events: none): a ghost peeking over the chat input, a ghost
- * or monster lunging at you now and then, and every 20–120 s a wave of
+ * the way (pointer-events: none): a ghost or monster lunging at you now and then, and every 20–120 s a wave of
  * 1–3 spiders that dash in, stop on the chat to look around, then run into a
  * corner and spin a web there; a web fades away after a minute or two. Reduced motion: no movement, the webs only.
  */
@@ -55,9 +54,6 @@ const CSS = `
 .hfx-ghost.scare svg { filter: drop-shadow(0 0 30px rgba(255,40,40,.8)) }
 .hfx-ghost.scare .eye { animation: none; opacity: 1 }
 .hfx-dim { position: absolute; inset: 0; background: #000; opacity: 0 }
-.hfx-peek { position: fixed; width: 40px; opacity: 0; z-index: 9991; pointer-events: none }
-.hfx-peek.up { animation: hfx-peek 2.2s ease-in-out forwards }
-@keyframes hfx-peek { 0% { transform: translateY(36px); opacity: 0 } 25%, 75% { transform: translateY(0); opacity: .95 } 100% { transform: translateY(36px); opacity: 0 } }
 .hfx-spider { position: fixed; left: 0; top: 0; z-index: 9995; font-size: 64px; margin: -32px 0 0 -32px; pointer-events: none; will-change: transform;
   /* No glow: a contact shadow right under the body, and a soft cast shadow down-right, as if lit from above-left. */
   filter: drop-shadow(0 1px 1.5px rgba(0,0,0,.75)) drop-shadow(5px 12px 7px rgba(0,0,0,.5)) }
@@ -68,7 +64,7 @@ const CSS = `
 .hfx-web path { fill: none; stroke: #e9ddff; stroke-width: .9; stroke-dasharray: 160; stroke-dashoffset: 160; animation: hfx-spin 1.6s ease-out forwards }
 .hfx-web path:nth-child(n+2) { animation-delay: .35s; animation-duration: 1.4s }
 @keyframes hfx-spin { to { stroke-dashoffset: 0 } }
-@media (prefers-reduced-motion: reduce) { .hfx-mummy, .hfx-frank, .hfx-pumpkin { display: none } .hfx *, .hfx-ghost svg, .hfx-peek, .hfx-spider, .hfx-spider span { animation: none !important } .hfx-web path { stroke-dashoffset: 0 } }
+@media (prefers-reduced-motion: reduce) { .hfx-mummy, .hfx-frank, .hfx-pumpkin { display: none } .hfx *, .hfx-ghost svg, .hfx-spider, .hfx-spider span { animation: none !important } .hfx-web path { stroke-dashoffset: 0 } }
 `
 
 // The three musketeers (approved sheet, 10-28).
@@ -129,7 +125,6 @@ const FRANK_W = 130
 const PUMPKIN = '<svg viewBox="0 0 300 300"><defs><radialGradient id="hfxPskin" cx="45%" cy="36%" r="72%"><stop offset="0" stop-color="#ffab45"/><stop offset=".55" stop-color="#ee7410"/><stop offset="1" stop-color="#8f3304"/></radialGradient><radialGradient id="hfxPrib" cx="50%" cy="40%" r="70%"><stop offset="0" stop-color="#f88a22"/><stop offset="1" stop-color="#a23d06"/></radialGradient><radialGradient id="hfxPfire" cx="50%" cy="60%" r="65%"><stop offset="0" stop-color="#fff6b8"/><stop offset=".3" stop-color="#ffd04a"/><stop offset=".7" stop-color="#ff7414"/><stop offset="1" stop-color="#7a1c00"/></radialGradient><radialGradient id="hfxPpit" cx="50%" cy="30%" r="80%"><stop offset="0" stop-color="#ffcf4a"/><stop offset=".35" stop-color="#ff6a10"/><stop offset=".75" stop-color="#6a1600"/><stop offset="1" stop-color="#1c0500"/></radialGradient><filter id="hfxPglow" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter><clipPath id="hfxPfront"><ellipse cx="150" cy="160" rx="100" ry="116"/></clipPath></defs><g class="bob"><g class="head"><path d="M148 54c-5-20 2-38 20-46 5-2 8 3 4 6-11 8-13 20-11 38z" fill="#55712c"/><path d="M168 22c10-7 23-6 30 2" stroke="#55712c" stroke-width="3.5" fill="none" stroke-linecap="round"/><ellipse cx="76" cy="165" rx="62" ry="104" fill="url(#hfxPrib)"/><ellipse cx="224" cy="165" rx="62" ry="104" fill="url(#hfxPrib)"/><ellipse cx="106" cy="162" rx="66" ry="112" fill="url(#hfxPskin)"/><ellipse cx="194" cy="162" rx="66" ry="112" fill="url(#hfxPskin)"/><ellipse cx="150" cy="160" rx="64" ry="116" fill="url(#hfxPskin)"/><g stroke="#9a3b07" stroke-width="2" fill="none" opacity=".5"><path d="M116 56c-14 40-14 170 0 214"/><path d="M184 56c14 40 14 170 0 214"/></g><g class="flame" filter="url(#hfxPglow)"><path class="eye" d="M66 112 L142 140 Q138 168 108 166 Q78 160 66 112z" fill="url(#hfxPfire)"/><path class="eye" d="M234 112 L158 140 Q162 168 192 166 Q222 160 234 112z" fill="url(#hfxPfire)"/><path d="M150 168 L136 192 Q150 186 164 192z" fill="url(#hfxPfire)"/></g><g fill="none" stroke="#ffd79a" stroke-width="1.6" opacity=".55"><path d="M66 112 L142 140"/><path d="M234 112 L158 140"/></g><path d="M52 196 Q100 214 150 214 Q200 214 248 196 Q236 278 150 282 Q64 278 52 196z" fill="url(#hfxPpit)"/><ellipse class="flame" cx="150" cy="250" rx="46" ry="18" fill="url(#hfxPfire)" filter="url(#hfxPglow)" opacity=".85"/><path d="M44 186 Q100 210 150 210 Q200 210 256 186 L252 200 Q200 222 150 222 Q100 222 48 200z" fill="url(#hfxPskin)"/><path d="M86 206 L98 240 L110 212z M138 220 L150 254 L162 220z M190 212 L202 240 L214 206z" fill="url(#hfxPskin)" stroke="#8f3304" stroke-width="1"/><g clip-path="url(#hfxPfront)"><g class="jaw"><path d="M40 232 Q60 236 72 232 L84 210 L96 236 Q120 242 150 242 Q180 242 204 236 L216 210 L228 232 Q240 236 260 232 L260 300 L40 300z" fill="url(#hfxPskin)"/><path d="M112 240 L124 214 L136 241z M164 241 L176 214 L188 240z" fill="url(#hfxPskin)" stroke="#8f3304" stroke-width="1"/><path d="M58 236 Q150 254 242 236" stroke="#ffd79a" stroke-width="1.4" fill="none" opacity=".45"/><g stroke="#9a3b07" stroke-width="2" fill="none" opacity=".5"><path d="M116 250c-2 10-2 20 0 26"/><path d="M184 250c2 10 2 20 0 26"/></g></g></g></g></g></svg>'
 const PUMPKIN_W = 260
 
-const PEEK = '<svg viewBox="0 0 60 70"><path fill="#efe9ff" d="M30 2C14 2 4 14 4 30v36l8-6 8 6 10-6 10 6 8-6 8 6V30C56 14 46 2 30 2z"/><circle cx="22" cy="28" r="4" fill="#120a1f"/><circle cx="38" cy="28" r="4" fill="#120a1f"/><ellipse cx="30" cy="42" rx="5" ry="6" fill="#120a1f"/></svg>'
 const WEB = '<svg viewBox="0 0 120 120"><path d="M0 0 L120 0 M0 0 L0 120 M0 0 L110 45 M0 0 L80 80 M0 0 L45 110"/><path d="M28 0 Q24 10 26 11 Q12 18 11 26 Q8 26 0 28"/><path d="M58 0 Q50 20 52 23 Q36 34 23 52 Q20 50 0 58"/><path d="M90 0 Q78 30 81 34 Q58 52 34 81 Q30 78 0 90"/></svg>'
 
 type Corner = 'tl' | 'tr' | 'bl' | 'br'
@@ -273,23 +268,8 @@ export function HalloweenFX() {
     ;(window as unknown as { __hivePumpkin?: () => void }).__hivePumpkin = pumpkin
     ;(window as unknown as { __hiveFrank?: () => void }).__hiveFrank = frank
 
-    // The chat input, when a chat is open: where the ghost peeks and the spiders stop.
+    // The chat input, when a chat is open: where the spiders stop.
     const input = () => document.querySelector<HTMLElement>('[data-testid="hive-chat-input"]')
-
-    const peek = document.createElement('div')
-    peek.className = 'hfx-peek'
-    peek.innerHTML = PEEK
-    document.body.appendChild(peek)
-    extra.push(peek)
-    const peekLoop = () => {
-      const r = input()?.getBoundingClientRect()
-      if (r && r.width > 0 && !reduce) {
-        Object.assign(peek.style, { left: `${r.right - 70}px`, top: `${r.top - 44}px` })
-        peek.classList.remove('up'); void peek.offsetWidth; peek.classList.add('up')
-      }
-      later(peekLoop, 7000)
-    }
-    later(peekLoop, 4000)
 
     const webbed = new Map<Corner, HTMLElement>()
     const spinWeb = (c: Corner) => {
