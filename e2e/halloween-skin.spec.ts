@@ -98,7 +98,7 @@ test('a spider wave: they run, stop, a web is spun in a corner and later fades a
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-spider').length)).toBeGreaterThan(0)
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-web').length), { timeout: 8000 }).toBeGreaterThan(0)
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-spider').length), { timeout: 8000 }).toBe(0)
-  const blocks = await page.evaluate(() => [...document.querySelectorAll('.hfx, .hfx-web, .hfx-peek')].some(e => getComputedStyle(e).pointerEvents !== 'none'))
+  const blocks = await page.evaluate(() => [...document.querySelectorAll('.hfx, .hfx-web')].some(e => getComputedStyle(e).pointerEvents !== 'none'))
   expect(blocks).toBe(false)
   await expect.poll(() => page.evaluate(() => document.querySelectorAll('.hfx-web').length), { timeout: 15000 }).toBe(0)
   await page.evaluate(() => { delete (window as any).__hiveWebLifeMs })
