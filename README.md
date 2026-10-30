@@ -27,7 +27,7 @@ and you can check on the team and give orders from your phone.
 
 Update in season and Hive puts on a night-violet and pumpkin-gold skin, once. The window gets a cast:
 
-- A **ghost** peeks over the chat input; press Send and one pops out of its hole.
+- Press Send and a **ghost** pops out of its hole.
 - **Spiders** dash in every so often, stop on the chat to look around, then run into a corner and spin a web that fades a minute or two later.
 - A **mummy** shambles along the bottom; **Frankenstein's monster** peeks up from the edge, neck bolts sparking.
 - Every few minutes a **ghost or the pumpkin fiend** lunges at you — the pumpkin bites.
