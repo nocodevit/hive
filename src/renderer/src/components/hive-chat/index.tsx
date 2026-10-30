@@ -2,7 +2,7 @@ import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } 
 import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, accentTint, redact, configureRedact } from './crush-styles'
 import { VoiceGroup } from './VoiceGroup'
 import { ModelSwitchModal, modelLabel } from './ModelSwitch'
-import { GhostSend, useHalloween } from './GhostSend'
+import { PumpkinSend, useHalloween } from './PumpkinSend'
 import { joinVoiceText } from '../../lib/voice-text'
 import { hookLoopStep, HOOK_LOOP_IDLE, stopHookFeedback, goalCheckLine, GOAL_LOOP_STUCK_AFTER } from '../../../../shared/goal-loop'
 import { autoSendStep, AUTO_SEND_IDLE, useAutoSendPrefs, setAutoSendPrefs, type VoiceEvent } from '../../lib/voice-autosend'
@@ -121,15 +121,15 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   }, [id])
   // Status-bar state (above + below input)
   const [modelSwitch, setModelSwitch] = useState<{ saved: string | null } | null>(null)
-  // 🎃 Send is a headless ghost in the Halloween skin; Enter makes its head pop too.
+  // 🎃 Send is a jack-o'-lantern in the Halloween skin; Enter lights it too.
   const halloween = useHalloween()
-  const [ghostUp, setGhostUp] = useState(false)
-  const ghostTimer = useRef<number | null>(null)
-  const popGhost = () => {
+  const [pumpkinLit, setPumpkinLit] = useState(false)
+  const pumpkinTimer = useRef<number | null>(null)
+  const lightPumpkin = () => {
     if (!halloween) return
-    if (ghostTimer.current !== null) clearTimeout(ghostTimer.current)
-    setGhostUp(true)
-    ghostTimer.current = window.setTimeout(() => { ghostTimer.current = null; setGhostUp(false) }, 1000)
+    if (pumpkinTimer.current !== null) clearTimeout(pumpkinTimer.current)
+    setPumpkinLit(true)
+    pumpkinTimer.current = window.setTimeout(() => { pumpkinTimer.current = null; setPumpkinLit(false) }, 600)
   }
   const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
   const [contextSize, setContextSize] = useState<string>('') // "1M"
@@ -1738,7 +1738,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         Hidden during compact since the --print child is dead;
         we show a disabled Send glyph instead so the user has
         a visual signal that Enter will be queued, not sent. */}
-    {!compactInProgress && (sending || thinking) && !(halloween && ghostUp) && (
+    {!compactInProgress && (sending || thinking) && !(halloween && pumpkinLit) && (
       <button
         onClick={() => {
           window.api.chat.interrupt(id).catch(() => {})
@@ -1791,8 +1791,8 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
         }}
       >⏳</span>
     )}
-    {!compactInProgress && halloween && (ghostUp || !(sending || thinking)) && (
-      <GhostSend enabled={!!input.trim() && exited === null} popped={ghostUp} onPress={() => { popGhost(); send() }} />
+    {!compactInProgress && halloween && (pumpkinLit || !(sending || thinking)) && (
+      <PumpkinSend enabled={!!input.trim() && exited === null} lit={pumpkinLit} onPress={() => { lightPumpkin(); send() }} />
     )}
     {!compactInProgress && !(sending || thinking) && !halloween && (
       <button
@@ -2319,7 +2319,7 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
                 // e.nativeEvent.isComposing is the modern signal; composingRef
                 // is the belt-and-suspenders backup.
                 if (composingRef.current || (e.nativeEvent as any).isComposing) return
-                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (input.trim()) popGhost(); send(); return }
+                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (input.trim()) lightPumpkin(); send(); return }
                 // ↑/↓ left as native textarea cursor navigation. Recall is
                 // a click-the-↺-icon action on each past UserMessage now.
               }}

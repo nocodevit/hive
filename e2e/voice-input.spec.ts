@@ -346,7 +346,7 @@ test('⋮ → Switch model: pick Haiku, confirm — the running session gets set
   expect(logs).toContain('"subtype":"set_model","model":"claude-haiku-5-5"')
 })
 
-test('🎃 Halloween skin: Send is the ghost in the hole — press, it pops out as the message goes, a second later it ducks back', async () => {
+test('🎃 Halloween skin: Send is a jack-o\'-lantern — press, it lights up as the message goes, then goes dark', async () => {
   await page.evaluate(() => document.documentElement.setAttribute('data-palette', 'halloween'))
   const send = page.getByRole('button', { name: 'Send', exact: true })
   const input = page.getByTestId('hive-chat-input')
@@ -354,10 +354,10 @@ test('🎃 Halloween skin: Send is the ghost in the hole — press, it pops out 
   await expect(send).toBeDisabled()
   await input.fill('/help')
   await expect(send).toBeEnabled()
-  await page.getByTestId('hive-chat-input').locator('xpath=ancestor::div[3]').screenshot({ path: test.info().outputPath('hole-ghost-idle.png') })
+  await page.getByTestId('hive-chat-input').locator('xpath=ancestor::div[3]').screenshot({ path: test.info().outputPath('pumpkin-idle.png') })
   await send.click()
   await expect.poll(() => send.evaluate(el => el.classList.contains('pop'))).toBe(true)
-  await page.getByTestId('hive-chat-input').locator('xpath=ancestor::div[3]').screenshot({ path: test.info().outputPath('hole-ghost-pop.png') })
+  await page.getByTestId('hive-chat-input').locator('xpath=ancestor::div[3]').screenshot({ path: test.info().outputPath('pumpkin-lit.png') })
   await expect.poll(() => send.evaluate(el => el.classList.contains('pop')), { timeout: 3000 }).toBe(false)
   await page.evaluate(() => document.documentElement.removeAttribute('data-palette'))
 })
