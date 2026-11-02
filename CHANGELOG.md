@@ -7,6 +7,15 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.40.5] — 2026-11-02
+
+##### 📱 Butler
+- **Fixed: on a new Mac, Butler could not run any `./hive` command** ("denied because Claude Code is running in don't ask mode"). Claude only reads a folder's allow-list once that folder is trusted; Hive now records your yes for the Butler folders, and routines / answer-for-me pass the allow-list directly.
+- **One memory for the phone and desk Butler**: what you teach one, the other knows.
+- **Drafts in your name stay professional**: no slangy fillers like 吱一声 / 哈 / 辛苦啦.
+
+---
+
 ## [2.40.4] — 2026-10-30
 
 ##### 📱 Butler
