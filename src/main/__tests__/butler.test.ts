@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSy
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
-  butlerArgs, bridgeSessionId, claudeTrustsFolder, readButlerOutput, outputTail, installButlerFiles, createButler,
+  butlerArgs, bridgeSessionId, claudeTrustsFolder, recordClaudeTrust, readButlerOutput, outputTail, installButlerFiles, createButler,
   readButlerSettings, SETUP_VERSION, RESTART_DELAYS_MS, STABLE_AFTER_MS, type ButlerState, type PtyLike
 } from '../butler'
 
@@ -38,8 +38,10 @@ function setup(opts: { enabled?: boolean } = {}) {
   let clock = 1_000_000
   let recorded: string | null = null
   let claudeOk = true
+  let trustWrites = 0
   const butler = createButler({
     claudeTrusts: () => claudeOk,
+    recordTrust: () => { trustWrites++ },
     recordedSessionId: () => recorded,
     dataDir,
     resourcesDir: RESOURCES,
@@ -56,7 +58,8 @@ function setup(opts: { enabled?: boolean } = {}) {
     last: () => ptys[ptys.length - 1],
     advance: (ms: number) => { clock += ms },
     record: (id: string | null) => { recorded = id },
-    claudeTrust: (ok: boolean) => { claudeOk = ok }
+    claudeTrust: (ok: boolean) => { claudeOk = ok },
+    trustWrites: () => trustWrites
   }
 }
 
@@ -85,6 +88,29 @@ describe('claudeTrustsFolder', () => {
   })
   it('false when the config is missing or unreadable', () => {
     expect(claudeTrustsFolder(join(tmpdir(), 'no-such-dir', '.claude.json'), tmpdir())).toBe(false)
+  })
+})
+
+describe('recordClaudeTrust', () => {
+  it('marks only the Butler folders trusted (by real path) and keeps everything else in the file', () => {
+    const a = mkdtempSync(join(tmpdir(), 'hive-trust-a-')), b = mkdtempSync(join(tmpdir(), 'hive-trust-b-'))
+    const f = join(mkdtempSync(join(tmpdir(), 'hive-claude-json-')), '.claude.json')
+    writeFileSync(f, JSON.stringify({ oauthAccount: { x: 1 }, projects: { '/other': { hasTrustDialogAccepted: false }, [realpathSync(a)]: { allowedTools: ['y'] } } }))
+    expect(recordClaudeTrust(f, [a, b])).toBe(true)
+    const j = JSON.parse(readFileSync(f, 'utf8'))
+    expect(j.oauthAccount).toEqual({ x: 1 })
+    expect(j.projects['/other']).toEqual({ hasTrustDialogAccepted: false })
+    expect(j.projects[realpathSync(a)]).toEqual({ allowedTools: ['y'], hasTrustDialogAccepted: true })
+    expect(j.projects[realpathSync(b)]).toEqual({ hasTrustDialogAccepted: true })
+    expect(claudeTrustsFolder(f, a) && claudeTrustsFolder(f, b)).toBe(true)
+  })
+  it('a missing or unreadable config is left alone', () => {
+    const d = mkdtempSync(join(tmpdir(), 'hive-claude-json-'))
+    expect(recordClaudeTrust(join(d, '.claude.json'), [d])).toBe(false)
+    expect(existsSync(join(d, '.claude.json'))).toBe(false)
+    writeFileSync(join(d, '.claude.json'), '{ half')
+    expect(recordClaudeTrust(join(d, '.claude.json'), [d])).toBe(false)
+    expect(readFileSync(join(d, '.claude.json'), 'utf8')).toBe('{ half')
   })
 })
 
@@ -294,8 +320,11 @@ describe('createButler', () => {
     t.last().emit(TRUST_PROMPT)
     expect(t.butler.getState().status).toBe('needs_trust')
     expect(t.last().written).toEqual([])
+    expect(t.trustWrites()).toBe(0)
     expect(t.butler.confirmTrust()).toBe(true)
     expect(t.last().written).toEqual(['y\r'])
+    // The yes goes into Claude Code's own record too, or the folder's allow-list is not read.
+    expect(t.trustWrites()).toBe(1)
     expect(t.butler.getState().status).toBe('starting')
     t.last().emit('…redraw…')
     expect(t.butler.getState().status).toBe('starting')
