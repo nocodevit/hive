@@ -10,7 +10,7 @@
 // last. Everything here takes its side effects as deps so it can be tested
 // without a real pty or a real `claude`.
 
-import { chmodSync, copyFileSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
+import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmdirSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { claudeProjectSlug } from '../shared/claude-project-slug'
 import { composeSkills } from './butlerSkills'
@@ -47,6 +47,40 @@ export function linkPhoneFolder(butler: string, phone: string): void {
     try { if (lstatSync(link).isSymbolicLink() && readlinkSync(link) === join(butler, name)) continue; rmSync(link, { recursive: true, force: true }) } catch { /* not there */ }
     symlinkSync(join(butler, name), link)
   }
+}
+
+/**
+ * One memory for the desk and the phone Butler. Claude keeps auto-memory per
+ * folder, so what the owner taught the desk Butler (say, "no 吱一声") the phone
+ * one never knew. The phone folder's memory becomes a link to the desk one;
+ * anything the phone had is moved over first (its MEMORY.md lines added, a
+ * same-named different file kept as <name>-phone.md), nothing is lost.
+ */
+export function sharePhoneMemory(claudeHome: string, butler: string, phone: string): void {
+  const mem = (folder: string) => join(claudeHome, 'projects', claudeProjectSlug(realpathSync(folder)), 'memory')
+  const desk = mem(butler), ph = mem(phone)
+  mkdirSync(desk, { recursive: true })
+  let st: ReturnType<typeof lstatSync> | null = null
+  try { st = lstatSync(ph) } catch { /* not there */ }
+  if (st?.isSymbolicLink()) {
+    if (readlinkSync(ph) === desk) return
+    unlinkSync(ph)
+  } else if (st?.isDirectory()) {
+    for (const f of readdirSync(ph)) {
+      const from = join(ph, f), to = join(desk, f)
+      if (f === 'MEMORY.md') {
+        const have = existsSync(to) ? readFileSync(to, 'utf8') : ''
+        const add = readFileSync(from, 'utf8').split('\n').filter(l => l.trim() && !have.split('\n').includes(l))
+        if (add.length) writeFileSync(to, (have && !have.endsWith('\n') ? have + '\n' : have) + add.join('\n') + '\n')
+        unlinkSync(from)
+      } else if (!existsSync(to)) renameSync(from, to)
+      else if (readFileSync(from, 'utf8') === readFileSync(to, 'utf8')) unlinkSync(from)
+      else renameSync(from, join(desk, f.replace(/(\.md)?$/, '-phone$1')))
+    }
+    rmdirSync(ph)
+  }
+  mkdirSync(join(ph, '..'), { recursive: true })
+  symlinkSync(desk, ph)
 }
 
 /** Overwrite the bundled files into the butler folder. Other files are left alone.
@@ -214,6 +248,8 @@ export interface ButlerDeps {
   claudeTrusts: () => boolean
   /** Write the owner's yes into Claude Code's trust record for both Butler folders (see recordClaudeTrust). */
   recordTrust?: () => void
+  /** Claude Code's config folder (CLAUDE_CONFIG_DIR or ~/.claude): the phone Butler shares the desk one's memory there. */
+  claudeHome?: string
   /** The session id remote-control recorded for the butler folder (see bridgeSessionId). */
   recordedSessionId: () => string | null
   spawn: (args: string[], cwd: string) => PtyLike
@@ -352,6 +388,7 @@ export function createButler(deps: ButlerDeps) {
     try {
       installButlerFiles(deps.resourcesDir, dir)
       linkPhoneFolder(dir, phone)
+      if (deps.claudeHome) { try { sharePhoneMemory(deps.claudeHome, dir, phone) } catch { /* the phone keeps its own memory */ } }
       // Owners who said yes before the trust record was written get it now.
       if (trusted) deps.recordTrust?.()
     } catch (e) {
