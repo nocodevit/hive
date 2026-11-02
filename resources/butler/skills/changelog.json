@@ -35,6 +35,14 @@
         "Three outcomes only: can't answer / your call → nothing sent, a card for you; can answer → answered and you are told; partly → the checked facts + \"其余已转告 <you>，稍后回复\", a card for the rest"
       ],
       "hash": "4e551d7213ed20ea"
+    },
+    {
+      "version": 6,
+      "date": "2026-11-02",
+      "changes": [
+        "Professional tone in the owner's name: no slangy fillers like 吱一声 / 哈 / 辛苦啦"
+      ],
+      "hash": "6b2fa85f41cfc8b7"
     }
   ],
   "dispatch": [
@@ -109,6 +117,14 @@
         "First version"
       ],
       "hash": "e6de32992f2be22f"
+    },
+    {
+      "version": 2,
+      "date": "2026-11-02",
+      "changes": [
+        "Professional tone in the owner's name: no slangy fillers like 吱一声 / 哈 / 辛苦啦"
+      ],
+      "hash": "72deffc3f918a44e"
     }
   ],
   "sort-inbox": [

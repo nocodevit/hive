@@ -240,23 +240,25 @@ describe('default updated', () => {
   })
   it('an update shows its version and changes; Overwrite / Save mine as a copy / Keep mine', () => {
     const log = readChangelog(store)
-    log['reply-email'] = [...(log['reply-email'] ?? []), { version: 2, date: '2026-10-22', changes: ['Shorter replies'] }]
+    // the next version after whatever ships, written against the one before it
+    const v = Math.max(0, ...(log['reply-email'] ?? []).map(e => e.version)) + 1
+    log['reply-email'] = [...(log['reply-email'] ?? []), { version: v, date: '2026-10-22', changes: ['Shorter replies'] }]
     writeFileSync(join(store.defaultsDir, 'changelog.json'), JSON.stringify(log))
     const mine = def('reply-email').replace('Plain and calm.', 'Warm.')
     writeFileSync(join(store.defaultsDir, 'reply-email.md'), def('reply-email'))
     saveOverride(store, 'reply-email', mine)
     saveOverlay(store, 'reply-email', { tone: 'formal' })
-    // remembered as based on v2 now; pretend it was written against v1 and the text changed since
+    // remembered as based on the newest now; pretend it was written against the one before and the text changed since
     const metaFile = join(store.butlerDir, 'skills', '.meta.json')
     const meta = JSON.parse(readFileSync(metaFile, 'utf8'))
-    meta['reply-email'] = { defaultHash: 'old', version: 1 }
+    meta['reply-email'] = { defaultHash: 'old', version: v - 1 }
     writeFileSync(metaFile, JSON.stringify(meta))
     const info = skillDetail(store, 'reply-email')
-    expect(info).toMatchObject({ defaultUpdated: true, version: 2, baseVersion: 1, updates: [{ version: 2, changes: ['Shorter replies'] }] })
-    expect(newSkillUpdates(store)).toEqual([{ id: 'reply-email', name: 'reply-email', version: 2, changes: ['Shorter replies'] }])
+    expect(info).toMatchObject({ defaultUpdated: true, version: v, baseVersion: v - 1, updates: [{ version: v, changes: ['Shorter replies'] }] })
+    expect(newSkillUpdates(store)).toEqual([{ id: 'reply-email', name: 'reply-email', version: v, changes: ['Shorter replies'] }])
     expect(newSkillUpdates(store)).toEqual([])
     const copy = saveNewAsCopy(store, 'reply-email')
-    expect(copy).toMatch(/reply-email\.new-v2\.md$/)
+    expect(copy).toMatch(new RegExp(`reply-email\\.new-v${v}\\.md$`))
     expect(readFileSync(copy, 'utf8')).toBe(def('reply-email'))
     expect(readOverride(store, 'reply-email')).toBe(mine.trimEnd() + '\n')
     expect(skillDetail(store, 'reply-email')).toMatchObject({ defaultUpdated: false, customized: 'override' })
