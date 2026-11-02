@@ -43,6 +43,7 @@ import { NoteTag, NOTE_TAG_COLORS } from './noteTag'
 import { NUDGE_MESSAGE, nudgeTargets } from './nudge'
 import { projectListState } from './projectListState'
 import { HalloweenFX } from './components/HalloweenFX'
+import { BotanicFX } from './components/BotanicFX'
 import { availablePalettes, halloweenTakeover, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
 import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
@@ -1008,8 +1009,9 @@ export default function App() {
   const butlerInList = butlerPinned || (butlerOpen && butlerMode === 'page')
 
   return (
-    <div className="flex flex-col h-screen bg-sidebar-bg text-text-primary">
+    <div className={`flex flex-col h-screen text-text-primary ${palette === 'botanic' ? '' : 'bg-sidebar-bg'}`}>
       {palette === 'halloween' && <HalloweenFX />}
+      {palette === 'botanic' && <BotanicFX />}
       {/* Title bar across the window: traffic lights, where you are, Butler (ui-preview-butler.html). */}
       <div className="drag-region h-[44px] flex-shrink-0 flex items-center gap-2 pl-[88px] pr-3">
         {palette === 'halloween' && (
@@ -1021,7 +1023,7 @@ export default function App() {
         </span>
         {butlerButton}
       </div>
-      <div className="flex flex-1 min-h-0 pr-2.5 pb-2.5">
+      <div className="hive-frame flex flex-1 min-h-0 pr-2.5 pb-2.5">
       {/* Left: Projects */}
       <div className="flex flex-col flex-shrink-0 pl-2.5" style={{ width: panelWidths.projects }}>
         <div className="drag-region flex items-center px-2 pt-1 pb-2.5 justify-between">
@@ -1356,7 +1358,7 @@ export default function App() {
             </div>
           )}
         </div>
-        <div className="py-2 space-y-0.5">
+        <div className="hive-sidebar-foot py-2 space-y-0.5">
           {/* v2.6.0: Overview toggle. Highlighted (accent bg) when active
               so it reads as the currently-selected top-level view. */}
           <button
