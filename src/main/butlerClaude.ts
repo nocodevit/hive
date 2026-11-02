@@ -22,6 +22,8 @@ export function claudePrintArgs(allowedTools: string[] = []): string[] {
 export interface ClaudeRunDeps {
   bin: () => string
   cwd: () => string
+  /** The Butler allow-list, passed on every run (see butlerAllow). */
+  allow?: () => string[]
   env?: NodeJS.ProcessEnv
   spawn?: typeof nodeSpawn
   timeoutMs?: number
@@ -30,7 +32,7 @@ export interface ClaudeRunDeps {
 export function createClaudeRunner(deps: ClaudeRunDeps) {
   const spawn = deps.spawn ?? nodeSpawn
   return (prompt: string, opts: { allowedTools?: string[] } = {}): Promise<string> => new Promise((resolve, reject) => {
-    const child = spawn(deps.bin(), claudePrintArgs(opts.allowedTools), { cwd: deps.cwd(), env: deps.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'] })
+    const child = spawn(deps.bin(), claudePrintArgs([...new Set([...(deps.allow?.() ?? []), ...(opts.allowedTools ?? [])])]), { cwd: deps.cwd(), env: deps.env ?? process.env, stdio: ['pipe', 'pipe', 'pipe'] })
     let out = ''
     let err = ''
     const timer = setTimeout(() => { child.kill('SIGTERM'); reject(new Error('claude timed out')) }, deps.timeoutMs ?? ROUTINE_CLAUDE_TIMEOUT_MS)

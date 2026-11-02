@@ -310,4 +310,18 @@ describe('claude -p runner', () => {
     expect(claudePrintArgs()).not.toContain('--continue')
     expect(claudePrintArgs(['mcp__jira'])).toContain('mcp__jira')
   })
+
+  it('passes the Butler allow-list on the command line: an untrusted Butler folder is not read by claude', async () => {
+    let args: string[] = []
+    const spawn = ((_b: string, a: string[]) => {
+      args = a
+      const child = new EventEmitter() as any
+      child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.kill = () => {}
+      child.stdin = { end: () => setTimeout(() => child.emit('close', 0), 0) }
+      return child
+    }) as any
+    const run = createClaudeRunner({ bin: () => 'c', cwd: () => '/b', spawn, allow: () => ['Bash(./hive pending:*)', 'Bash(./hive agents:*)'] })
+    await run('x', { allowedTools: ['mcp__jira', 'Bash(./hive agents:*)'] })
+    expect(args[args.indexOf('--allowedTools') + 1]).toBe('Bash(./hive pending:*),Bash(./hive agents:*),mcp__jira')
+  })
 })
