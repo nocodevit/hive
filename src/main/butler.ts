@@ -10,7 +10,7 @@
 // last. Everything here takes its side effects as deps so it can be tested
 // without a real pty or a real `claude`.
 
-import { chmodSync, copyFileSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
+import { chmodSync, copyFileSync, lstatSync, mkdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, symlinkSync, unlinkSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import { claudeProjectSlug } from '../shared/claude-project-slug'
 import { composeSkills } from './butlerSkills'
@@ -136,8 +136,41 @@ export function readButlerOutput(text: string): ButlerSignal {
 /**
  * Claude Code's own trust record for a folder: `hasTrustDialogAccepted` in
  * .claude.json (in CLAUDE_CONFIG_DIR when set, else the home folder). Read
- * fresh on every prompt so a revoked trust is seen; never written by Hive.
+ * fresh on every prompt so a revoked trust is seen.
  */
+/**
+ * Record the owner's yes in Claude Code's trust record for the Butler folders.
+ * Claude reads a folder's own .claude/settings.json (the Butler allow-list) only
+ * once the folder is trusted, and answering remote-control's trust question does
+ * not record it: on a new Mac the phone Butler then refused every ./hive call.
+ * Only these folders' `hasTrustDialogAccepted` is set; a config file that is
+ * missing or unreadable is left alone; written whole via rename (Claude rewrites
+ * it often, and must never read it half-written).
+ */
+export function recordClaudeTrust(configFile: string, folders: string[]): boolean {
+  let j: any
+  try { j = JSON.parse(readFileSync(configFile, 'utf8')) } catch { return false }
+  if (!j || typeof j !== 'object') return false
+  j.projects = j.projects && typeof j.projects === 'object' ? j.projects : {}
+  let changed = false
+  for (const f of folders) {
+    let real: string
+    try { real = realpathSync(f) } catch { continue }
+    const p = j.projects[real] && typeof j.projects[real] === 'object' ? j.projects[real] : (j.projects[real] = {})
+    if (p.hasTrustDialogAccepted !== true) { p.hasTrustDialogAccepted = true; changed = true }
+  }
+  if (!changed) return true
+  const tmp = `${configFile}.hive-${process.pid}.tmp`
+  try {
+    writeFileSync(tmp, JSON.stringify(j, null, 2), { mode: 0o600 })
+    renameSync(tmp, configFile)
+    return true
+  } catch {
+    try { unlinkSync(tmp) } catch { /* not there */ }
+    return false
+  }
+}
+
 export function claudeTrustsFolder(configFile: string, cwd: string): boolean {
   try {
     const real = realpathSync(cwd)
@@ -179,6 +212,8 @@ export interface ButlerDeps {
   resourcesDir: string
   /** Claude Code still trusts the butler folder (see claudeTrustsFolder), read now. */
   claudeTrusts: () => boolean
+  /** Write the owner's yes into Claude Code's trust record for both Butler folders (see recordClaudeTrust). */
+  recordTrust?: () => void
   /** The session id remote-control recorded for the butler folder (see bridgeSessionId). */
   recordedSessionId: () => string | null
   spawn: (args: string[], cwd: string) => PtyLike
@@ -317,6 +352,8 @@ export function createButler(deps: ButlerDeps) {
     try {
       installButlerFiles(deps.resourcesDir, dir)
       linkPhoneFolder(dir, phone)
+      // Owners who said yes before the trust record was written get it now.
+      if (trusted) deps.recordTrust?.()
     } catch (e) {
       set({ status: 'error', error: `Could not write ${dir}: ${e instanceof Error ? e.message : String(e)}` })
       return
@@ -439,6 +476,7 @@ export function createButler(deps: ButlerDeps) {
       if (state.status !== 'needs_trust' || !term) return false
       trusted = true
       persist()
+      deps.recordTrust?.()
       // Forget the prompt text, or the next chunk would read as it again.
       output = ''
       term.write('y\r')
