@@ -79,3 +79,30 @@ test('Settings › Theme palette › Botanic: comfortable in both light and dark
   await launch()
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.palette)).toBe('botanic')
 })
+
+test('the garden: real flowers on the ground behind the app, never over a button; a gust blows petals across', async () => {
+  await expect(page.getByTestId('botanic-fx')).toBeAttached()
+  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.bfx-plant img')].filter(i => i.complete && i.naturalWidth > 0).length), { timeout: 5000 }).toBe(13)
+  expect(await page.evaluate(() => ['.bfx', '.bfx-ground'].map(q => getComputedStyle(document.querySelector(q)!).pointerEvents))).toEqual(['none', 'none'])
+  // The plants grow behind the app: what's under the pointer on the sidebar is the app's own button, not a flower.
+  const box = (await page.getByText('Add Project').boundingBox())!
+  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.bfx-ground') ? 'plant' : 'app', [box.x + 10, box.y + box.height / 2])
+  expect(hit).toBe('app')
+  // The bed has its own room under the sidebar buttons.
+  const below = await page.evaluate(([y]) => window.innerHeight - y, [box.y + box.height])
+  expect(below).toBeGreaterThan(150)
+
+  await page.evaluate(() => (window as any).__hiveGust())
+  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.bfx-bit').length), { timeout: 3000 }).toBeGreaterThan(3)
+  await expect.poll(() => page.evaluate(() => document.querySelector('.bfx-gust')!.getAnimations().length), { timeout: 3000 }).toBeGreaterThan(0)
+  await page.waitForTimeout(1500)
+  await page.screenshot({ path: test.info().outputPath('botanic-gust.png') })
+})
+
+test('switching away from Botanic takes the garden with it', async () => {
+  await page.getByRole('button', { name: 'App Settings' }).click()
+  const section = page.getByLabel('Palette section')
+  await section.scrollIntoViewIfNeeded()
+  await section.getByRole('button', { name: /Neon Purple/ }).click()
+  await expect(page.getByTestId('botanic-fx')).toHaveCount(0)
+})
