@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSy
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
-  butlerArgs, bridgeSessionId, claudeTrustsFolder, recordClaudeTrust, readButlerOutput, outputTail, installButlerFiles, createButler,
+  butlerArgs, bridgeSessionId, claudeTrustsFolder, recordClaudeTrust, sharePhoneMemory, readButlerOutput, outputTail, installButlerFiles, createButler,
   readButlerSettings, SETUP_VERSION, RESTART_DELAYS_MS, STABLE_AFTER_MS, type ButlerState, type PtyLike
 } from '../butler'
 
@@ -88,6 +88,40 @@ describe('claudeTrustsFolder', () => {
   })
   it('false when the config is missing or unreadable', () => {
     expect(claudeTrustsFolder(join(tmpdir(), 'no-such-dir', '.claude.json'), tmpdir())).toBe(false)
+  })
+})
+
+describe('sharePhoneMemory', () => {
+  const setupMem = () => {
+    const home = mkdtempSync(join(tmpdir(), 'hive-claude-home-'))
+    const butler = mkdtempSync(join(tmpdir(), 'hive-b-')), phone = mkdtempSync(join(tmpdir(), 'hive-p-'))
+    const mem = (f: string) => join(home, 'projects', realpathSync(f).replace(/[^a-zA-Z0-9]/g, '-'), 'memory')
+    return { home, butler, phone, desk: mem(butler), ph: mem(phone) }
+  }
+  it('the phone reads and writes the desk Butler\u2019s memory', () => {
+    const m = setupMem()
+    mkdirSync(m.desk, { recursive: true })
+    writeFileSync(join(m.desk, 'professional-tone.md'), 'no 吱一声')
+    sharePhoneMemory(m.home, m.butler, m.phone)
+    expect(readlinkSync(m.ph)).toBe(m.desk)
+    expect(readFileSync(join(m.ph, 'professional-tone.md'), 'utf8')).toBe('no 吱一声')
+    sharePhoneMemory(m.home, m.butler, m.phone)
+    expect(readlinkSync(m.ph)).toBe(m.desk)
+  })
+  it('what the phone had is moved over, nothing lost', () => {
+    const m = setupMem()
+    mkdirSync(m.desk, { recursive: true }); mkdirSync(m.ph, { recursive: true })
+    writeFileSync(join(m.desk, 'MEMORY.md'), '- [Tone](professional-tone.md)\n')
+    writeFileSync(join(m.desk, 'same.md'), 'A')
+    writeFileSync(join(m.ph, 'MEMORY.md'), '- [Tone](professional-tone.md)\n- [Phone](phone-only.md)\n')
+    writeFileSync(join(m.ph, 'phone-only.md'), 'P')
+    writeFileSync(join(m.ph, 'same.md'), 'B')
+    sharePhoneMemory(m.home, m.butler, m.phone)
+    expect(readFileSync(join(m.desk, 'MEMORY.md'), 'utf8')).toBe('- [Tone](professional-tone.md)\n- [Phone](phone-only.md)\n')
+    expect(readFileSync(join(m.desk, 'phone-only.md'), 'utf8')).toBe('P')
+    expect(readFileSync(join(m.desk, 'same.md'), 'utf8')).toBe('A')
+    expect(readFileSync(join(m.desk, 'same-phone.md'), 'utf8')).toBe('B')
+    expect(readlinkSync(m.ph)).toBe(m.desk)
   })
 })
 

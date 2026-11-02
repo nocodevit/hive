@@ -591,6 +591,7 @@ const butler = createButler({
     process.env.CLAUDE_CONFIG_DIR ? join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : join(app.getPath('home'), '.claude.json'),
     phoneDir(DATA_DIR)
   ),
+  claudeHome: process.env.CLAUDE_CONFIG_DIR || join(app.getPath('home'), '.claude'),
   recordTrust: () => { recordClaudeTrust(
     process.env.CLAUDE_CONFIG_DIR ? join(process.env.CLAUDE_CONFIG_DIR, '.claude.json') : join(app.getPath('home'), '.claude.json'),
     [butlerDir(DATA_DIR), phoneDir(DATA_DIR)]
