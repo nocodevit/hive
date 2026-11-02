@@ -10,7 +10,7 @@
 // No renderer code has to know about the specific hue values — everything
 // downstream reads through the semantic CSS vars.
 
-export const PALETTES = ['neon-purple', 'tech-blue', 'future-pink', 'halloween'] as const
+export const PALETTES = ['neon-purple', 'tech-blue', 'future-pink', 'botanic', 'halloween'] as const
 export type Palette = (typeof PALETTES)[number]
 
 // v2.9.0: Style is orthogonal to Palette. Accent = the calm shipping look
@@ -161,6 +161,12 @@ export const PALETTE_META: Record<Palette, PaletteMeta> = {
     name: 'Future Pink',
     swatch: '#ff2eaa',
     tagline: 'Neon fuchsia · vaporwave forward',
+  },
+  botanic: {
+    id: 'botanic',
+    name: '🌿 Botanic',
+    swatch: '#5f8f68',
+    tagline: 'Greenhouse sage · soft on the eyes · light & dark',
   },
   halloween: {
     id: 'halloween',

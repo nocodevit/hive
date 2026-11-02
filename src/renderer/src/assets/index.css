@@ -184,6 +184,69 @@
     --sidebar-bg: #131114;
     --sidebar-active: #2d1f2c;
   }
+  /* ---------- 🌿 Botanic — easy on the eyes ----------
+     Light: linen paper, never pure white; ink is deep moss, not black.
+     Dark: greenhouse at dusk, never pure black; text is soft parchment.
+     Sage accent, terracotta for danger; contrast stays readable but
+     nothing glares. */
+  [data-palette='botanic'][data-theme='light'] {
+    --bg-primary: #f1efe6;
+    --bg-secondary: #f8f6ee;
+    --bg-tertiary: #e7e9da;
+    --bg-hover: #dfe4d1;
+    --bg-active: #d2dcc3;
+
+    --border-default: #d4d9c6;
+    --border-subtle: #e5e7d9;
+
+    --text-primary: #263028;
+    --text-secondary: #3e5a45;
+    --text-muted: #6c7867;
+    --text-on-purple: #f8f6ee;
+
+    --accent: #4f7f5a;
+    --accent-hover: #3f6a49;
+    --accent-subtle: #e2ebd9;
+    --accent-muted: #7fa98a;
+
+    --status-working: #5a8a3c;
+    --status-waiting: #4f7f99;
+    --status-done: #8a9184;
+    --status-danger: #b85a40;
+
+    --sidebar-bg: #eae9dd;
+    --sidebar-active: #dbe4cd;
+  }
+  [data-palette='botanic'] {
+    --bg-primary: #161b17;
+    --bg-secondary: #1c221d;
+    --bg-tertiary: #232b25;
+    --bg-hover: #2b352d;
+    --bg-active: #354238;
+    --bg-terminal: #1a201b;
+
+    --border-default: #2f3a31;
+    --border-subtle: #222a24;
+
+    --text-primary: #e2e6da;
+    --text-secondary: #b6c6ad;
+    --text-muted: #86927e;
+    --text-on-purple: #142016;
+
+    --accent: #8fbf9a;
+    --accent-hover: #acd3b5;
+    --accent-subtle: #243328;
+    --accent-muted: #6a9e77;
+
+    --status-working: #9cc77a;
+    --status-waiting: #7fb0c4;
+    --status-done: #78806f;
+    --status-danger: #dc8a6c;
+
+    --sidebar-bg: #121713;
+    --sidebar-active: #26332a;
+  }
+
   /* ---------- 🎃 Halloween (limited, Oct 24 – Nov 2) ----------
      Night violet ground, witch-violet selection, pumpkin gold only on
      primary actions / badges / working dots — never on body text.
@@ -343,6 +406,32 @@ body {
   --crush-cumin: #BF976F;
   /* --chat-* are not repeated here: the :root formulas already resolve
      against the dark palette tokens. */
+}
+
+/* 🌿 Botanic: chat hues softened — no neon on the dark ground. */
+:root[data-palette='botanic'] {
+  --crush-sriracha: #b85a40;
+  --crush-salmon: #b85a40;
+}
+:root[data-palette='botanic'][data-theme='dark'] {
+  --crush-pepper: #1a201b;
+  --crush-bbq: #222a24;
+  --crush-charcoal: #2c362e;
+  --crush-oyster: #59645a;
+  --crush-squid: #86927e;
+  --crush-ash: #d6dbcd;
+  --crush-butter: #e9e6d8;
+  --crush-sriracha: #dc8a6c;
+  --crush-julep: #8fd1a6;
+  --crush-zest: #d6d08a;
+  --crush-malibu: #7fb0c4;
+  --crush-dolly: #c49bcf;
+  --crush-bok: #86c9b6;
+  --crush-violet: #b19dd8;
+  --crush-mochi: #c49bcf;
+  --crush-blush: #dba3b6;
+  --crush-guac: #7dbf92;
+  --crush-salmon: #e2998a;
 }
 
 .hive-card {
