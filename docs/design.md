@@ -152,13 +152,15 @@ Source of truth: `ui-preview-unified.html` (scheme B, approved 2026-10-09).
 - Chat follows the app theme. `CRUSH` / `CHAT` (hive-chat/crush-styles.ts) are CSS variables; light values = white card, dark values = original Crush hexes (assets/index.css).
 - Chat prose uses `FONT_PROSE` (Inter Tight); mono is only for code, commands and numbers. User turns are right-aligned bubbles; no speaker glyphs.
 - Composer = one rounded box: textarea on top, control row below (voice 中/EN, Streaming, context, Compact, ⋮, Send/Stop). Model + usage are a single muted status line under it.
-- One accent — the palette's (`--accent`: violet / sky / fuchsia). Chat
+- One accent — the palette's (`--accent`: violet / sky / fuchsia / sage). Chat
   surfaces, text and its primary accent (`--crush-charple`, `--chat-*`) are
   derived from the palette tokens, so every palette recolors the chat. Other
-  Crush hues are semantic (tool families, success, warning) and stay fixed.
+  Crush hues are semantic (tool families, success, warning) and stay fixed —
+  except 🌿 Botanic, which softens them (no neon, no pure white/black) so
+  long sessions are easy on the eyes.
 - The composer (`.hive-composer`) has a neon outline in the accent, stronger
   on focus.
-- Both styles (Accent, Prime) work with all three palettes.
+- Both styles (Accent, Prime) work with every palette.
 - Status colors only on small dots.
 
 ## Border Radius

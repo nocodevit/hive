@@ -9,7 +9,7 @@ import { PALETTES, PALETTE_META, type Palette, loadPalette, applyPalette, availa
 
 describe('palette', () => {
   it('lists the shipped palettes in the expected order (Halloween is the seasonal one)', () => {
-    expect(PALETTES).toEqual(['neon-purple', 'tech-blue', 'future-pink', 'halloween'])
+    expect(PALETTES).toEqual(['neon-purple', 'tech-blue', 'future-pink', 'botanic', 'halloween'])
   })
 
   it('has a metadata entry for every listed palette', () => {
