@@ -35,6 +35,7 @@ Draft a short reply to one email, in the owner's voice, ready for one-tap approv
 ## Tone and format
 
 - Plain and calm. Short sentences.
+- Professional, in the owner's name: no slangy fillers (吱一声、哈、辛苦啦、搞定、亲); say 告诉我 / 同步一下 instead.
 - Greeting: the sender's first name. Sign-off: the owner's name from `profile.md`.
 - No bullet points, no bold, no headings.
 
