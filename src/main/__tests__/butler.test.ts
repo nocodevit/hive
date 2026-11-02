@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { feishuAnswerArgs } from '../butlerFeishuAgentIpc'
+import { butlerAllow } from '../butlerTools'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, statSync, existsSync, realpathSync, readlinkSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
@@ -175,6 +176,17 @@ describe('answer-feishu run', () => {
     expect(off).toEqual(expect.arrayContaining(['Edit', 'Write', 'WebFetch', 'Bash(./hive send:*)', 'Bash(./hive start:*)', 'mcp__gateway__jira_add_comment']))
     // Bash as such follows the allow-list (./hive agents / tail run, anything else is refused by dontAsk).
     expect(off).not.toContain('Bash')
+    expect(a).not.toContain('--allowedTools')
+    const b = feishuAnswerArgs('hi', [], ['Bash(./hive tail:*)', 'mcp__gateway__jira_search'])
+    expect(b[b.indexOf('--allowedTools') + 1]).toBe('Bash(./hive tail:*),mcp__gateway__jira_search')
+  })
+
+  it('the allow-list is read from the Butler folder; a rule with a comma stays in the file only', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-allow-'))
+    expect(butlerAllow(dir)).toEqual([])
+    mkdirSync(join(dir, '.claude'))
+    writeFileSync(join(dir, '.claude', 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(./hive pending:*)', 'Bash(a,b)', '', 7] } }))
+    expect(butlerAllow(dir)).toEqual(['Bash(./hive pending:*)'])
   })
 })
 

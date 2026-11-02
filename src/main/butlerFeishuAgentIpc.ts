@@ -3,7 +3,7 @@
 
 import { execFile } from 'child_process'
 import { DISALLOWED_TOOLS } from './butlerClaude'
-import { discoveredWrites } from './butlerTools'
+import { butlerAllow, discoveredWrites } from './butlerTools'
 import { createRelationLookup, readPeople, setPerson } from './feishuAnswer'
 import { readJiraConfig } from './handleJira'
 import { readJiraMd } from './butlerJiraSettings'
@@ -66,8 +66,9 @@ export interface FeishuAgentIpcDeps {
 
 /** answer-feishu run: the Butler allow-list (dontAsk), minus anything that writes —
  *  the message being answered comes from someone else. */
-export function feishuAnswerArgs(prompt: string, writes: string[]): string[] {
-  return ['-p', prompt, '--output-format', 'text', '--permission-mode', 'dontAsk', '--disallowedTools', [...DISALLOWED_TOOLS, ...writes].join(',')]
+export function feishuAnswerArgs(prompt: string, writes: string[], allow: string[] = []): string[] {
+  return ['-p', prompt, '--output-format', 'text', '--permission-mode', 'dontAsk', '--disallowedTools', [...DISALLOWED_TOOLS, ...writes].join(','),
+    ...(allow.length ? ['--allowedTools', allow.join(',')] : [])]
 }
 
 const runs = new Map<string, RunScope>()
@@ -84,7 +85,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     // The run token ties `./hive chat-search` in this run to the person being answered.
     const run = randomUUID()
     if (scope) runs.set(run, scope)
-    execFile(d.claudeBin(), feishuAnswerArgs(prompt, discoveredWrites(d.butlerDir)),
+    execFile(d.claudeBin(), feishuAnswerArgs(prompt, discoveredWrites(d.butlerDir), butlerAllow(d.butlerDir)),
       { cwd: d.butlerDir, timeout: CLAUDE_TIMEOUT_MS, maxBuffer: 4 * 1024 * 1024, env: { ...process.env, HIVE_RUN_TOKEN: run } },
       (err, stdout) => { runs.delete(run); if (err && !stdout) reject(err); else resolve(String(stdout)) })
   })

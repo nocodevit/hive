@@ -11,7 +11,7 @@ import { discoverPrompt, parseDiscovery, readJiraSettings, writeJiraSettings, re
 import { butlerDayText, waitingLines } from './butlerDay'
 import { createCaseLog } from './feishuCases'
 import { jiraCaller } from './butlerJira'
-import { claudeJsonPath, jiraTools } from './butlerTools'
+import { butlerAllow, claudeJsonPath, jiraTools } from './butlerTools'
 import { homedir } from 'os'
 import { join } from 'path'
 import type { App, IpcMain, SafeStorage } from 'electron'
@@ -63,7 +63,7 @@ export function setupButlerMailRoutines(d: ButlerMailRoutinesDeps): { mode: Rout
     ? { encrypt: s => Buffer.from(s, 'utf8'), decrypt: b => b.toString('utf8') }
     : { encrypt: s => d.safeStorage.encryptString(s), decrypt: b => d.safeStorage.decryptString(b) }
 
-  const runClaude = createClaudeRunner({ bin: d.claudeBin, cwd: d.folder })
+  const runClaude = createClaudeRunner({ bin: d.claudeBin, cwd: d.folder, allow: () => butlerAllow(d.folder()) })
   const jiraConn = createJiraConnectionStore(folder, crypto)
   const jiraCall = () => butlerJiraCall(folder, claudeJsonPath(homedir()), jiraConn)?.call ?? null
   const mail = createButlerMail({

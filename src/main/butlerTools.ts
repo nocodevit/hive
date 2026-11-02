@@ -10,6 +10,18 @@ import { existsSync, readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 
 /** The owner's own additions to the Butler allow-list (<butler>/allow-list.json → {"allow": [...]}). */
+/**
+ * The Butler allow-list itself (.claude/settings.json), to pass to a run with
+ * --allowedTools. Claude reads a folder's own settings only once that folder is
+ * trusted, which on a new Mac the Butler folder is not: then every ./hive call
+ * in a routine or answer-for-me run was refused. A rule with a comma would be
+ * split by --allowedTools, so it stays in the file only.
+ */
+export function butlerAllow(butlerFolder: string): string[] {
+  const list: unknown[] = readJson(join(butlerFolder, '.claude', 'settings.json'))?.permissions?.allow ?? []
+  return Array.isArray(list) ? list.filter((x): x is string => typeof x === 'string' && x.trim().length > 0 && !x.includes(',')) : []
+}
+
 export function ownerAllow(butlerFolder: string): string[] {
   const j = readJson(join(butlerFolder, 'allow-list.json'))
   const list: unknown[] = Array.isArray(j?.allow) ? j.allow : []
