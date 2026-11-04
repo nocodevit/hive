@@ -124,6 +124,7 @@ declare global {
         setStatus: (id: string, status: 'open' | 'done' | 'dropped') => Promise<boolean>
         note: (id: string, text: string) => Promise<boolean>
         fromApproval: (id: string, note?: string) => Promise<import('../renderer/src/lib/butler-todos').TodoView | null>
+        sendBack: (id: string, note: string) => Promise<{ ok: boolean; error?: string }>
         onChange: (cb: () => void) => () => void
       }
       approvals: {

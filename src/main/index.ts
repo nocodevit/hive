@@ -681,10 +681,12 @@ const notifications = setupNotifications({
 const agentName = (id: string) => ((loadData().agents || []) as any[]).find(a => a.id === id)?.name || 'Agent'
 // What each chat waits on (also ./hive pending). Only chats with an agentId.
 const agentWatch = createAgentWatch()
+let taskTracker: TaskTracker | null = null
 chatEventBus.on('event', ({ sessionId, event }: { sessionId: string; event: unknown }) => {
   if (!sessionId.startsWith('chat-')) return
   const w = agentWatch.onEvent(agentIdFromChatId(sessionId), event)
   if (w) void notifications.emit(agentWaitEvent(w, agentName(w.agentId)))
+  void Promise.resolve(taskTracker?.onEvent(agentIdFromChatId(sessionId), event)).catch(() => {})
 })
 
 // ── Butler approval queue (approvals.ts) ──────────────────────────────
@@ -692,14 +694,16 @@ chatEventBus.on('event', ({ sessionId, event }: { sessionId: string; event: unkn
 // register an executor for their kind (approvals.register) and add items.
 const knownApprovals = new Set<string>()
 // Butler › Todo (butlerTodos.ts): every write tells the tab.
-const todosChanged = () => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send('todos:changed') }
+const todosChanged = () => { taskTracker?.invalidate(); for (const win of BrowserWindow.getAllWindows()) win.webContents.send('todos:changed') }
 const todos: TodoStore = (() => {
   const s = createTodoStore(butlerDir(DATA_DIR))
   return {
     ...s,
     add: (i: Parameters<TodoStore['add']>[0]) => { const r = s.add(i); if (r) todosChanged(); return r },
     event: (id: string, e: Parameters<TodoStore['event']>[1]) => { const r = s.event(id, e); if (r) todosChanged(); return r },
-    setStatus: (id: string, st: Parameters<TodoStore['setStatus']>[1], who?: Parameters<TodoStore['setStatus']>[2]) => { const r = s.setStatus(id, st, who); if (r) todosChanged(); return r }
+    setStatus: (id: string, st: Parameters<TodoStore['setStatus']>[1], who?: Parameters<TodoStore['setStatus']>[2]) => { const r = s.setStatus(id, st, who); if (r) todosChanged(); return r },
+    assign: (...a: Parameters<TodoStore['assign']>) => { const r = s.assign(...a); if (r) todosChanged(); return r },
+    setWork: (...a: Parameters<TodoStore['setWork']>) => { const r = s.setWork(...a); if (r) todosChanged(); return r }
   }
 })()
 let pendingIds = new Set<string>()
@@ -747,6 +751,7 @@ ipcMain.handle('approvals:reopen', (_e, id: unknown) => typeof id === 'string' &
 import { registerButlerSkillsIpc } from './butlerSkillsIpc'
 import { cardRoute } from './butlerCards'
 import { createDispatcher, runDispatch } from './butlerDispatch'
+import { createTaskTracker, type TaskTracker } from './butlerTasks'
 import { tailLines } from './fileSlices'
 registerButlerSkillsIpc({ ipcMain, previewFeishu: text => previewFeishuAnswer({ text }), butlerDir: () => butlerDir(DATA_DIR), defaultsDir: join(app.isPackaged ? process.resourcesPath : join(__dirname, '..', '..', 'resources'), 'butler', 'skills'), reveal: p => shell.showItemInFolder(p) })
 // [butler:mail-routines]
@@ -892,6 +897,15 @@ const dispatcher = createDispatcher({
   rows: () => butlerRows(), deliver: (id, text) => deliverToAgent(id, text), approvals, todos: () => todos,
   notify: (title, body) => { try { new Notification({ title, body }).show() } catch { /* none */ } }
 })
+// Work given to an agent reports back by itself (butlerTasks.ts).
+taskTracker = createTaskTracker({
+  todos: () => todos, deliver: (id, text) => deliverToAgent(id, text), approvals,
+  notify: (title, body) => { try { new Notification({ title, body }).show() } catch { /* none */ } },
+  busy: id => butlerRows().find(r => r.agentId === id)?.activity === 'working'
+})
+setInterval(() => { try { taskTracker?.sweep() } catch { /* best-effort */ } }, 10 * 60_000).unref()
+ipcMain.handle('todos:sendBack', async (_e, id: unknown, note: unknown) =>
+  typeof id === 'string' && typeof note === 'string' ? taskTracker!.sendBack(id, note) : { ok: false, error: 'bad_input' })
 ipcMain.handle('butler:retry', () => { butler.retry(); return butler.getState() })
 
 async function unclosedDetail(rec: { agentId: string; cwd: string; since: number }) {
@@ -1028,7 +1042,19 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       return reply(200, { ok: true, settings: butlerCalendar.getSettings(), days })
     }
 
-    // ./hive assign: give work to an agent — sent now when Butler is sure and the agent is free, else a card.
+    // ./hive tasks / task accept|back: what each agent was given and where it is (butlerTasks.ts).
+    if (req.method === 'GET' && url.pathname === '/tasks') return reply(200, { ok: true, tasks: taskTracker!.list() })
+    if (req.method === 'POST' && (url.pathname === '/tasks/accept' || url.pathname === '/tasks/back')) {
+      const b = await readJsonBody(req).catch(() => null)
+      const ref = typeof b?.id === 'string' ? b.id.replace(/^#/, '').trim() : ''
+      const hits = ref.length >= 4 ? taskTracker!.list().filter(t => t.id.startsWith(ref)) : []
+      if (hits.length !== 1) return reply(404, { ok: false, error: 'no_such_task' })
+      if (url.pathname === '/tasks/accept') return reply(200, { ok: todos.setStatus(hits[0].id, 'done', 'owner') })
+      const r = await taskTracker!.sendBack(hits[0].id, String(b?.note ?? ''))
+      return reply(r.ok ? 200 : 400, r)
+    }
+
+    // ./hive assign: give work to an agent — always an Assign card; the owner presses Assign.
     if (req.method === 'POST' && url.pathname === '/dispatch/assign') {
       const b = await readJsonBody(req).catch(() => null)
       const r = await dispatcher.assign({ task: String(b?.task ?? ''), agent: String(b?.agent ?? ''), project: typeof b?.project === 'string' ? b.project : undefined,

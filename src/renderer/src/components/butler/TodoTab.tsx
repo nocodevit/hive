@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useRef, useState } from 'react'
 import { DiscussButton, type OnDiscuss } from './DiscussButton'
 import { AnimatePresence, motion } from 'motion/react'
 import { offerUndo, popover, row, SMOOTH, SNAPPY } from '../../lib/motion'
-import { groupTodos, isOverdue, PRIORITIES, priMeta, priOf, SOURCE_LABEL, sortTodos, todoDiscussText, tomorrow, whenShort, type GroupBy, type Priority, type SortBy, type TodoView } from '../../lib/butler-todos'
+import { groupTodos, isOverdue, PRIORITIES, priMeta, priOf, SOURCE_LABEL, sortTodos, todoDiscussText, tomorrow, whenShort, WORK_CHIP, type GroupBy, type Priority, type SortBy, type TodoView } from '../../lib/butler-todos'
 
 const PREF = 'hive:todo-view'
 const readPref = (): { group: GroupBy; sort: SortBy } => {
@@ -69,6 +69,40 @@ function DoneBox({ checked, label, onChange }: { checked: boolean; label: string
   )
 }
 
+const SEND_ERR: Record<string, string> = { no_such_agent: 'that agent is gone', no_session: 'its chat did not open', no_such_task: 'the task is closed' }
+
+/** The agent says it is done: the owner looks, then ✓ closes it or ↺ sends it back with what is missing. */
+function CheckBar({ t }: { t: TodoView }) {
+  const [back, setBack] = useState(false)
+  const [note, setNote] = useState('')
+  const [err, setErr] = useState('')
+  const send = async () => {
+    if (!note.trim()) return
+    const r = await window.api.todos.sendBack(t.id, note.trim())
+    if (r.ok) { setBack(false); setNote(''); setErr('') } else setErr(SEND_ERR[r.error ?? ''] ?? r.error ?? 'failed')
+  }
+  return (
+    <div role="group" aria-label={`Check: ${t.title}`} className="mx-2.5 mb-2 px-2.5 py-2 rounded-lg bg-accent-subtle text-[12px] flex flex-col gap-1.5">
+      <div className="text-text-secondary"><span className="font-semibold text-accent">{t.assignee?.agent}: </span>{t.work?.text || 'Done'}</div>
+      {back ? (
+        <div className="flex gap-1.5">
+          <input autoFocus value={note} onChange={e => setNote(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') void send(); if (e.key === 'Escape') setBack(false) }}
+            placeholder="What is still missing… ↵" aria-label={`What is missing: ${t.title}`}
+            className="flex-1 min-w-0 h-7 px-2.5 rounded-lg bg-bg-secondary border border-border text-[12px] text-text-primary focus:outline-none focus:border-accent" />
+          <button onClick={() => void send()} disabled={!note.trim()} className={`${primary} disabled:opacity-50`}>Send back</button>
+          <button onClick={() => setBack(false)} className={ghost}>Cancel</button>
+        </div>
+      ) : (
+        <div className="flex gap-1.5">
+          <button onClick={() => void window.api.todos.setStatus(t.id, 'done')} aria-label={`Accept ${t.title}`} className={primary}>✓ Looks good</button>
+          <button onClick={() => setBack(true)} aria-label={`Send back ${t.title}`} className={ghost}>↺ Send back</button>
+        </div>
+      )}
+      {err && <div role="alert" className="text-status-waiting">Could not send it back: {err}</div>}
+    </div>
+  )
+}
+
 const primary = 'h-7 px-3 rounded-lg bg-accent text-text-on-purple text-[12px] font-semibold inline-flex items-center shadow-sm cursor-pointer'
 const ghost = 'h-7 px-2 rounded-lg text-[12px] text-text-secondary hover:bg-bg-hover inline-flex items-center gap-1 cursor-pointer'
 
@@ -102,9 +136,11 @@ const Item = forwardRef<HTMLDivElement, { t: TodoView; onDiscuss?: OnDiscuss; on
         {t.due && <span className={`relative flex-shrink-0 overflow-hidden font-mono text-[11px] ${isOverdue(t) ? 'text-status-waiting' : 'text-text-muted'}`} style={{ fontVariantNumeric: 'tabular-nums' }}>
           <AnimatePresence initial={false} mode="popLayout"><motion.span key={t.due} className="inline-block" initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -10, opacity: 0 }} transition={SNAPPY}>{t.due.slice(5)}</motion.span></AnimatePresence>
         </span>}
-        {/* Given to an agent (Butler dispatch): who has it. */}
+        {/* Given to an agent (Butler dispatch): who has it, and where it is (it reports back by itself). */}
         {t.assignee && <span aria-label={`Assigned to ${t.assignee.agent}`} title={`Assigned to ${t.assignee.agent}${t.assignee.project ? ` · ${t.assignee.project}` : ''}`}
           className="flex-shrink-0 max-w-[96px] truncate px-1.5 py-0.5 rounded-md bg-accent-subtle text-[11px] font-semibold text-accent">→ {t.assignee.agent}</span>}
+        {t.work && !closed && <span aria-label={`Agent status: ${WORK_CHIP[t.work.state].label}`} title={t.work.text || undefined}
+          className={`flex-shrink-0 px-1.5 py-0.5 rounded-md text-[11px] whitespace-nowrap ${WORK_CHIP[t.work.state].tone === 'you' ? 'bg-accent text-text-on-purple font-semibold' : WORK_CHIP[t.work.state].tone === 'warn' ? 'bg-status-waiting/15 text-status-waiting' : 'text-text-muted'}`}>{WORK_CHIP[t.work.state].label}</span>}
         <PriorityChip t={t} />
         {onDiscuss && <DiscussButton compact label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
         <button onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`View ${t.title}`} title="View its story"
@@ -112,6 +148,7 @@ const Item = forwardRef<HTMLDivElement, { t: TodoView; onDiscuss?: OnDiscuss; on
           <span className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>›</span>
         </button>
       </div>
+      {t.work?.state === 'check' && !closed && <CheckBar t={t} />}
       <AnimatePresence initial={false}>{open && (
         <motion.div key="story" className="border-t border-border overflow-hidden" initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={SMOOTH}>
           <ol className="mx-2.5 mt-2.5 ml-[17px] border-l border-border pl-3.5 flex flex-col gap-1.5" aria-label="History">

@@ -6,6 +6,7 @@ import { createApprovals } from '../approvals'
 import { createTodoStore } from '../butlerTodos'
 import { createDispatcher, dispatchReason, parseDecisions, runDispatch, withRequirements, DISPATCH_KIND } from '../butlerDispatch'
 import type { AgentRow } from '../butlerApi'
+import { reportLine, taskTag } from '../butlerTasks'
 
 const agent = (agentId: string, name: string, project: string, activity: AgentRow['activity'], role = 'Engineering'): AgentRow =>
   ({ agentId, agent: name, projectId: project, project, role, note: '', chatLive: activity !== 'off', activity, updatedAt: 0 })
@@ -51,8 +52,29 @@ describe('dispatch rule', () => {
     expect(s.todos.get(todo.id)!.assignee).toBeUndefined()
     // The owner edits the brief and assigns: that text goes out, the todo is linked.
     expect(await s.approvals.approve(card.id, 'Fix checkout — see DEV-1')).toEqual({ ok: true })
-    expect(s.sent).toEqual([{ agentId: 'a1', text: 'Fix checkout — see DEV-1' }])
+    // It goes out tagged with its todo, so the agent's DONE / BLOCKED lands on it.
+    expect(s.sent).toEqual([{ agentId: 'a1', text: `Fix checkout — see DEV-1\n\n${reportLine(todo.id)}` }])
     expect(s.todos.get(todo.id)!.assignee).toMatchObject({ agent: 'Ada' })
+    expect(s.todos.get(todo.id)!.work).toMatchObject({ state: 'sent' })
+  })
+
+  it('work that did not come from a todo gets one when it is sent', async () => {
+    const s = setup([agent('a1', 'Ada', 'Acme Web', 'waiting')])
+    await s.dispatcher.assign({ task: 'Write release notes for 2.41', agent: 'Ada', why: 'did the last ones', confident: true })
+    expect(s.todos.all()).toEqual([])
+    const [card] = s.approvals.pending()
+    expect(await s.approvals.approve(card.id)).toEqual({ ok: true })
+    const [t] = s.todos.all()
+    expect(t).toMatchObject({ title: 'Write release notes for 2.41', status: 'open', assignee: { agentId: 'a1' }, work: { state: 'sent' } })
+    expect(s.sent[0].text).toContain(`DONE ${taskTag(t.id)}:`)
+  })
+
+  it('cancelled: no todo is made, nothing is sent', async () => {
+    const s = setup([agent('a1', 'Ada', 'Acme Web', 'waiting')])
+    await s.dispatcher.assign({ task: 'Write release notes', agent: 'Ada', why: '', confident: true })
+    s.approvals.reject(s.approvals.pending()[0].id)
+    expect(s.todos.all()).toEqual([])
+    expect(s.sent).toEqual([])
   })
 
   it('names are exact; two with the same name need the project', async () => {

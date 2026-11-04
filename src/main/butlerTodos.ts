@@ -27,6 +27,15 @@ export interface TodoRefs {
 
 export interface TodoAssignee { agentId: string; agent: string; project: string }
 
+/** Where the agent it was given to is with it (butlerTasks.ts reads the agent's chat). */
+export type WorkState = 'sent' | 'working' | 'needs_you' | 'blocked' | 'check' | 'quiet' | 'stalled'
+export interface TodoWork { state: WorkState; at: number; text: string; nudged?: boolean }
+export const WORK_STATES: WorkState[] = ['sent', 'working', 'needs_you', 'blocked', 'check', 'quiet', 'stalled']
+const WORK_EVENT: Record<WorkState, string> = {
+  sent: 'Sent to the agent', working: 'Agent is working on it', needs_you: 'Agent is waiting for you', blocked: 'Agent is blocked',
+  check: 'Agent says done — check it', quiet: 'Agent stopped without saying done', stalled: 'No word from the agent for hours'
+}
+
 export interface TodoEvent {
   at: number
   who: TodoWho
@@ -48,6 +57,8 @@ export interface Todo {
   priority: TodoPriority
   /** The agent it was given to (Butler dispatch), if any. */
   assignee?: TodoAssignee
+  /** The assignee's progress; set once the brief went out. */
+  work?: TodoWork
   refs: TodoRefs
   status: TodoStatus
   closedAt?: number
@@ -61,6 +72,7 @@ type Line =
   | { op: 'due'; id: string; due: string; at: number; who: TodoWho }
   | { op: 'priority'; id: string; priority: TodoPriority; at: number; who: TodoWho }
   | { op: 'assign'; id: string; assignee: TodoAssignee; why: string; at: number; who: TodoWho }
+  | { op: 'work'; id: string; state: WorkState; text: string; at: number; who: TodoWho; nudged?: boolean }
 
 const SOURCES: TodoSource[] = ['chat', 'feishu', 'jira', 'email', 'agent', 'manual']
 const DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -102,6 +114,13 @@ export function createTodoStore(dir: string, now: () => number = Date.now) {
         const who = `${l.assignee.agent}${l.assignee.project ? ` (${l.assignee.project})` : ''}`
         t.events.push({ at: l.at, who: l.who, kind: 'action', text: `Assigned to ${who}${l.why ? ` — ${l.why}` : ''}` })
         t.assignee = l.assignee
+        t.work = { state: 'sent', at: l.at, text: '' }
+      } else if (l.op === 'work') {
+        const t = byId.get(l.id)
+        if (!t || !WORK_STATES.includes(l.state)) continue
+        const nudged = !!(l.nudged || (t.work?.nudged && l.state !== 'sent'))
+        t.work = { state: l.state, at: l.at, text: l.text, ...(nudged ? { nudged } : {}) }
+        if (l.state !== 'working') t.events.push({ at: l.at, who: l.who, kind: 'action', text: l.text ? `${WORK_EVENT[l.state]}: ${l.text}` : WORK_EVENT[l.state] })
       } else if (l.op === 'priority') {
         const t = byId.get(l.id)
         if (!t || !isPriority(l.priority)) continue
@@ -157,6 +176,13 @@ export function createTodoStore(dir: string, now: () => number = Date.now) {
       const t = get(id)
       if (!t || t.status !== 'open' || !assignee.agentId) return false
       write({ op: 'assign', id, assignee: { agentId: assignee.agentId, agent: clip(assignee.agent, 80), project: clip(assignee.project, 80) }, why: clip(why, 300), at: now(), who })
+      return true
+    },
+    /** The assignee's progress moved on (a report, a wait, a nudge, sent back). */
+    setWork(id: string, state: WorkState, text = '', who: TodoWho = 'agent', nudged = false): boolean {
+      const t = get(id)
+      if (!t || t.status !== 'open' || !t.assignee || !WORK_STATES.includes(state)) return false
+      write({ op: 'work', id, state, text: clip(text, 1000), at: now(), who, ...(nudged ? { nudged } : {}) })
       return true
     },
     setPriority(id: string, priority: TodoPriority, who: TodoWho = 'owner'): boolean {

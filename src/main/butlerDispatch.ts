@@ -7,13 +7,16 @@
 //     brief, and a box for the owner's own requirements; Assign sends it (an
 //     agent that is off is resumed first), Cancel drops it;
 //   no agent fits → nothing is sent; the todo says so and Butler tells the owner.
-// A todo it came from is linked to the agent and its story records each step.
+// Every assignment is a todo (one is made when the work did not come from one),
+// linked to the agent; the brief carries the task's tag and the agent reports
+// back on it by itself (butlerTasks.ts: DONE / BLOCKED → the todo, the owner).
 
 import { readFileSync, writeFileSync } from 'fs'
 import { join } from 'path'
 import type { Approval } from './approvals'
 import type { AgentRow } from './butlerApi'
 import type { TodoStore } from './butlerTodos'
+import { withReportLine } from './butlerTasks'
 
 export const DISPATCH_KIND = 'dispatch.assign'
 
@@ -57,13 +60,9 @@ export function withRequirements(brief: string, requirements: string): string {
   return requirements.trim() ? `${brief.trim()}\n\nRequirements from the owner: ${requirements.trim()}` : brief
 }
 
-/** What the agent receives: the task, why it is theirs, and how to report back. */
+/** What the agent receives: the task and why it is theirs (the task tag and how to report back go on when it is sent). */
 export function briefText(task: string, why: string): string {
-  return [
-    `[From Butler, on the owner's behalf] ${task.trim()}`,
-    why.trim() ? `Why you: ${why.trim()}` : '',
-    'When it is done (or you are stuck / need the owner), end with one line: DONE: … / BLOCKED: …'
-  ].filter(Boolean).join('\n\n')
+  return [`[From Butler, on the owner's behalf] ${task.trim()}`, why.trim() ? `Why you: ${why.trim()}` : ''].filter(Boolean).join('\n\n')
 }
 
 export function findAgent(rows: AgentRow[], agent: string, project?: string): { row?: AgentRow; candidates: AgentRow[] } {
@@ -82,14 +81,20 @@ export function createDispatcher(deps: DispatchDeps) {
     deps.todos().assign(todoId, { agentId: r.agentId, agent: r.agent, project: r.project }, why, 'butler')
   }
 
-  // The owner pressed Assign on the card: the (maybe edited) brief goes out.
+  // The owner pressed Assign on the card: the (maybe edited) brief goes out, tagged with its todo.
   deps.approvals.register(DISPATCH_KIND, async item => {
-    const p = item.payload as { agentId?: string; todoId?: string; why?: string }
+    const p = item.payload as { agentId?: string; todoId?: string; why?: string; task?: string }
     const r = deps.rows().find(x => x.agentId === p.agentId)
     if (!r) return { ok: false, error: 'no_such_agent' }
-    const sent = await deps.deliver(r.agentId, item.draft)
-    if (!sent.ok) return sent
-    linkTodo(p.todoId, r, String(p.why ?? ''))
+    let todoId = typeof p.todoId === 'string' && deps.todos().get(p.todoId)?.status === 'open' ? p.todoId : undefined
+    if (!todoId) {
+      const t = deps.todos().add({ title: String(p.task ?? item.title), source: 'chat', who: 'butler', refs: { agentId: r.agentId }, note: String(p.task ?? ''), link: `approval:${item.id}` })
+      if (!t) return { ok: false, error: 'empty_task' }
+      todoId = t.id
+    }
+    const sent = await deps.deliver(r.agentId, withReportLine(item.draft, todoId))
+    if (!sent.ok) { deps.todos().event(todoId, { who: 'butler', kind: 'note', text: `Could not reach ${label(r)}: ${sent.error ?? 'failed'}` }); return sent }
+    linkTodo(todoId, r, String(p.why ?? ''))
     return { ok: true }
   })
 

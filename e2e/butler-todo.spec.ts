@@ -141,3 +141,40 @@ test('the ? guide: system language, 中 / EN switch, Try sends the line to the C
   await expect(panel().getByRole('tab', { name: /Chat/ })).toHaveAttribute('aria-selected', 'true')
   await expect(panel().getByText('有什么在等我？').first()).toBeVisible({ timeout: 15000 })
 })
+
+test('an agent reports DONE: the todo says "check it"; send back needs a reachable agent; ✓ closes it; ./hive tasks sees it', async () => {
+  // As the store writes it: Butler gave the todo to Ada, Ada reported DONE (butlerTasks reads that from her chat).
+  const id = '7e57da7a-0000-4000-8000-000000000001'
+  const at = Date.now()
+  const lines = [
+    { op: 'create', todo: { id, title: '修 checkout 合计', createdAt: at, createdBy: 'butler', source: 'chat', refs: {}, events: [{ at, who: 'butler', kind: 'created', text: '修 checkout 合计' }] } },
+    { op: 'assign', id, assignee: { agentId: 'ada-1', agent: 'Ada', project: 'Acme' }, why: 'touched checkout', at: at + 1, who: 'butler' },
+    { op: 'work', id, state: 'check', text: 'totals fixed, 12 tests green', at: at + 2, who: 'agent' }
+  ]
+  const file = join(BUTLER, 'todos.jsonl')
+  writeFileSync(file, (existsSync(file) ? readFileSync(file, 'utf8') : '') + lines.map(l => JSON.stringify(l)).join('\n') + '\n')
+  await app.evaluate(({ BrowserWindow }) => { for (const w of BrowserWindow.getAllWindows()) w.webContents.send('todos:changed') })
+  await panel().getByRole('tab', { name: /Todo/ }).click()
+  const row = panel().getByLabel('Todo: 修 checkout 合计')
+  await expect(row.getByLabel('Agent status: check it')).toBeVisible()
+  const check = row.getByRole('group', { name: 'Check: 修 checkout 合计' })
+  await expect(check).toContainText('Ada: totals fixed, 12 tests green')
+
+  const token = readFileSync(join(HIVE_DATA_DIR, 'api-token'), 'utf8').trim()
+  const tasks = await (await fetch('http://127.0.0.1:17896/tasks', { headers: { 'X-Hive-Token': token } })).json()
+  expect(tasks.tasks).toEqual([expect.objectContaining({ tag: '#7e57da7a', agent: 'Ada', state: 'check', text: 'totals fixed, 12 tests green' })])
+
+  // Not done yet → back to Ada; this Hive has no Ada, so it says it could not, and nothing changes.
+  await check.getByRole('button', { name: 'Send back 修 checkout 合计' }).click()
+  await check.getByLabel('What is missing: 修 checkout 合计').fill('手机端还是错')
+  await check.getByRole('button', { name: 'Send back', exact: true }).click()
+  await expect(check.getByRole('alert')).toContainText('that agent is gone')
+  await expect(row.getByLabel('Agent status: check it')).toBeVisible()
+  await page.screenshot({ path: test.info().outputPath('todo-check-it.png') })
+
+  await check.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await check.getByRole('button', { name: 'Accept 修 checkout 合计' }).click()
+  await expect(panel().getByRole('group', { name: 'Completed' }).getByLabel('Todo: 修 checkout 合计')).toBeAttached()
+  const after = await (await fetch('http://127.0.0.1:17896/tasks', { headers: { 'X-Hive-Token': token } })).json()
+  expect(after.tasks[0]).toMatchObject({ tag: '#7e57da7a', state: 'closed', status: 'done' })
+})

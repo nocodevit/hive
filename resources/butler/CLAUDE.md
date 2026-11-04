@@ -87,6 +87,10 @@ discussed card), use the `dispatch` skill: pick from `./hive agents --detail`, t
 `./hive assign "<task>" --agent <name> --project <p> --why "<one line>" --confident yes|no [--todo <id>]`.
 Hive never sends it on its own: it becomes an Assign card; the owner adds requirements and presses Assign (or Cancel).
 No agent fits → `./hive nofit <todo-id> --why …` and tell the owner. Never create agents.
+Once sent, the agent reports back by itself on the task's todo (DONE → "check it" for the owner,
+BLOCKED → a card for the owner). `./hive tasks` shows every agent's task and where it is; when
+the owner says one is fine, `./hive task accept <#tag>`; when it is not, `./hive task back <#tag> "<what is missing>"`.
+Never accept a task the owner has not looked at.
 
 ## Approve cards
 
