@@ -48,6 +48,7 @@ import { availablePalettes, halloweenTakeover, botanicTakeover, type Palette, PA
 import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
 import { ManyAgentsBanner } from './components/ManyAgentsBanner'
+import { BotanicSound } from './components/BotanicSound'
 import { confirmDialog } from './components/ConfirmDialog'
 import { type VoiceEvent, useAutoSendPrefs, setAutoSendPrefs, AUTO_SEND_DELAY_MIN_MS, AUTO_SEND_DELAY_MAX_MS } from './lib/voice-autosend'
 import { CHAT } from './components/hive-chat/crush-styles'
@@ -964,6 +965,7 @@ export default function App() {
 
   const butlerButton = (
     <div className="no-drag inline-flex items-center gap-1.5 flex-shrink-0">
+      <BotanicSound />
       <QuickToggles
         setupMarks={butlerSetup.marks}
         onSetupMobile={() => setWizardAt(SETUP_STEPS.findIndex(s => s.id === 'phone'))}
