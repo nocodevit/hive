@@ -39,6 +39,28 @@ test.afterAll(async () => {
   if (dataDir) rmSync(dataDir, { recursive: true, force: true })
 })
 
+test('🍃 garden sound: plays, switches sound, sets volume, stops', async () => {
+  await expect.poll(palette).toBe('botanic')
+  const garden = page.getByRole('group', { name: 'Garden sounds' })
+  const leaf = garden.getByRole('switch', { name: 'Garden sound' })
+  await expect(leaf).toHaveAttribute('aria-checked', 'false')
+  await expect(garden.getByRole('slider')).toHaveCount(0)
+
+  await leaf.click()
+  await expect(leaf).toHaveAttribute('aria-checked', 'true')
+  await expect(garden).toHaveAttribute('data-state', 'playing', { timeout: 10000 })
+  await garden.getByRole('button', { name: 'Sound: Bamboo' }).click()
+  await expect(garden.getByRole('button', { name: 'Sound: Forest' })).toBeVisible()
+  await expect(garden).toHaveAttribute('data-state', 'playing', { timeout: 10000 })
+  await garden.getByRole('slider', { name: 'Garden sound volume' }).fill('20')
+  await page.screenshot({ path: test.info().outputPath('garden-sound.png') })
+
+  await leaf.click()
+  await expect(leaf).toHaveAttribute('aria-checked', 'false')
+  await expect(garden).toHaveAttribute('data-state', 'off')
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('hive:botanic-sound')!))).toEqual({ sound: 'forest', volume: 0.2 })
+})
+
 test('first launch puts on Botanic; another pick sticks across a restart', async () => {
   await expect.poll(palette).toBe('botanic')
   await expect(page.getByTestId('botanic-fx')).toBeAttached()
@@ -49,6 +71,7 @@ test('first launch puts on Botanic; another pick sticks across a restart', async
   await expect(section.getByRole('button', { name: /Botanic/ })).toHaveAttribute('aria-pressed', 'true')
   await section.getByRole('button', { name: /Tech Blue/ }).click()
   await expect.poll(palette).toBe('tech-blue')
+  await expect(page.getByRole('group', { name: 'Garden sounds' })).toHaveCount(0)
 
   await app.close()
   await launch()
