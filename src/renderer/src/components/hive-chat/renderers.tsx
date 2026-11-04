@@ -879,7 +879,7 @@ function LongRunningTick({ toolName }: { toolName: string }) {
 
 function ToolHeader({ name, input }: { name: string; input: Record<string, unknown> }) {
   // MCP tools arrive as `mcp__<server>__<function>`. Split for display
-  // so "mcp__gateway__eagle_cost_by_service" → `MCP · metrics_cost_by_service`.
+  // so "mcp__gateway__metrics_cost_by_service" → `MCP · metrics_cost_by_service`.
   if (name.startsWith('mcp__')) {
     const parts = name.slice(5).split('__')
     const server = parts[0] || 'mcp'

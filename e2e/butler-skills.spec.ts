@@ -38,7 +38,7 @@ test.beforeAll(async () => {
   writeFileSync(FAKE, FAKE_SCRIPT)
   chmodSync(FAKE, 0o755)
   writeFileSync(PROPOSAL, readFileSync(SHIPPED, 'utf8').replace('- Plain text; no headings, no tables.', '- Casual, no 您好.'))
-  // The owner rewrote handle-jira against v1; this Hive ships v2.
+  // The owner rewrote handle-jira against v1; this Hive ships v3.
   const jira = readFileSync(join(PROJECT_ROOT, 'resources', 'butler', 'skills', 'handle-jira.md'), 'utf8')
   mkdirSync(join(BUTLER_DIR, 'skills'), { recursive: true })
   writeFileSync(join(BUTLER_DIR, 'skills', 'handle-jira.md'), jira.replace('one ask per comment.', 'one ask per comment. Always in English.'))
@@ -126,14 +126,14 @@ test('a reference skill (Jira knowledge) has no tone form; its markdown is open 
 test('a skill the owner rewrote gets an update: what changed, then Overwrite / Keep mine / Merge, or save the new one beside it', async () => {
   await page.getByRole('option', { name: /Handle Jira/ }).click()
   const upd = page.getByRole('group', { name: 'Skill update' })
-  await expect(upd).toContainText('v1 → v2')
+  await expect(upd).toContainText('v1 → v3')
   await expect(upd.getByLabel('What changed')).toContainText('sprint running now')
   await expect(upd.getByRole('button', { name: 'Overwrite with new' })).toBeVisible()
   await expect(upd.getByRole('button', { name: 'Keep mine' })).toBeVisible()
   await expect(upd.getByRole('button', { name: 'Merge' })).toBeVisible()
   await upd.getByRole('button', { name: 'Save new as a copy' }).click()
-  await expect(page.getByText(/New version saved at .*handle-jira\.new-v2\.md · yours is still in use/)).toBeVisible()
+  await expect(page.getByText(/New version saved at .*handle-jira\.new-v3\.md · yours is still in use/)).toBeVisible()
   await expect(upd).toHaveCount(0)
   expect(readFileSync(join(BUTLER_DIR, 'skills', 'handle-jira.md'), 'utf8')).toContain('Always in English.')
-  expect(existsSync(join(BUTLER_DIR, 'skills', 'handle-jira.new-v2.md'))).toBe(true)
+  expect(existsSync(join(BUTLER_DIR, 'skills', 'handle-jira.new-v3.md'))).toBe(true)
 })

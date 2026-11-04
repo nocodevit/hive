@@ -223,7 +223,7 @@ describe('installButlerFiles', () => {
     writeFileSync(join(dest, 'tools-cache.json'), JSON.stringify({ at: 1, servers: { gateway: ['jira_search', 'jira_get_transitions', 'jira_add_comment', 'jira_delete_issue', 'feishu_write_markdown', 'metrics_list_assets'] } }))
     installButlerFiles(RESOURCES, dest)
     const allow: string[] = JSON.parse(readFileSync(join(dest, '.claude', 'settings.json'), 'utf8')).permissions.allow
-    expect(allow.filter(t => t.startsWith('mcp__'))).toEqual(['mcp__gateway__jira_search', 'mcp__gateway__jira_get_transitions', 'mcp__gateway__eagle_list_assets', 'mcp__gateway__jira_add_comment'])
+    expect(allow.filter(t => t.startsWith('mcp__'))).toEqual(['mcp__gateway__jira_search', 'mcp__gateway__jira_get_transitions', 'mcp__gateway__metrics_list_assets', 'mcp__gateway__jira_add_comment'])
   })
 })
 

@@ -43,6 +43,14 @@
         "Professional tone in the owner's name: no slangy fillers like 吱一声 / 哈 / 辛苦啦"
       ],
       "hash": "6b2fa85f41cfc8b7"
+    },
+    {
+      "version": 7,
+      "date": "2026-11-04",
+      "changes": [
+        "Neutral example names in the samples"
+      ],
+      "hash": "e4ac707b511b8baa"
     }
   ],
   "dispatch": [
@@ -71,6 +79,14 @@
         "First version"
       ],
       "hash": "3e1659bd09e84ca6"
+    },
+    {
+      "version": 2,
+      "date": "2026-11-04",
+      "changes": [
+        "Neutral example names in the samples"
+      ],
+      "hash": "028f569368f175ac"
     }
   ],
   "handle-jira": [
@@ -88,6 +104,14 @@
         "Engineering follow-up (no task / PR, engineering done, no fixVersion) only for product issues in the sprint running now — not the backlog, past or future sprints"
       ],
       "hash": "9bd92a889a3d6486"
+    },
+    {
+      "version": 3,
+      "date": "2026-11-04",
+      "changes": [
+        "Neutral example names in the samples"
+      ],
+      "hash": "a319f5f4e5627aca"
     }
   ],
   "jira-knowledge": [
@@ -115,6 +139,14 @@
         "First version"
       ],
       "hash": "319095de2aa19965"
+    },
+    {
+      "version": 2,
+      "date": "2026-11-04",
+      "changes": [
+        "Neutral example names in the samples"
+      ],
+      "hash": "01ede89145400ffd"
     }
   ],
   "reply-email": [
@@ -133,6 +165,14 @@
         "Professional tone in the owner's name: no slangy fillers like 吱一声 / 哈 / 辛苦啦"
       ],
       "hash": "72deffc3f918a44e"
+    },
+    {
+      "version": 3,
+      "date": "2026-11-04",
+      "changes": [
+        "Neutral example names in the samples"
+      ],
+      "hash": "60ee872850b8bb1e"
     }
   ],
   "sort-inbox": [
