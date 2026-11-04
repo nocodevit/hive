@@ -7,6 +7,14 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.3] — 2026-11-04
+
+##### 🌿 Botanic
+- **🍃 Garden sounds.** In the Botanic theme, a leaf next to the Butler button plays a calm loop while you work: **Bamboo** (wind in a bamboo grove) or **Forest** (birds and leaves). Tap the leaf to play or stop, tap the name to switch, slide to set the volume.
+- It never starts by itself: Hive remembers your sound and volume, but stays quiet until you tap the leaf.
+
+---
+
 ## [2.42.2] — 2026-11-04
 
 ##### 🌿 Botanic
