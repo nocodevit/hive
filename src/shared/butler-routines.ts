@@ -35,7 +35,7 @@ export const ROUTINE_DESC: Record<RoutineId, string> = {
   'sort-inbox': 'Sorts new mail, drafts replies → Approve',
   'jira-check': 'Closes, nudges and lists your tickets → Today, Approve',
   'evening-report': 'What agents and Butler did, @mentions of you → Today',
-  dispatch: 'Gives open todos to the agent that fits (sure + free: sent; else asks you) → Todo, Approve'
+  dispatch: 'Suggests an agent for open todos (an Assign card for your OK); agents report back on the todo → Todo, Approve'
 }
 
 /** The skill that decides how each routine works (Settings → Skills). */

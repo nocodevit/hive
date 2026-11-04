@@ -7,6 +7,16 @@ export interface TodoView {
   due?: string; refs: { approvalId?: string; chatId?: string; messageId?: string; jiraKey?: string; mailKey?: string; agentId?: string }
   status: 'open' | 'done' | 'dropped'; closedAt?: number; events: TodoEventView[]; priority?: Priority
   assignee?: { agentId: string; agent: string; project: string }
+  /** Where the agent is with it (it reports back by itself). */
+  work?: { state: WorkState; at: number; text: string }
+}
+
+export type WorkState = 'sent' | 'working' | 'needs_you' | 'blocked' | 'check' | 'quiet' | 'stalled'
+/** The chip on an assigned todo: one or two words, colored by who has to act. */
+export const WORK_CHIP: Record<WorkState, { label: string; tone: 'agent' | 'you' | 'warn' }> = {
+  sent: { label: 'sent', tone: 'agent' }, working: { label: 'working', tone: 'agent' }, quiet: { label: 'no report', tone: 'warn' },
+  needs_you: { label: 'needs you', tone: 'you' }, blocked: { label: 'blocked', tone: 'you' }, check: { label: 'check it', tone: 'you' },
+  stalled: { label: 'gone quiet', tone: 'warn' }
 }
 
 export type Priority = 1 | 2 | 3

@@ -23,6 +23,7 @@ Work reaches the agent best placed to do it, with a clear brief, without the own
 - **Confident yes** — one agent clearly fits on project and role, or the owner named it. **No** — two or more fit about equally, the project is unclear, or the text is thin.
 - Then `./hive assign "<task>" --agent <name> --project <project> --why "<one line>" --confident yes|no [--todo <id>] [--alt <runner-up>]`. Hive puts an Assign card in Approve; the owner adds requirements and sends it, or cancels.
 - No agent fits → `./hive nofit <todo-id> --why "<what kind of agent it needs>"`. Never create an agent.
+- After it is sent, do not chase the agent yourself: it reports back on the todo (DONE / BLOCKED). `./hive tasks` shows where each one is.
 
 ## Ask me first
 

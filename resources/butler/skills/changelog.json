@@ -53,6 +53,14 @@
         "First version"
       ],
       "hash": "6d4fda3dd0459274"
+    },
+    {
+      "version": 2,
+      "date": "2026-11-04",
+      "changes": [
+        "Once sent, agents report back on the todo by themselves (DONE / BLOCKED); ./hive tasks shows where each one is"
+      ],
+      "hash": "42ee7708db3a3d8e"
     }
   ],
   "evening-report": [

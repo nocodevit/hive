@@ -320,6 +320,7 @@ const api = {
     setDue: (ids: string[], due: string) => ipcRenderer.invoke('todos:setDue', ids, due) as Promise<number>,
     setPriority: (ids: string[], p: 1 | 2 | 3) => ipcRenderer.invoke('todos:setPriority', ids, p) as Promise<number>,
     fromApproval: (id: string, note?: string) => ipcRenderer.invoke('todos:fromApproval', id, note),
+    sendBack: (id: string, note: string) => ipcRenderer.invoke('todos:sendBack', id, note) as Promise<{ ok: boolean; error?: string }>,
     onChange: (cb: () => void) => {
       const handler = () => cb()
       ipcRenderer.on('todos:changed', handler)

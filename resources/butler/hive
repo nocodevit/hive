@@ -107,6 +107,8 @@ def main():
     a = sub.add_parser('agents'); a.add_argument('--project'); a.add_argument('--detail', action='store_true')
     asg = sub.add_parser('assign'); asg.add_argument('task', nargs='+'); asg.add_argument('--agent', required=True); asg.add_argument('--project')
     asg.add_argument('--why', default=''); asg.add_argument('--confident', choices=['yes', 'no'], default='no'); asg.add_argument('--todo'); asg.add_argument('--alt', action='append', default=[])
+    sub.add_parser('tasks')
+    tk = sub.add_parser('task'); tk.add_argument('what', choices=['accept', 'back']); tk.add_argument('id'); tk.add_argument('note', nargs='*')
     nf = sub.add_parser('nofit'); nf.add_argument('todo'); nf.add_argument('--why', default='')
     sub.add_parser('pending')
     cs = sub.add_parser('cards'); cs.add_argument('--all', action='store_true')
@@ -141,6 +143,26 @@ def main():
                                     'send_failed': f"Could not reach the agent: {data.get('detail', '')}"}.get(data.get('error'), data.get('error', ''))})
         a = data['agent']
         print(f"ASKED THE OWNER: Assign card in Approve → {a['project']} / {a['agent']}. Nothing is sent until the owner presses Assign (they can add requirements). Tell them in one line.")
+        return
+
+    if args.cmd == 'tasks':
+        status, data = call('GET', '/tasks')
+        if status != 200: fail(status, data)
+        rows = data['tasks']
+        if not rows: print('No tasks with agents.'); return
+        say = {'sent': 'sent', 'working': 'working', 'needs_you': 'WAITING FOR THE OWNER', 'blocked': 'BLOCKED', 'check': 'SAYS DONE — owner to check',
+               'quiet': 'stopped without a report', 'stalled': 'no word for hours', 'closed': 'closed'}
+        for x in rows:
+            print(f"{x['tag']}  {x['agent']} ({x['project'] or '—'}) · {say.get(x['state'], x['state'])} · {x['title']}" + (f"\n      {x['text']}" if x['text'] else ''))
+        return
+
+    if args.cmd == 'task':
+        note = ' '.join(args.note).strip()
+        if args.what == 'back' and not note: sys.exit('Say what is still missing: ./hive task back <#tag> "…"')
+        status, data = call('POST', f"/tasks/{args.what}", {'id': args.id, 'note': note}, timeout=120)
+        if status != 200 or not data.get('ok'):
+            fail(status, {'error': {'no_such_task': 'No such task (see ./hive tasks).'}.get(data.get('error'), data.get('error', ''))})
+        print('Closed: the owner accepted it.' if args.what == 'accept' else 'Sent back to the agent with what is missing.')
         return
 
     if args.cmd == 'nofit':
