@@ -47,7 +47,7 @@ import { BotanicFX } from './components/BotanicFX'
 import { availablePalettes, halloweenTakeover, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
 import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
-import { pickLRUToEvict } from './lru-terminals'
+import { ManyAgentsBanner } from './components/ManyAgentsBanner'
 import { confirmDialog } from './components/ConfirmDialog'
 import { type VoiceEvent, useAutoSendPrefs, setAutoSendPrefs, AUTO_SEND_DELAY_MIN_MS, AUTO_SEND_DELAY_MAX_MS } from './lib/voice-autosend'
 import { CHAT } from './components/hive-chat/crush-styles'
@@ -163,14 +163,6 @@ export default function App() {
     const t = setInterval(load, 10_000)
     return () => { alive = false; clearInterval(t) }
   }, [])
-  // v2.15.7: last-touched timestamp per agent (Map in a ref instead of
-  // useState so bumping doesn't churn re-renders). Read by pickLRUToEvict
-  // when the set hits MAX_ACTIVE_TERMINALS to choose which sticky
-  // HiveChat to unmount for memory reclamation.
-  const lastAccessedAtRef = useRef<Map<string, number>>(new Map())
-  useEffect(() => {
-    if (selectedAgentId) lastAccessedAtRef.current.set(selectedAgentId, Date.now())
-  }, [selectedAgentId])
   // v2.1.0: agent IDs currently running a Handoff. Drives the 🥴 sticker
   // overlay on AvatarPreview. Refreshed from handoff:progress/done events +
   // a 4s poll fallback (handles cases where events were missed during a
@@ -889,30 +881,8 @@ export default function App() {
       setAgentNames((prev) => ({ ...prev, [agent.id]: result.agentName! }))
     }
 
-    // v2.15.7: LRU eviction. Before adding another sticky-mounted
-    // HiveChat + xterm to the process, see if we're at the cap and
-    // if so evict the oldest un-pinned one. See lru-terminals.ts for
-    // the picker + why (2.2 GB / 2 day report).
-    setActiveTerminals((prev) => {
-      const evict = pickLRUToEvict({
-        incomingId: agent.id,
-        activeIds: prev,
-        selectedId: selectedAgentId,
-        pinnedIds: activeHandoffAgentIds,
-        lastAccessed: lastAccessedAtRef.current
-      })
-      const next = new Set(prev)
-      if (evict) {
-        // Same teardown path as user-clicked close: kill the child +
-        // remove from set. Renderer unmounts the Terminal/HiveChat →
-        // useEffect cleanups fire → memory reclaimed.
-        try { window.api.chat.stop(`chat-${evict}`) } catch { /* silent */ }
-        next.delete(evict)
-      }
-      next.add(agent.id)
-      return next
-    })
-    lastAccessedAtRef.current.set(agent.id, Date.now())
+    // Never close another agent to make room (owner, 11-04): past 12 open, a banner says so.
+    setActiveTerminals((prev) => new Set(prev).add(agent.id))
     setSelectedAgentId(agent.id)
     setMainView('terminal')
   }
@@ -3205,7 +3175,10 @@ export default function App() {
       {/* [butler:wake] forward toast */}
       <WakeToast onOpenButler={() => setButlerOpen(true)} />
 
-      <FeishuExpiredBanner />
+      <div className="no-drag fixed z-[60] top-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none [&>*]:pointer-events-auto">
+        <ManyAgentsBanner open={activeTerminals.size} />
+        <FeishuExpiredBanner />
+      </div>
 
       {butlerOffer && unclosedAgents.length === 0 && (
         <ButlerOfferCard
