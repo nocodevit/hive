@@ -7,6 +7,18 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.0] — 2026-11-04
+
+##### 📱 Butler
+- **Agents report back on their own.** When Butler gives an agent a task, the agent ends with DONE or BLOCKED and the todo updates by itself:
+  - **DONE** → the todo says **check it**, with what the agent did. ✓ Looks good closes it; ↺ Send back returns it to the same agent with what's missing.
+  - **BLOCKED** → a card in Approve; your answer goes straight back to the agent.
+  - The agent asks you something → **needs you**. No word for 4 hours → **gone quiet**, and you're told (Telegram too when you're away).
+- **Every assignment is a todo**, so the Todo tab shows what each agent is doing.
+- Phone Butler: `./hive tasks` lists every agent's task and status; `./hive task accept` / `./hive task back` do the same as the buttons.
+
+---
+
 ## [2.41.0] — 2026-11-04
 
 ##### 🌿 Botanic theme
