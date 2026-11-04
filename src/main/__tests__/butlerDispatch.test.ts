@@ -69,6 +69,29 @@ describe('dispatch rule', () => {
     expect(s.sent[0].text).toContain(`DONE ${taskTag(t.id)}:`)
   })
 
+  it('delivery failed, then retried: the same todo, not a second one', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'hive-dispatch-'))
+    let t = 1000, fail = true
+    const approvals = createApprovals({ dir, now: () => (t += 1000) })
+    const todos = createTodoStore(dir, () => (t += 1000))
+    const d = createDispatcher({ rows: () => [agent('a1', 'Ada', 'Acme Web', 'off')], deliver: async () => (fail ? { ok: false, error: 'no_session' } : { ok: true }), approvals, todos: () => todos })
+    await d.assign({ task: 'Write release notes', agent: 'Ada', why: '', confident: true })
+    const [card] = approvals.pending()
+    expect(await approvals.approve(card.id)).toEqual({ ok: false, error: 'no_session' })
+    approvals.retry(card.id)
+    fail = false
+    expect(await approvals.approve(card.id)).toEqual({ ok: true })
+    expect(todos.all()).toHaveLength(1)
+    expect(todos.all()[0]).toMatchObject({ assignee: { agentId: 'a1' }, work: { state: 'sent' } })
+  })
+
+  it('an old assigned todo (before tasks reported back) is not tracked', () => {
+    const s = setup([])
+    const old = s.todos.add({ title: 'old' })!
+    s.todos.assign(old.id, { agentId: 'a1', agent: 'Ada', project: 'x' })
+    expect(s.todos.get(old.id)!.work).toBeUndefined()
+  })
+
   it('cancelled: no todo is made, nothing is sent', async () => {
     const s = setup([agent('a1', 'Ada', 'Acme Web', 'waiting')])
     await s.dispatcher.assign({ task: 'Write release notes', agent: 'Ada', why: '', confident: true })

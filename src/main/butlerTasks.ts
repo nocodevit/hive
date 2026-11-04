@@ -49,8 +49,11 @@ export interface TaskTrackerDeps {
   approvals: {
     add: (i: Pick<Approval, 'kind' | 'title' | 'subtitle' | 'draft' | 'payload' | 'action'>) => Approval
     register: (kind: string, exec: (item: Approval) => Promise<{ ok: boolean; error?: string }>) => void
+    pending: () => Approval[]
+    reject: (id: string, by?: 'owner' | 'butler', why?: string) => boolean
   }
-  notify: (title: string, body: string) => void
+  /** 'check' = the owner has to look (says done); 'stuck' = no word for hours. */
+  notify: (kind: 'check' | 'stuck', title: string, body: string, agentId: string) => void
   /** Is the agent generating right now (a long turn is not a stall)? */
   busy?: (agentId: string) => boolean
   now?: () => number
@@ -59,6 +62,9 @@ export interface TaskTrackerDeps {
 export function createTaskTracker(deps: TaskTrackerDeps) {
   const now = deps.now ?? Date.now
   const turnText = new Map<string, string>()
+  /** Agents whose current turn is working on a task message (the brief, an answer, a send-back): only those are asked where it is. */
+  const taskTurn = new Set<string>()
+  const TURN_KEEP = 20_000
 
   // Every assistant event of every chat lands here: the todo file is read at most every few seconds.
   let cache: { at: number; open: Todo[] } | null = null
@@ -87,19 +93,31 @@ export function createTaskTracker(deps: TaskTrackerDeps) {
     const p = item.payload as { todoId?: string; agentId?: string }
     if (typeof p.todoId !== 'string' || typeof p.agentId !== 'string') return { ok: false, error: 'bad_payload' }
     if (!item.draft.trim()) return { ok: false, error: 'empty_draft' }
+    if (deps.todos().get(p.todoId)?.status !== 'open') return { ok: false, error: 'task_closed' }
     const r = await deps.deliver(p.agentId, `[From the owner] ${withReportLine(item.draft, p.todoId)}`)
     if (r.ok) setWork(p.todoId, 'sent', `Your answer: ${clip(item.draft, 200)}`, 'owner')
     return r
   })
 
-  async function onTurnEnd(agentId: string, text: string) {
+  /** A BLOCKED card for a task that moved on (done, closed) is withdrawn: answering it would send an old answer. */
+  function closeBlockedCards(todoId: string | null, why: string) {
+    for (const a of deps.approvals.pending()) {
+      if (a.kind !== BLOCKED_KIND) continue
+      const id = String(a.payload.todoId ?? '')
+      if (todoId ? id === todoId : deps.todos().get(id)?.status !== 'open') deps.approvals.reject(a.id, 'butler', why)
+    }
+  }
+
+  async function onTurnEnd(agentId: string, text: string, onTask: boolean) {
     const report = parseReport(text)
     const t = target(agentId, report?.tag)
     if (!t) return
     const s = deps.todos()
     if (report?.kind === 'done') {
+      if (t.work?.state === 'check' && t.work.text === clip(report.text, 1000)) return
       setWork(t.id, 'check', report.text)
-      deps.notify(`${label(t)} says done — check it`, `${clip(t.title, 60)} · ${clip(report.text, 80)}`)
+      closeBlockedCards(t.id, 'the agent reported done')
+      deps.notify('check', `${label(t)} says done — check it`, `${clip(t.title, 60)} · ${clip(report.text, 80)}`, agentId)
       return
     }
     if (report?.kind === 'blocked') {
@@ -116,8 +134,8 @@ export function createTaskTracker(deps: TaskTrackerDeps) {
       s.event(t.id, { who: 'butler', kind: 'action', text: 'Asked you on a card', link: `approval:${card.id}` })
       return
     }
-    // No report: once per task, ask where it is.
-    if (t.work?.state === 'needs_you' || t.work?.state === 'blocked') return
+    // No report after working on the task: once per task, ask where it is. The owner's own chats with the agent are left alone.
+    if (!onTask || t.work?.state === 'needs_you' || t.work?.state === 'blocked' || t.work?.state === 'check') return
     if (t.work?.nudged) { setWork(t.id, 'quiet', clip(text, 300)); return }
     setWork(t.id, 'quiet', clip(text, 300), 'agent', true)
     await deps.deliver(agentId, `[From Butler] Where is task ${taskTag(t.id)} (${clip(t.title, 80)})? ${reportLine(t.id)}`)
@@ -129,11 +147,15 @@ export function createTaskTracker(deps: TaskTrackerDeps) {
     /** Feed one stream-json event of an agent chat. */
     onEvent(agentId: string, ev: any): Promise<void> | void {
       const type = ev?.type
+      if (type === 'system' && ev.subtype === 'init') { turnText.delete(agentId); taskTurn.delete(agentId); return }
       if (type === 'assistant' && !ev.parent_tool_use_id) {
         const blocks = Array.isArray(ev.message?.content) ? ev.message.content : []
         const text = blocks.filter((b: any) => b?.type === 'text' && b.text).map((b: any) => String(b.text)).join('\n')
-        if (text) turnText.set(agentId, `${turnText.get(agentId) ?? ''}\n${text}`)
-        for (const t of active(agentId)) if (t.work!.state === 'sent' || t.work!.state === 'needs_you' || t.work!.state === 'stalled') setWork(t.id, 'working')
+        if (text) turnText.set(agentId, `${turnText.get(agentId) ?? ''}\n${text}`.slice(-TURN_KEEP))
+        for (const t of active(agentId)) {
+          if (t.work!.state === 'sent') taskTurn.add(agentId)
+          if (t.work!.state === 'sent' || t.work!.state === 'needs_you' || t.work!.state === 'stalled') setWork(t.id, 'working')
+        }
         return
       }
       if (type === 'control_request' && ev.request?.subtype === 'can_use_tool') {
@@ -144,7 +166,8 @@ export function createTaskTracker(deps: TaskTrackerDeps) {
       if (type === 'result') {
         const text = typeof ev.result === 'string' && ev.result.trim() ? ev.result : turnText.get(agentId) ?? ''
         turnText.delete(agentId)
-        return onTurnEnd(agentId, text)
+        const onTask = taskTurn.delete(agentId)
+        return onTurnEnd(agentId, text, onTask)
       }
     },
 
@@ -155,8 +178,9 @@ export function createTaskTracker(deps: TaskTrackerDeps) {
       for (const t of s.all()) {
         if (t.status !== 'open' || !t.assignee || !t.work || !['sent', 'working', 'quiet'].includes(t.work.state)) continue
         if (now() - t.work.at < STALL_MS || deps.busy?.(t.assignee.agentId)) continue
-        if (setWork(t.id, 'stalled', '', 'butler')) { n++; deps.notify(`${label(t)} has gone quiet`, clip(t.title, 80)) }
+        if (setWork(t.id, 'stalled', '', 'butler')) { n++; deps.notify('stuck', `${label(t)} has gone quiet`, clip(t.title, 80), t.assignee.agentId) }
       }
+      closeBlockedCards(null, 'the task was closed')
       return n
     },
 
