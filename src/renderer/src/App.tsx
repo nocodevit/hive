@@ -44,7 +44,7 @@ import { NUDGE_MESSAGE, nudgeTargets } from './nudge'
 import { projectListState } from './projectListState'
 import { HalloweenFX } from './components/HalloweenFX'
 import { BotanicFX } from './components/BotanicFX'
-import { availablePalettes, halloweenTakeover, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
+import { availablePalettes, halloweenTakeover, botanicTakeover, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
 import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
 import { ManyAgentsBanner } from './components/ManyAgentsBanner'
@@ -90,10 +90,11 @@ export default function App() {
   // v2.6.0: accent-palette overlay. Layered on top of light/dark theme.
   // 'neon-purple' = default (no data-palette attribute), matches historic look.
   // 🎃 In season, the first launch of this version puts on the Halloween skin (once);
-  // Settings › Theme palette switches back to anything.
+  // 🌿 out of season, Botanic (once). Settings › Theme palette switches back to anything.
   const [palette, setPalette] = useState<Palette>(() => {
     const p = loadPalette()
-    return window.api?.seasonal?.halloween ? halloweenTakeover(p) : p
+    const h = window.api?.seasonal?.halloween ? halloweenTakeover(p) : p
+    return window.api?.seasonal?.botanic ? botanicTakeover(h) : h
   })
   // v2.9.0: visual STYLE (accent | prime), orthogonal to palette.
   // Prime is a full CRT/HUD language swap; accent = shipping look.

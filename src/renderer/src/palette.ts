@@ -95,6 +95,19 @@ export function halloweenTakeover(current: Palette, now = new Date()): Palette {
   return 'halloween'
 }
 
+// ── 🌿 Botanic: put on once for everyone (owner, 11-04) ──────────────
+const BOTANIC_KEY = 'hive:botanic-takeover'
+
+/**
+ * The first launch of this version switches to Botanic, once. After that the
+ * owner's choice stands. Waits while Halloween is in season.
+ */
+export function botanicTakeover(current: Palette, now = new Date()): Palette {
+  if (isHalloweenSeason(now) || localStorage.getItem(BOTANIC_KEY)) return current
+  localStorage.setItem(BOTANIC_KEY, '1')
+  return 'botanic'
+}
+
 /// Persist + apply a palette to the DOM. Removing the attribute for the
 /// default palette lets base CSS variables win (no override layer needed).
 export function applyPalette(p: Palette): void {
