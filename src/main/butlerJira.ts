@@ -1,6 +1,6 @@
 // Jira writes Butler makes for the owner — only ever after the owner approved a
 // card (or, in handle-jira, the one clear-cut case). Hive calls the owner's own
-// Jira MCP server (e.g. a Jira MCP server) itself, with the owner's own credentials from
+// Jira MCP server itself, with the owner's own credentials from
 // ~/.claude.json: the model never holds a write tool for this.
 
 import { createMcpClient, type HttpServer } from './mcpHttp'

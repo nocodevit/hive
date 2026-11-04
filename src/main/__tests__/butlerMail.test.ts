@@ -93,7 +93,7 @@ describe('mail accounts', () => {
   it('refuses a new account without a password and a duplicate address', () => {
     const t = setup()
     expect(t.m.save({ address: 'x@corp.com', preset: 'exmail' })).toEqual({ ok: false, error: 'no_password' })
-    expect(t.m.save({ address: 'MEI@corp.com', preset: 'exmail', password: 'p', consent: true })).toEqual({ ok: false, error: 'already_added' })
+    expect(t.m.save({ address: 'ALEX@corp.com', preset: 'exmail', password: 'p', consent: true })).toEqual({ ok: false, error: 'already_added' })
   })
   it('a new account needs consent; it is stored with the time', () => {
     const t = setup()

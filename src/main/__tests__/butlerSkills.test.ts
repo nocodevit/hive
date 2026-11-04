@@ -40,7 +40,7 @@ describe('shipped defaults', () => {
     const md = def('jira-knowledge')
     expect(parseSkill(md).kind).toBe('reference')
     expect(lintSkill('jira-knowledge', md, md)).toEqual([])
-    expect(md).not.toMatch(/Acme|@[a-z]+\.[a-z]+|DEV-\d|FAE-\d/i)
+    expect(md).not.toMatch(/@[a-z]+\.[a-z]+|\b[A-Z][A-Z0-9]+-\d+\b/)
   })
   it('a reference override keeps its kind and starts with Purpose; its other sections are free', () => {
     const md = def('jira-knowledge')

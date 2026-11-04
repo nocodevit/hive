@@ -66,18 +66,18 @@ describe('lastUserText', () => {
 
 describe('buildUnclosedRows', () => {
   const data = {
-    projects: [{ id: 'p1', name: 'Acme App' }, { id: 'p2', name: 'Alpha' }],
+    projects: [{ id: 'p1', name: 'Beta App' }, { id: 'p2', name: 'Alpha' }],
     agents: [{ id: 'a1', name: 'Wendy', projectId: 'p1' }, { id: 'a2', name: 'Missy', projectId: 'p1' }, { id: 'a3', name: 'Zed', projectId: 'p2' }]
   }
   const open: OpenChat[] = [{ agentId: 'a1', cwd: '/w', since: 1 }, { agentId: 'a2', cwd: '/m', since: 2 }, { agentId: 'a3', cwd: '/z', since: 3 }, { agentId: 'gone', cwd: '/g', since: 4 }]
   const detail = (rec: OpenChat) => ({ lastTask: `task of ${rec.agentId}`, lastActiveMs: rec.since, contextSize: '1M', peakInputTokens: 1000, hasSession: true })
 
   it('lists recorded chats with project and agent names, sorted by project then agent', () => {
-    expect(buildUnclosedRows(data, open, [], detail).map(r => `${r.project}/${r.agent}`)).toEqual(['Alpha/Zed', 'Acme App/Missy', 'Acme App/Wendy'])
+    expect(buildUnclosedRows(data, open, [], detail).map(r => `${r.project}/${r.agent}`)).toEqual(['Alpha/Zed', 'Beta App/Missy', 'Beta App/Wendy'])
   })
   it('carries the detail fields through', () => {
     expect(buildUnclosedRows(data, [open[0]], [], detail)[0]).toEqual({
-      agentId: 'a1', agent: 'Wendy', project: 'Acme App', lastTask: 'task of a1', lastActiveMs: 1, contextSize: '1M', peakInputTokens: 1000, hasSession: true
+      agentId: 'a1', agent: 'Wendy', project: 'Beta App', lastTask: 'task of a1', lastActiveMs: 1, contextSize: '1M', peakInputTokens: 1000, hasSession: true
     })
   })
   it('skips agents that were deleted and chats that are already running again', () => {
