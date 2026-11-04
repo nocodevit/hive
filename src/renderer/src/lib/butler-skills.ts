@@ -102,7 +102,7 @@ export const PROFILE_FRONT: ReadonlyArray<[ProfileKey, string, string]> = [
   ['whenUnsure', 'When unsure', '说“我去确认”，转给我']
 ]
 export const PROFILE_MORE: ReadonlyArray<[ProfileKey, string, string]> = [
-  ['name', 'Your name', 'Mei Yang'],
+  ['name', 'Your name', 'Alex Chen'],
   ['assistantName', 'Assistant name · prefix & intro', 'Mimi'],
   ['team', 'Team', 'IoT 平台'],
   ['worksWith', 'Works with', 'Ben、PMO'],

@@ -37,3 +37,7 @@ test-multi-agent-report/screenshots/
 test-results/
 playwright-report/
 /index.js
+
+# Local build/test output (contains local paths)
+out-backup/
+test-multi-agent-report/
