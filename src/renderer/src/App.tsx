@@ -1025,7 +1025,7 @@ export default function App() {
       </div>
       <div className="hive-frame flex flex-1 min-h-0 pr-2.5 pb-2.5">
       {/* Left: Projects */}
-      <div className="flex flex-col flex-shrink-0 pl-2.5" style={{ width: panelWidths.projects }}>
+      <div className="hive-sidebar flex flex-col flex-shrink-0 pl-2.5" style={{ width: panelWidths.projects }}>
         <div className="drag-region flex items-center px-2 pt-1 pb-2.5 justify-between">
           <h2 className="no-drag text-[14px] font-bold text-text-primary">
             Hive<span className="ml-1.5 text-[11px] font-medium text-text-muted">v{__APP_VERSION__}</span>

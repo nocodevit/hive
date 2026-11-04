@@ -3,6 +3,7 @@ import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, accentTint, redact, configureRedact
 import { VoiceGroup } from './VoiceGroup'
 import { ModelSwitchModal, modelLabel } from './ModelSwitch'
 import { PumpkinSend, useHalloween } from './PumpkinSend'
+import { SucculentSend, useBotanic } from './SucculentSend'
 import { joinVoiceText } from '../../lib/voice-text'
 import { hookLoopStep, HOOK_LOOP_IDLE, stopHookFeedback, goalCheckLine, GOAL_LOOP_STUCK_AFTER } from '../../../../shared/goal-loop'
 import { autoSendStep, AUTO_SEND_IDLE, useAutoSendPrefs, setAutoSendPrefs, type VoiceEvent } from '../../lib/voice-autosend'
@@ -121,15 +122,16 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
   }, [id])
   // Status-bar state (above + below input)
   const [modelSwitch, setModelSwitch] = useState<{ saved: string | null } | null>(null)
-  // 🎃 Send is a jack-o'-lantern in the Halloween skin; Enter lights it too.
+  // 🎃 Send is a jack-o'-lantern in the Halloween skin, 🌿 a succulent in Botanic; Enter lights it too.
   const halloween = useHalloween()
+  const botanic = useBotanic()
   const [pumpkinLit, setPumpkinLit] = useState(false)
   const pumpkinTimer = useRef<number | null>(null)
   const lightPumpkin = () => {
-    if (!halloween) return
+    if (!halloween && !botanic) return
     if (pumpkinTimer.current !== null) clearTimeout(pumpkinTimer.current)
     setPumpkinLit(true)
-    pumpkinTimer.current = window.setTimeout(() => { pumpkinTimer.current = null; setPumpkinLit(false) }, 600)
+    pumpkinTimer.current = window.setTimeout(() => { pumpkinTimer.current = null; setPumpkinLit(false) }, botanic ? 950 : 600)
   }
   const [modelName, setModelName] = useState<string>('')     // "claude-opus-4-7"
   const [contextSize, setContextSize] = useState<string>('') // "1M"
@@ -1802,7 +1804,10 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     {!compactInProgress && halloween && (pumpkinLit || !(sending || thinking)) && (
       <PumpkinSend enabled={!!input.trim() && exited === null} lit={pumpkinLit} onPress={() => { lightPumpkin(); send() }} />
     )}
-    {!compactInProgress && !(sending || thinking) && !halloween && (
+    {!compactInProgress && botanic && (pumpkinLit || !(sending || thinking)) && (
+      <SucculentSend enabled={!!input.trim() && exited === null} lit={pumpkinLit} onPress={() => { lightPumpkin(); send() }} />
+    )}
+    {!compactInProgress && !(sending || thinking) && !halloween && !botanic && (
       <button
         onClick={() => send()}
         disabled={!input.trim() || exited !== null}

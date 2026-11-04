@@ -6,7 +6,8 @@ import { mkdtempSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 
 /**
- * 🌿 Botanic: a calm green palette, easy on the eyes in light and dark.
+ * 🌿 Botanic: a calm green palette, easy on the eyes in light and dark, on a
+ * greenhouse photo (dark: monstera leaves) behind frosted-glass cards.
  * Easy on the eyes = no pure white or pure black ground, and body text that
  * reads well (≥ 7:1) without glaring (≤ 15:1, pure black on white is 21:1).
  */
@@ -80,23 +81,34 @@ test('Settings › Theme palette › Botanic: comfortable in both light and dark
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.palette)).toBe('botanic')
 })
 
-test('the garden: real flowers on the ground behind the app, never over a button; a gust blows petals across', async () => {
+test('the ground: greenhouse photo in light, monstera at night, behind frosted-glass cards and sidebar', async () => {
   await expect(page.getByTestId('botanic-fx')).toBeAttached()
-  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll<HTMLImageElement>('.bfx-plant img')].filter(i => i.complete && i.naturalWidth > 0).length), { timeout: 5000 }).toBe(13)
-  expect(await page.evaluate(() => ['.bfx', '.bfx-ground'].map(q => getComputedStyle(document.querySelector(q)!).pointerEvents))).toEqual(['none', 'none'])
-  // The plants grow behind the app: what's under the pointer on the sidebar is the app's own button, not a flower.
+  const ground = () => page.evaluate(() => {
+    const card = getComputedStyle(document.querySelector('.hive-card')!)
+    const side = getComputedStyle(document.querySelector('.hive-sidebar')!)
+    return { theme: document.documentElement.dataset.theme, bg: getComputedStyle(document.body).backgroundImage, card: [card.backgroundColor, card.backdropFilter], side: [side.backgroundColor, side.backdropFilter] }
+  })
+  const seen = new Map<string, string>()
+  for (let i = 0; i < 2; i++) {
+    const g = await ground()
+    expect(g.bg).toMatch(/url\(/)
+    for (const [color, blur] of [g.card, g.side]) {
+      const a = Number(color.match(/[\d.]+/g)![3])
+      expect(a).toBeGreaterThan(0.3)
+      expect(a).toBeLessThan(0.7)
+      expect(blur).toContain('blur(14px)')
+    }
+    seen.set(g.theme!, g.bg)
+    // The photo loaded (not a broken url).
+    await expect.poll(() => page.evaluate(src => new Promise<number>(res => { const im = new Image(); im.onload = () => res(im.naturalWidth); im.onerror = () => res(0); im.src = src }), g.bg.slice(5, -2))).toBeGreaterThan(1000)
+    await page.screenshot({ path: test.info().outputPath(`botanic-ground-${g.theme}.png`) })
+    await page.getByRole('button', { name: /Switch to (light|dark) mode/ }).click()
+    await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).not.toBe(g.theme)
+  }
+  expect(new Set(seen.values()).size).toBe(2)
+  // Nothing drawn over the app: what's under the pointer is the app's own button.
   const box = (await page.getByText('Add Project').boundingBox())!
-  const hit = await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.bfx-ground') ? 'plant' : 'app', [box.x + 10, box.y + box.height / 2])
-  expect(hit).toBe('app')
-  // The bed has its own room under the sidebar buttons.
-  const below = await page.evaluate(([y]) => window.innerHeight - y, [box.y + box.height])
-  expect(below).toBeGreaterThan(150)
-
-  await page.evaluate(() => (window as any).__hiveGust())
-  await expect.poll(() => page.evaluate(() => document.querySelectorAll('.bfx-bit').length), { timeout: 3000 }).toBeGreaterThan(3)
-  await expect.poll(() => page.evaluate(() => document.querySelector('.bfx-gust')!.getAnimations().length), { timeout: 3000 }).toBeGreaterThan(0)
-  await page.waitForTimeout(1500)
-  await page.screenshot({ path: test.info().outputPath('botanic-gust.png') })
+  expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.hive-sidebar') ? 'app' : 'other', [box.x + 10, box.y + box.height / 2])).toBe('app')
 })
 
 test('switching away from Botanic takes the garden with it', async () => {
@@ -105,4 +117,5 @@ test('switching away from Botanic takes the garden with it', async () => {
   await section.scrollIntoViewIfNeeded()
   await section.getByRole('button', { name: /Neon Purple/ }).click()
   await expect(page.getByTestId('botanic-fx')).toHaveCount(0)
+  expect(await page.evaluate(() => getComputedStyle(document.body).backgroundImage)).toBe('none')
 })
