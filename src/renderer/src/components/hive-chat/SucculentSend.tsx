@@ -15,7 +15,7 @@ export function useBotanic(): boolean {
 
 // A div, not a <button>: the composer's button styles would squash it into an oval.
 const CSS = `
-.hss { all: unset; position: relative; display: block; box-sizing: border-box; flex: 0 0 auto; --s: 44px;
+.hss { all: unset; position: relative; display: block; box-sizing: border-box; flex: 0 0 auto; --s: 30px;
   width: var(--s); height: var(--s); min-width: var(--s); min-height: var(--s); aspect-ratio: 1 / 1; border-radius: 50%; cursor: pointer }
 .hss[aria-disabled='true'] { cursor: default }
 .hss:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
