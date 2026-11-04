@@ -373,7 +373,16 @@ test('🌿 Botanic skin: Send is a round succulent — off when empty, spins as 
   // A circle, never squashed: width = height, and the rosette fills it.
   const box = (await send.boundingBox())!
   expect(Math.abs(box.width - box.height)).toBeLessThan(0.5)
-  expect(box.width).toBeGreaterThanOrEqual(40)
+  // Same size as the default Send (30px), and inside the composer's frame.
+  expect(Math.round(box.width)).toBe(30)
+  const inside = await send.evaluate(el => {
+    const field = document.querySelector('[data-testid="hive-chat-input"]')!
+    let f = el.parentElement
+    while (f && !(f.contains(field) && parseFloat(getComputedStyle(f).borderTopWidth) > 0)) f = f.parentElement
+    const a = el.getBoundingClientRect(), b = f!.getBoundingClientRect()
+    return a.top >= b.top && a.bottom <= b.bottom && a.left >= b.left && a.right <= b.right
+  })
+  expect(inside).toBe(true)
   await expect.poll(() => send.evaluate(el => { const i = el.querySelector('img')!; return i.complete && i.naturalWidth > 0 && i.getBoundingClientRect().width === el.getBoundingClientRect().width })).toBe(true)
   await input.locator('xpath=ancestor::div[3]').screenshot({ path: test.info().outputPath('succulent-idle.png') })
   await send.click()
