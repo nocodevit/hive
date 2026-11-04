@@ -900,7 +900,7 @@ const dispatcher = createDispatcher({
 // Work given to an agent reports back by itself (butlerTasks.ts).
 taskTracker = createTaskTracker({
   todos: () => todos, deliver: (id, text) => deliverToAgent(id, text), approvals,
-  notify: (title, body) => { try { new Notification({ title, body }).show() } catch { /* none */ } },
+  notify: (kind, title, body, agentId) => void notifications.emit({ kind: kind === 'check' ? 'butlerApproval' : 'taskStuck', key: `task-${kind}:${agentId}:${title}`, title, body, target: { kind: 'agent', agentId } }),
   busy: id => butlerRows().find(r => r.agentId === id)?.activity === 'working'
 })
 setInterval(() => { try { taskTracker?.sweep() } catch { /* best-effort */ } }, 10 * 60_000).unref()
@@ -1049,7 +1049,7 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       const ref = typeof b?.id === 'string' ? b.id.replace(/^#/, '').trim() : ''
       const hits = ref.length >= 4 ? taskTracker!.list().filter(t => t.id.startsWith(ref)) : []
       if (hits.length !== 1) return reply(404, { ok: false, error: 'no_such_task' })
-      if (url.pathname === '/tasks/accept') return reply(200, { ok: todos.setStatus(hits[0].id, 'done', 'owner') })
+      if (url.pathname === '/tasks/accept') return hits[0].status !== 'open' ? reply(400, { ok: false, error: 'already_closed' }) : reply(200, { ok: todos.setStatus(hits[0].id, 'done', 'owner') })
       const r = await taskTracker!.sendBack(hits[0].id, String(b?.note ?? ''))
       return reply(r.ok ? 200 : 400, r)
     }

@@ -114,7 +114,6 @@ export function createTodoStore(dir: string, now: () => number = Date.now) {
         const who = `${l.assignee.agent}${l.assignee.project ? ` (${l.assignee.project})` : ''}`
         t.events.push({ at: l.at, who: l.who, kind: 'action', text: `Assigned to ${who}${l.why ? ` — ${l.why}` : ''}` })
         t.assignee = l.assignee
-        t.work = { state: 'sent', at: l.at, text: '' }
       } else if (l.op === 'work') {
         const t = byId.get(l.id)
         if (!t || !WORK_STATES.includes(l.state)) continue

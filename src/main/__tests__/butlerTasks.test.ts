@@ -21,11 +21,12 @@ const setup = () => {
   const tracker = createTaskTracker({
     todos: () => todos, approvals, now: clock.now, busy: () => busy,
     deliver: async (agentId, text) => { sent.push({ agentId, text }); return { ok: true } },
-    notify: title => told.push(title)
+    notify: (_kind, title) => told.push(title)
   })
   const give = (title: string, agentId = 'a1', agent = 'Ada') => {
     const todo = todos.add({ title, who: 'butler' })!
     todos.assign(todo.id, { agentId, agent, project: 'Acme' }, 'fits')
+    todos.setWork(todo.id, 'sent', '', 'butler')
     tracker.invalidate()
     return todo.id
   }
@@ -91,13 +92,15 @@ describe('an agent reports back on its own', () => {
     expect(s.todos.get(id)!.work!.state).toBe('working')
   })
 
-  it('a turn without a report: asked once where it is, never twice', async () => {
+  it('a turn on the task without a report: asked once where it is, never twice', async () => {
     const s = setup()
     const id = s.give('Fix it')
+    await s.tracker.onEvent('a1', say('On it'))
     await s.tracker.onEvent('a1', end('I changed the file.'))
     expect(s.todos.get(id)!.work).toMatchObject({ state: 'quiet', nudged: true })
     expect(s.sent).toHaveLength(1)
     expect(s.sent[0].text).toContain(`Where is task ${taskTag(id)}`)
+    await s.tracker.onEvent('a1', say('Still'))
     await s.tracker.onEvent('a1', end('Still on it.'))
     expect(s.sent).toHaveLength(1)
     await s.tracker.onEvent('a1', end(`DONE ${taskTag(id)}: done`))
@@ -144,5 +147,40 @@ describe('an agent reports back on its own', () => {
     expect(s.tracker.list()[0]).toMatchObject({ tag: taskTag(id), agent: 'Ada', state: 'sent' })
     s.todos.setStatus(id, 'done', 'owner')
     expect(s.tracker.list()[0]).toMatchObject({ state: 'closed' })
+  })
+
+  it('the owner\u2019s own chat with the agent is never interrupted with "where is it?"', async () => {
+    const s = setup()
+    const id = s.give('Fix it')
+    await s.tracker.onEvent('a1', say('On it'))
+    await s.tracker.onEvent('a1', end(`DONE ${taskTag(id)}: fixed`))
+    const other = s.give('Second task')
+    s.todos.setWork(other, 'working')
+    s.tracker.invalidate()
+    await s.tracker.onEvent('a1', say('Sure, here is how the router works'))
+    await s.tracker.onEvent('a1', end('Sure, here is how the router works'))
+    expect(s.sent).toEqual([])
+  })
+
+  it('DONE again is not a second notice; done withdraws a waiting BLOCKED card', async () => {
+    const s = setup()
+    const id = s.give('Deploy')
+    await s.tracker.onEvent('a1', end(`BLOCKED ${taskTag(id)}: need a password`))
+    expect(s.approvals.pending()).toHaveLength(1)
+    await s.tracker.onEvent('a1', end(`DONE ${taskTag(id)}: found it myself`))
+    await s.tracker.onEvent('a1', end(`DONE ${taskTag(id)}: found it myself`))
+    expect(s.told).toEqual(['Ada says done — check it'])
+    expect(s.approvals.pending()).toEqual([])
+  })
+
+  it('a task closed while its BLOCKED card waits: the card is withdrawn, answering it sends nothing', async () => {
+    const s = setup()
+    const id = s.give('Deploy')
+    await s.tracker.onEvent('a1', end(`BLOCKED ${taskTag(id)}: need a password`))
+    const [card] = s.approvals.pending()
+    s.todos.setStatus(id, 'dropped', 'owner')
+    expect(await s.approvals.approve(card.id, 'here')).toEqual({ ok: false, error: 'task_closed' })
+    s.tracker.sweep()
+    expect(s.sent).toEqual([])
   })
 })

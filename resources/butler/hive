@@ -161,7 +161,7 @@ def main():
         if args.what == 'back' and not note: sys.exit('Say what is still missing: ./hive task back <#tag> "…"')
         status, data = call('POST', f"/tasks/{args.what}", {'id': args.id, 'note': note}, timeout=120)
         if status != 200 or not data.get('ok'):
-            fail(status, {'error': {'no_such_task': 'No such task (see ./hive tasks).'}.get(data.get('error'), data.get('error', ''))})
+            fail(status, {'error': {'no_such_task': 'No such task (see ./hive tasks).', 'already_closed': 'That task is already closed.', 'empty_note': 'Say what is still missing.'}.get(data.get('error'), data.get('error', ''))})
         print('Closed: the owner accepted it.' if args.what == 'accept' else 'Sent back to the agent with what is missing.')
         return
 

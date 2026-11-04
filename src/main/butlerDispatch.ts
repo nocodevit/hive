@@ -79,6 +79,8 @@ export function createDispatcher(deps: DispatchDeps) {
   function linkTodo(todoId: string | undefined, r: AgentRow, why: string) {
     if (!todoId) return
     deps.todos().assign(todoId, { agentId: r.agentId, agent: r.agent, project: r.project }, why, 'butler')
+    // From here the agent's reports land on it (butlerTasks.ts).
+    deps.todos().setWork(todoId, 'sent', '', 'butler')
   }
 
   // The owner pressed Assign on the card: the (maybe edited) brief goes out, tagged with its todo.
@@ -91,6 +93,8 @@ export function createDispatcher(deps: DispatchDeps) {
       const t = deps.todos().add({ title: String(p.task ?? item.title), source: 'chat', who: 'butler', refs: { agentId: r.agentId }, note: String(p.task ?? ''), link: `approval:${item.id}` })
       if (!t) return { ok: false, error: 'empty_task' }
       todoId = t.id
+      // A retry after a failed delivery reuses this todo instead of making another.
+      p.todoId = todoId
     }
     const sent = await deps.deliver(r.agentId, withReportLine(item.draft, todoId))
     if (!sent.ok) { deps.todos().event(todoId, { who: 'butler', kind: 'note', text: `Could not reach ${label(r)}: ${sent.error ?? 'failed'}` }); return sent }
