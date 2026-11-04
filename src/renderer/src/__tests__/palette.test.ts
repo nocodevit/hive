@@ -5,7 +5,7 @@
 // swatch typo would silently render an empty-looking picker.
 
 import { describe, it, expect, beforeEach } from 'vitest'
-import { PALETTES, PALETTE_META, type Palette, loadPalette, applyPalette, availablePalettes, halloweenTakeover, isHalloweenSeason } from '../palette'
+import { PALETTES, PALETTE_META, type Palette, loadPalette, applyPalette, availablePalettes, halloweenTakeover, botanicTakeover, isHalloweenSeason } from '../palette'
 
 describe('palette', () => {
   it('lists the shipped palettes in the expected order (Halloween is the seasonal one)', () => {
@@ -115,5 +115,23 @@ describe('🎃 Halloween, a limited skin', () => {
   it('next year it comes back once more', () => {
     halloweenTakeover('tech-blue', oct27)
     expect(halloweenTakeover('tech-blue', new Date(2027, 9, 25))).toBe('halloween')
+  })
+})
+
+describe('🌿 Botanic takeover', () => {
+  const nov4 = new Date(2026, 10, 4), oct27 = new Date(2026, 9, 27)
+  beforeEach(() => localStorage.clear())
+
+  it('puts itself on once; after that the owner\'s choice stands', () => {
+    expect(botanicTakeover('tech-blue', nov4)).toBe('botanic')
+    applyPalette('botanic')
+    applyPalette('future-pink')
+    expect(botanicTakeover(loadPalette(nov4), nov4)).toBe('future-pink')
+    expect(botanicTakeover('neon-purple', new Date(2027, 5, 1))).toBe('neon-purple')
+  })
+
+  it('waits while Halloween is in season, then comes on', () => {
+    expect(botanicTakeover('halloween', oct27)).toBe('halloween')
+    expect(botanicTakeover('tech-blue', nov4)).toBe('botanic')
   })
 })

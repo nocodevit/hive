@@ -55,7 +55,7 @@ declare global {
         onData: (id: string, cb: (data: string) => void) => () => void
         onExit: (id: string, cb: (code: number) => void) => () => void
       }
-      seasonal: { halloween: boolean }
+      seasonal: { halloween: boolean; botanic: boolean }
       dialog: {
         selectFolder: (title?: string) => Promise<string | null>
         selectFiles: () => Promise<string[]>
