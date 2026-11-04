@@ -23,7 +23,7 @@ export function FeishuExpiredBanner() {
   if (!expired || hidden) return null
   return (
     <div role="alert" aria-label="Feishu sign-in expired"
-      className="no-drag fixed z-[60] top-3 left-1/2 -translate-x-1/2 flex items-center gap-2.5 pl-3.5 pr-2 py-1.5 rounded-full bg-bg-secondary shadow-e3 border border-status-waiting/60 text-[13px]">
+      className="flex items-center gap-2.5 pl-3.5 pr-2 py-1.5 rounded-full bg-bg-secondary shadow-e3 border border-status-waiting/60 text-[13px]">
       <span className="w-[7px] h-[7px] rounded-full bg-status-waiting" />
       <span className="font-semibold text-text-primary">Feishu sign-in expired</span>
       <button onClick={() => { setBusy(true); void window.api.feishu.login() }} disabled={busy}
