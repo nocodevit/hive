@@ -361,3 +361,26 @@ test('🎃 Halloween skin: Send is a jack-o\'-lantern — press, it lights up as
   await expect.poll(() => send.evaluate(el => el.classList.contains('pop')), { timeout: 3000 }).toBe(false)
   await page.evaluate(() => document.documentElement.removeAttribute('data-palette'))
 })
+
+test('🌿 Botanic skin: Send is a round succulent — off when empty, spins as the message goes', async () => {
+  await page.evaluate(() => document.documentElement.setAttribute('data-palette', 'botanic'))
+  const send = page.getByRole('button', { name: 'Send', exact: true })
+  const input = page.getByTestId('hive-chat-input')
+  await input.fill('')
+  await expect(send).toHaveAttribute('aria-disabled', 'true')
+  await input.fill('/help')
+  await expect(send).toHaveAttribute('aria-disabled', 'false')
+  // A circle, never squashed: width = height, and the rosette fills it.
+  const box = (await send.boundingBox())!
+  expect(Math.abs(box.width - box.height)).toBeLessThan(0.5)
+  expect(box.width).toBeGreaterThanOrEqual(40)
+  await expect.poll(() => send.evaluate(el => { const i = el.querySelector('img')!; return i.complete && i.naturalWidth > 0 && i.getBoundingClientRect().width === el.getBoundingClientRect().width })).toBe(true)
+  await input.locator('xpath=ancestor::div[3]').screenshot({ path: test.info().outputPath('succulent-idle.png') })
+  await send.click()
+  await expect.poll(() => send.evaluate(el => el.classList.contains('spin'))).toBe(true)
+  await expect(input).toHaveValue('')
+  await expect.poll(() => send.evaluate(el => el.querySelector('img')!.getAnimations().length)).toBeGreaterThan(0)
+  await input.locator('xpath=ancestor::div[3]').screenshot({ path: test.info().outputPath('succulent-spin.png') })
+  await expect.poll(() => send.evaluate(el => el.classList.contains('spin')), { timeout: 3000 }).toBe(false)
+  await page.evaluate(() => document.documentElement.removeAttribute('data-palette'))
+})

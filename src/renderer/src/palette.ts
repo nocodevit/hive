@@ -166,7 +166,7 @@ export const PALETTE_META: Record<Palette, PaletteMeta> = {
     id: 'botanic',
     name: '🌿 Botanic',
     swatch: '#5f8f68',
-    tagline: 'Greenhouse sage · soft on the eyes · a flower bed of botanical plates · petals on the wind',
+    tagline: 'Greenhouse by day, monstera by night · frosted glass · a succulent to send',
   },
   halloween: {
     id: 'halloween',
