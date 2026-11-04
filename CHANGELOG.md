@@ -7,6 +7,15 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.41.0] — 2026-11-04
+
+##### 🌿 Botanic theme
+- **A new look: Settings › Theme palette › 🌿 Botanic.** A sunlit greenhouse behind the app by day, monstera leaves by night (dark mode), with frosted-glass cards and sidebar.
+- **Send is a succulent**: a round rosette. Press it (or Enter) and it spins as your message goes.
+- Calm green colors, easy on the eyes in light and dark.
+
+---
+
 ## [2.40.5] — 2026-11-02
 
 ##### 📱 Butler
