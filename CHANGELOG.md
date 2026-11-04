@@ -7,6 +7,13 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.2] — 2026-11-04
+
+##### 🌿 Botanic
+- **Hive opens in the new 🌿 Botanic look**, once: a sunlit greenhouse by day, monstera leaves by night, frosted glass. Prefer another one? Settings › Theme palette — your pick stays.
+
+---
+
 ## [2.42.1] — 2026-11-04
 
 ##### 🐝 Agents
