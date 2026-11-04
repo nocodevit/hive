@@ -7,6 +7,14 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.1] — 2026-11-04
+
+##### 🐝 Agents
+- **Hive no longer closes an agent by itself.** Before, opening a 13th agent quietly closed the one you'd looked at least recently, even if it was working. Now every agent stays open until you close it.
+- **With 12 or more agents open, a banner stays at the top** to say so, so you can close the ones you're done with to free memory.
+
+---
+
 ## [2.42.0] — 2026-11-04
 
 ##### 📱 Butler
