@@ -99,7 +99,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   }, [items, held])
   // "+ Todo", and Discuss (a card taken to the chat is a follow-up): the card becomes a todo with its refs.
   const toTodo = (id: string, note?: string) => { void window.api.todos.fromApproval(id, note).then(t => { if (t) setNoted(n => ({ ...n, [id]: true })) }).catch(() => {}) }
-  const discuss = (it: ApprovalCard, text: string, to?: Parameters<OnDiscuss>[1]) => { onDiscuss?.(text, to); toTodo(it.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed in Chat') }
+  const discuss = (it: ApprovalCard, text: string, to?: Parameters<OnDiscuss>[1]) => { onDiscuss?.(text, to); toTodo(it.id, to ? `Dispatched to ${to.agent} (${to.project})` : 'Discussed in Chat') }
   useEffect(() => { if (editing && !items.some(i => i.id === editing)) setEditing(null) }, [items, editing])
 
   const approve = async (it: ApprovalCard, draft?: string) => {
@@ -214,7 +214,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
                 onKeyDown={e => { if (e.key === 'Enter') answer(it) }} aria-label="Your answer to Butler" placeholder="Answer Butler — it writes the reply"
                 className="flex-1 min-w-0 h-7 rounded-lg bg-bg-secondary border border-border px-2.5 text-[12px] text-text-primary focus:outline-none focus:border-accent" />
               <button disabled={busy === it.id || !(answers[it.id] ?? '').trim()} onClick={() => answer(it)} className={primary}>{busy === it.id ? 'Writing…' : 'Write reply'}</button>
-              {onDiscuss && <DiscussButton label={`Discuss ${it.title}`} text={() => discussText(it)} onDiscuss={(t, to) => discuss(it, t, to)} />}
+              {onDiscuss && <DiscussButton subject={it.title} text={() => discussText(it)} onDiscuss={(t, to) => discuss(it, t, to)} />}
             </>
           ) : (
             <>
@@ -229,7 +229,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
                 </AnimatePresence>
               </button>
               {editing !== it.id && it.draft.trim() && <button onClick={() => edit(it)} aria-label={`Edit ${it.title}`} className={ghost}>✎ Edit</button>}
-              {onDiscuss && <DiscussButton label={`Discuss ${it.title}`} text={() => cardDiscussText(it)} onDiscuss={(t, to) => discuss(it, t, to)} />}
+              {onDiscuss && <DiscussButton subject={it.title} text={() => cardDiscussText(it)} onDiscuss={(t, to) => discuss(it, t, to)} />}
             </>
           )}
           {!decide && it.kind !== 'dispatch.assign' && <button onClick={() => toTodo(it.id)} disabled={noted[it.id]} aria-label={`Add ${it.title} to Todo`} className={`${ghost} ${noted[it.id] ? 'text-accent' : ''}`}>{noted[it.id] ? '✓ In Todo' : '＋ Todo'}</button>}
@@ -321,7 +321,7 @@ export function ApprovalHistory({ onDiscuss }: { onDiscuss?: OnDiscuss }) {
               {it.closed?.why && <div className="mt-1 text-[11.5px] text-text-secondary" aria-label="Why closed">Why: {it.closed.why}</div>}
               {it.error && <div className="mt-1 text-[11px] text-red-400 font-mono">{it.error}</div>}
               {onDiscuss && (
-                <DiscussButton label={`Discuss ${it.title}`} text={() => historyDiscussText(it)} onDiscuss={onDiscuss} className="mt-1.5" />
+                <DiscussButton subject={it.title} text={() => historyDiscussText(it)} onDiscuss={onDiscuss} className="mt-1.5" />
               )}
             </details>
           )

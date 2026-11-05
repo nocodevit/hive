@@ -81,7 +81,7 @@ test('a Feishu card shows their whole message', async () => {
 })
 
 test('a card can go to the Butler chat instead of replying', async () => {
-  await page.getByLabel('Reply: Daniel Vargas Millan · On another topic, I have a requirement f…').getByRole('button', { name: /^Discuss (?!.*with…$)/ }).click()
+  await page.getByLabel('Reply: Daniel Vargas Millan · On another topic, I have a requirement f…').getByRole('button', { name: /^Discuss / }).click()
   await expect(page.getByRole('tab', { name: /Chat/ })).toHaveAttribute('aria-selected', 'true')
   // It shows in the chat as the owner's own message.
   await expect(page.getByRole('complementary', { name: 'Butler panel' }).getByText('Help me think this through.', { exact: false }).first()).toBeVisible({ timeout: 15000 })
@@ -119,7 +119,7 @@ test('a question that sat behind Send is now a needs-you card with no Send', asy
   await expect(gary.getByLabel('Butler asks')).toContainText("Gary is asking you to study Northwind's new Contoso roaming")
   await expect(gary.getByRole('button', { name: /^Send/ })).toHaveCount(0)
   await expect(gary.getByRole('button', { name: /^Edit/ })).toHaveCount(0)
-  await expect(gary.getByRole('button', { name: /^Discuss (?!.*with…$)/ })).toBeVisible()
+  await expect(gary.getByRole('button', { name: /^Discuss / })).toBeVisible()
   await expect(gary.getByLabel('Your answer to Butler')).toBeVisible()
   const saved = JSON.parse(readFileSync(join(BUTLER, 'approvals.json'), 'utf8')).find((x: { id: string }) => x.id === 'old-q')
   expect(saved).toMatchObject({ kind: 'email.decide', draft: '', action: 'Discuss' })
@@ -150,12 +150,16 @@ test('a past card goes to the Butler chat with its context', async () => {
   await page.getByRole('tab', { name: /Approve/ }).click()
 })
 
-test('Discuss ▾ lists Butler first, then agents by project', async () => {
+test('Dispatch ▾ lists agents by project; the menu stays inside the window', async () => {
   const ana = page.getByLabel('Needs you: Ana · Price list')
-  await ana.getByRole('button', { name: 'Discuss Ana · Price list with…' }).click()
-  const menu = page.getByRole('menu', { name: 'Discuss with' })
-  await expect(menu.getByRole('menuitem').first()).toContainText('Butler')
-  await expect(menu.getByRole('group', { name: 'PSLE' }).getByRole('menuitem', { name: 'Discuss with Planner' })).toContainText('resumes')
+  await ana.getByRole('button', { name: 'Dispatch Ana · Price list' }).click()
+  const menu = page.getByRole('menu', { name: 'Dispatch to' })
+  await expect(menu.getByRole('menuitem', { name: 'Dispatch to Butler' })).toHaveCount(0)
+  const box = (await menu.boundingBox())!
+  const win = page.viewportSize() ?? await page.evaluate(() => ({ width: innerWidth, height: innerHeight }))
+  expect(box.y).toBeGreaterThanOrEqual(0)
+  expect(box.y + box.height).toBeLessThanOrEqual(win.height)
+  await expect(menu.getByRole('group', { name: 'PSLE' }).getByRole('menuitem', { name: 'Dispatch to Planner' })).toContainText('resumes')
   await page.keyboard.press('Escape')
   await expect(menu).toHaveCount(0)
 })
@@ -197,7 +201,7 @@ test('needs-you card: what it wants + question; Discuss opens the Butler chat', 
   await expect(ana.getByLabel('Butler asks')).toContainText('Which prices can I share?')
   await expect(ana.getByRole('button', { name: 'Write reply' })).toBeDisabled()
   await page.screenshot({ path: test.info().outputPath('approve.png') })
-  await ana.getByRole('button', { name: /^Discuss (?!.*with…$)/ }).click()
+  await ana.getByRole('button', { name: /^Discuss / }).click()
   await expect(page.getByRole('tab', { name: /Chat/ })).toHaveAttribute('aria-selected', 'true')
 })
 
@@ -220,8 +224,8 @@ test('the selected tab background slides with the tab; menus grow from their tri
   await expect(sel()).toContainText('Todo')
   await page.getByRole('tab', { name: /Approve/ }).click()
   await expect(sel()).toContainText('Approve')
-  await page.getByRole('button', { name: 'Discuss Ana · Price list with…' }).click()
-  const menu = page.getByRole('menu', { name: 'Discuss with' })
+  await page.getByRole('button', { name: 'Dispatch Ana · Price list' }).click()
+  const menu = page.getByRole('menu', { name: 'Dispatch to' })
   await expect(menu).toBeVisible()
   expect(await menu.evaluate(el => getComputedStyle(el).transformOrigin)).toMatch(/^0px/)
   await page.keyboard.press('Escape')
