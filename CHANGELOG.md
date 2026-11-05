@@ -7,6 +7,20 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.4] — 2026-11-05
+
+##### 📱 Butler
+- **Discuss and Dispatch are two buttons now.** 💬 **Discuss** talks it over with Butler (it opens the Butler chat). 📤 **Dispatch ▾** next to it sends the item to one agent's chat — pick the agent by project.
+- **The agent list is never cut off**: it opens upward when there's no room below, and always stays inside the window.
+
+##### 🌿 Botanic
+- **The succulent Send button is the same size as the normal one** and sits inside the message box.
+
+##### 🔒 Privacy
+- Butler's built-in skills use neutral example names — no real people or companies.
+
+---
+
 ## [2.42.3] — 2026-11-04
 
 ##### 🌿 Botanic
