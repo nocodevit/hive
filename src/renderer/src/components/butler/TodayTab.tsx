@@ -186,7 +186,7 @@ export function TodayTab({ visible, onDiscuss }: { visible: boolean; onDiscuss?:
             </label>
             {it.source && <span className={`px-1.5 py-0.5 rounded-md text-[10px] font-semibold ${TAG[it.source].cls}`}>{TAG[it.source].text}</span>}
             {onDiscuss && (
-              <DiscussButton compact label={`Discuss ${it.text}`} text={() => planDiscussText(it, date)} onDiscuss={onDiscuss}
+              <DiscussButton compact subject={it.text} text={() => planDiscussText(it, date)} onDiscuss={onDiscuss}
                 className="opacity-0 group-hover:opacity-100 focus-within:opacity-100" />
             )}
             {!it.done && (

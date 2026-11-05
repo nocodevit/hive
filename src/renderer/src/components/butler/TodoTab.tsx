@@ -142,7 +142,7 @@ const Item = forwardRef<HTMLDivElement, { t: TodoView; onDiscuss?: OnDiscuss; on
         {t.work && !closed && <span aria-label={`Agent status: ${WORK_CHIP[t.work.state].label}`} title={t.work.text || undefined}
           className={`flex-shrink-0 px-1.5 py-0.5 rounded-md text-[11px] whitespace-nowrap ${WORK_CHIP[t.work.state].tone === 'you' ? 'bg-accent text-text-on-purple font-semibold' : WORK_CHIP[t.work.state].tone === 'warn' ? 'bg-status-waiting/15 text-status-waiting' : 'text-text-muted'}`}>{WORK_CHIP[t.work.state].label}</span>}
         <PriorityChip t={t} />
-        {onDiscuss && <DiscussButton compact label={`Discuss ${t.title}`} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Discussed with ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
+        {onDiscuss && <DiscussButton compact subject={t.title} text={() => todoDiscussText(t)} onDiscuss={(text, to) => { onDiscuss(text, to); void window.api.todos.note(t.id, to ? `Dispatched to ${to.agent} (${to.project})` : 'Discussed with Butler') }} />}
         <button onClick={() => setOpen(o => !o)} aria-expanded={open} aria-label={`View ${t.title}`} title="View its story"
           className={`flex-shrink-0 w-7 h-7 rounded-lg inline-flex items-center justify-center text-[15px] text-text-muted hover:bg-bg-hover hover:text-text-primary cursor-pointer ${open ? 'bg-bg-hover text-text-primary' : ''}`}>
           <span className={`inline-block transition-transform ${open ? 'rotate-90' : ''}`} aria-hidden>›</span>
