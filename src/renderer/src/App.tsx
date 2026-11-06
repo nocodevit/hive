@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { PointMenu } from './components/PointMenu'
 import Terminal from './components/Terminal'
 import { ButlerSettings } from './components/ButlerSettings'
 import { ButlerOfferCard } from './components/butler/ButlerOfferCard'
@@ -1133,10 +1134,8 @@ export default function App() {
             const off = 'text-text-muted opacity-50 cursor-not-allowed'
             const count = (n: number) => n ? <span className="ml-auto text-[11px] tabular-nums text-text-muted">{n}</span> : null
             return (
-            <div
-              className="fixed z-50 bg-bg-secondary border border-border rounded-2xl shadow-2xl p-1.5 min-w-[236px]"
-              style={{ left: contextMenu.x, top: contextMenu.y }}
-            >
+            <PointMenu x={contextMenu.x} y={contextMenu.y}
+              className="z-50 bg-bg-secondary border border-border rounded-2xl shadow-2xl p-1.5 min-w-[236px]">
               <button
                 onClick={async () => {
                   const pid = contextMenu.projectId
@@ -1197,7 +1196,7 @@ export default function App() {
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 <span>Remove from group</span>
               </button>
-            </div>
+            </PointMenu>
             )
           })()}
           {/* Agent context menu */}
@@ -1205,11 +1204,9 @@ export default function App() {
             const ag = agents.find(a => a.id === agentContextMenu.agentId)
             if (!ag) return null
             return (
-              <div
-                className="fixed z-50 bg-bg-secondary border border-border rounded-lg shadow-e3 py-1 min-w-[200px]"
-                style={{ left: agentContextMenu.x, top: agentContextMenu.y }}
-                onClick={(e) => e.stopPropagation()}
-              >
+              <PointMenu x={agentContextMenu.x} y={agentContextMenu.y}
+                className="z-50 bg-bg-secondary border border-border rounded-lg shadow-e3 py-1 min-w-[200px]"
+                onClick={(e) => e.stopPropagation()}>
                 <button
                   onClick={() => {
                     setAgentNoteInput(ag.note || '')
@@ -1235,7 +1232,7 @@ export default function App() {
                     Clear note
                   </button>
                 )}
-              </div>
+              </PointMenu>
             )
           })()}
           {/* Agent note prompt */}
