@@ -10,6 +10,7 @@
       "Bash(./hive assign:*)",
       "Bash(./hive nofit:*)",
       "Bash(./hive chat-search:*)",
+      "Bash(./hive feishu:*)",
       "Bash(./hive pending:*)",
       "Bash(./hive run:*)",
       "Bash(./hive jira:*)",

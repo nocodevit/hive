@@ -3,7 +3,7 @@ import type { AskTopic, FeishuAgentSettings, FeishuAgentView, FeishuLogEntry, Lo
 
 const RECALL_MS = 24 * 3600_000
 const RELATION_OPTS: Array<[string, string]> = [['unknown', '—'], ['boss', 'Manager'], ['report', 'Reports to me'], ['peer', 'Colleague'], ['requester', 'Other team']]
-const KIND_ICON: Record<FeishuLogEntry['kind'], string> = { answer: '💬', holding: '⏳', followup: '↩️' }
+const KIND_ICON: Record<FeishuLogEntry['kind'], string> = { answer: '💬', holding: '⏳', followup: '↩️', owner: '👤' }
 
 function useFeishuAgent() {
   const [v, setV] = useState<FeishuAgentView | null>(null)
