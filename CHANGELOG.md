@@ -7,6 +7,15 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.5] — 2026-11-06
+
+##### 📱 Butler
+- **Butler sends Feishu through Prime.** Say "给 xx 发飞书" in the Butler chat: Butler finds the chat, reads it if needed, and sends as you — through the same Feishu sign-in Hive already uses. No lark-cli needed.
+- Phone Butler: `./hive feishu chats NAME`, `./hive feishu messages --chat …`, `./hive feishu send --chat … TEXT` (`--reply` to answer in the thread).
+- Every message Butler sends for you shows in the Feishu log with 👤.
+
+---
+
 ## [2.42.4] — 2026-11-05
 
 ##### 📱 Butler
