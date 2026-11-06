@@ -34,7 +34,7 @@ export type FeishuAgentView = {
 
 export type FeishuLogEntry = {
   id: string; time: number; chatId: string; chatName: string; inReplyTo: string
-  text: string; kind: 'answer' | 'holding' | 'followup'; recalled?: boolean
+  text: string; kind: 'answer' | 'holding' | 'followup' | 'owner'; recalled?: boolean
 }
 
 export type CalendarSettings = { feishu: boolean; mac: boolean }

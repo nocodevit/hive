@@ -222,7 +222,7 @@ export function messageText(m: any): string {
   return text.trim()
 }
 
-export type LogKind = 'answer' | 'holding' | 'followup'
+export type LogKind = 'answer' | 'holding' | 'followup' | 'owner'
 export interface LogEntry {
   /** The sent message's id (what recall deletes). */
   id: string
@@ -774,6 +774,41 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     async chats(): Promise<Array<{ id: string; name: string; p2p: boolean }>> {
       const tok = await deps.token()
       return tok.ok && tok.token ? listChats(tok.token) : []
+    },
+    /** `./hive feishu chats`: chats whose name contains the words (a direct chat is named after the other person). */
+    async ownerChats(q: string): Promise<{ ok: boolean; error?: string; chats?: Array<{ id: string; name: string; p2p: boolean }> }> {
+      const tok = await deps.token()
+      if (!tok.ok || !tok.token) return { ok: false, error: 'signed_out' }
+      const words = q.toLowerCase().split(/\s+/).filter(Boolean)
+      const all = await listChats(tok.token).catch(() => null)
+      if (!all) return { ok: false, error: 'feishu_unreachable' }
+      return { ok: true, chats: all.filter(c => words.every(w => c.name.toLowerCase().includes(w))).slice(0, 20) }
+    },
+    /** `./hive feishu messages`: one chat's latest messages, oldest first. */
+    async ownerMessages(chatId: string, n: number): Promise<{ ok: boolean; error?: string; messages?: Array<{ id: string; time: number; sender: string; mine: boolean; text: string }> }> {
+      const tok = await deps.token()
+      if (!tok.ok || !tok.token) return { ok: false, error: 'signed_out' }
+      const self = deps.selfOpenId()
+      try {
+        const items = await recentMessages(tok.token, chatId, Math.min(50, Math.max(1, n)))
+        return { ok: true, messages: items.filter(m => !m?.deleted).map(m => ({ id: String(m?.message_id ?? ''), time: Number(m?.create_time) || 0, sender: String(m?.sender?.id ?? ''), mine: !!self && m?.sender?.id === self, text: messageText(m) })) }
+      } catch (e) { return { ok: false, error: String((e as Error).message) } }
+    },
+    /** `./hive feishu send`: the owner's own words, sent as the owner through Prime (no assistant prefix); logged like every other send. */
+    async ownerSend(p: { chatId: string; text: string; replyTo?: string }): Promise<{ ok: boolean; error?: string; id?: string }> {
+      const tok = await deps.token()
+      if (!tok.ok || !tok.token) return { ok: false, error: 'signed_out' }
+      const chat = (await listChats(tok.token).catch(() => [])).find(c => c.id === p.chatId)
+      if (!chat) return { ok: false, error: 'no_such_chat' }
+      const content = { msg_type: 'text', content: JSON.stringify({ text: p.text }) }
+      const r = p.replyTo
+        ? await deps.http('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(p.replyTo)}/reply`, tok.token, content)
+        : await deps.http('POST', `${FEISHU_API}/im/v1/messages?receive_id_type=chat_id`, tok.token, { receive_id: p.chatId, ...content })
+      if (!ok(r)) return { ok: false, error: errOf(r) }
+      const id = String(r.body?.data?.message_id ?? '')
+      appendLog({ id, time: now(), chatId: chat.id, chatName: chat.name, inReplyTo: p.replyTo ?? '', text: p.text, kind: 'owner' })
+      for (const t of deps.todos?.openByRef('chatId', chat.id) ?? []) deps.todos!.event(t.id, { who: 'butler', kind: 'action', text: `Sent for you in ${chat.name || 'Feishu'}: ${clip(p.text, 200)}` })
+      return { ok: true, id }
     },
     /** The case log (memory layer 1). */
     cases: () => cases.all(),

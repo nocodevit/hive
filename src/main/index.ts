@@ -778,7 +778,7 @@ const butlerRoutines = setupButlerMailRoutines({
 })
 const butlerRoutineMode = butlerRoutines.mode
 // [butler:feishu-agent-calendar]
-import { registerButlerFeishuAgentIpc, registerButlerCalendarIpc, searchChatHistory, previewFeishuAnswer } from './butlerFeishuAgentIpc'
+import { registerButlerFeishuAgentIpc, feishuOwner, registerButlerCalendarIpc, searchChatHistory, previewFeishuAnswer } from './butlerFeishuAgentIpc'
 import { jiraBrowseBase, rememberJiraBase, withJiraLinks } from './jiraRest'
 import { newSkillUpdates } from './butlerSkills'
 import { createTodoStore, type TodoStore } from './butlerTodos'
@@ -1131,6 +1131,34 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       const body = await readJsonBody(req)
       if (typeof body.text !== 'string' || !body.text.trim()) return reply(400, { ok: false, error: 'empty_text' })
       return reply(200, await previewFeishuAnswer({ text: body.text, senderId: body.senderId, chatId: body.chatId, chatName: body.chatName, p2p: body.p2p }))
+    }
+
+    // ./hive feishu chats / messages / send: Feishu through Prime, the default Feishu channel.
+    // The owner's own session only — never a run answering someone.
+    if (url.pathname === '/feishu/chats' || url.pathname === '/feishu/messages' || url.pathname === '/feishu/send') {
+      if (req.headers['x-hive-run']) return reply(403, { ok: false, error: 'not_in_a_run' })
+      const o = feishuOwner()
+      if (!o) return reply(503, { ok: false, error: 'not_ready' })
+      if (req.method === 'GET' && url.pathname === '/feishu/chats') {
+        const q = (url.searchParams.get('q') || '').trim().slice(0, 100)
+        if (!q) return reply(400, { ok: false, error: 'empty_query' })
+        const r = await o.ownerChats(q)
+        return reply(r.ok ? 200 : 409, r)
+      }
+      if (req.method === 'GET' && url.pathname === '/feishu/messages') {
+        const chat = url.searchParams.get('chat') || ''
+        if (!/^oc_[\w-]+$/.test(chat)) return reply(400, { ok: false, error: 'bad_chat' })
+        const r = await o.ownerMessages(chat, parseInt(url.searchParams.get('n') || '20', 10) || 20)
+        return reply(r.ok ? 200 : 409, r)
+      }
+      if (req.method === 'POST' && url.pathname === '/feishu/send') {
+        const body = await readJsonBody(req)
+        if (typeof body.chat !== 'string' || !/^oc_[\w-]+$/.test(body.chat)) return reply(400, { ok: false, error: 'bad_chat' })
+        if (typeof body.text !== 'string' || !body.text.trim()) return reply(400, { ok: false, error: 'empty_text' })
+        if (body.replyTo !== undefined && (typeof body.replyTo !== 'string' || !/^om_[\w-]+$/.test(body.replyTo))) return reply(400, { ok: false, error: 'bad_reply_to' })
+        const r = await o.ownerSend({ chatId: body.chat, text: body.text.slice(0, 4000), replyTo: body.replyTo })
+        return reply(r.ok ? 200 : 409, r)
+      }
     }
 
     if (req.method === 'GET' && url.pathname === '/chat/tail') {

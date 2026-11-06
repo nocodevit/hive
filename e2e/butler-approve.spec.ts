@@ -268,3 +268,12 @@ test('dispatch: ./hive agents --detail; a not-sure ./hive assign becomes an Assi
   await expect(sure).toHaveCount(0)
   expect(hive('assign', 'x', '--agent', 'Nobody').out).toContain('No agent with that name')
 })
+
+test('./hive feishu goes through Prime: not signed in says how to sign in; bad ids and runs are refused', async () => {
+  expect(hive('feishu', 'chats', '张三').out).toContain('Feishu is not signed in to Hive')
+  expect(hive('feishu', 'send', '--chat', 'oc_abc', '明天给你').out).toContain('Feishu is not signed in to Hive')
+  expect(hive('feishu', 'send', '--chat', 'not-a-chat', 'x').out).toContain('not a chat id')
+  expect(hive('feishu', 'send', 'x').out).toContain('Which chat?')
+  const run = spawnSync('python3', [join(PROJECT_ROOT, 'resources', 'butler', 'hive'), 'feishu', 'chats', '张三'], { env: { ...process.env, HIVE_DATA_DIR, HIVE_RUN_TOKEN: 'r1' }, encoding: 'utf8' })
+  expect(`${run.stdout}${run.stderr}`).toContain('Not available while answering someone')
+})

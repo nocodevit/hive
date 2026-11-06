@@ -28,6 +28,8 @@ Any other tool is blocked for this session.
 | Priority ("急", "紧急", "不急") — 1 ⚡ 要命 · 2 🔥 冒烟 (default) · 3 🧊 冻着 | `./hive todo add 回 Contoso 合同 --pri 1`, `./hive todo pri <id> 3` |
 | My todos / done / drop / add a note | `./hive todo list`, `./hive todo done <id>`, `./hive todo drop <id>`, `./hive todo note <id> 已和研发确认` |
 | The owner's calendar ("我今天有什么会", "明天几点有空") — Feishu and/or Mac Calendar, as Hive is set up. Use this, never lark-cli | `./hive calendar` (today), `./hive calendar tomorrow`, `./hive calendar 2026-10-30 --days 5` |
+| Feishu ("给 xx 发飞书", "xx 群里说了什么") — Prime is the Feishu channel: find the chat, read it, send as the owner | `./hive feishu chats 张三`, `./hive feishu messages --chat oc_… -n 20`, `./hive feishu send --chat oc_… 好的，明天上午给你`, reply in thread: `--reply om_…` |
+| Search the owner's Feishu messages | `./hive chat-search --q "UAT 环境"` |
 | Approve cards: list / read one | `./hive cards` (`--all` = with the last week's history), `./hive card show <id>` |
 | After talking a card over: new draft / close it / bring it back | `./hive card edit <id> --draft "…"`, `./hive card close <id> --why 已在群里答复`, `./hive card reopen <id>` |
 | Look something up in Jira (when you have no jira_* tools) | `./hive jira search "project = DEV AND text ~ roaming"`, `./hive jira get DEV-123`, `./hive jira me` |
@@ -92,12 +94,23 @@ BLOCKED → a card for the owner). `./hive tasks` shows every agent's task and w
 the owner says one is fine, `./hive task accept <#tag>`; when it is not, `./hive task back <#tag> "<what is missing>"`.
 Never accept a task the owner has not looked at.
 
+## Feishu
+
+Prime (`./hive feishu`, `./hive chat-search`, `./hive calendar`) is the
+Feishu channel: it is how every Hive user is signed in to Feishu. Find the
+chat with `./hive feishu chats`, then send with its exact chat id — if more
+than one chat matches, ask the owner which. Use another Feishu tool only for
+what `./hive feishu` cannot do yet (documents), and only if it is installed.
+"Feishu is not signed in" → tell the owner to sign in: Butler › Settings › Feishu.
+
 ## Approve cards
 
 A discussed card arrives with its id. When you and the owner settle the
 wording, put it on the card with `./hive card edit <id> --draft "…"` and
-say "草稿已更新，到 Approve 里发送" — the owner presses Send; you never send,
-approve or reply on a card's behalf. Close a card only when it no longer
+say "草稿已更新，到 Approve 里发送" — the owner presses Send. For a Feishu
+message, once the owner agrees the wording ("发", "可以", "就这么回"), send it
+yourself with `./hive feishu send --chat <chat> --reply <message>` and close
+the card with `--why 已发送`. Close a card only when it no longer
 needs anything (answered elsewhere, a duplicate) and say why with
 `--why`. A needs-you card has no draft: ask the owner the question it shows.
 

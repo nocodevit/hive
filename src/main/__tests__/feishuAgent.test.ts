@@ -45,6 +45,12 @@ function fakeFeishu(clock: () => number) {
       const since = Number(u.searchParams.get('start_time')) * 1000
       return { status: 200, body: { code: 0, data: { items: list.filter(m => Number(m.create_time) >= since), has_more: false } } }
     }
+    if (method === 'POST' && path === '/im/v1/messages') {
+      const text = JSON.parse(body.content).text
+      const m = add(body.receive_id, SELF, text)
+      sent.push({ replyTo: '', text, id: m.message_id })
+      return { status: 200, body: { code: 0, data: { message_id: m.message_id } } }
+    }
     const reply = path.match(/^\/im\/v1\/messages\/([^/]+)\/reply$/)
     if (method === 'POST' && reply) {
       const orig = Object.values(msgs).flat().find(m => m.message_id === decodeURIComponent(reply[1]))!
@@ -712,5 +718,40 @@ describe('defaultPrefix with an assistant name', () => {
     expect(defaultPrefix({ name: 'Alex', prefix: '', assistantName: 'Mimi' })).toBe('[Mimi · Alex 的 AI 代理]')
     expect(defaultPrefix({ name: 'Alex', prefix: '', assistantName: '' })).toBe('[Alex 的 AI 代理]')
     expect(defaultPrefix({ name: 'Alex', prefix: '[Alex’s AI agent]', assistantName: 'Mimi' })).toBe('[Alex’s AI agent]')
+  })
+})
+
+describe('owner Feishu through Prime (./hive feishu)', () => {
+  it('chats: every word must be in the name; direct chats are named after the person', async () => {
+    const t = setup()
+    expect((await t.agent.ownerChats('lin')).chats).toEqual([{ id: 'p1', name: 'Lin', p2p: true }])
+    expect((await t.agent.ownerChats('team lin')).chats).toEqual([])
+  })
+
+  it('messages: the latest, oldest first, own ones marked', async () => {
+    const t = setup()
+    t.fs.add('p1', 'ou_lin', '在吗', T0 - 2 * MIN)
+    t.fs.add('p1', SELF, '在', T0 - MIN)
+    const r = await t.agent.ownerMessages('p1', 20)
+    expect(r.messages!.map(m => [m.text, m.mine])).toEqual([['在吗', false], ['在', true]])
+  })
+
+  it('send: new message or thread reply, as the owner with no assistant prefix, logged as owner', async () => {
+    const t = setup()
+    const asked = t.fs.add('g1', 'ou_lin', 'UAT 好了吗？')
+    expect(await t.agent.ownerSend({ chatId: 'p1', text: '明天上午给你' })).toMatchObject({ ok: true })
+    expect(await t.agent.ownerSend({ chatId: 'g1', text: '好了', replyTo: asked.message_id })).toMatchObject({ ok: true })
+    expect(t.fs.sent.map(x => [x.replyTo, x.text])).toEqual([['', '明天上午给你'], [asked.message_id, '好了']])
+    const log = readFileSync(join(t.dir, 'feishu-log.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    expect(log.map(e => [e.kind, e.chatName, e.inReplyTo])).toEqual([['owner', 'Lin', ''], ['owner', 'Team', asked.message_id]])
+  })
+
+  it('send: only to one of the owner\'s chats, by exact id; signed out says so', async () => {
+    const t = setup()
+    expect(await t.agent.ownerSend({ chatId: 'p', text: 'x' })).toEqual({ ok: false, error: 'no_such_chat' })
+    expect(t.fs.sent).toEqual([])
+    const out = createFeishuAgent({ ...t.deps, token: async () => ({ ok: false, error: 'signed_out' }) } as any)
+    expect(await out.ownerSend({ chatId: 'p1', text: 'x' })).toEqual({ ok: false, error: 'signed_out' })
+    expect(await out.ownerChats('lin')).toEqual({ ok: false, error: 'signed_out' })
   })
 })

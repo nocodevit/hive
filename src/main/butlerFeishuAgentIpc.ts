@@ -80,6 +80,11 @@ let previewer: ((input: { text: string; senderId?: string; chatId?: string; chat
 export const previewFeishuAnswer = (input: { text: string; senderId?: string; chatId?: string; chatName?: string; p2p?: boolean }) =>
   previewer ? previewer(input) : Promise.resolve({ ok: false, error: 'not_ready' })
 
+type Owner = Pick<ReturnType<typeof createFeishuAgent>, 'ownerChats' | 'ownerMessages' | 'ownerSend'>
+let owner: Owner | null = null
+/** ./hive feishu chats / messages / send: the owner's Feishu through Prime. */
+export const feishuOwner = (): Owner | null => owner
+
 export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
   const runClaude = (prompt: string, scope?: RunScope) => new Promise<string>((resolve, reject) => {
     // The run token ties `./hive chat-search` in this run to the person being answered.
@@ -161,6 +166,7 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
   })
   d.ipcMain.handle('feishuAgent:recall', (_e, id: unknown) => typeof id === 'string' ? agent.recall(id) : { ok: false, error: 'bad_id' })
   previewer = input => agent.preview(input)
+  owner = agent
   return agent
 }
 
