@@ -1135,7 +1135,7 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
 
     // ./hive feishu chats / messages / send: Feishu through Prime, the default Feishu channel.
     // The owner's own session only — never a run answering someone.
-    if (url.pathname === '/feishu/chats' || url.pathname === '/feishu/messages' || url.pathname === '/feishu/send') {
+    if (['/feishu/chats', '/feishu/messages', '/feishu/send', '/feishu/edit', '/feishu/recall', '/feishu/people', '/feishu/doc'].includes(url.pathname)) {
       if (req.headers['x-hive-run']) return reply(403, { ok: false, error: 'not_in_a_run' })
       const o = feishuOwner()
       if (!o) return reply(503, { ok: false, error: 'not_ready' })
@@ -1153,10 +1153,30 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       }
       if (req.method === 'POST' && url.pathname === '/feishu/send') {
         const body = await readJsonBody(req)
-        if (typeof body.chat !== 'string' || !/^oc_[\w-]+$/.test(body.chat)) return reply(400, { ok: false, error: 'bad_chat' })
+        const chat = typeof body.chat === 'string' && /^oc_[\w-]+$/.test(body.chat) ? body.chat : undefined
+        const to = typeof body.to === 'string' && /^ou_[\w-]+$/.test(body.to) ? body.to : undefined
+        if (!chat && !to) return reply(400, { ok: false, error: 'bad_chat' })
         if (typeof body.text !== 'string' || !body.text.trim()) return reply(400, { ok: false, error: 'empty_text' })
         if (body.replyTo !== undefined && (typeof body.replyTo !== 'string' || !/^om_[\w-]+$/.test(body.replyTo))) return reply(400, { ok: false, error: 'bad_reply_to' })
-        const r = await o.ownerSend({ chatId: body.chat, text: body.text.slice(0, 4000), replyTo: body.replyTo })
+        const r = await o.ownerSend({ chatId: chat, openId: chat ? undefined : to, name: typeof body.name === 'string' ? body.name.slice(0, 100) : undefined, text: body.text.slice(0, 4000), replyTo: body.replyTo })
+        return reply(r.ok ? 200 : 409, r)
+      }
+      if (req.method === 'POST' && (url.pathname === '/feishu/edit' || url.pathname === '/feishu/recall')) {
+        const body = await readJsonBody(req)
+        if (typeof body.id !== 'string' || !/^om_[\w-]+$/.test(body.id)) return reply(400, { ok: false, error: 'bad_message' })
+        if (url.pathname === '/feishu/recall') { const r = await o.recall(body.id); return reply(r.ok ? 200 : 409, r) }
+        if (typeof body.text !== 'string' || !body.text.trim()) return reply(400, { ok: false, error: 'empty_text' })
+        const r = await o.ownerEdit(body.id, body.text.slice(0, 4000))
+        return reply(r.ok ? 200 : 409, r)
+      }
+      if (req.method === 'GET' && url.pathname === '/feishu/people') {
+        const q = (url.searchParams.get('q') || '').trim().slice(0, 100)
+        if (!q) return reply(400, { ok: false, error: 'empty_query' })
+        const r = await o.ownerPeople(q)
+        return reply(r.ok ? 200 : 409, r)
+      }
+      if (req.method === 'GET' && url.pathname === '/feishu/doc') {
+        const r = await o.ownerDoc((url.searchParams.get('url') || '').slice(0, 500))
         return reply(r.ok ? 200 : 409, r)
       }
     }

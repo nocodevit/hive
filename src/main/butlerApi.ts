@@ -7,7 +7,7 @@
 import { existsSync, readdirSync } from 'fs'
 import { join } from 'path'
 
-export const BUTLER_ROUTES = ['/agents', '/chat/tail', '/chat/send', '/chat/start', '/chat/stop', '/chat/dismiss', '/feishu/probe', '/feishu/chat-search', '/feishu/try', '/feishu/chats', '/feishu/messages', '/feishu/send', '/pending', '/routines/run', '/jira/read', '/todos', '/todos/add', '/todos/status', '/todos/note', '/todos/priority', '/cards', '/cards/show', '/cards/edit', '/cards/close', '/cards/reopen', '/calendar', '/dispatch/assign', '/dispatch/nofit', '/tasks', '/tasks/accept', '/tasks/back'] as const
+export const BUTLER_ROUTES = ['/agents', '/chat/tail', '/chat/send', '/chat/start', '/chat/stop', '/chat/dismiss', '/feishu/probe', '/feishu/chat-search', '/feishu/try', '/feishu/chats', '/feishu/messages', '/feishu/send', '/feishu/edit', '/feishu/recall', '/feishu/people', '/feishu/doc', '/pending', '/routines/run', '/jira/read', '/todos', '/todos/add', '/todos/status', '/todos/note', '/todos/priority', '/cards', '/cards/show', '/cards/edit', '/cards/close', '/cards/reopen', '/calendar', '/dispatch/assign', '/dispatch/nofit', '/tasks', '/tasks/accept', '/tasks/back'] as const
 
 export function isButlerRoute(url: string): boolean {
   const path = url.split('?')[0]

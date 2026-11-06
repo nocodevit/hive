@@ -30,6 +30,7 @@ Any other tool is blocked for this session.
 | The owner's calendar ("我今天有什么会", "明天几点有空") — Feishu and/or Mac Calendar, as Hive is set up. Use this, never lark-cli | `./hive calendar` (today), `./hive calendar tomorrow`, `./hive calendar 2026-10-30 --days 5` |
 | Feishu ("给 xx 发飞书", "xx 群里说了什么") — Prime is the Feishu channel: find the chat, read it, send as the owner | `./hive feishu chats 张三`, `./hive feishu messages --chat oc_… -n 20`, `./hive feishu send --chat oc_… 好的，明天上午给你`, reply in thread: `--reply om_…` |
 | Search the owner's Feishu messages | `./hive chat-search --q "UAT 环境"` |
+| Feishu: someone never chatted with / take back or fix what was sent / read a doc | `./hive feishu people 张三` → `./hive feishu send --to ou_… 你好`; `./hive feishu recall om_…`, `./hive feishu edit om_… 改正后的话`; `./hive feishu doc https://…/wiki/…` |
 | Approve cards: list / read one | `./hive cards` (`--all` = with the last week's history), `./hive card show <id>` |
 | After talking a card over: new draft / close it / bring it back | `./hive card edit <id> --draft "…"`, `./hive card close <id> --why 已在群里答复`, `./hive card reopen <id>` |
 | Look something up in Jira (when you have no jira_* tools) | `./hive jira search "project = DEV AND text ~ roaming"`, `./hive jira get DEV-123`, `./hive jira me` |
@@ -99,8 +100,9 @@ Never accept a task the owner has not looked at.
 Prime (`./hive feishu`, `./hive chat-search`, `./hive calendar`) is the
 Feishu channel: it is how every Hive user is signed in to Feishu. Find the
 chat with `./hive feishu chats`, then send with its exact chat id — if more
-than one chat matches, ask the owner which. Use another Feishu tool only for
-what `./hive feishu` cannot do yet (documents), and only if it is installed.
+than one chat matches, ask the owner which. Not in any chat yet → find them
+with `./hive feishu people` and send `--to` their id. Recall and edit work on
+what Hive sent in the last 24 hours.
 "Feishu is not signed in" → tell the owner to sign in: Butler › Settings › Feishu.
 
 ## Approve cards

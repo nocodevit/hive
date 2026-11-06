@@ -26,7 +26,7 @@ interface FeishuLike {
 
 const CLAUDE_TIMEOUT_MS = 180_000
 
-async function feishuHttp(method: 'GET' | 'POST' | 'DELETE', url: string, token: string, body?: unknown) {
+async function feishuHttp(method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, token: string, body?: unknown) {
   const r = await fetch(url, {
     method,
     headers: { Authorization: `Bearer ${token}`, ...(body ? { 'Content-Type': 'application/json; charset=utf-8' } : {}) },
@@ -80,7 +80,7 @@ let previewer: ((input: { text: string; senderId?: string; chatId?: string; chat
 export const previewFeishuAnswer = (input: { text: string; senderId?: string; chatId?: string; chatName?: string; p2p?: boolean }) =>
   previewer ? previewer(input) : Promise.resolve({ ok: false, error: 'not_ready' })
 
-type Owner = Pick<ReturnType<typeof createFeishuAgent>, 'ownerChats' | 'ownerMessages' | 'ownerSend'>
+type Owner = Pick<ReturnType<typeof createFeishuAgent>, 'ownerChats' | 'ownerMessages' | 'ownerSend' | 'ownerEdit' | 'ownerPeople' | 'ownerDoc' | 'recall'>
 let owner: Owner | null = null
 /** ./hive feishu chats / messages / send: the owner's Feishu through Prime. */
 export const feishuOwner = (): Owner | null => owner
