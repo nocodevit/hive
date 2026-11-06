@@ -21,6 +21,7 @@ function fakeFeishu(clock: () => number) {
   const sent: Array<{ replyTo: string; text: string; id: string }> = []
   const deleted: string[] = []
   const reactions: string[] = []
+  const edited: string[] = []
   const listQueries: string[] = []
   let n = 0
   const add = (chat: string, from: string, text: string, at = clock(), mentions?: any[]) => {
@@ -45,8 +46,15 @@ function fakeFeishu(clock: () => number) {
       const since = Number(u.searchParams.get('start_time')) * 1000
       return { status: 200, body: { code: 0, data: { items: list.filter(m => Number(m.create_time) >= since), has_more: false } } }
     }
+    const put = path.match(/^\/im\/v1\/messages\/([^/]+)$/)
+    if (method === 'PUT' && put) { edited.push(`${decodeURIComponent(put[1])}:${JSON.parse(body.content).text}`); return { status: 200, body: { code: 0, data: { updated: true } } } }
+    if (method === 'GET' && path === '/search/v1/user') return { status: 200, body: { code: 0, data: { users: [{ open_id: 'ou_wang', name: '王五' }] } } }
+    if (method === 'GET' && path === '/wiki/v2/spaces/get_node') return { status: 200, body: { code: 0, data: { node: { obj_type: 'docx', obj_token: 'dx1', title: '验收清单' } } } }
+    if (method === 'GET' && path === '/docx/v1/documents/dx1/raw_content') return { status: 200, body: { code: 0, data: { content: '1. 下载\n2. 启用' } } }
+    if (method === 'GET' && path.startsWith('/docx/v1/documents/')) return { status: 403, body: { code: 99991679, msg: 'no scope' } }
     if (method === 'POST' && path === '/im/v1/messages') {
       const text = JSON.parse(body.content).text
+      if (u.searchParams.get('receive_id_type') === 'open_id') { msgs.d1 = msgs.d1 ?? []; const m = add('d1', SELF, text); sent.push({ replyTo: '', text, id: m.message_id }); return { status: 200, body: { code: 0, data: { message_id: m.message_id, chat_id: 'd1' } } } }
       const m = add(body.receive_id, SELF, text)
       sent.push({ replyTo: '', text, id: m.message_id })
       return { status: 200, body: { code: 0, data: { message_id: m.message_id } } }
@@ -65,7 +73,7 @@ function fakeFeishu(clock: () => number) {
     if (method === 'DELETE' && del) { deleted.push(decodeURIComponent(del[1])); return { status: 200, body: { code: 0 } } }
     return { status: 404, body: { code: 404 } }
   }
-  return { msgs, sent, deleted, reactions, listQueries, add, http }
+  return { msgs, sent, deleted, reactions, edited, listQueries, add, http }
 }
 
 function setup(opts: { claude?: (p: string) => string | Promise<string>; settings?: any; profile?: Partial<typeof EMPTY_PROFILE> } = {}) {
@@ -753,5 +761,37 @@ describe('owner Feishu through Prime (./hive feishu)', () => {
     const out = createFeishuAgent({ ...t.deps, token: async () => ({ ok: false, error: 'signed_out' }) } as any)
     expect(await out.ownerSend({ chatId: 'p1', text: 'x' })).toEqual({ ok: false, error: 'signed_out' })
     expect(await out.ownerChats('lin')).toEqual({ ok: false, error: 'signed_out' })
+  })
+})
+
+describe('owner Feishu: people, recall, edit, documents', () => {
+  it('people → send --to opens the direct chat and logs it under that chat', async () => {
+    const t = setup()
+    expect((await t.agent.ownerPeople('王五')).people).toEqual([{ openId: 'ou_wang', name: '王五' }])
+    expect(await t.agent.ownerSend({ openId: 'ou_wang', name: '王五', text: '你好' })).toMatchObject({ ok: true })
+    const log = readFileSync(join(t.dir, 'feishu-log.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    expect(log[0]).toMatchObject({ chatId: 'd1', chatName: '王五', kind: 'owner', text: '你好' })
+  })
+
+  it('edit rewrites what Hive sent (owner text as is) and marks it; recall works on it; older than a day is refused', async () => {
+    const t = setup()
+    const r = await t.agent.ownerSend({ chatId: 'p1', text: '明天上午' })
+    expect(await t.agent.ownerEdit(r.id!, '明天下午')).toEqual({ ok: true })
+    expect(t.fs.edited).toEqual([`${r.id}:明天下午`])
+    const log = () => readFileSync(join(t.dir, 'feishu-log.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l))
+    expect(log()[0]).toMatchObject({ text: '明天下午', edited: true })
+    expect(await t.agent.ownerEdit('om_nope', 'x')).toEqual({ ok: false, error: 'not_found' })
+    expect(await t.agent.recall(r.id!)).toEqual({ ok: true })
+    expect(await t.agent.ownerEdit(r.id!, 'x')).toEqual({ ok: false, error: 'already_recalled' })
+    const r2 = await t.agent.ownerSend({ chatId: 'p1', text: '旧的' })
+    t.advance(25 * 60 * MIN)
+    expect(await t.agent.ownerEdit(r2.id!, 'x')).toEqual({ ok: false, error: 'too_old' })
+  })
+
+  it('doc: a wiki page resolves to its docx; a missing scope says so; other links are refused', async () => {
+    const t = setup()
+    expect(await t.agent.ownerDoc('https://x.feishu.cn/wiki/Abc123')).toEqual({ ok: true, title: '验收清单', text: '1. 下载\n2. 启用' })
+    expect(await t.agent.ownerDoc('https://x.feishu.cn/docx/Zzz')).toEqual({ ok: false, error: 'missing_scope' })
+    expect(await t.agent.ownerDoc('https://x.feishu.cn/sheets/S1')).toEqual({ ok: false, error: 'unsupported_link' })
   })
 })

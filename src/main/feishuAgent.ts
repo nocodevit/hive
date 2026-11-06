@@ -233,6 +233,8 @@ export interface LogEntry {
   text: string
   kind: LogKind
   recalled?: boolean
+  /** Edited after sending (./hive feishu edit). */
+  edited?: boolean
 }
 
 export interface Job {
@@ -263,7 +265,7 @@ export type Outcome =
   | { messageId: string; result: 'skipped'; why: 'owner_took_over' | 'rate_limited' | 'acknowledged' | 'from_assistant' | 'added_to_card' }
   | { messageId: string; result: 'failed'; error: string }
 
-type Http = (method: 'GET' | 'POST' | 'DELETE', url: string, token: string, body?: unknown) => Promise<{ status: number; body: any }>
+type Http = (method: 'GET' | 'POST' | 'PUT' | 'DELETE', url: string, token: string, body?: unknown) => Promise<{ status: number; body: any }>
 
 /** Butler › Todo, as the Feishu agent uses it (butlerTodos.ts). */
 export interface FeishuTodos {
@@ -795,20 +797,73 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       } catch (e) { return { ok: false, error: String((e as Error).message) } }
     },
     /** `./hive feishu send`: the owner's own words, sent as the owner through Prime (no assistant prefix); logged like every other send. */
-    async ownerSend(p: { chatId: string; text: string; replyTo?: string }): Promise<{ ok: boolean; error?: string; id?: string }> {
+    /** To a chat (oc_, one of the owner's) or to a person (ou_, from ./hive feishu people: opens the direct chat). */
+    async ownerSend(p: { chatId?: string; openId?: string; name?: string; text: string; replyTo?: string }): Promise<{ ok: boolean; error?: string; id?: string }> {
       const tok = await deps.token()
       if (!tok.ok || !tok.token) return { ok: false, error: 'signed_out' }
-      const chat = (await listChats(tok.token).catch(() => [])).find(c => c.id === p.chatId)
-      if (!chat) return { ok: false, error: 'no_such_chat' }
+      const chat = p.chatId ? (await listChats(tok.token).catch(() => [])).find(c => c.id === p.chatId) : undefined
+      if (p.chatId && !chat) return { ok: false, error: 'no_such_chat' }
+      if (!p.chatId && !p.openId) return { ok: false, error: 'no_such_chat' }
       const content = { msg_type: 'text', content: JSON.stringify({ text: p.text }) }
       const r = p.replyTo
         ? await deps.http('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(p.replyTo)}/reply`, tok.token, content)
-        : await deps.http('POST', `${FEISHU_API}/im/v1/messages?receive_id_type=chat_id`, tok.token, { receive_id: p.chatId, ...content })
+        : chat
+          ? await deps.http('POST', `${FEISHU_API}/im/v1/messages?receive_id_type=chat_id`, tok.token, { receive_id: chat.id, ...content })
+          : await deps.http('POST', `${FEISHU_API}/im/v1/messages?receive_id_type=open_id`, tok.token, { receive_id: p.openId, ...content })
       if (!ok(r)) return { ok: false, error: errOf(r) }
       const id = String(r.body?.data?.message_id ?? '')
-      appendLog({ id, time: now(), chatId: chat.id, chatName: chat.name, inReplyTo: p.replyTo ?? '', text: p.text, kind: 'owner' })
-      for (const t of deps.todos?.openByRef('chatId', chat.id) ?? []) deps.todos!.event(t.id, { who: 'butler', kind: 'action', text: `Sent for you in ${chat.name || 'Feishu'}: ${clip(p.text, 200)}` })
+      const chatId = chat?.id ?? String(r.body?.data?.chat_id ?? '')
+      appendLog({ id, time: now(), chatId, chatName: chat?.name ?? p.name ?? '', inReplyTo: p.replyTo ?? '', text: p.text, kind: 'owner' })
+      for (const t of deps.todos?.openByRef('chatId', chatId) ?? []) deps.todos!.event(t.id, { who: 'butler', kind: 'action', text: `Sent for you in ${chat?.name || p.name || 'Feishu'}: ${clip(p.text, 200)}` })
       return { ok: true, id }
+    },
+    /** `./hive feishu edit`: a text Hive sent in the last day, rewritten in place (Feishu allows 20 edits). */
+    async ownerEdit(id: string, text: string): Promise<{ ok: boolean; error?: string }> {
+      const all = readLog()
+      const e = all.find(x => x.id === id)
+      if (!e) return { ok: false, error: 'not_found' }
+      if (e.recalled) return { ok: false, error: 'already_recalled' }
+      if (now() - e.time > RECALL_WINDOW_MS) return { ok: false, error: 'too_old' }
+      const tok = await deps.token()
+      if (!tok.ok || !tok.token) return { ok: false, error: 'signed_out' }
+      // An assistant reply keeps its prefix: the edit says the same who-is-talking.
+      const full = e.kind === 'owner' ? text : ensurePrefix(text, prefix())
+      const r = await deps.http('PUT', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(id)}`, tok.token, { msg_type: 'text', content: JSON.stringify({ text: full }) })
+      if (!ok(r)) return { ok: false, error: errOf(r) }
+      e.text = full
+      e.edited = true
+      writeFileSync(logFile + '.tmp', all.map(x => JSON.stringify(x)).join('\n') + '\n')
+      renameSync(logFile + '.tmp', logFile)
+      deps.onChange?.()
+      return { ok: true }
+    },
+    /** `./hive feishu people`: the company directory (contact:user:search), for someone the owner has never chatted with. */
+    async ownerPeople(q: string): Promise<{ ok: boolean; error?: string; people?: Array<{ openId: string; name: string }> }> {
+      const tok = await deps.token()
+      if (!tok.ok || !tok.token) return { ok: false, error: 'signed_out' }
+      const r = await deps.http('GET', `${FEISHU_API}/search/v1/user?${new URLSearchParams({ query: q, page_size: '20' })}`, tok.token)
+      if (!ok(r)) return { ok: false, error: r.body?.code === 99991679 ? 'missing_scope' : errOf(r) }
+      return { ok: true, people: ((r.body.data?.users ?? []) as any[]).filter(u => typeof u?.open_id === 'string').map(u => ({ openId: u.open_id, name: String(u.name ?? '') })) }
+    },
+    /** `./hive feishu doc`: a docx or wiki page as plain text. */
+    async ownerDoc(link: string): Promise<{ ok: boolean; error?: string; title?: string; text?: string }> {
+      const m = /\/(docx|wiki)\/([A-Za-z0-9]+)/.exec(link)
+      if (!m) return { ok: false, error: 'unsupported_link' }
+      const tok = await deps.token()
+      if (!tok.ok || !tok.token) return { ok: false, error: 'signed_out' }
+      let docId = m[2]
+      let title = ''
+      if (m[1] === 'wiki') {
+        const n = await deps.http('GET', `${FEISHU_API}/wiki/v2/spaces/get_node?${new URLSearchParams({ token: m[2] })}`, tok.token)
+        if (!ok(n)) return { ok: false, error: n.body?.code === 99991679 ? 'missing_scope' : errOf(n) }
+        const node = n.body.data?.node
+        if (node?.obj_type !== 'docx') return { ok: false, error: 'unsupported_link' }
+        docId = String(node.obj_token)
+        title = String(node.title ?? '')
+      }
+      const r = await deps.http('GET', `${FEISHU_API}/docx/v1/documents/${encodeURIComponent(docId)}/raw_content`, tok.token)
+      if (!ok(r)) return { ok: false, error: r.body?.code === 99991679 ? 'missing_scope' : errOf(r) }
+      return { ok: true, title, text: String(r.body.data?.content ?? '').slice(0, 60_000) }
     },
     /** The case log (memory layer 1). */
     cases: () => cases.all(),

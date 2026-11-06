@@ -277,3 +277,12 @@ test('./hive feishu goes through Prime: not signed in says how to sign in; bad i
   const run = spawnSync('python3', [join(PROJECT_ROOT, 'resources', 'butler', 'hive'), 'feishu', 'chats', '张三'], { env: { ...process.env, HIVE_DATA_DIR, HIVE_RUN_TOKEN: 'r1' }, encoding: 'utf8' })
   expect(`${run.stdout}${run.stderr}`).toContain('Not available while answering someone')
 })
+
+test('./hive feishu people / edit / recall / doc: signed out says how to sign in; bad ids are refused', async () => {
+  expect(hive('feishu', 'people', '王五').out).toContain('Feishu is not signed in to Hive')
+  expect(hive('feishu', 'send', '--to', 'ou_wang', '你好').out).toContain('Feishu is not signed in to Hive')
+  expect(hive('feishu', 'edit', 'om_1', '改一下').out).toContain('No such')
+  expect(hive('feishu', 'recall', 'bad').out).toContain('not a message id')
+  expect(hive('feishu', 'edit', 'om_1').out).toContain('What should it say?')
+  expect(hive('feishu', 'doc', 'https://x.feishu.cn/wiki/Abc').out).toContain('Feishu is not signed in to Hive')
+})

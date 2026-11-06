@@ -191,6 +191,7 @@ function LogList() {
             <span aria-hidden>{KIND_ICON[e.kind]}</span>
             <span className="font-semibold text-text-primary shrink-0 max-w-[110px] truncate">{e.chatName || 'Feishu'}</span>
             <span className={`flex-1 min-w-0 truncate ${e.recalled ? 'line-through text-text-muted' : 'text-text-secondary'}`} title={e.text}>{e.text}</span>
+            {e.edited && !e.recalled && <span className="text-[10.5px] text-text-muted shrink-0">edited</span>}
             <span className="text-[11px] text-text-muted font-mono shrink-0">{new Date(e.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
             {canRecall && <button onClick={() => recall(e.id)} className="text-[11px] font-semibold text-accent cursor-pointer shrink-0">Recall</button>}
             {e.recalled && <span className="text-[11px] text-text-muted shrink-0">recalled</span>}

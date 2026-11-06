@@ -10,7 +10,10 @@
   ./hive chat-search --q "words"
   ./hive feishu chats NAME...                         (find a chat or person; Feishu through Prime)
   ./hive feishu messages --chat CHAT_ID [-n 20]
-  ./hive feishu send --chat CHAT_ID [--reply MESSAGE_ID] TEXT...   (sent as the owner)
+  ./hive feishu send (--chat CHAT_ID | --to OPEN_ID) [--reply MESSAGE_ID] TEXT...   (sent as the owner)
+  ./hive feishu people NAME...                        (company directory: someone never chatted with)
+  ./hive feishu edit MESSAGE_ID TEXT... | ./hive feishu recall MESSAGE_ID   (what Hive sent, last 24h)
+  ./hive feishu doc URL                               (a docx / wiki page as text)
   ./hive feishu-try --text "message" [--sender OPEN_ID] [--chat CHAT_ID]   (nothing is sent)
 """
 import argparse, json, os, subprocess, sys, urllib.error, urllib.parse, urllib.request
@@ -88,6 +91,11 @@ def fail(status, data):
         'signed_out': 'Feishu is not signed in to Hive. Ask the owner to sign in: Butler › Settings › Feishu.',
         'no_such_chat': 'No chat with that id among the owner\'s chats. Find it with ./hive feishu chats NAME.',
         'not_in_a_run': 'Not available while answering someone.',
+        'missing_scope': 'Prime is not allowed to do that yet: the owner signs out of Feishu in Hive and in again (the Prime app needs the permission).',
+        'too_old': 'Only what Hive sent in the last 24 hours can be changed.',
+        'already_recalled': 'That message was recalled already.',
+        'unsupported_link': 'Only Feishu docx and wiki document links can be read.',
+        'bad_message': 'That is not a message id (om_…). See ./hive feishu messages --chat CHAT_ID.',
         'bad_chat': 'That is not a chat id (oc_…). Find it with ./hive feishu chats NAME.',
         'no_session': "That agent's chat is not running. Nothing was sent. Start it first (./hive start ...).",
         'not_in_print_mode': "That chat is in remote-control mode right now and can't take input.",
@@ -128,8 +136,8 @@ def main():
     j.add_argument('--fields', default='summary,status,assignee,updated,labels,fixVersions,issuelinks'); j.add_argument('--max', type=int, default=20)
     r = sub.add_parser('run'); r.add_argument('routine', choices=['jira', 'jira-check', 'sort-inbox', 'morning-plan', 'evening-report', 'dispatch'])
     c = sub.add_parser('chat-search'); c.add_argument('--q', required=True)
-    fs = sub.add_parser('feishu'); fs.add_argument('what', choices=['chats', 'messages', 'send']); fs.add_argument('words', nargs='*')
-    fs.add_argument('--chat'); fs.add_argument('--reply'); fs.add_argument('-n', type=int, default=20)
+    fs = sub.add_parser('feishu'); fs.add_argument('what', choices=['chats', 'messages', 'send', 'people', 'edit', 'recall', 'doc']); fs.add_argument('words', nargs='*')
+    fs.add_argument('--chat'); fs.add_argument('--to'); fs.add_argument('--reply'); fs.add_argument('-n', type=int, default=20)
     f = sub.add_parser('feishu-try'); f.add_argument('--text', required=True); f.add_argument('--sender'); f.add_argument('--chat')
     for name in ('tail', 'send', 'start', 'stop', 'dismiss'):
         s = sub.add_parser(name)
@@ -343,7 +351,30 @@ def main():
             if not data['chats']: print('No chat with that name.')
             for c in data['chats']: print(f"{c['name']}  [{'direct' if c['p2p'] else 'group'}]  (chat {c['id']})")
             return
-        if not args.chat: sys.exit('Which chat? --chat CHAT_ID (find it with ./hive feishu chats NAME)')
+        if args.what == 'people':
+            if not args.words: sys.exit('Say who: ./hive feishu people 张三')
+            status, data = call('GET', '/feishu/people?' + urlencode({'q': ' '.join(args.words)}))
+            if status != 200: fail(status, data)
+            if not data['people']: print('Nobody with that name in the directory.')
+            for u in data['people']: print(f"{u['name']}  (to {u['openId']})")
+            return
+        if args.what in ('edit', 'recall'):
+            if not args.words: sys.exit(f'Which message? ./hive feishu {args.what} MESSAGE_ID' + (' TEXT' if args.what == 'edit' else ''))
+            mid, text = args.words[0], ' '.join(args.words[1:]).strip()
+            if args.what == 'edit' and not text: sys.exit('What should it say? ./hive feishu edit MESSAGE_ID TEXT')
+            status, data = call('POST', f'/feishu/{args.what}', {'id': mid, **({'text': text} if args.what == 'edit' else {})})
+            if data.get('error') == 'not_found': sys.exit('FAILED: No such message among what Hive sent (see the Feishu log in Butler).')
+            if status != 200: fail(status, data)
+            print('EDITED' if args.what == 'edit' else 'RECALLED')
+            return
+        if args.what == 'doc':
+            if not args.words: sys.exit('Which document? ./hive feishu doc URL')
+            status, data = call('GET', '/feishu/doc?' + urlencode({'url': args.words[0]}))
+            if status != 200: fail(status, data)
+            if data.get('title'): print(f"# {data['title']}\n")
+            print(data['text'])
+            return
+        if not args.chat and not (args.what == 'send' and args.to): sys.exit('Which chat? --chat CHAT_ID (find it with ./hive feishu chats NAME, or --to OPEN_ID from ./hive feishu people)')
         if args.what == 'messages':
             status, data = call('GET', '/feishu/messages?' + urlencode({'chat': args.chat, 'n': args.n}))
             if status != 200: fail(status, data)
@@ -351,7 +382,7 @@ def main():
             return
         text = ' '.join(args.words).strip()
         if not text: sys.exit('Nothing to send.')
-        status, data = call('POST', '/feishu/send', {'chat': args.chat, 'text': text, **({'replyTo': args.reply} if args.reply else {})})
+        status, data = call('POST', '/feishu/send', {**({'chat': args.chat} if args.chat else {'to': args.to}), 'text': text, **({'replyTo': args.reply} if args.reply else {})})
         if status != 200: fail(status, data)
         print(f"SENT (msg {data['id']})")
         return
