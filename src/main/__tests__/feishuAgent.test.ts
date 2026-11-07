@@ -343,7 +343,7 @@ describe('feishu agent', () => {
 
   it('a group card leads with who sent it; the group goes in the subtitle', async () => {
     const t = setup({ settings: { waitBeforeReplyMs: 0 }, claude: () => '{"category":"cannot-answer","level":"hold","confidence":"low","reply":"","sources":[],"claims":[]}' })
-    ;(t.deps as any).senderName = async (id: string) => (id === 'ou_huo' ? '霍传俊' : '')
+    ;(t.deps as any).senderName = async (id: string, chat: string) => (id === 'ou_huo' && chat ? '霍传俊' : '')
     const agent = createFeishuAgent(t.deps)
     agent.setSettings({ enabled: true, waitBeforeReplyMs: 0 })
     t.advance(1000)

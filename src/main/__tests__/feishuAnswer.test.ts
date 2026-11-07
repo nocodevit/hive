@@ -88,6 +88,24 @@ describe('relation', () => {
     expect(await look.nameOf('ou_stranger')).toBe('')
     expect(await createRelationLookup({ get, token: async () => null, selfOpenId: () => 'ou_me' })('ou_boss')).toBe('unknown')
   })
+  it('a name contacts cannot show comes from the chat members (paged, cached a day)', async () => {
+    const calls: string[] = []
+    const get = async (url: string) => {
+      calls.push(url)
+      if (url.includes('/contact/v3/users/')) return { status: 400, body: { code: 41050, msg: 'no user authority' } }
+      const second = url.includes('page_token=p2')
+      return { status: 200, body: { code: 0, data: second
+        ? { items: [{ member_id: 'ou_ext', name: 'Ext Lee' }], has_more: false }
+        : { items: [{ member_id: 'ou_a', name: 'A' }], has_more: true, page_token: 'p2' } } }
+    }
+    const look = createRelationLookup({ get, token: async () => 'u-t', selfOpenId: () => 'ou_me', now: () => 0 })
+    expect(await look.nameOf('ou_ext', 'oc_g')).toBe('Ext Lee')
+    expect(calls.filter(u => u.includes('/im/v1/chats/oc_g/members'))).toHaveLength(2)
+    expect(await look.nameOf('ou_a', 'oc_g')).toBe('A')
+    expect(calls.filter(u => u.includes('/members'))).toHaveLength(2)
+    expect(await look.nameOf('ou_nobody', 'oc_g')).toBe('')
+    expect(await look.nameOf('ou_ext')).toBe('')
+  })
 })
 
 describe('free / busy', () => {

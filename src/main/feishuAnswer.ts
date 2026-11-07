@@ -181,6 +181,7 @@ export function relationOf(owner: Person, sender: Person): Relation {
 
 type Get = (url: string, token: string) => Promise<{ status: number; body: any }>
 const CONTACT = 'https://open.feishu.cn/open-apis/contact/v3/users'
+const CHATS = 'https://open.feishu.cn/open-apis/im/v1/chats'
 const DAY_MS = 24 * 3600_000
 
 /** Reads both people from Feishu contacts (cached a day). Any failure → 'unknown':
@@ -207,10 +208,32 @@ export function createRelationLookup(deps: { get: Get; token: () => Promise<stri
     const [owner, sender] = await Promise.all([person(self, token), person(senderId, token)])
     return owner && sender ? relationOf(owner, sender) : 'unknown'
   }
-  /** The sender's display name ('' when contacts cannot be read). */
-  const nameOf = async (openId: string): Promise<string> => {
+  // A group's members by open_id (cached a day): names for people contacts do not show (outside the app's range, external).
+  const members = new Map<string, { names: Record<string, string>; at: number }>()
+  async function memberNames(chatId: string, token: string): Promise<Record<string, string>> {
+    const hit = members.get(chatId)
+    if (hit && now() - hit.at < DAY_MS) return hit.names
+    const names: Record<string, string> = {}
+    let page = ''
+    try {
+      for (let i = 0; i < 20; i++) {
+        const r = await deps.get(`${CHATS}/${encodeURIComponent(chatId)}/members?member_id_type=open_id&page_size=100${page ? `&page_token=${encodeURIComponent(page)}` : ''}`, token)
+        const d = r.status === 200 && r.body?.code === 0 ? r.body.data : null
+        if (!d) break
+        for (const m of Array.isArray(d.items) ? d.items : []) if (typeof m?.member_id === 'string' && typeof m.name === 'string' && m.name) names[m.member_id] = m.name
+        if (!d.has_more || typeof d.page_token !== 'string' || !d.page_token) break
+        page = d.page_token
+      }
+    } catch { /* names so far */ }
+    members.set(chatId, { names, at: now() })
+    return names
+  }
+  /** The sender's display name: Feishu contacts, else the chat's member list ('' when neither has it). */
+  const nameOf = async (openId: string, chatId?: string): Promise<string> => {
     const token = await deps.token()
-    return token ? (await person(openId, token))?.name ?? '' : ''
+    if (!token) return ''
+    const name = (await person(openId, token))?.name ?? ''
+    return name || (chatId ? (await memberNames(chatId, token))[openId] ?? '' : '')
   }
   return Object.assign(relation, { nameOf })
 }
