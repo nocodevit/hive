@@ -7,6 +7,19 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.43.0](https://github.com/nocodevit/hive/compare/v2.42.5...v2.43.0) (2026-11-07)
+
+
+### Features
+
+* **butler:** ./hive feishu people / edit / recall / doc through Prime ([32c8c5b](https://github.com/nocodevit/hive/commit/32c8c5b6c480938cd21c1d8d3e48a7e1d557e289))
+
+
+### Bug Fixes
+
+* **feishu:** group card names the sender from chat members when contacts can't ([90be57b](https://github.com/nocodevit/hive/commit/90be57b3fc81b471b9ea974d27a8c77ebd6872ee))
+* right-click menus stay inside the window (flip up/left near edges) ([16289ff](https://github.com/nocodevit/hive/commit/16289ff502eda4918ee92beac0d26fe702afd893))
+
 ## [2.42.5] — 2026-11-06
 
 ##### 📱 Butler
