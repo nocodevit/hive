@@ -302,8 +302,8 @@ export interface FeishuAgentDeps {
   relation?: (openId: string) => Promise<Relation>
   /** Jira projects whose keys never go out in a reply (the owner's jira-config dev project). */
   neverQuote?: () => string[]
-  /** The sender's name from Feishu contacts ('' when unknown). */
-  senderName?: (openId: string) => Promise<string>
+  /** The sender's name from Feishu contacts or the chat's members ('' when unknown). */
+  senderName?: (openId: string, chatId: string) => Promise<string>
   /** Is the owner free then (re-checked right before creating)? */
   slotFree?: (start: number, end: number) => Promise<boolean>
   /** Create a Feishu meeting on the owner's calendar, inviting these open_ids (with a reminder). */
@@ -564,7 +564,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const started = now()
     const relation: Relation = await (deps.relation?.(job.senderId) ?? Promise.resolve('unknown' as Relation)).catch(() => 'unknown' as Relation)
     const busy = await (deps.freeBusy?.() ?? Promise.resolve({ known: false, text: '' })).catch(() => ({ known: false, text: '' }))
-    const senderName = await (deps.senderName?.(job.senderId) ?? Promise.resolve('')).catch(() => '')
+    const senderName = await (deps.senderName?.(job.senderId, job.chatId) ?? Promise.resolve('')).catch(() => '')
     let answer: Answer | null = null
     let error = ''
     try { answer = parseAnswer(await deps.runClaude(buildPrompt(job, history, self, relation, busy, senderName), { senderId: job.senderId, chatId: job.chatId, chatName: job.chatName })) } catch (e) { answer = null; error = e instanceof Error ? e.message : String(e) }
