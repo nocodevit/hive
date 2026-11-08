@@ -11,7 +11,7 @@ back-filled from git history at v1.7.28.
 
 ##### 📱 Butler
 - **Butler can do more in Feishu through Prime**: find a person, read a Feishu doc, edit or recall a message it sent for you.
-- Phone Butler: `./hive feishu people NAME`, `./hive feishu doc URL`, `./hive feishu edit …`, `./hive feishu recall …`.
+- Phone Butler: `./hive feishu people NAME`, `./hive feishu doc URL`, `./hive feishu edit MESSAGE_ID TEXT`, `./hive feishu recall MESSAGE_ID` (messages Hive sent in the last 24h).
 - **Group-chat cards show who wrote the message.** When Feishu contacts can't show a sender's name, Hive takes it from the group's member list.
 
 ##### 🐝 Agents
