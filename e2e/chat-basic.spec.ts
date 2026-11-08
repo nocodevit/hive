@@ -21,7 +21,7 @@ const PROJECT_ROOT = join(__dirname, '..')
 const HIVE_DATA_DIR = join(require('os').tmpdir(), 'hive-e2e-chat-basic')
 const HIVE_PORT = 17813
 
-const FIXTURE_DIR = join(require('os').homedir(), 'projects', 'hive-e2e-fixture')
+const FIXTURE_DIR = process.env.HIVE_E2E_FIXTURE || ''
 const TMP_FIXTURE = join(require('os').tmpdir(), 'hive-e2e-chat-basic-fixture')
 
 let projectFolder: string

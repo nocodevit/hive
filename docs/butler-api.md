@@ -174,5 +174,5 @@ from my phone (Butler)", off by default.
 
 `~/.hive/butler/hive` (`agents` / `tail` / `send` / `start`) wraps these
 routes; `~/.hive/butler/CLAUDE.md` holds the butler's operating rules.
-Both are written by Hive from `resources/butler/`. The hand-built
-`~/projects/hive-butler/` predates this and is no longer needed.
+Both are written by Hive from `resources/butler/`. The old hand-built
+`hive-butler` folder predates this and is no longer needed.

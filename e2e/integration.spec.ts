@@ -232,7 +232,6 @@ test.beforeAll(async () => {
 
   // Clean residual [TEST] agent DEFINITION FILES on disk (from previous failed runs)
   const agentsDirs = [
-    join(require('os').homedir(), 'workspace', 'Hive', '.claude', 'agents'),
     join(PROJECT_ROOT, '.claude', 'agents'),
   ]
   for (const dir of agentsDirs) {

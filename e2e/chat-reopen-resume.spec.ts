@@ -39,7 +39,7 @@ const PROJECT_ROOT = join(__dirname, '..')
 const HIVE_DATA_DIR = join(require('os').tmpdir(), 'hive-e2e-reopen-resume')
 const HIVE_PORT = 17816
 
-const FIXTURE_DIR = join(require('os').homedir(), 'projects', 'hive-e2e-fixture')
+const FIXTURE_DIR = process.env.HIVE_E2E_FIXTURE || ''
 // Fixture lives under $HOME with a DOT-FREE name, faithfully matching the
 // user's real ~/Development/<project> paths. Two macOS-only pitfalls this
 // avoids, both of which would falsely disable Resume by making

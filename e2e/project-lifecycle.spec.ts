@@ -9,7 +9,7 @@ import { mkdirSync, rmSync, existsSync } from 'fs'
  * and delete project. No claude spawned — exercises only the UI + IPC + data
  * persistence path that broke silently in v1.7.108 / v1.7.119 etc.
  *
- * Fixture: nocodevit/hive-e2e-fixture cloned to ~/projects/hive-e2e-fixture
+ * Fixture: a clone of nocodevit/hive-e2e-fixture, path in HIVE_E2E_FIXTURE
  * (a small TS project with real git history; safe to point Hive at).
  * If absent, this spec creates a temp dir on the fly so the suite still runs.
  *
@@ -21,7 +21,7 @@ const PROJECT_ROOT = join(__dirname, '..')
 const HIVE_DATA_DIR = join(require('os').tmpdir(), 'hive-e2e-project-lifecycle')
 const HIVE_PORT = 17811
 
-const FIXTURE_DIR = join(require('os').homedir(), 'projects', 'hive-e2e-fixture')
+const FIXTURE_DIR = process.env.HIVE_E2E_FIXTURE || ''
 const TMP_FIXTURE = join(require('os').tmpdir(), 'hive-e2e-tmp-project')
 
 let projectFolder: string
