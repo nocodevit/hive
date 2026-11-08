@@ -6,8 +6,9 @@ import { mkdirSync, rmSync, existsSync, writeFileSync, chmodSync } from 'fs'
 import { tmpdir } from 'os'
 
 /**
- * Hive never closes an agent's chat to make room. With 12+ open, a banner
- * stays up instead; opening the 13th keeps all 13.
+ * Hive never closes an agent's chat to make room. With 12+ running, a banner
+ * stays up instead; opening the 13th keeps all 13. It counts running claude
+ * processes, not panes: a pane whose session was closed does not count.
  */
 
 const PROJECT_ROOT = join(__dirname, '..')
@@ -50,6 +51,7 @@ test('12 open agents: a banner stays; the 13th closes nobody', async () => {
   const banner = page.getByRole('status', { name: /agents open$/ })
   for (const [i, name] of NAMES.entries()) {
     await page.getByText(name, { exact: true }).first().click()
+    await page.getByRole('button', { name: /Start new/ }).and(page.locator(':visible')).click()
     if (i < 11) await expect(banner).toHaveCount(0)
   }
   await expect(page.getByRole('status', { name: '13 agents open' })).toBeVisible()
@@ -57,4 +59,12 @@ test('12 open agents: a banner stays; the 13th closes nobody', async () => {
   // Still up after a while and after switching back to the first one: nothing was closed.
   await page.getByText(NAMES[0], { exact: true }).first().click()
   await expect(page.getByRole('status', { name: '13 agents open' })).toBeVisible()
+})
+
+test('a closed session stops counting even though its pane stays', async () => {
+  await page.evaluate(() => window.api.chat.stop('chat-a13'))
+  await expect(page.getByRole('status', { name: '12 agents open' })).toBeVisible({ timeout: 15000 })
+  await page.evaluate(() => window.api.chat.stop('chat-a12'))
+  await expect(page.getByRole('status', { name: /agents open$/ })).toHaveCount(0, { timeout: 15000 })
+  await expect(page.getByText(NAMES[12], { exact: true }).first()).toBeVisible()
 })

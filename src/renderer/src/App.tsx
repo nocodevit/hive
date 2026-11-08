@@ -48,7 +48,7 @@ import { BotanicFX } from './components/BotanicFX'
 import { availablePalettes, halloweenTakeover, botanicTakeover, type Palette, PALETTE_META, loadPalette, applyPalette, STYLES, type Style, STYLE_META, loadStyle, applyStyle } from './palette'
 import { OverviewPage } from './components/OverviewPage'
 import { formatTimeSince } from './timeSince'
-import { ManyAgentsBanner } from './components/ManyAgentsBanner'
+import { ManyAgentsBanner, useRunningAgentCount } from './components/ManyAgentsBanner'
 import { BotanicSound } from './components/BotanicSound'
 import { confirmDialog } from './components/ConfirmDialog'
 import { type VoiceEvent, useAutoSendPrefs, setAutoSendPrefs, AUTO_SEND_DELAY_MIN_MS, AUTO_SEND_DELAY_MAX_MS } from './lib/voice-autosend'
@@ -109,6 +109,7 @@ export default function App() {
   // "scanning" state instead of flashing "No projects yet" on cold open.
   const [projectsLoaded, setProjectsLoaded] = useState(false)
   const [agents, setAgents] = useState<Agent[]>([])
+  const runningAgents = useRunningAgentCount(agents.map(a => a.id))
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null)
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null)
   const [activeTerminals, setActiveTerminals] = useState<Set<string>>(new Set())
@@ -3176,7 +3177,7 @@ export default function App() {
       <WakeToast onOpenButler={() => setButlerOpen(true)} />
 
       <div className="no-drag fixed z-[60] top-3 left-1/2 -translate-x-1/2 flex flex-col items-center gap-2 pointer-events-none [&>*]:pointer-events-auto">
-        <ManyAgentsBanner open={activeTerminals.size} />
+        <ManyAgentsBanner open={runningAgents} />
         <FeishuExpiredBanner />
       </div>
 
@@ -3351,7 +3352,7 @@ export default function App() {
             }}
             onCloseSession={async (agentId) => {
               try {
-                await (window as any).api?.chat?.stop?.(agentId)
+                await (window as any).api?.chat?.stop?.(`chat-${agentId}`)
               } catch { /* silent — chat.stop already logs on the main side */ }
               setActiveTerminals((prev) => {
                 const next = new Set(prev)
