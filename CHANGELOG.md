@@ -7,6 +7,22 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.6] — 2026-11-09
+
+##### 📱 Butler
+- **Butler can do more in Feishu through Prime**: find a person, read a Feishu doc, edit or recall a message it sent for you.
+- Phone Butler: `./hive feishu people NAME`, `./hive feishu doc URL`, `./hive feishu edit …`, `./hive feishu recall …`.
+- **Group-chat cards show who wrote the message.** When Feishu contacts can't show a sender's name, Hive takes it from the group's member list.
+
+##### 🐝 Agents
+- **"N agents open" counts only agents that are running.** A chat whose session you closed no longer counts, and Butler doesn't either.
+- **Close in the Overview stops that agent for real.**
+
+##### 🖱 Menus
+- **Right-click menus stay inside the window.** Near the bottom or right edge they open upward or to the left instead of being cut off.
+
+---
+
 ## [2.42.5] — 2026-11-06
 
 ##### 📱 Butler
