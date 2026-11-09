@@ -51,7 +51,9 @@ export function discussText(it: ApprovalCard): string {
 export function cardDiscussText(it: ApprovalCard): string {
   const p = it.payload
   return [
-    'Help me think this through. Do not send or change anything until I confirm. Once we agree on the wording, put it on the card (./hive card edit) and I send it from Approve.',
+    it.kind === ANSWERED
+      ? `Butler already answered this for me (below). Help me check that answer. Do not send or change anything until I confirm. Anything to add: put it on the card (./hive card edit) and I send it from Approve as a reply in their thread. To fix the answer itself: ./hive feishu edit ${str(p, 'sentId')} TEXT, or ./hive feishu recall ${str(p, 'sentId')}.`
+      : 'Help me think this through. Do not send or change anything until I confirm. Once we agree on the wording, put it on the card (./hive card edit) and I send it from Approve.',
     `${it.title} · ${it.subtitle} · card ${it.id}`,
     str(p, 'key') ? `Jira: ${str(p, 'key')}${str(p, 'url') ? ` (${str(p, 'url')})` : ''}` : '',
     str(p, 'chatName') ? `Feishu chat: ${str(p, 'chatName')}` : '',
@@ -62,6 +64,9 @@ export function cardDiscussText(it: ApprovalCard): string {
     it.draft ? `--- Butler's draft (not sent) ---\n${it.draft}` : ''
   ].filter(Boolean).join('\n')
 }
+
+/** The main button: an 已回复 card with a follow-up on it sends that follow-up. */
+const actionOf = (it: ApprovalCard) => (it.kind === ANSWERED && it.draft.trim() ? 'Reply' : it.action)
 
 /** Who it is from: the name before " · " in the title (a Jira card: its key). */
 const nameOf = (it: ApprovalCard) => (it.kind.startsWith('jira') ? str(it.payload, 'key') || it.title.split(' · ')[0] : it.title.split(' · ')[0])
@@ -220,9 +225,9 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
           ) : (
             <>
               {/* Loading: the label stays (invisible) so the width never jumps; a spinner, then ✓ when it went out. */}
-              <button disabled={busy === it.id || !!held[it.id]} onClick={() => approve(it)} aria-label={`${it.action} ${it.title}`} className={`${primary} relative`}>
+              <button disabled={busy === it.id || !!held[it.id]} onClick={() => approve(it)} aria-label={`${actionOf(it)} ${it.title}`} className={`${primary} relative`}>
                 <span className={`inline-flex items-center gap-1.5 transition-opacity duration-150 ${busy === it.id || held[it.id] ? 'opacity-0' : ''}`}>
-                  {it.action}{editing === it.id && <kbd className="text-[10px] opacity-70 bg-white/20 rounded px-1 font-sans">⌘↵</kbd>}
+                  {actionOf(it)}{editing === it.id && <kbd className="text-[10px] opacity-70 bg-white/20 rounded px-1 font-sans">⌘↵</kbd>}
                 </span>
                 <AnimatePresence initial={false}>
                   {busy === it.id && <motion.span key="spin" initial={{ opacity: 0 }} animate={{ opacity: 1, transition: FADE_IN }} exit={{ opacity: 0 }} className="absolute inset-0 grid place-items-center" aria-label="Sending"><i className="w-3.5 h-3.5 rounded-full border-2 border-current border-t-transparent animate-spin" /></motion.span>}

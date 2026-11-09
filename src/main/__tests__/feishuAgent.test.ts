@@ -252,6 +252,13 @@ describe('feishu agent', () => {
     expect(answered).toEqual([expect.objectContaining({ title: 'Lin · 已回复', action: 'OK', draft: '', payload: expect.objectContaining({ messageId: q.message_id, question: 'build 状态?', sent: 'Missy 在修 iOS 失焦' }) })])
     expect(await t.approvals.approve(answered[0].id)).toEqual({ ok: true })
     expect(t.fs.sent).toHaveLength(1)
+    // a follow-up put on an 已回复 card after Discuss goes out as a reply in their thread
+    const again = t.fs.add('p1', 'ou_lin', 'iOS 呢?')
+    t.advance(3 * MIN); await t.agent.tick(); t.advance(3 * MIN); await t.agent.tick()
+    const card2 = t.approvals.pending().find(c => c.kind === ANSWERED_KIND && (c.payload as any).messageId === again.message_id)!
+    expect(t.approvals.editDraft(card2.id, '补充：周五前给 TestFlight')).toBe(true)
+    expect(await t.approvals.approve(card2.id)).toEqual({ ok: true })
+    expect(t.fs.sent.at(-1)).toMatchObject({ replyTo: again.message_id, text: '[Alex 的 AI 代理] 补充：周五前给 TestFlight' })
     expect(t.prompts[0]).toContain('answer-feishu')
     expect(t.prompts[0]).toContain('build 状态?')
   })

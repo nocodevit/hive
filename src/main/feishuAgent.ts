@@ -414,8 +414,16 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     return !!r && ok(r)
   }
 
-  // Nothing to send: OK just files the card.
-  deps.approvals.register(ANSWERED_KIND, async () => ({ ok: true }))
+  // OK just files the card; a follow-up put on it after Discuss (./hive card edit) goes out as a reply in the thread.
+  deps.approvals.register(ANSWERED_KIND, async item => {
+    if (!item.draft.trim()) return { ok: true }
+    const p = item.payload as { messageId?: string; chatId?: string; chatName?: string }
+    if (typeof p.messageId !== 'string' || typeof p.chatId !== 'string') return { ok: false, error: 'bad_payload' }
+    const tok = await deps.token()
+    if (!tok.ok || !tok.token) return { ok: false, error: tok.error || 'signed_out' }
+    const r = await reply(tok.token, { messageId: p.messageId, chatId: p.chatId, chatName: String(p.chatName ?? '') }, item.draft, 'followup')
+    return r.ok ? { ok: true } : r
+  })
 
   deps.approvals.register(FOLLOWUP_KIND, async item => {
     const p = item.payload as { messageId?: string; chatId?: string; chatName?: string }
