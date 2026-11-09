@@ -11,7 +11,7 @@
 // This test pins two invariants:
 //   1. The FIRST goal (or truncated multi-goal preview) shows INLINE
 //      on the running strip (no click needed) — the "🎯 <goal>" span.
-//   2. The ⓘ expand box shows ALL goals in full, unwrapped.
+//   2. Details expands in place and shows ALL goals in full.
 
 import React from 'react'
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
@@ -124,5 +124,20 @@ describe('HandoffBanner running-strip goal echo (v2.15.5)', () => {
     const full = screen.getByTestId('handoff-goal-full')
     expect(full.textContent).toMatch(/^goal:/)
     expect(full.textContent).not.toMatch(/^1\./)
+  })
+
+  it('Details opens inside the strip, not as a popover the chat can clip', async () => {
+    render(<HandoffBanner agentId="agent-1" />)
+    await new Promise((r) => setTimeout(r, 5))
+    act(() => {
+      progressCb?.(baseState(['a long goal that must be readable in full']))
+    })
+    const toggle = screen.getByRole('button', { name: /Show handoff details/i })
+    expect(toggle.textContent).toBe('Details')
+    fireEvent.click(toggle)
+    const box = screen.getByTestId('handoff-goal-full').parentElement as HTMLElement
+    expect(box.style.position).not.toBe('absolute')
+    expect(screen.getByText(/runId: hnd_g1/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /Hide handoff details/i }).getAttribute('aria-expanded')).toBe('true')
   })
 })

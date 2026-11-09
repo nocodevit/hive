@@ -507,6 +507,8 @@ button, [role='button'] {
 @keyframes hive-fade-in { from { opacity: 0 } to { opacity: 1 } }
 /* A menu grows from its trigger (set transform-origin on the element). */
 @keyframes hive-pop-in { from { opacity: 0; transform: scale(.96) } to { opacity: 1; transform: none } }
+@keyframes hive-handoff-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .45 } }
+@media (prefers-reduced-motion: reduce) { [style*="hive-handoff-pulse"] { animation: none !important } }
 .hive-pop-in { animation: hive-pop-in 150ms ease-out both }
 @media (prefers-reduced-motion: reduce) { .hive-pop-in { animation: hive-fade-in 150ms linear both } }
 

@@ -3,12 +3,13 @@
  * while its agent has an active handoff. Subscribes to handoff:progress +
  * handoff:done events and tears itself down when the run terminates.
  *
- * Deliberately minimal in the default view: elapsed clock + Stop button.
- * The click-ⓘ toggle expands to show turn/cost meters + goal + runId.
+ * One row: status, elapsed · turn · cost, the goal, Details, Stop.
+ * Details expands in place (full goals + runId).
  * Matches HandoffModal's "developer-free by default" principle.
  */
 import { useEffect, useState, type CSSProperties } from 'react'
 import { confirmDialog } from './ConfirmDialog'
+import { CHAT, CRUSH, FONT_MONO, FONT_PROSE, accentTint } from './hive-chat/crush-styles'
 
 export interface HandoffLiveState {
   runId: string
@@ -129,32 +130,16 @@ function PausedCard({ state, onNewGoal }: { state: HandoffLiveState; onNewGoal?:
     try { await (window as any).api.handoff.stop(state.runId) } finally { setBusy(null) }
   }
   return (
-    <div style={{ ...runningStripStyle, background: 'rgba(232,254,150,0.10)', borderColor: '#E8FE96', flexWrap: 'wrap' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 14, flexShrink: 0 }}>🤔</span>
-        <span style={{ fontWeight: 600, color: '#E8FE96', flexShrink: 0 }}>Handoff paused — agent asked a question</span>
-        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>
-          turn {state.turnCount} · ${state.totalCostUsd.toFixed(2)}
-        </span>
-      </div>
-      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
-        <button type="button" onClick={onResume} disabled={busy !== null} autoFocus style={{
-          padding: '3px 10px', background: '#00FFB2', color: '#150e24',
-          border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600,
-          cursor: busy === null ? 'pointer' : 'wait', fontFamily: 'inherit'
-        }}>▶ Resume</button>
-        <button type="button" onClick={onExit} disabled={busy !== null} style={{
-          padding: '3px 10px', background: '#EB4268', color: '#FFFAF1',
-          border: 'none', borderRadius: 6, fontSize: 11, fontWeight: 600,
-          cursor: busy === null ? 'pointer' : 'wait', fontFamily: 'inherit'
-        }}>✕ Exit + report</button>
+    <div style={runningStripStyle}>
+      <div style={rowStyle}>
+        <Dot color={CRUSH.Zest} />
+        <span style={titleStyle}>Handoff paused · needs your answer</span>
+        <span style={metaStyle}>turn {state.turnCount} · ${state.totalCostUsd.toFixed(2)}</span>
+        <span style={{ flex: 1 }} />
+        <button type="button" onClick={onResume} disabled={busy !== null} autoFocus style={primaryButtonStyle}>Resume</button>
+        <button type="button" onClick={onExit} disabled={busy !== null} style={stopButtonStyle}>Exit + report</button>
         {onNewGoal && (
-          <button type="button" onClick={onNewGoal} disabled={busy !== null} style={{
-            padding: '3px 10px', background: 'transparent', color: '#DFDBDD',
-            border: '1px solid #3A3943', borderRadius: 6, fontSize: 11,
-            cursor: busy === null ? 'pointer' : 'wait', fontFamily: 'inherit'
-          }}>↻ New goal</button>
+          <button type="button" onClick={onNewGoal} disabled={busy !== null} style={ghostButtonStyle}>New goal</button>
         )}
       </div>
     </div>
@@ -162,15 +147,10 @@ function PausedCard({ state, onNewGoal }: { state: HandoffLiveState; onNewGoal?:
 }
 
 function RunningStrip({ state, expanded, onToggle }: { state: HandoffLiveState; expanded: boolean; onToggle: () => void }) {
-  const elapsedNow = Date.now() - state.startedAt
-  const elapsedStr = formatDuration(elapsedNow)
+  const elapsedStr = formatDuration(Date.now() - state.startedAt)
   const paused = state.status === 'paused'
   const compacting = state.status === 'compacting'
-  const label = compacting
-    ? 'Handoff auto-compacting (context ≥ 70%)…'
-    : paused ? 'Handoff paused (rate-limit)' : 'Handoff running'
-  const icon = compacting ? '⏳' : paused ? '⏸' : '🥴'
-  const color = compacting ? '#E8FE96' : paused ? '#E8FE96' : '#FF60FF'
+  const label = compacting ? 'Handoff compacting' : paused ? 'Handoff paused (rate limit)' : 'Handoff running'
   const onStop = async () => {
     const ok = await confirmDialog({
       title: 'Stop this handoff?',
@@ -181,11 +161,8 @@ function RunningStrip({ state, expanded, onToggle }: { state: HandoffLiveState; 
     if (!ok) return
     await (window as any).api.handoff.stop(state.runId)
   }
-  // v2.15.5: user complaint 'handoff running 的 detail 应该 show goal 我输入的
-  // 内容, 不然我忘了'. Show the goal INLINE (not just behind ⓘ) — the running
-  // banner is a long-lived HUD, hunting for a click-to-expand for the most
-  // important piece of context is wrong. First goal truncated to ~80 chars
-  // shows on the strip; ⓘ expand keeps full multi-goal detail + runId.
+  // v2.15.5: the goal shows inline — it is the one thing you need on a
+  // long-running strip. Details expand in place (no popover to be clipped).
   const goals = state.goals ?? []
   const goalPreview = goals.length === 0
     ? ''
@@ -193,67 +170,43 @@ function RunningStrip({ state, expanded, onToggle }: { state: HandoffLiveState; 
       ? goals[0]
       : `${goals[0]} (+${goals.length - 1} more)`
   return (
-    <div style={{ ...runningStripStyle, background: (paused || compacting) ? 'rgba(232,254,150,0.10)' : 'rgba(255,96,255,0.10)', borderColor: color, flexWrap: 'wrap' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 14, flexShrink: 0 }}>{icon}</span>
-        <span style={{ fontWeight: 600, color, flexShrink: 0 }}>{label}</span>
-        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>{elapsedStr}</span>
-        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>turn {state.turnCount}</span>
-        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>${state.totalCostUsd.toFixed(2)}</span>
-        {goalPreview && (
-          <>
-            <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
-            <span
-              data-testid="handoff-goal-inline"
-              title={goals.join('\n\n')}
-              style={{
-                fontSize: 11,
-                fontStyle: 'italic',
-                opacity: 0.9,
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-                color: '#DFDBDD'
-              }}
-            >🎯 {goalPreview}</span>
-          </>
-        )}
+    <div style={runningStripStyle}>
+      <div style={rowStyle}>
+        <Dot color={paused || compacting ? CRUSH.Zest : CHAT.accent} pulse={!paused} />
+        <span style={titleStyle}>{label}</span>
+        <span style={metaStyle}>{elapsedStr} · turn {state.turnCount} · ${state.totalCostUsd.toFixed(2)}</span>
+        {goalPreview ? (
+          <span
+            data-testid="handoff-goal-inline"
+            title={goals.join('\n\n')}
+            style={{ flex: '1 1 160px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: CHAT.ink2 }}
+          >🎯 {goalPreview}</span>
+        ) : <span style={{ flex: 1 }} />}
+        <button
+          type="button"
+          onClick={onToggle}
+          title={expanded ? 'Hide meta' : 'Show meta'}
+          aria-label={expanded ? 'Hide handoff details' : 'Show handoff details'}
+          aria-expanded={expanded}
+          style={ghostButtonStyle}
+        >{expanded ? 'Hide' : 'Details'}</button>
+        <button type="button" onClick={onStop} style={stopButtonStyle}>Stop</button>
       </div>
-      <button
-        type="button"
-        onClick={onToggle}
-        title={expanded ? 'Hide meta' : 'Show meta'}
-        style={{ ...infoButtonStyle, flexShrink: 0 }}
-      >
-        ⓘ
-      </button>
-      <button
-        type="button"
-        onClick={onStop}
-        style={{ ...stopButtonStyle, flexShrink: 0 }}
-      >
-        Stop
-      </button>
       {expanded && (
-        <div style={metaBoxStyle}>
+        <div style={detailBoxStyle}>
           {goals.length > 0 && (
-            <div data-testid="handoff-goal-full" style={{ marginBottom: 6 }}>
-              <div style={{ opacity: 0.6, marginBottom: 2 }}>
-                {goals.length === 1 ? 'goal:' : `goals (${goals.length}):`}
-              </div>
+            <div data-testid="handoff-goal-full">
+              <div style={sectionLabelStyle}>{goals.length === 1 ? 'goal:' : `goals (${goals.length}):`}</div>
               {goals.map((g, i) => (
-                <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', paddingLeft: 8 }}>
+                <div key={i} style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: CHAT.ink, marginTop: i ? 6 : 0 }}>
                   {goals.length > 1 ? `${i + 1}. ` : ''}{g}
                 </div>
               ))}
             </div>
           )}
-          <div>runId: {state.runId}</div>
-          {state.stopReason && <div>reason: {state.stopReason}</div>}
+          <div style={{ ...metaStyle, marginTop: goals.length ? 8 : 0, wordBreak: 'break-all' }}>
+            runId: {state.runId}{state.stopReason ? ` · reason: ${state.stopReason}` : ''}
+          </div>
         </div>
       )}
     </div>
@@ -279,104 +232,81 @@ function FinalCard({ state, onDismiss }: { state: HandoffLiveState; onDismiss: (
     navigator.clipboard.writeText(lines.join('\n')).catch(() => { /* silent */ })
   }
   return (
-    <div style={{ ...runningStripStyle, background: ok ? 'rgba(0,255,178,0.10)' : 'rgba(232,254,150,0.10)', borderColor: ok ? '#00FFB2' : '#E8FE96', flexWrap: 'wrap' }}>
-      {/* min-width:0 lets the flex child shrink; without it, a long
-          stopReason (e.g. "hit cost cap $5.00 (spent $5.02)") pushes
-          the ✕ button off the right edge and the card becomes
-          undismissable. Reported by user 2026-08-18: "X 根本关不上". */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 14, flexShrink: 0 }}>{ok ? '✅' : '⚠️'}</span>
-        <span style={{ fontWeight: 600, color: ok ? '#00FFB2' : '#E8FE96', flexShrink: 0 }}>
-          Handoff {state.status}
-        </span>
-        <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
-        <span style={{ fontFamily: 'monospace', fontSize: 11, flexShrink: 0 }}>
-          {formatDuration(state.elapsedMs)} · {state.turnCount} turn · ${state.totalCostUsd.toFixed(2)}
-        </span>
-        {state.stopReason && (
-          <>
-            <span style={{ opacity: 0.7, flexShrink: 0 }}>·</span>
-            <span
-              title={state.stopReason}
-              style={{
-                fontSize: 11,
-                opacity: 0.9,
-                minWidth: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}
-            >{state.stopReason}</span>
-          </>
+    <div style={runningStripStyle}>
+      {/* min-width:0 on the reason lets it shrink, so a long stopReason never
+          pushes ✕ off the edge (2026-08-18: "X 根本关不上"). */}
+      <div style={rowStyle}>
+        <Dot color={ok ? CRUSH.Julep : CRUSH.Zest} />
+        <span style={titleStyle}>Handoff {state.status}</span>
+        <span style={metaStyle}>{formatDuration(state.elapsedMs)} · {state.turnCount} turn · ${state.totalCostUsd.toFixed(2)}</span>
+        {state.stopReason ? (
+          <span
+            title={state.stopReason}
+            style={{ flex: '1 1 160px', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: CHAT.ink2 }}
+          >{state.stopReason}</span>
+        ) : <span style={{ flex: 1 }} />}
+        {hasDetails && (
+          <button
+            type="button"
+            onClick={() => setExpanded(v => !v)}
+            aria-label={expanded ? 'Hide handoff details' : 'Show handoff details'}
+            aria-expanded={expanded}
+            style={ghostButtonStyle}
+          >{expanded ? 'Hide' : 'Details'}</button>
         )}
-      </div>
-      {hasDetails && (
         <button
           type="button"
-          onClick={() => setExpanded(v => !v)}
-          aria-label={expanded ? 'Hide handoff details' : 'Show handoff details'}
-          style={{ ...infoButtonStyle, flexShrink: 0 }}
-        >{expanded ? '▾' : '▸'} details</button>
-      )}
-      {/* flexShrink:0 guarantees the dismiss button never gets pushed
-          off-screen regardless of the leftside content width. */}
-      <button
-        type="button"
-        onClick={onDismiss}
-        aria-label="Dismiss handoff summary"
-        style={{ ...infoButtonStyle, flexShrink: 0 }}
-      >✕</button>
+          onClick={onDismiss}
+          aria-label="Dismiss handoff summary"
+          style={{ ...ghostButtonStyle, padding: '4px 8px' }}
+        >✕</button>
+      </div>
       {expanded && stats && (
-        <div style={{
-          flexBasis: '100%',
-          marginTop: 8,
-          padding: '8px 10px',
-          background: 'rgba(0,0,0,0.25)',
-          borderRadius: 8,
-          fontSize: 11,
-          fontFamily: 'monospace',
-          color: '#DFDBDD',
-          maxHeight: 220,
-          overflowY: 'auto'
-        }}>
+        <div style={{ ...detailBoxStyle, maxHeight: 240, overflowY: 'auto' }}>
           {stats.filesEdited.length > 0 && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ opacity: 0.7, marginBottom: 2 }}>Files changed ({stats.filesEdited.length}):</div>
-              {stats.filesEdited.slice(0, 20).map(f => <div key={f} style={{ paddingLeft: 8 }}>· {f}</div>)}
-              {stats.filesEdited.length > 20 && <div style={{ paddingLeft: 8, opacity: 0.6 }}>… +{stats.filesEdited.length - 20} more</div>}
+              <div style={sectionLabelStyle}>Files changed ({stats.filesEdited.length}):</div>
+              {stats.filesEdited.slice(0, 20).map(f => <div key={f} style={monoLineStyle}>{f}</div>)}
+              {stats.filesEdited.length > 20 && <div style={{ ...monoLineStyle, color: CHAT.muted }}>… +{stats.filesEdited.length - 20} more</div>}
             </div>
           )}
           {stats.commits.length > 0 && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ opacity: 0.7, marginBottom: 2 }}>Commits ({stats.commits.length}):</div>
-              {stats.commits.slice(-5).map((c, i) => <div key={i} style={{ paddingLeft: 8 }}>· {c.msg}</div>)}
+              <div style={sectionLabelStyle}>Commits ({stats.commits.length}):</div>
+              {stats.commits.slice(-5).map((c, i) => <div key={i} style={{ color: CHAT.ink }}>{c.msg}</div>)}
             </div>
           )}
           {stats.lastTestRun && (
             <div style={{ marginBottom: 8 }}>
-              <div style={{ opacity: 0.7, marginBottom: 2 }}>Last test run:</div>
-              <div style={{ paddingLeft: 8 }}>
+              <div style={sectionLabelStyle}>Last test run:</div>
+              <div style={{ color: CHAT.ink }}>
                 {stats.lastTestRun.ok ? '✅' : '❌'} {stats.lastTestRun.passed ?? '?'} passed / {stats.lastTestRun.failed ?? '?'} failed
-                <div style={{ opacity: 0.6, fontSize: 10 }}>{stats.lastTestRun.command}</div>
               </div>
+              <div style={{ ...monoLineStyle, color: CHAT.muted }}>{stats.lastTestRun.command}</div>
             </div>
           )}
           {stats.toolErrorsRecovered > 0 && (
-            <div style={{ opacity: 0.7 }}>Tool errors recovered: {stats.toolErrorsRecovered}</div>
+            <div style={{ color: CHAT.muted }}>Tool errors recovered: {stats.toolErrorsRecovered}</div>
           )}
           {(stats.autoCompactCount ?? 0) > 0 && (
-            <div style={{ opacity: 0.7, marginTop: 4 }}>
+            <div style={{ color: CHAT.muted, marginTop: 4 }}>
               Auto-compacted <b>{stats.autoCompactCount}×</b> · cost <b>${(stats.autoCompactCostUsd ?? 0).toFixed(2)}</b>
             </div>
           )}
-          <button
-            type="button"
-            onClick={copySummary}
-            style={{ marginTop: 6, padding: '2px 8px', background: 'transparent', color: '#DFDBDD', border: '1px solid #3A3943', borderRadius: 6, fontSize: 10, cursor: 'pointer', fontFamily: 'inherit' }}
-          >Copy summary</button>
+          <button type="button" onClick={copySummary} style={{ ...ghostButtonStyle, marginTop: 8 }}>Copy summary</button>
         </div>
       )}
     </div>
+  )
+}
+
+function Dot({ color, pulse }: { color: string; pulse?: boolean }) {
+  return (
+    <span aria-hidden style={{
+      width: 8, height: 8, borderRadius: 9999, background: color, flexShrink: 0,
+      boxShadow: `0 0 0 3px color-mix(in srgb, ${color} 25%, transparent)`,
+      animation: pulse ? 'hive-handoff-pulse 1.6s ease-in-out infinite' : undefined
+    }} />
   )
 }
 
@@ -390,49 +320,41 @@ export function formatDuration(ms: number): string {
   return `${s}s`
 }
 
+// paddingRight 56px keeps the right-most button clear of the floating ↓
+// scroll-to-bottom arrow (32 wide + 16 right offset + 8 gap). v2.5.1:
+// "handoff x 因为和 bottom 的箭头重合了，所以按不到".
 const runningStripStyle: CSSProperties = {
-  display: 'flex', alignItems: 'center', gap: 10,
-  // v2.5.1: paddingRight bumped to 56px so the ✕ dismiss button
-  // never sits under the floating ↓ scroll-to-bottom arrow (which
-  // is `position:absolute; right:16; top:-42; width:32` inside the
-  // input area, i.e. hovers up 42px into the banner strip region).
-  // 32 (arrow width) + 16 (its right offset) + 8 (safe gap) = 56.
-  // User: "handoff x 因为和 bottom 的箭头重合了，所以按不到".
-  padding: '6px 56px 6px 12px',
-  background: 'rgba(255,96,255,0.10)',
-  border: '1px solid #FF60FF',
-  borderRadius: 8,
-  fontSize: 12, color: '#FFFAF1', fontFamily: 'inherit',
-  position: 'relative' as const,
-  margin: '4px 8px',
-  minWidth: 0  // container must allow shrink so inner min-w-0 works
+  margin: '0 20px 10px',
+  padding: '8px 56px 8px 14px',
+  borderRadius: 14,
+  background: accentTint(8),
+  color: CHAT.ink2,
+  fontFamily: FONT_PROSE, fontSize: 13, lineHeight: 1.5,
+  minWidth: 0
 }
 
-const infoButtonStyle: CSSProperties = {
-  background: 'transparent', border: 'none',
-  color: '#DFDBDD', fontSize: 12, cursor: 'pointer',
-  padding: '2px 6px', fontFamily: 'inherit'
+const rowStyle: CSSProperties = { display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 10, rowGap: 6, minWidth: 0 }
+
+const titleStyle: CSSProperties = { color: CHAT.ink, fontWeight: 600, flexShrink: 0, whiteSpace: 'nowrap' }
+
+const metaStyle: CSSProperties = { fontFamily: FONT_MONO, fontSize: 11, color: CHAT.muted, flexShrink: 0, whiteSpace: 'nowrap' }
+
+const sectionLabelStyle: CSSProperties = { fontSize: 11, color: CHAT.muted, marginBottom: 2 }
+
+const monoLineStyle: CSSProperties = { fontFamily: FONT_MONO, fontSize: 11, color: CHAT.ink, wordBreak: 'break-all' }
+
+const buttonBase: CSSProperties = {
+  flexShrink: 0, borderRadius: 10, padding: '4px 12px',
+  fontFamily: FONT_PROSE, fontSize: 12, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap'
 }
 
-const stopButtonStyle: CSSProperties = {
-  padding: '3px 10px',
-  background: '#EB4268', color: '#FFFAF1',
-  border: 'none', borderRadius: 6,
-  fontSize: 11, fontWeight: 600,
-  cursor: 'pointer', fontFamily: 'inherit'
-}
+const ghostButtonStyle: CSSProperties = { ...buttonBase, background: 'transparent', color: CHAT.ink2, border: `1px solid ${CRUSH.Charcoal}` }
 
-const metaBoxStyle: CSSProperties = {
-  position: 'absolute' as const,
-  top: '100%', right: 8,
-  marginTop: 4,
-  padding: 8,
-  background: '#201F26',
-  border: '1px solid #3A3943',
-  borderRadius: 8,
-  fontFamily: 'monospace' as const,
-  fontSize: 10,
-  color: '#DFDBDD',
-  zIndex: 30,
-  minWidth: 260
+const primaryButtonStyle: CSSProperties = { ...buttonBase, background: CRUSH.Charple, color: '#FFFFFF', border: 'none' }
+
+const stopButtonStyle: CSSProperties = { ...buttonBase, background: 'transparent', color: CRUSH.Sriracha, border: `1px solid color-mix(in srgb, ${CRUSH.Sriracha} 45%, transparent)` }
+
+const detailBoxStyle: CSSProperties = {
+  marginTop: 8, padding: '8px 12px', borderRadius: 10,
+  background: CHAT.surface, fontSize: 12.5
 }
