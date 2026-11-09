@@ -8,6 +8,7 @@ export type ApprovalCard = { id: string; kind: string; title: string; subtitle: 
 const ICON: Record<string, string> = { email: '✉️', feishu: '💬', jira: '🎫', dispatch: '🧭' }
 const iconOf = (kind: string) => ICON[kind.split('.')[0]] ?? '📝'
 const DECIDE = 'email.decide'
+const ANSWERED = 'feishu.answered'
 const str = (p: Record<string, unknown> | undefined, k: string) => (typeof p?.[k] === 'string' ? (p[k] as string) : '')
 
 /** What they wrote (Feishu cards): in full, folded after a few lines. */
@@ -72,7 +73,7 @@ const SOURCE: Record<string, string> = { feishu: '💬 Feishu', email: '✉️ E
 const srcKey = (kind: string) => kind.split('.')[0]
 const ago = (ms?: number) => { if (!ms || Date.now() - ms > 365 * 86_400_000) return ''; const m = Math.max(0, Math.round((Date.now() - ms) / 60000)); return m < 60 ? `${m}m` : m < 1440 ? `${Math.round(m / 60)}h` : `${Math.round(m / 1440)}d` }
 /** A card the owner must decide (a question, or the facts went out and a call is left) vs one ready to send. */
-const needsYou = (it: ApprovalCard) => it.kind === DECIDE || !!str(it.payload, 'sent') || !it.draft.trim()
+const needsYou = (it: ApprovalCard) => it.kind !== ANSWERED && (it.kind === DECIDE || !!str(it.payload, 'sent') || !it.draft.trim())
 
 /** Butler → Approve: grouped "needs your call" / "ready to send", filterable by source. Each card reads like a
  *  chat — their message, what Butler already sent, Butler's reply (click to edit) — with the actions in one row. */
@@ -104,7 +105,7 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
 
   const approve = async (it: ApprovalCard, draft?: string) => {
     // No draft (the owner's call): Reply opens an empty box instead of sending nothing.
-    if (draft === undefined && !it.draft.trim() && editing !== it.id) { setEditing(it.id); setText(''); return }
+    if (draft === undefined && !it.draft.trim() && editing !== it.id && it.kind !== ANSWERED) { setEditing(it.id); setText(''); return }
     if (draft === undefined && editing === it.id && !text.trim()) return
     setBusy(it.id)
     const r = await window.api.approvals.approve(it.id, draft ?? (editing === it.id ? text : undefined))
@@ -169,11 +170,11 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
           {them && <TheirMessage text={them} />}
           {sent && (
             <div aria-label="Already sent" className="self-end max-w-[92%] rounded-[12px_4px_12px_12px] bg-emerald-500/10 px-2.5 py-1.5 text-[12.5px] text-text-primary">
-              <span className="block text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">Sent to them ✓</span>
+              <span className="block text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400">{it.kind === ANSWERED ? '已回复 ✓ · Butler answered for you' : 'Sent to them ✓'}</span>
               <span className="whitespace-pre-wrap">{sent}</span>
             </div>
           )}
-          {(sent || decide) && (
+          {(sent || decide) && it.kind !== ANSWERED && (
             <div aria-label={decide ? 'Butler asks' : 'Your call'} className="flex gap-2 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[12.5px] font-medium text-amber-700 dark:text-amber-400">
               <span aria-hidden>⚖️</span><span>{decide ? `Needs you · ${str(it.payload, 'question')}` : `Your call · ${str(it.payload, 'topic')}`}</span>
             </div>

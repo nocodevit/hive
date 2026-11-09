@@ -4,7 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import {
   createFeishuAgent, ensurePrefix, quoteBlock, POLL_CHATS, lockedTopicHit, inQuietHours, messageText, normalizeAgentSettings,
-  defaultPrefix, FOLLOWUP_KIND, RECALL_WINDOW_MS, START_SCAN_MS, calendarText, isAssistantMessage
+  defaultPrefix, FOLLOWUP_KIND, ANSWERED_KIND, RECALL_WINDOW_MS, START_SCAN_MS, calendarText, isAssistantMessage
 } from '../feishuAgent'
 import { createApprovals } from '../approvals'
 import { EMPTY_PROFILE } from '../butlerProfile'
@@ -100,7 +100,9 @@ function setup(opts: { claude?: (p: string) => string | Promise<string>; setting
   }
   const agent = createFeishuAgent(deps)
   agent.setSettings({ enabled: true, ...opts.settings })
-  return { dir, fs, agent, approvals, notes, prompts, deps, todos, advance: (ms: number) => { clock += ms }, now }
+  // Cards that wait on the owner; the 已回复 cards (Butler answered on its own) are checked on their own.
+  const followups = () => approvals.pending().filter(a => a.kind !== ANSWERED_KIND)
+  return { followups, dir, fs, agent, approvals, notes, prompts, deps, todos, advance: (ms: number) => { clock += ms }, now }
 }
 
 describe('pure helpers', () => {
@@ -245,6 +247,11 @@ describe('feishu agent', () => {
     expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '[Alex 的 AI 代理] Missy 在修 iOS 失焦' })])
     // case 2: answered, and the owner is told
     expect(t.notes.at(-1)).toContain('Missy 在修 iOS 失焦')
+    // ...with a 已回复 card: who asked, what they asked, what went out
+    const answered = t.approvals.pending().filter(c => c.kind === ANSWERED_KIND)
+    expect(answered).toEqual([expect.objectContaining({ title: 'Lin · 已回复', action: 'OK', draft: '', payload: expect.objectContaining({ messageId: q.message_id, question: 'build 状态?', sent: 'Missy 在修 iOS 失焦' }) })])
+    expect(await t.approvals.approve(answered[0].id)).toEqual({ ok: true })
+    expect(t.fs.sent).toHaveLength(1)
     expect(t.prompts[0]).toContain('answer-feishu')
     expect(t.prompts[0]).toContain('build 状态?')
   })
@@ -349,7 +356,7 @@ describe('feishu agent', () => {
     t.advance(1000)
     t.fs.add('g1', 'ou_huo', '@_user_1 已完成上次评论内容的回复和补充，请您 review', undefined, [{ key: '@_user_1', id: SELF, name: 'Alex' }])
     await agent.tick()
-    const [card] = t.approvals.pending()
+    const [card] = t.followups()
     expect(card.title.startsWith('霍传俊 · ')).toBe(true)
     expect(card.subtitle).toContain('Team')
     expect(card.payload).toMatchObject({ senderId: 'ou_huo', senderName: '霍传俊', chatName: 'Team' })
@@ -363,7 +370,7 @@ describe('feishu agent', () => {
     expect(out[0]).toEqual({ messageId: q.message_id, result: 'escalated' })
     // Held: nothing goes out to them, the owner gets the card.
     expect(t.fs.sent).toEqual([])
-    const [item] = t.approvals.pending()
+    const [item] = t.followups()
     expect(item).toMatchObject({ kind: FOLLOWUP_KIND, draft: '周五上线', action: 'Reply' })
     expect(item.payload).toMatchObject({ messageId: q.message_id, chatId: 'p1', question: 'checkout 报价多少？', topic: 'prices' })
     const r = await t.approvals.approve(item.id, '下周一上线')
@@ -378,7 +385,7 @@ describe('feishu agent', () => {
     const q = t.fs.add('p1', 'ou_lin', '[我 的 AI 代理] 我是 主人 的助理，可能不太了解上下文，我会转给 主人 处理。')
     expect(await t.agent.tick()).toEqual([{ messageId: q.message_id, result: 'skipped', why: 'from_assistant' }])
     expect(t.fs.sent).toHaveLength(0)
-    expect(t.approvals.pending()).toHaveLength(0)
+    expect(t.followups()).toHaveLength(0)
   })
 
   it('while a card waits for the owner, more messages in that chat join the card; nothing is sent', async () => {
@@ -390,7 +397,7 @@ describe('feishu agent', () => {
     const q2 = t.fs.add('p1', 'ou_lin', '在吗？')
     expect(await t.agent.tick()).toEqual([{ messageId: q2.message_id, result: 'skipped', why: 'added_to_card' }])
     expect(t.fs.sent).toHaveLength(0)
-    const cards = t.approvals.pending()
+    const cards = t.followups()
     expect(cards).toHaveLength(1)
     expect((cards[0].payload as any).question).toBe('这个方案你看了吗\n在吗？')
   })
@@ -401,7 +408,7 @@ describe('feishu agent', () => {
     const q = t.fs.add('p1', 'ou_lin', 'https://jira.example.com/browse/REQ-1422')
     expect(await t.agent.tick()).toEqual([{ messageId: q.message_id, result: 'answered' }])
     expect(t.fs.sent).toEqual([expect.objectContaining({ replyTo: q.message_id, text: '[Alex 的 AI 代理] 看了 REQ-1422：三项都没回答，建议先在单里追问。\n其余已转告 Alex，稍后回复。' })])
-    const [card] = t.approvals.pending()
+    const [card] = t.followups()
     expect(card).toMatchObject({ kind: FOLLOWUP_KIND, title: 'Lin · 要不要升级', draft: '' })
     // the promised follow-up is a todo: what came in, what went out
     expect(t.todos.added).toEqual([expect.objectContaining({ source: 'feishu', who: 'butler', refs: { approvalId: card.id, chatId: 'p1', messageId: q.message_id } })])
@@ -415,7 +422,7 @@ describe('feishu agent', () => {
     await t.agent.tick()
     expect(q.message_id).toBeTruthy()
     expect(t.fs.sent).toEqual([])
-    expect(t.approvals.pending()).toHaveLength(1)
+    expect(t.followups()).toHaveLength(1)
   })
 
   it('a locked word in the model reply also escalates; owner topics too', async () => {
@@ -424,7 +431,7 @@ describe('feishu agent', () => {
     t.fs.add('p1', 'ou_lin', '那个方案怎么样')
     t.fs.add('p1', 'ou_ben', '要招人吗')
     await t.agent.tick()
-    expect(t.approvals.pending().map(i => (i.payload as any).topic)).toEqual(['prices', 'hiring'])
+    expect(t.followups().map(i => (i.payload as any).topic)).toEqual(['prices', 'hiring'])
   })
 
   it('bad JSON from claude escalates; a claude failure escalates too', async () => {
@@ -435,7 +442,7 @@ describe('feishu agent', () => {
     t.fs.add('p1', 'ou_ben', 'tests?')
     const out = await t.agent.tick()
     expect(out.map(o => o.result)).toEqual(['escalated', 'escalated'])
-    expect(t.approvals.pending()).toHaveLength(2)
+    expect(t.followups()).toHaveLength(2)
     expect(t.fs.sent.every(s => s.text.endsWith('我是 Alex 的助理，可能不太了解上下文，判断和回答不一定准确，我会转给 Alex 处理。'))).toBe(true)
   })
 
@@ -446,7 +453,7 @@ describe('feishu agent', () => {
     t.advance(1000)
     t.fs.add('p1', 'ou_lin', 'checkout 好了吗？')
     expect((await again.tick())[0].result).toBe('escalated')
-    expect(t.approvals.pending()[0].payload).toMatchObject({ relation: 'boss', topic: 'from your manager' })
+    expect(t.followups()[0].payload).toMatchObject({ relation: 'boss', topic: 'from your manager' })
   })
 
   it('the prompt says who wrote, where, and how they relate to the owner', async () => {
@@ -479,7 +486,7 @@ describe('feishu agent', () => {
     const byId = () => Object.fromEntries(t.agent.cases().map(x => [x.id, x]))
     expect(byId()[a.message_id]).toMatchObject({ outcome: 'auto', category: 'chitchat-work', sent: '在的', question: '在吗' })
     expect(byId()[b.message_id]).toMatchObject({ outcome: 'pending', level: 'approve', draft: '下周上线', reasons: ['medium confidence'] })
-    const [first, second] = t.approvals.pending()
+    const [first, second] = t.followups()
     await t.approvals.approve(first.id, '下周三上线')
     t.approvals.reject(second.id)
     t.advance(1000)
@@ -528,7 +535,7 @@ describe('feishu agent', () => {
     expect(await t.agent.preview({ text: 'Alex 和 Lin 在聊什么？' })).toMatchObject({ wouldSend: '(nothing sent — a card for you)' })
     expect(t.fs.sent).toEqual([])
     expect(t.agent.cases()).toEqual([])
-    expect(t.approvals.pending()).toEqual([])
+    expect(t.followups()).toEqual([])
   })
 
   it('"ok" with nothing proposed: a 👍 on their message, no reply, no model', async () => {
@@ -562,7 +569,7 @@ describe('feishu agent', () => {
     // Their "ok" gets a 👍, no "我会转给…确认" line; the owner gets the card.
     expect(t.fs.sent).toHaveLength(sentBefore)
     expect(t.fs.reactions.at(-1)).toBe(`${agreed.message_id}:THUMBSUP`)
-    expect(t.approvals.pending()[0]).toMatchObject({ draft: '已确认：明天 16:00 和 Lin 开会', payload: { topic: 'consent · create_meeting' } })
+    expect(t.followups()[0]).toMatchObject({ draft: '已确认：明天 16:00 和 Lin 开会', payload: { topic: 'consent · create_meeting' } })
     // Consent is used once.
     t.advance(1000)
     const again = t.fs.add('p1', 'ou_lin', 'ok')
@@ -590,7 +597,7 @@ describe('feishu agent', () => {
     expect(made).toEqual([{ title: 'Lin sync', start: new Date(`${ymd}T16:00:00`).getTime(), end: new Date(`${ymd}T16:30:00`).getTime(), invite: ['ou_lin'] }])
     expect(t.fs.sent.at(-1)!.text).toContain('会议已创建：Lin sync')
     expect(t.fs.sent.at(-1)!.text).toContain('已设 15 分钟提醒')
-    expect(t.approvals.pending()).toEqual([])
+    expect(t.followups()).toEqual([])
   })
 
   it('a proposed meeting whose slot is taken by now goes to the owner instead', async () => {
@@ -609,7 +616,7 @@ describe('feishu agent', () => {
     const agreed2 = t.fs.add('p1', 'ou_lin', 'ok')
     await agent.tick()
     expect(t.fs.reactions.at(-1)).toBe(`${agreed2.message_id}:THUMBSUP`)
-    expect(t.approvals.pending()).toHaveLength(1)
+    expect(t.followups()).toHaveLength(1)
   })
 
   it('a proposal older than a day is not consent', async () => {
@@ -621,7 +628,7 @@ describe('feishu agent', () => {
     const late = t.fs.add('p1', 'ou_lin', 'ok')
     await t.agent.tick()
     expect(t.fs.reactions).toEqual([`${late.message_id}:THUMBSUP`])
-    expect(t.approvals.pending()).toEqual([])
+    expect(t.followups()).toEqual([])
   })
 
   it('lists direct messages too (types=p2p,group), most recently active first', async () => {
@@ -652,7 +659,7 @@ describe('feishu agent', () => {
     t.advance(1000)
     t.fs.add('p1', 'ou_lin', 'build?')
     await t.agent.tick()
-    t.approvals.reject(t.approvals.pending()[0].id)
+    t.approvals.reject(t.followups()[0].id)
     t.advance(60 * MIN)
     await t.agent.tick()
     expect(t.notes).toHaveLength(0)

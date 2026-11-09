@@ -315,6 +315,8 @@ export interface FeishuAgentDeps {
 }
 
 export const FOLLOWUP_KIND = 'feishu.followup'
+/** Butler answered on its own: the owner still gets a card saying so, with what went out (owner, 11-09). */
+export const ANSWERED_KIND = 'feishu.answered'
 
 const ok = (r: { status: number; body: any }) => r.status === 200 && r.body?.code === 0
 const errOf = (r: { status: number; body: any }) => `feishu ${r.body?.code ?? r.status}: ${String(r.body?.msg ?? '').slice(0, 120)}`
@@ -411,6 +413,9 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
     const r = await deps.http('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(messageId)}/reactions`, token, { reaction_type: { emoji_type: 'THUMBSUP' } }).catch(() => null)
     return !!r && ok(r)
   }
+
+  // Nothing to send: OK just files the card.
+  deps.approvals.register(ANSWERED_KIND, async () => ({ ok: true }))
 
   deps.approvals.register(FOLLOWUP_KIND, async item => {
     const p = item.payload as { messageId?: string; chatId?: string; chatName?: string }
@@ -669,7 +674,17 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       const r = await reply(token, job, draft, 'answer')
       if (r.ok) cases.add({ ...decided, sent: draft, outcome: 'auto' })
       if (r.ok && answer?.proposal) state.proposals[job.chatId] = { to: job.senderId, ...answer.proposal, at: now() }
-      if (r.ok) deps.notify('Feishu · answered for you', `${lead}${where} · ${clip(draft, 80)}`)
+      if (r.ok) {
+        deps.approvals.add({
+          kind: ANSWERED_KIND,
+          title: `${lead} · 已回复`,
+          subtitle: `Feishu${where} · answered for you`,
+          draft: '',
+          payload: { messageId: job.messageId, chatId: job.chatId, chatName: job.chatName, senderId: job.senderId, senderName: who, question: job.text, sent: draft, sentId: r.id, relation, category: answer?.category ?? '' },
+          action: 'OK'
+        })
+        deps.notify('Feishu · answered for you', `${lead}${where} · ${clip(draft, 80)}`)
+      }
       return r.ok ? { messageId: job.messageId, result: 'answered' } : { messageId: job.messageId, result: 'failed', error: r.error }
     }
     const topic = gate.reasons[0] || 'unsure'
