@@ -7,6 +7,14 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.9] — 2026-11-09
+
+##### 📱 Butler
+- **Discuss on an "已回复" card checks Butler's answer with you.** Butler knows it already replied, and can edit or recall that reply.
+- **Add a follow-up from the card.** Put it on the card and the button becomes **Reply**: it goes into their thread, sent as you. With nothing added, **OK** just files the card.
+
+---
+
 ## [2.42.8] — 2026-11-09
 
 ##### 📱 Butler
