@@ -227,6 +227,26 @@ describe('installButlerFiles', () => {
   })
 })
 
+describe('Feishu messages go out as the owner, never from a bot', () => {
+  it('denies lark-cli sends and every discovered Feishu bot send tool, even one the owner allowed', () => {
+    const dest = join(mkdtempSync(join(tmpdir(), 'hive-butler-dest-')), 'butler')
+    mkdirSync(dest)
+    writeFileSync(join(dest, 'tools-cache.json'), JSON.stringify({ at: 1, servers: { gw: ['stargate_feishu_send_message', 'stargate_image_to_feishu', 'feishu_read_document', 'jira_search'] } }))
+    writeFileSync(join(dest, 'allow-list.json'), JSON.stringify({ allow: ['mcp__gw__stargate_feishu_send_message'] }))
+    installButlerFiles(RESOURCES, dest)
+    installButlerFiles(RESOURCES, dest)
+    const p = JSON.parse(readFileSync(join(dest, '.claude', 'settings.json'), 'utf8')).permissions
+    expect(p.deny).toEqual(expect.arrayContaining(['Bash(lark-cli im +messages-send:*)', 'Bash(lark-cli im +messages-reply:*)', 'mcp__gw__stargate_feishu_send_message', 'mcp__gw__stargate_image_to_feishu']))
+    expect(p.deny.filter((t: string) => t === 'mcp__gw__stargate_feishu_send_message')).toHaveLength(1)
+    expect(p.deny).not.toContain('mcp__gw__feishu_read_document')
+    expect(p.allow).not.toContain('mcp__gw__stargate_feishu_send_message')
+    expect(p.allow).toEqual(expect.arrayContaining(['Bash(./hive feishu:*)', 'mcp__gw__feishu_read_document']))
+  })
+  it('the rules say ./hive feishu send is the only way', () => {
+    expect(readFileSync(join(RESOURCES, 'CLAUDE.md'), 'utf8')).toMatch(/goes out only with `\.\/hive feishu send`[\s\S]*Never send one from a bot/)
+  })
+})
+
 describe('answer-feishu run', () => {
   it('follows the allow-list (dontAsk) with every write tool off', () => {
     const a = feishuAnswerArgs('hi', ['mcp__gateway__jira_add_comment'])

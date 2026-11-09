@@ -14,7 +14,7 @@ import { chmodSync, copyFileSync, existsSync, lstatSync, mkdirSync, readdirSync,
 import { join } from 'path'
 import { claudeProjectSlug } from '../shared/claude-project-slug'
 import { composeSkills } from './butlerSkills'
-import { discoveredAllow, ownerAllow } from './butlerTools'
+import { discoveredAllow, discoveredBotSends, ownerAllow } from './butlerTools'
 
 export const BUTLER_SESSION_NAME = 'Hive Butler'
 
@@ -96,10 +96,13 @@ export function installButlerFiles(srcDir: string, destDir: string): void {
     if (f.mode) chmodSync(dest, f.mode)
   }
   const extra = [...discoveredAllow(destDir), ...ownerAllow(destDir)]
-  if (extra.length) {
+  // A Feishu message goes out as the owner (./hive feishu send), never from a bot (owner, 11-09).
+  const botSends = discoveredBotSends(destDir)
+  if (extra.length || botSends.length) {
     const settingsPath = join(destDir, '.claude', 'settings.json')
     const s = JSON.parse(readFileSync(settingsPath, 'utf8'))
-    s.permissions.allow = Array.from(new Set([...s.permissions.allow, ...extra]))
+    s.permissions.deny = Array.from(new Set([...s.permissions.deny, ...botSends]))
+    s.permissions.allow = Array.from(new Set([...s.permissions.allow, ...extra])).filter(t => !s.permissions.deny.includes(t))
     writeFileSync(settingsPath, JSON.stringify(s, null, 2) + '\n')
   }
   composeSkills({ defaultsDir: join(srcDir, 'skills'), butlerDir: destDir })

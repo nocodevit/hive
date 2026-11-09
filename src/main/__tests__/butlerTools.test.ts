@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { existsSync, mkdtempSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
-import { allowFromTools, claudeJsonPath, discoverTools, discoveredWrites, httpServers, isReadTool, jiraTools, mcpServerNames, readToolCache } from '../butlerTools'
+import { isBotSendTool, allowFromTools, claudeJsonPath, discoverTools, discoveredWrites, httpServers, isReadTool, jiraTools, mcpServerNames, readToolCache } from '../butlerTools'
 
 const tmp = () => mkdtempSync(join(tmpdir(), 'hive-butler-tools-'))
 
@@ -52,5 +52,12 @@ describe('butler tools', () => {
   it('honours CLAUDE_CONFIG_DIR', () => {
     expect(claudeJsonPath('/h', {})).toBe('/h/.claude.json')
     expect(claudeJsonPath('/h', { CLAUDE_CONFIG_DIR: '/c' })).toBe('/c/.claude.json')
+  })
+})
+
+describe('isBotSendTool', () => {
+  it('a Feishu / Lark tool that posts is a bot send; reads and other sends are not', () => {
+    expect(['stargate_feishu_send_message', 'stargate_image_to_feishu', 'stargate_mermaid_to_feishu', 'lark_im_reply'].every(isBotSendTool)).toBe(true)
+    expect(['feishu_read_document', 'feishu_search_messages', 'stargate_feishu_bot_chats', 'gitlab_add_mr_comment', 'mail_send'].some(isBotSendTool)).toBe(false)
   })
 })

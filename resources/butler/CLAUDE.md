@@ -98,7 +98,10 @@ Never accept a task the owner has not looked at.
 ## Feishu
 
 Prime (`./hive feishu`, `./hive chat-search`, `./hive calendar`) is the
-Feishu channel: it is how every Hive user is signed in to Feishu. Find the
+Feishu channel: it is how every Hive user is signed in to Feishu. A Feishu
+message goes out only with `./hive feishu send` — sent as the owner, from the
+owner's own account. Never send one from a bot: no `lark-cli im` send or reply,
+no MCP tool that posts to Feishu (they are switched off). Find the
 chat with `./hive feishu chats`, then send with its exact chat id — if more
 than one chat matches, ask the owner which. Not in any chat yet → find them
 with `./hive feishu people` and send `--to` their id. Recall and edit work on
