@@ -113,17 +113,6 @@ export function discoveredAllow(folder: string): string[] {
   return Object.entries(readToolCache(folder).servers).flatMap(([server, tools]) => allowFromTools(server, tools))
 }
 
-/** A Feishu / Lark MCP tool that posts into a chat — it sends as a bot, not as the owner. */
-export function isBotSendTool(name: string): boolean {
-  const n = name.toLowerCase()
-  return /feishu|lark/.test(n) && /send|reply|_to_(feishu|lark)/.test(n)
-}
-
-/** Deny-list entries for every discovered bot send: Feishu messages go out as the owner only (./hive feishu send). */
-export function discoveredBotSends(folder: string): string[] {
-  return Object.entries(readToolCache(folder).servers).flatMap(([server, tools]) => tools.filter(isBotSendTool).map(t => `mcp__${server}__${t}`))
-}
-
 /** Every discovered tool that writes (switched off where nothing may change). */
 export function discoveredWrites(folder: string): string[] {
   return Object.entries(readToolCache(folder).servers).flatMap(([server, tools]) => tools.filter(t => !isReadTool(t)).map(t => `mcp__${server}__${t}`))
