@@ -1150,7 +1150,7 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
       return reply(200, await previewFeishuAnswer({ text: body.text, senderId: body.senderId, chatId: body.chatId, chatName: body.chatName, p2p: body.p2p }))
     }
 
-    // ./hive feishu: reads through Prime; sends as the owner through lark-cli.
+    // ./hive feishu chats / messages / send: Feishu through Prime, the default Feishu channel.
     // The owner's own session only — never a run answering someone.
     if (['/feishu/chats', '/feishu/messages', '/feishu/send', '/feishu/edit', '/feishu/recall', '/feishu/people', '/feishu/doc'].includes(url.pathname)) {
       if (req.headers['x-hive-run']) return reply(403, { ok: false, error: 'not_in_a_run' })

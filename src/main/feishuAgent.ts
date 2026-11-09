@@ -279,10 +279,6 @@ export interface FeishuAgentDeps {
   /** Follow-ups Butler promised ("其余已转告") become todos; later replies in that chat join their history. */
   todos?: FeishuTodos
   http: Http
-  /** Every message write (send, reply, 👍, edit, recall): as the owner through lark-cli, never Prime's send-as-user. */
-  send: Http
-  /** The company directory, with ids \`send\` can use. */
-  people: (q: string) => Promise<{ ok: boolean; error?: string; people?: Array<{ openId: string; name: string }> }>
   token: () => Promise<{ ok: boolean; token?: string; error?: string }>
   selfOpenId: () => string | null
   profile: () => ButlerProfile
@@ -401,7 +397,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
 
   async function reply(token: string, job: Pick<Job, 'messageId' | 'chatId' | 'chatName'>, text: string, kind: LogKind) {
     const full = ensurePrefix(text, prefix())
-    const r = await deps.send('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(job.messageId)}/reply`, token,
+    const r = await deps.http('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(job.messageId)}/reply`, token,
       { msg_type: 'text', content: JSON.stringify({ text: full }) })
     if (!ok(r)) return { ok: false as const, error: errOf(r) }
     const id = String(r.body?.data?.message_id ?? '')
@@ -412,7 +408,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
 
   /** 👍 on their message: "got it" without a reply. Needs the reactions scope; quietly nothing without it. */
   async function thumbsUp(token: string, messageId: string): Promise<boolean> {
-    const r = await deps.send('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(messageId)}/reactions`, token, { reaction_type: { emoji_type: 'THUMBSUP' } }).catch(() => null)
+    const r = await deps.http('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(messageId)}/reactions`, token, { reaction_type: { emoji_type: 'THUMBSUP' } }).catch(() => null)
     return !!r && ok(r)
   }
 
@@ -800,7 +796,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
         return { ok: true, messages: items.filter(m => !m?.deleted).map(m => ({ id: String(m?.message_id ?? ''), time: Number(m?.create_time) || 0, sender: String(m?.sender?.id ?? ''), mine: !!self && m?.sender?.id === self, text: messageText(m) })) }
       } catch (e) { return { ok: false, error: String((e as Error).message) } }
     },
-    /** `./hive feishu send`: the owner's own words, sent as the owner through lark-cli (no assistant prefix); logged like every other send. */
+    /** `./hive feishu send`: the owner's own words, sent as the owner through Prime (no assistant prefix); logged like every other send. */
     /** To a chat (oc_, one of the owner's) or to a person (ou_, from ./hive feishu people: opens the direct chat). */
     async ownerSend(p: { chatId?: string; openId?: string; name?: string; text: string; replyTo?: string }): Promise<{ ok: boolean; error?: string; id?: string }> {
       const tok = await deps.token()
@@ -810,10 +806,10 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       if (!p.chatId && !p.openId) return { ok: false, error: 'no_such_chat' }
       const content = { msg_type: 'text', content: JSON.stringify({ text: p.text }) }
       const r = p.replyTo
-        ? await deps.send('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(p.replyTo)}/reply`, tok.token, content)
+        ? await deps.http('POST', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(p.replyTo)}/reply`, tok.token, content)
         : chat
-          ? await deps.send('POST', `${FEISHU_API}/im/v1/messages?receive_id_type=chat_id`, tok.token, { receive_id: chat.id, ...content })
-          : await deps.send('POST', `${FEISHU_API}/im/v1/messages?receive_id_type=open_id`, tok.token, { receive_id: p.openId, ...content })
+          ? await deps.http('POST', `${FEISHU_API}/im/v1/messages?receive_id_type=chat_id`, tok.token, { receive_id: chat.id, ...content })
+          : await deps.http('POST', `${FEISHU_API}/im/v1/messages?receive_id_type=open_id`, tok.token, { receive_id: p.openId, ...content })
       if (!ok(r)) return { ok: false, error: errOf(r) }
       const id = String(r.body?.data?.message_id ?? '')
       const chatId = chat?.id ?? String(r.body?.data?.chat_id ?? '')
@@ -832,7 +828,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       if (!tok.ok || !tok.token) return { ok: false, error: 'signed_out' }
       // An assistant reply keeps its prefix: the edit says the same who-is-talking.
       const full = e.kind === 'owner' ? text : ensurePrefix(text, prefix())
-      const r = await deps.send('PUT', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(id)}`, tok.token, { msg_type: 'text', content: JSON.stringify({ text: full }) })
+      const r = await deps.http('PUT', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(id)}`, tok.token, { msg_type: 'text', content: JSON.stringify({ text: full }) })
       if (!ok(r)) return { ok: false, error: errOf(r) }
       e.text = full
       e.edited = true
@@ -841,9 +837,13 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       deps.onChange?.()
       return { ok: true }
     },
-    /** `./hive feishu people`: the company directory (lark-cli, contact:user:search), for someone the owner has never chatted with. */
+    /** `./hive feishu people`: the company directory (contact:user:search), for someone the owner has never chatted with. */
     async ownerPeople(q: string): Promise<{ ok: boolean; error?: string; people?: Array<{ openId: string; name: string }> }> {
-      return deps.people(q)
+      const tok = await deps.token()
+      if (!tok.ok || !tok.token) return { ok: false, error: 'signed_out' }
+      const r = await deps.http('GET', `${FEISHU_API}/search/v1/user?${new URLSearchParams({ query: q, page_size: '20' })}`, tok.token)
+      if (!ok(r)) return { ok: false, error: r.body?.code === 99991679 ? 'missing_scope' : errOf(r) }
+      return { ok: true, people: ((r.body.data?.users ?? []) as any[]).filter(u => typeof u?.open_id === 'string').map(u => ({ openId: u.open_id, name: String(u.name ?? '') })) }
     },
     /** `./hive feishu doc`: a docx or wiki page as plain text. */
     async ownerDoc(link: string): Promise<{ ok: boolean; error?: string; title?: string; text?: string }> {
@@ -913,7 +913,7 @@ export function createFeishuAgent(deps: FeishuAgentDeps) {
       if (now() - e.time > RECALL_WINDOW_MS) return { ok: false, error: 'too_old' }
       const tok = await deps.token()
       if (!tok.ok || !tok.token) return { ok: false, error: tok.error || 'signed_out' }
-      const r = await deps.send('DELETE', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(id)}`, tok.token)
+      const r = await deps.http('DELETE', `${FEISHU_API}/im/v1/messages/${encodeURIComponent(id)}`, tok.token)
       if (!ok(r)) return { ok: false, error: errOf(r) }
       e.recalled = true
       if (e.inReplyTo && cases.get(e.inReplyTo)) cases.resolve(e.inReplyTo, 'recalled')

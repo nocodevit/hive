@@ -28,7 +28,7 @@ Any other tool is blocked for this session.
 | Priority ("急", "紧急", "不急") — 1 ⚡ 要命 · 2 🔥 冒烟 (default) · 3 🧊 冻着 | `./hive todo add 回 Contoso 合同 --pri 1`, `./hive todo pri <id> 3` |
 | My todos / done / drop / add a note | `./hive todo list`, `./hive todo done <id>`, `./hive todo drop <id>`, `./hive todo note <id> 已和研发确认` |
 | The owner's calendar ("我今天有什么会", "明天几点有空") — Feishu and/or Mac Calendar, as Hive is set up. Use this, never lark-cli | `./hive calendar` (today), `./hive calendar tomorrow`, `./hive calendar 2026-10-30 --days 5` |
-| Feishu ("给 xx 发飞书", "xx 群里说了什么") — find the chat, read it (through Prime), send as the owner (through lark-cli, never Prime) | `./hive feishu chats 张三`, `./hive feishu messages --chat oc_… -n 20`, `./hive feishu send --chat oc_… 好的，明天上午给你`, reply in thread: `--reply om_…` |
+| Feishu ("给 xx 发飞书", "xx 群里说了什么") — Prime is the Feishu channel: find the chat, read it, send as the owner | `./hive feishu chats 张三`, `./hive feishu messages --chat oc_… -n 20`, `./hive feishu send --chat oc_… 好的，明天上午给你`, reply in thread: `--reply om_…` |
 | Search the owner's Feishu messages | `./hive chat-search --q "UAT 环境"` |
 | Feishu: someone never chatted with / take back or fix what was sent / read a doc | `./hive feishu people 张三` → `./hive feishu send --to ou_… 你好`; `./hive feishu recall om_…`, `./hive feishu edit om_… 改正后的话`; `./hive feishu doc https://…/wiki/…` |
 | Approve cards: list / read one | `./hive cards` (`--all` = with the last week's history), `./hive card show <id>` |
@@ -97,9 +97,8 @@ Never accept a task the owner has not looked at.
 
 ## Feishu
 
-`./hive feishu`, `./hive chat-search` and `./hive calendar` read Feishu
-through Prime. Everything `./hive feishu` sends, edits or recalls goes out as
-the owner through lark-cli — Prime never sends. Find the
+Prime (`./hive feishu`, `./hive chat-search`, `./hive calendar`) is the
+Feishu channel: it is how every Hive user is signed in to Feishu. Find the
 chat with `./hive feishu chats`, then send with its exact chat id — if more
 than one chat matches, ask the owner which. Not in any chat yet → find them
 with `./hive feishu people` and send `--to` their id. Recall and edit work on
