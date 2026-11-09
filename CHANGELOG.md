@@ -7,6 +7,14 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.7] — 2026-11-09
+
+##### 📱 Butler
+- **Sessions shows what each agent last did.** Under every agent: the task you last gave it, and the first lines of how it ended the turn.
+- **Answer right there.** Click it to read the whole reply and type your answer; it goes into that agent's chat (resumed first if it was off) without leaving Butler.
+
+---
+
 ## [2.42.6] — 2026-11-09
 
 ##### 📱 Butler
