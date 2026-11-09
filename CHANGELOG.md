@@ -7,6 +7,14 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.8] — 2026-11-09
+
+##### 📱 Butler
+- **Every Feishu reply Butler sends on its own leaves a card.** Approve shows "已回复": who asked, what they asked, and what Butler answered. **OK** files it.
+- Before, an automatic reply was only a passing Mac banner, so a reply that promised to pass something on to you could go unseen.
+
+---
+
 ## [2.42.7] — 2026-11-09
 
 ##### 📱 Butler
