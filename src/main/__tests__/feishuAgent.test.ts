@@ -88,8 +88,14 @@ function setup(opts: { claude?: (p: string) => string | Promise<string>; setting
     event(_id: string, e: any) { this.events.push(e); return true },
     openByRef() { return [] as Array<{ id: string }> } }
   const prompts: string[] = []
+  // Prime (http) only reads; every message write goes through \`send\` (lark-cli as the owner).
+  const primeWrites: string[] = []
+  const userWrites: string[] = []
   const deps = {
-    dir, http: fs.http as any, now,
+    dir, now,
+    http: (async (m: string, url: string, tok: string, body?: unknown) => { if (m !== 'GET' && url.includes('/im/v1/messages')) primeWrites.push(`${m} ${url}`); return fs.http(m as any, url, tok, body) }) as any,
+    send: (async (m: string, url: string, tok: string, body?: unknown) => { userWrites.push(`${m} ${url}`); return fs.http(m as any, url, tok, body) }) as any,
+    people: async (q: string) => ({ ok: true, people: q === '王五' ? [{ openId: 'ou_wang', name: '王五' }] : [] }),
     token: async () => ({ ok: true, token: 'u-test' }),
     selfOpenId: () => SELF,
     profile: () => ({ ...EMPTY_PROFILE, name: 'Alex', ...opts.profile }),
@@ -100,7 +106,7 @@ function setup(opts: { claude?: (p: string) => string | Promise<string>; setting
   }
   const agent = createFeishuAgent(deps)
   agent.setSettings({ enabled: true, ...opts.settings })
-  return { dir, fs, agent, approvals, notes, prompts, deps, todos, advance: (ms: number) => { clock += ms }, now }
+  return { dir, fs, agent, approvals, notes, prompts, deps, todos, primeWrites, userWrites, advance: (ms: number) => { clock += ms }, now }
 }
 
 describe('pure helpers', () => {
@@ -765,6 +771,16 @@ describe('owner Feishu through Prime (./hive feishu)', () => {
 })
 
 describe('owner Feishu: people, recall, edit, documents', () => {
+  it('every message Hive sends, edits or recalls goes out as the owner (lark-cli), never through Prime', async () => {
+    const t = setup()
+    const r = await t.agent.ownerSend({ chatId: 'p1', text: '明天上午' })
+    await t.agent.ownerSend({ openId: 'ou_wang', name: '王五', text: '你好' })
+    await t.agent.ownerEdit(r.id!, '明天下午')
+    await t.agent.recall(r.id!)
+    expect(t.userWrites.map(w => w.split(' ')[0])).toEqual(['POST', 'POST', 'PUT', 'DELETE'])
+    expect(t.primeWrites).toEqual([])
+  })
+
   it('people → send --to opens the direct chat and logs it under that chat', async () => {
     const t = setup()
     expect((await t.agent.ownerPeople('王五')).people).toEqual([{ openId: 'ou_wang', name: '王五' }])

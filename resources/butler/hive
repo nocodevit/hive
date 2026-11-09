@@ -8,9 +8,9 @@
   ./hive start (--id AGENT_ID | [--project NAME] --agent NAME) [--mode resume|new]
   ./hive dismiss (--id AGENT_ID | [--project NAME] --agent NAME)   (stop waiting on a question for the owner)
   ./hive chat-search --q "words"
-  ./hive feishu chats NAME...                         (find a chat or person; Feishu through Prime)
+  ./hive feishu chats NAME...                         (find a chat or person; read through Prime)
   ./hive feishu messages --chat CHAT_ID [-n 20]
-  ./hive feishu send (--chat CHAT_ID | --to OPEN_ID) [--reply MESSAGE_ID] TEXT...   (sent as the owner)
+  ./hive feishu send (--chat CHAT_ID | --to OPEN_ID) [--reply MESSAGE_ID] TEXT...   (sent as the owner, through lark-cli)
   ./hive feishu people NAME...                        (company directory: someone never chatted with)
   ./hive feishu edit MESSAGE_ID TEXT... | ./hive feishu recall MESSAGE_ID   (what Hive sent, last 24h)
   ./hive feishu doc URL                               (a docx / wiki page as text)

@@ -12,6 +12,7 @@ import { randomUUID } from 'crypto'
 import { existsSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { Notification, type IpcMain } from 'electron'
+import { createLarkPeople, createLarkUserHttp } from './larkUser'
 import { createFeishuAgent, LOCKED_TOPICS, defaultPrefix, type FeishuAgentSettings } from './feishuAgent'
 import { createCalendar, createFeishuMeeting, type Exec } from './calendar'
 import type { ButlerProfile } from './butlerProfile'
@@ -82,7 +83,7 @@ export const previewFeishuAnswer = (input: { text: string; senderId?: string; ch
 
 type Owner = Pick<ReturnType<typeof createFeishuAgent>, 'ownerChats' | 'ownerMessages' | 'ownerSend' | 'ownerEdit' | 'ownerPeople' | 'ownerDoc' | 'recall'>
 let owner: Owner | null = null
-/** ./hive feishu chats / messages / send: the owner's Feishu through Prime. */
+/** ./hive feishu chats / messages / send: reads through Prime, sends as the owner through lark-cli. */
 export const feishuOwner = (): Owner | null => owner
 
 export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
@@ -112,6 +113,9 @@ export function registerButlerFeishuAgentIpc(d: FeishuAgentIpcDeps) {
     dir: d.butlerDir,
     todos: d.todos,
     http: feishuHttp,
+    // Messages go out as the owner through lark-cli; Prime only reads (owner, 11-09).
+    send: createLarkUserHttp(),
+    people: createLarkPeople(),
     token: () => d.feishu.accessToken(),
     selfOpenId: () => { const s = d.feishu.getStatus(); return s.state === 'signed_in' && s.openId ? s.openId : null },
     profile: () => d.readProfile(d.butlerDir),
