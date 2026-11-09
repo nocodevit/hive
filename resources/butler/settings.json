@@ -22,9 +22,7 @@
     "deny": [
       "Edit",
       "Write",
-      "NotebookEdit",
-      "Bash(lark-cli im +messages-send:*)",
-      "Bash(lark-cli im +messages-reply:*)"
+      "NotebookEdit"
     ]
   }
 }
