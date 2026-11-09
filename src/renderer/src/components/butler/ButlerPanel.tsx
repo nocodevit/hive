@@ -10,6 +10,7 @@ import { TodayTab } from './TodayTab' // [butler:mail-routines]
 import { TodoTab } from './TodoTab'
 import type { DiscussTarget } from './DiscussButton'
 import { ButlerGuide } from './ButlerGuide'
+import { SessionCard, type LastTurn } from './SessionCard'
 
 export type ButlerMode = 'drawer' | 'page'
 // [butler:mail-routines] add 'today'
@@ -74,6 +75,7 @@ export function ButlerPanel(p: Props) {
   const [approvals, setApprovals] = useState<ApprovalCard[]>([])
   const [folder, setFolder] = useState<string | null>(null)
   const [rows, setRows] = useState<SessionRow[]>([])
+  const [turns, setTurns] = useState<Record<string, LastTurn>>({})
   /** Resume pressed: agentId → when. Cleared once the row is live, or after a minute. */
   const [resuming, setResuming] = useState<Record<string, number>>({})
   const [mounted, setMounted] = useState(false)
@@ -91,7 +93,10 @@ export function ButlerPanel(p: Props) {
   useEffect(() => {
     if (!p.visible) return
     let alive = true
-    const load = () => window.api.butler.agents().then(r => { if (alive) setRows(orderSessions(r)) }).catch(() => {})
+    const load = () => {
+      window.api.butler.agents().then(r => { if (alive) setRows(orderSessions(r)) }).catch(() => {})
+      window.api.butler.lastTurns().then(t => { if (alive) setTurns(t) }).catch(() => {})
+    }
     load()
     const t = setInterval(load, 2000)
     return () => { alive = false; clearInterval(t) }
@@ -228,13 +233,10 @@ export function ButlerPanel(p: Props) {
             ))}
           </div>
           {rows.map(r => (
-            <div key={r.agentId} className="flex items-center gap-2.5 px-3 py-2 rounded-xl bg-bg-primary text-[13px]">
-              <span className={`w-[7px] h-[7px] rounded-full flex-shrink-0 ${DOT[r.activity]}`} />
-              <div className="flex-1 min-w-0">
-                <div className="font-semibold text-text-primary truncate">{r.agent}</div>
-                <div className="text-[11px] text-text-muted truncate">{[r.project, r.activity, sinceLabel(r.updatedAt)].filter(Boolean).join(' · ')}</div>
-              </div>
-              {r.activity === 'off' ? (
+            <SessionCard key={r.agentId} agent={r.agent} dot={DOT[r.activity]} turn={turns[r.agentId]}
+              meta={[r.project, r.activity, sinceLabel(r.updatedAt)].filter(Boolean).join(' · ')}
+              onReply={text => window.api.chat.discussWith(r.agentId, text)}
+              action={r.activity === 'off' ? (
                 <button onClick={() => { setResuming(m => ({ ...m, [r.agentId]: Date.now() })); p.onResumeAgent(r) }} disabled={!!resuming[r.agentId]} aria-label={`Resume ${r.agent}`}
                   className="px-2.5 py-1 rounded-lg bg-bg-secondary border border-border text-text-primary text-[12px] font-semibold cursor-pointer disabled:cursor-default disabled:opacity-60 inline-flex items-center gap-1.5">
                   {resuming[r.agentId] && <span className="w-3 h-3 rounded-full border-2 border-text-muted border-t-transparent animate-spin" aria-hidden />}
@@ -242,8 +244,7 @@ export function ButlerPanel(p: Props) {
                 </button>
               ) : (
                 <button onClick={() => p.onOpenAgent(r)} aria-label={`${r.activity === 'waiting' ? 'Answer' : 'Open'} ${r.agent}`} className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer ${r.activity === 'waiting' ? 'bg-accent text-text-on-purple' : 'bg-bg-secondary border border-border text-text-primary'}`}>{r.activity === 'waiting' ? 'Answer' : 'Open'}</button>
-              )}
-            </div>
+              )} />
           ))}
           {rows.length === 0 && <div className="text-[12px] text-text-muted px-1">No agents yet</div>}
         </div>

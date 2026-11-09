@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
-  isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode, buildPending
+  isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode, buildPending, lastTurn
 } from '../butlerApi'
 
 const DATA = {
@@ -202,5 +202,25 @@ describe('buildPending', () => {
   it('nothing waiting', () => {
     expect(buildPending({ waits: [], rows: [], approvals: [], lastRuns: {}, routineName: x => x, dayStart }))
       .toEqual({ ok: true, agents: [], approvals: { count: 0, titles: [] }, routinesFailed: [] })
+  })
+})
+
+describe('lastTurn', () => {
+  const user = (t: string) => JSON.stringify({ _direction: 'stdin', type: 'user', message: { content: [{ type: 'text', text: t }] } })
+  const said = (t: string) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: t }] } })
+  const tool = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }] } })
+
+  it('is the owner\'s last message and the agent\'s last words after it', () => {
+    expect(lastTurn([user('old'), said('old reply'), user('compare the plans'), said('looking'), tool, said('Done: 3 differences')]))
+      .toEqual({ task: 'compare the plans', reply: 'Done: 3 differences' })
+  })
+  it('has no reply while the agent has not said anything since', () => {
+    expect(lastTurn([user('a'), said('b'), user('next'), tool])).toEqual({ task: 'next', reply: '' })
+  })
+  it('keeps a reply when the log has no owner message in it', () => {
+    expect(lastTurn([said('hello')])).toEqual({ task: '', reply: 'hello' })
+  })
+  it('is empty for an empty log', () => {
+    expect(lastTurn([])).toEqual({ task: '', reply: '' })
   })
 })

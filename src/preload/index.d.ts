@@ -112,6 +112,7 @@ declare global {
         pinned: () => Promise<boolean>
         setPinned: (v: boolean) => Promise<boolean>
         agents: () => Promise<ButlerAgentRow[]>
+        lastTurns: () => Promise<Record<string, { task: string; reply: string; at: number }>>
         offerAnswered: () => Promise<{ ok: boolean }>
         onState: (cb: (s: ButlerState) => void) => () => void
         onStartAgent: (cb: (payload: { agentId: string; mode: 'resume' | 'new' }) => void) => () => void

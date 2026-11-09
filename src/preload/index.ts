@@ -305,6 +305,7 @@ const api = {
     pinned: () => ipcRenderer.invoke('butler:pinned') as Promise<boolean>,
     setPinned: (v: boolean) => ipcRenderer.invoke('butler:setPinned', v) as Promise<boolean>,
     agents: () => ipcRenderer.invoke('butler:agents') as Promise<ButlerAgentRow[]>,
+    lastTurns: () => ipcRenderer.invoke('butler:lastTurns') as Promise<Record<string, { task: string; reply: string; at: number }>>,
     offerAnswered: () => ipcRenderer.invoke('butler:offerAnswered') as Promise<{ ok: boolean }>,
     onState: (cb: (s: ButlerState) => void) => {
       const handler = (_e: Electron.IpcRendererEvent, s: ButlerState) => cb(s)

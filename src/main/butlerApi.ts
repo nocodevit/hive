@@ -141,6 +141,18 @@ export function parseChatTail(lines: string[], n: number, maxChars = 4000): Tail
   return items.slice(-Math.max(1, n))
 }
 
+export interface LastTurn { task: string; reply: string }
+
+/** The owner's last message and the agent's last words after it (what it ended the turn with). */
+export function lastTurn(lines: string[]): LastTurn {
+  const items = parseChatTail(lines, 400)
+  let u = -1
+  for (let i = items.length - 1; i >= 0; i--) if (items[i].role === 'user') { u = i; break }
+  let reply = ''
+  for (let i = items.length - 1; i > u; i--) if (items[i].role === 'assistant') { reply = items[i].text; break }
+  return { task: u >= 0 ? items[u].text : '', reply }
+}
+
 /** Newest `chat-<agentId>-<startedAt>.jsonl` for this exact agent id. */
 export function latestChatLogPath(logDir: string, agentId: string): string | null {
   if (!existsSync(logDir)) return null

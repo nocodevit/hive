@@ -204,7 +204,7 @@ import { DELIVERABLE_RULE } from '../shared/deliverable'
 import { registerButlerWakeIpc } from './butlerWakeIpc'
 import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder, installButlerFiles, phoneDir, recordClaudeTrust } from './butler'
 import { claudeBin } from './claude-env'
-import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, parseStartMode, buildPending } from './butlerApi'
+import { isButlerRoute, checkButlerAuth, listAgents, resolveAgent, parseChatTail, latestChatLogPath, lastTurn, type LastTurn, parseStartMode, buildPending } from './butlerApi'
 import { setupNotifications } from './notifyIpc'
 import { createAgentWatch, agentWaitEvent } from './notifier'
 import { agentIdFromChatId } from './chatActivity'
@@ -859,6 +859,23 @@ ipcMain.handle('claude:auth', async () => {
 ipcMain.handle('butler:pinned', () => butler.pinned)
 ipcMain.handle('butler:setPinned', (_e, v: unknown) => { butler.setPinned(v === true); return butler.pinned })
 ipcMain.handle('butler:agents', () => butlerRows())
+// Butler → Sessions: each agent's last task and last reply, re-read only when its log changes.
+const lastTurnCache = new Map<string, { key: string; turn: LastTurn }>()
+ipcMain.handle('butler:lastTurns', () => {
+  const out: Record<string, LastTurn & { at: number }> = {}
+  for (const r of butlerRows()) {
+    const log = getChatSessionInfo(`chat-${r.agentId}`)?.logPath || latestChatLogPath(join(DATA_DIR, 'chat-logs'), r.agentId)
+    if (!log) continue
+    try {
+      const st = statSync(log)
+      const key = `${log}:${st.mtimeMs}:${st.size}`
+      let hit = lastTurnCache.get(r.agentId)
+      if (hit?.key !== key) { hit = { key, turn: lastTurn(readLogTailLines(log)) }; lastTurnCache.set(r.agentId, hit) }
+      if (hit.turn.task || hit.turn.reply) out[r.agentId] = { ...hit.turn, at: st.mtimeMs }
+    } catch { /* log gone or unreadable */ }
+  }
+  return out
+})
 // Discuss with an agent instead of Butler: start its chat when it is off (as a click on it would),
 // then the context goes in as the owner's own message.
 /** Agents with what each one last worked on (dispatch picks by it). */
