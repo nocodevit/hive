@@ -7,6 +7,17 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.11] — 2026-11-11
+
+##### 🌐 Remote Butler
+- **Your Butler can talk to a colleague's Butler.** App Settings › Remote Butler: turn it on, tick their Mac, and they tick yours. Ask Butler "问一下 xx 的 Hive…" and it sends; their answer comes back to your Butler.
+- **Works over Tailscale.** Install Tailscale and join the same network; Hive finds the other Mac by itself, no IP to type. Hive checks Tailscale only when you turn the switch on, and if Tailscale is missing or not connected the switch stays off and tells you why.
+- **You decide what comes in.** Per person: **Ask me first** (a card in Approve and in the Butler chat; **Give to Butler** passes it on) or **Straight to Butler**.
+- **Shown as cards in the Butler chat**, both what comes in and what Butler sent (✓, or why it didn't go through).
+- **Safe by default.** Only people you ticked can reach your Butler, and nobody can reach your agents. Butler treats their message as what they said, never as an order; work for an agent still needs your Assign card.
+
+---
+
 ## [2.42.10] — 2026-11-10
 
 ##### 🥴 Handoff
