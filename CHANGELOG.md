@@ -7,6 +7,14 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.10] — 2026-11-10
+
+##### 🥴 Handoff
+- **The handoff strip is readable again.** **Details** opens right inside the strip with your full goals, instead of a small popup that the chat cut off.
+- **It follows your theme** like the other notices in the chat, and wraps on narrow windows so Details and Stop are always visible.
+
+---
+
 ## [2.42.9] — 2026-11-09
 
 ##### 📱 Butler
