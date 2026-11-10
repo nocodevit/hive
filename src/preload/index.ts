@@ -27,6 +27,13 @@ export type ButlerState = {
 }
 
 // [butler:wake]
+export type RemoteView = {
+  enabled: boolean; listening: boolean; address: string; port: number; listenError: string
+  tailscale: { installed: boolean; state: string; selfName?: string; selfIp?: string; selfLogin?: string; error?: string }
+  devices: Array<{ id: string; name: string; ips: string[]; login: string; userName: string; online: boolean; os: string; allowed: { name: string; login: string; mode: 'ask' | 'auto'; port?: number } | null }>
+  allowed: Array<{ id: string; name: string; login: string; mode: 'ask' | 'auto'; port?: number; device: unknown }>
+  log: Array<{ id: string; at: number; dir: 'in' | 'out'; peerId: string; peerName: string; text: string; result: string }>
+}
 export type WakeState = { enabled: boolean; status: 'off' | 'starting' | 'listening' | 'error'; error?: string }
 export type WakePlan =
   | { kind: 'agent'; row: ButlerAgentRow; text: string }
@@ -408,6 +415,24 @@ const api = {
     agenda: (date?: string) => ipcRenderer.invoke('calendar:agenda', date) as Promise<import('./feishuAgentTypes').DayAgenda>
   },
 
+  remote: {
+    view: () => ipcRenderer.invoke('remote:view') as Promise<RemoteView>,
+    refresh: () => ipcRenderer.invoke('remote:refresh') as Promise<RemoteView>,
+    setEnabled: (on: boolean) => ipcRenderer.invoke('remote:setEnabled', on) as Promise<{ ok: boolean; error?: string; message: string; view: RemoteView }>,
+    setPeer: (id: string, peer: { name?: string; mode?: 'ask' | 'auto'; port?: number } | null) => ipcRenderer.invoke('remote:setPeer', id, peer) as Promise<RemoteView>,
+    setPort: (port: number) => ipcRenderer.invoke('remote:setPort', port) as Promise<{ ok: boolean; error?: string; view: RemoteView }>,
+    openTailscale: (what: 'app' | 'download') => ipcRenderer.invoke('remote:openTailscale', what) as Promise<void>,
+    onChange: (cb: (v: RemoteView) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, v: RemoteView) => cb(v)
+      ipcRenderer.on('remote:changed', handler)
+      return () => ipcRenderer.removeListener('remote:changed', handler)
+    },
+    onChat: (cb: (e: import('../shared/remote-message').RemoteChatEvent) => void) => {
+      const handler = (_e: Electron.IpcRendererEvent, v: import('../shared/remote-message').RemoteChatEvent) => cb(v)
+      ipcRenderer.on('remote:chat', handler)
+      return () => ipcRenderer.removeListener('remote:chat', handler)
+    }
+  },
   // [butler:wake]
   wake: {
     state: () => ipcRenderer.invoke('wake:state') as Promise<WakeState>,

@@ -200,6 +200,8 @@ import { createFeishuAuth, relayUrl, RELAY_TIMEOUT_MS } from './feishuAuth'
 import { probeFeishu } from './feishuProbe'
 import { readProfile, writeProfile } from './butlerProfile'
 import { createApprovals } from './approvals'
+import { createRemote, DETECT_ERROR_TEXT, SEND_ERROR_TEXT, TAILSCALE_DOWNLOAD, type AllowedPeer } from './remote'
+import { BUTLER_CHAT_ID as REMOTE_BUTLER_CHAT } from './wakeWord'
 import { DELIVERABLE_RULE } from '../shared/deliverable'
 import { registerButlerWakeIpc } from './butlerWakeIpc'
 import { createButler, BUTLER_SESSION_NAME, bridgeSessionId, butlerDir, claudeTrustsFolder, installButlerFiles, phoneDir, recordClaudeTrust } from './butler'
@@ -724,6 +726,30 @@ const approvals = createApprovals({
   }
 })
 for (const a of approvals.pending()) knownApprovals.add(a.id)
+// Remote Butler (remote.ts): Tailscale is only looked at while Remote is on.
+const remote = createRemote({
+  dataDir: DATA_DIR,
+  approvals,
+  toButler: text => getChatSessionInfo(REMOTE_BUTLER_CHAT)?.live ? sendExternalUserMessage(REMOTE_BUTLER_CHAT, text) : { ok: false, error: 'no_session' },
+  notify: (title, body) => void notifications.emit({ kind: 'butlerApproval', key: `remote:${Date.now()}`, title, body, target: { kind: 'approvals' } }),
+  onChange: () => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send('remote:changed', remote.view()) },
+  chatEvent: e => { for (const win of BrowserWindow.getAllWindows()) win.webContents.send('remote:chat', e) }
+})
+if (remote.settings().enabled) void remote.sync()
+setInterval(() => { if (remote.settings().enabled) void remote.sync() }, 30_000).unref()
+ipcMain.handle('remote:view', () => remote.view())
+ipcMain.handle('remote:refresh', async () => { if (remote.settings().enabled) await remote.sync(); return remote.view() })
+ipcMain.handle('remote:setEnabled', async (_e, on: unknown) => {
+  const r = await remote.setEnabled(on === true)
+  return { ...r, message: r.error ? DETECT_ERROR_TEXT[r.error] : '' }
+})
+ipcMain.handle('remote:setPeer', (_e, id: unknown, peer: unknown) =>
+  typeof id === 'string' ? remote.setPeer(id, peer === null ? null : (peer && typeof peer === 'object' ? peer as Partial<AllowedPeer> : {})) : remote.view())
+ipcMain.handle('remote:setPort', (_e, port: unknown) => remote.setPort(Number(port)))
+ipcMain.handle('remote:openTailscale', async (_e, what: unknown) => {
+  if (what === 'download') return shell.openExternal(TAILSCALE_DOWNLOAD)
+  await new Promise<void>(r => execFile('open', ['-a', 'Tailscale'], () => r()))
+})
 pendingIds = new Set(approvals.pending().map(a => a.id))
 registerTodosIpc({ ipcMain, store: () => todos, approvals, changed: todosChanged })
 // Jira cards carry an "open in Jira" link. The address comes from the connection or from Jira itself;
@@ -1060,6 +1086,18 @@ async function handleButlerRequest(req: IncomingMessage, res: ServerResponse) {
     }
 
     // ./hive tasks / task accept|back: what each agent was given and where it is (butlerTasks.ts).
+    // ./hive remote peers / send: Butler ↔ another person's Butler over Tailscale.
+    if (url.pathname === '/remote/peers' || url.pathname === '/remote/send') {
+      if (req.headers['x-hive-run']) return reply(403, { ok: false, error: 'not_in_a_run' })
+      if (!remote.settings().enabled) return reply(409, { ok: false, error: 'remote_off', message: SEND_ERROR_TEXT.remote_off })
+      if (req.method === 'GET' && url.pathname === '/remote/peers') return reply(200, { ok: true, peers: await remote.peers() })
+      if (req.method === 'POST' && url.pathname === '/remote/send') {
+        const body = await readJsonBody(req)
+        const r = await remote.send(String(body?.peer ?? ''), String(body?.text ?? ''))
+        return reply(r.ok ? 200 : 409, r.ok ? r : { ...r, message: SEND_ERROR_TEXT[(r as { error: keyof typeof SEND_ERROR_TEXT }).error] })
+      }
+      return reply(400, { ok: false, error: 'bad_request' })
+    }
     if (req.method === 'GET' && url.pathname === '/tasks') return reply(200, { ok: true, tasks: taskTracker!.list() })
     if (req.method === 'POST' && (url.pathname === '/tasks/accept' || url.pathname === '/tasks/back')) {
       const b = await readJsonBody(req).catch(() => null)
@@ -3064,7 +3102,7 @@ function removeOwnPortLock(reason: string) {
 function portLockLog(msg: string) {
   try { appendFileSync(join(DATA_DIR, 'port-lock.log'), `${new Date().toISOString()} pid ${process.pid} v${app.getVersion()} ${msg}\n`) } catch { /* diagnostics only */ }
 }
-app.on('will-quit', () => removeOwnPortLock('quit'))
+app.on('will-quit', () => { remote.close(); removeOwnPortLock('quit') })
 
 // Kill every chat `claude --print` child when Hive quits, so none orphan to
 // launchd. before-quit covers Cmd-Q / app.quit / auto-update relaunch; the

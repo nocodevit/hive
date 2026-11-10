@@ -9,6 +9,7 @@ import { ButlerPanel, type ButlerMode } from './components/butler/ButlerPanel'
 import { ButlerWizard } from './components/butler/ButlerWizard'
 import { WakeToast, useWakeListening } from './components/butler/WakeToast' // [butler:wake]
 import { WakeSettings } from './components/butler/WakeSettings' // [butler:wake]
+import { RemoteSettings } from './components/butler/RemoteSettings'
 import { EmailAccounts } from './components/butler/EmailAccounts' // [butler:mail-routines]
 import { JiraSettings } from './components/butler/JiraSettings'
 import { DailyRoutine } from './components/butler/DailyRoutine' // [butler:mail-routines]
@@ -3413,6 +3414,7 @@ export default function App() {
 
             {/* [butler:wake] Wake word section */}
             <SettingsSection label="Wake word"><WakeSettings /></SettingsSection>
+            <SettingsSection label="Remote Butler"><RemoteSettings /></SettingsSection>
 
             <SettingsSection label="Notifications"><NotificationSettings /></SettingsSection>
 

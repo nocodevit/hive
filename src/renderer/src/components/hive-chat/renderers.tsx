@@ -8,6 +8,8 @@ import { CRUSH, CHAT, FONT_MONO, FONT_PROSE, TOOL_COLORS, accentTint, redact } f
 import { parseGoalNotice, splitGoalCondition, goalCommandArgs, type GoalNotice } from './goal-notice'
 import { parseStructuredOutput } from './structured-format'
 import type { TimelineEntry } from './types'
+import { RemoteCard } from './RemoteCard'
+import { parseRemoteButlerText } from '../../../../shared/remote-message'
 
 /**
  * Tells deep tickers (ThinkingSpinner, LongRunningTick, SubagentBanner)
@@ -2019,13 +2021,22 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
   const isSub = (entry as any).isSubagent === true
   let row: React.ReactNode = null
   switch (entry.kind) {
-    case 'user': row = <UserMessage text={entry.text} onRecall={isSub ? undefined : onRecall} isSubagent={isSub} />
+    case 'user': {
+      const remote = isSub ? null : parseRemoteButlerText(entry.text)
+      row = remote
+        ? <RemoteCard dir="in" peerName={remote.peerName} login={remote.login} device={remote.device} text={remote.text} />
+        : <UserMessage text={entry.text} onRecall={isSub ? undefined : onRecall} isSubagent={isSub} />
       if ((entry as { fresh?: boolean }).fresh) row = <div className="hive-sent-in" data-sent>{row}</div>
       break
+    }
     case 'assistant': row = <AssistantMessage text={entry.text} onChoose={isSub ? undefined : onChoose} onRespond={isSub ? undefined : onRespond} />; break
     case 'tool_call': row = <ToolBlock name={entry.name} input={entry.input} result={result} />; break
     case 'tool_result': row = null; break
     case 'system': row = <SystemLine text={entry.text} />; break
+    case 'remote': row = entry.event.type === 'in'
+      ? <RemoteCard dir="in" peerName={entry.event.peerName} login={entry.event.login} device={entry.event.device} text={entry.event.text} cardId={entry.event.cardId} />
+      : <RemoteCard dir="out" peerName={entry.event.peerName} text={entry.event.text} ok={entry.event.ok} error={entry.event.error} />
+      break
     case 'result': row = <ResultSummaryCard
       costUSD={entry.costUSD} durationMs={entry.durationMs} numTurns={entry.numTurns}
       inputTokens={entry.inputTokens} outputTokens={entry.outputTokens}

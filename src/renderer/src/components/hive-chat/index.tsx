@@ -1310,6 +1310,14 @@ export default function HiveChat({ id, cwd, agent, agentName, continueSession, r
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  // Butler chat: remote messages that wait as a card, and what Butler sent to
+  // another Hive, shown as cards (main/remote.ts). Not part of the transcript.
+  useEffect(() => {
+    if (id !== 'chat-butler') return
+    return window.api.remote?.onChat?.(event => addEntry({ kind: 'remote', event }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
   // Listen for App.tsx's refresh button — `hive:reopen-chooser` event
   // flips this panel back to StartChooser so the user can pick Resume /
   // Compact+Resume / Start new / Fork. Without this listener, the old

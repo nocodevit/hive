@@ -74,6 +74,8 @@ export type TimelineEntry =
   | { kind: 'tool_call'; id: string; toolUseId: string; name: string; input: Record<string, unknown>; isSubagent?: boolean }
   | { kind: 'tool_result'; id: string; toolUseId: string; content: string; isError?: boolean; isSubagent?: boolean }
   | { kind: 'system'; id: string; text: string }
+  /** Butler chat only: a remote message that waits as a card, or one Butler sent (not part of the claude transcript). */
+  | { kind: 'remote'; id: string; event: import('../../../../shared/remote-message').RemoteChatEvent }
   | { kind: 'result'; id: string; costUSD?: number; durationMs?: number; numTurns?: number; inputTokens?: number; outputTokens?: number; cacheReadTokens?: number; stopReason?: string; isError?: boolean; apiErrorStatus?: number; errorText?: string }
   | { kind: 'compact_boundary'; id: string; turnsSummarized: number; previousTokens: number; newTokens: number }
   | { kind: 'compact_summary_hint'; id: string; transcriptPath?: string; summaryChars: number }

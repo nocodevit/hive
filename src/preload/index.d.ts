@@ -29,6 +29,13 @@ type ButlerState = {
 }
 
 // [butler:wake]
+type RemoteView = {
+  enabled: boolean; listening: boolean; address: string; port: number; listenError: string
+  tailscale: { installed: boolean; state: string; selfName?: string; selfIp?: string; selfLogin?: string; error?: string }
+  devices: Array<{ id: string; name: string; ips: string[]; login: string; userName: string; online: boolean; os: string; allowed: { name: string; login: string; mode: 'ask' | 'auto'; port?: number } | null }>
+  allowed: Array<{ id: string; name: string; login: string; mode: 'ask' | 'auto'; port?: number; device: unknown }>
+  log: Array<{ id: string; at: number; dir: 'in' | 'out'; peerId: string; peerName: string; text: string; result: string }>
+}
 type WakeState = { enabled: boolean; status: 'off' | 'starting' | 'listening' | 'error'; error?: string }
 type WakePlan =
   | { kind: 'agent'; row: ButlerAgentRow; text: string }
@@ -198,6 +205,17 @@ declare global {
         set: (patch: Partial<import('./feishuAgentTypes').CalendarSettings>) => Promise<import('./feishuAgentTypes').CalendarSettings>
         allowMac: () => Promise<{ ok: boolean; granted: boolean; error?: string }>
         agenda: (date?: string) => Promise<import('./feishuAgentTypes').DayAgenda>
+      }
+
+      remote: {
+        view: () => Promise<RemoteView>
+        refresh: () => Promise<RemoteView>
+        setEnabled: (on: boolean) => Promise<{ ok: boolean; error?: string; message: string; view: RemoteView }>
+        setPeer: (id: string, peer: { name?: string; mode?: 'ask' | 'auto'; port?: number } | null) => Promise<RemoteView>
+        setPort: (port: number) => Promise<{ ok: boolean; error?: string; view: RemoteView }>
+        openTailscale: (what: 'app' | 'download') => Promise<void>
+        onChange: (cb: (v: RemoteView) => void) => () => void
+        onChat: (cb: (e: import('../shared/remote-message').RemoteChatEvent) => void) => () => void
       }
 
       // [butler:wake]

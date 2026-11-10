@@ -17,7 +17,8 @@
       "Bash(./hive todo:*)",
       "Bash(./hive cards:*)",
       "Bash(./hive calendar:*)",
-      "Bash(./hive card:*)"
+      "Bash(./hive card:*)",
+      "Bash(./hive remote:*)"
     ],
     "deny": [
       "Edit",

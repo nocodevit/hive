@@ -4,7 +4,7 @@
 
 export const SETTINGS_SECTIONS = [
   'Remote Control', 'Feishu', 'About me', 'Skills', 'Email', 'Daily routine', 'Jira', 'Answer for me', 'Calendar',
-  'Wake word', 'Notifications', 'Style', 'Palette', 'General', 'Storage', 'Git tokens', 'Voice', 'Agent defaults', 'Templates'
+  'Wake word', 'Remote Butler', 'Notifications', 'Style', 'Palette', 'General', 'Storage', 'Git tokens', 'Voice', 'Agent defaults', 'Templates'
 ] as const
 
 export type SettingsSectionLabel = (typeof SETTINGS_SECTIONS)[number]
