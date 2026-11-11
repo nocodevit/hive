@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import HiveChat from '../hive-chat'
 import { MotionConfig, motion } from 'motion/react'
 import { CountBadge, SMOOTH, UndoToasts } from '../../lib/motion'
-import { orderSessions, sessionCounts, sinceLabel, type SessionRow } from '../../lib/butler-sessions'
+import { orderSessions, sessionCounts, type SessionRow } from '../../lib/butler-sessions'
 import { setupProgress, type SetupMark } from '../../lib/butler-setup'
 import { ApprovalHistory, ApprovalsList, type ApprovalCard } from './ApprovalsList'
 import { openSkill } from '../../lib/butler-skills'
@@ -10,7 +10,7 @@ import { TodayTab } from './TodayTab' // [butler:mail-routines]
 import { TodoTab } from './TodoTab'
 import type { DiscussTarget } from './DiscussButton'
 import { ButlerGuide } from './ButlerGuide'
-import { SessionCard, type LastTurn } from './SessionCard'
+import { SessionsList, type LastTurn } from './SessionCard'
 
 export type ButlerMode = 'drawer' | 'page'
 // [butler:mail-routines] add 'today'
@@ -40,8 +40,6 @@ interface Props {
 }
 
 const RESUME_TIMEOUT_MS = 60_000
-const DOT = { working: 'bg-status-working', waiting: 'bg-status-waiting', off: 'bg-status-done' } as const
-
 /**
  * Butler's chat and the sessions overview. One element for both the drawer
  * and the page pinned under the project list, so the chat never remounts.
@@ -223,30 +221,21 @@ export function ButlerPanel(p: Props) {
       {tab === 'today' && <TodayTab visible={p.visible} onDiscuss={discuss} />}
 
       {tab === 'sessions' && (
-        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-2">
-          <div className="grid grid-cols-3 gap-1.5">
-            {(['working', 'waiting', 'off'] as const).map(k => (
-              <div key={k} className="flex items-center gap-2 px-2.5 py-2 rounded-xl bg-bg-primary text-[11px] font-semibold text-text-muted">
-                <span className={`w-[7px] h-[7px] rounded-full ${DOT[k]}`} />
-                <b className="text-[18px] text-text-primary">{n[k]}</b>{k}
-              </div>
-            ))}
-          </div>
-          {rows.map(r => (
-            <SessionCard key={r.agentId} agent={r.agent} dot={DOT[r.activity]} turn={turns[r.agentId]}
-              meta={[r.project, r.activity, sinceLabel(r.updatedAt)].filter(Boolean).join(' · ')}
-              onReply={text => window.api.chat.discussWith(r.agentId, text)}
-              action={r.activity === 'off' ? (
-                <button onClick={() => { setResuming(m => ({ ...m, [r.agentId]: Date.now() })); p.onResumeAgent(r) }} disabled={!!resuming[r.agentId]} aria-label={`Resume ${r.agent}`}
-                  className="px-2.5 py-1 rounded-lg bg-bg-secondary border border-border text-text-primary text-[12px] font-semibold cursor-pointer disabled:cursor-default disabled:opacity-60 inline-flex items-center gap-1.5">
-                  {resuming[r.agentId] && <span className="w-3 h-3 rounded-full border-2 border-text-muted border-t-transparent animate-spin" aria-hidden />}
-                  {resuming[r.agentId] ? 'Resuming…' : 'Resume'}
-                </button>
-              ) : (
-                <button onClick={() => p.onOpenAgent(r)} aria-label={`${r.activity === 'waiting' ? 'Answer' : 'Open'} ${r.agent}`} className={`px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer ${r.activity === 'waiting' ? 'bg-accent text-text-on-purple' : 'bg-bg-secondary border border-border text-text-primary'}`}>{r.activity === 'waiting' ? 'Answer' : 'Open'}</button>
-              )} />
-          ))}
-          {rows.length === 0 && <div className="text-[12px] text-text-muted px-1">No agents yet</div>}
+        <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-3 flex flex-col gap-3">
+          <SessionsList rows={rows} turns={turns}
+            onReply={(r, text) => window.api.chat.discussWith(r.agentId, text)}
+            action={r => r.activity === 'off' ? (
+              <button onClick={() => { setResuming(m => ({ ...m, [r.agentId]: Date.now() })); p.onResumeAgent(r) }} disabled={!!resuming[r.agentId]} aria-label={`Resume ${r.agent}`}
+                className="h-7 px-2.5 rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover text-[12px] font-semibold cursor-pointer disabled:cursor-default disabled:opacity-60 inline-flex items-center gap-1.5">
+                {resuming[r.agentId] && <span className="w-3 h-3 rounded-full border-2 border-text-muted border-t-transparent animate-spin" aria-hidden />}
+                {resuming[r.agentId] ? 'Resuming…' : 'Resume'}
+              </button>
+            ) : (
+              <button onClick={() => p.onOpenAgent(r)} aria-label={`${r.activity === 'waiting' ? 'Answer' : 'Open'} ${r.agent}`}
+                className={`h-7 px-2.5 rounded-lg text-[12px] font-semibold cursor-pointer ${r.activity === 'waiting' ? 'bg-accent text-text-on-purple shadow-sm' : 'border border-border text-text-secondary hover:text-text-primary hover:bg-bg-hover'}`}>
+                {r.activity === 'waiting' ? 'Answer' : 'Open'}
+              </button>
+            )} />
         </div>
       )}
       <UndoToasts />

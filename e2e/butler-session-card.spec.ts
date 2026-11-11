@@ -80,5 +80,6 @@ test('opening it shows the whole reply; a reply goes to that agent from the pane
   await expect(box).toHaveValue('')
   await expect.poll(() => (existsSync(GOT) ? readFileSync(GOT, 'utf-8') : ''), { timeout: 30000 }).toContain('yes, write the table')
   await expect(panel).toBeVisible()
-  await expect(panel.getByRole('button', { name: "Hide Missy's last reply" })).toContainText('yes, write the table', { timeout: 15000 })
+  // Missy's row now shows the new task (open or folded, in whichever group she is in).
+  await expect(panel.getByText('yes, write the table').first()).toBeVisible({ timeout: 15000 })
 })

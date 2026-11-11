@@ -62,7 +62,7 @@ test('the Butler button opens the panel with Chat and Sessions', async () => {
   await panel.getByRole('tab', { name: /Sessions/ }).click()
   await expect(panel.getByText('Missy')).toBeVisible()
   await expect(panel.getByText('Quinn')).toBeVisible()
-  await expect(panel.getByText('Panel Test · off').first()).toBeVisible()
+  await expect(panel.getByRole('region', { name: /^Off/ }).getByText('Panel Test').first()).toBeVisible()
 })
 
 test('Resume on an off agent starts its chat; Open jumps to it and closes the panel', async () => {
