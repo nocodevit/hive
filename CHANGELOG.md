@@ -7,6 +7,13 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.12](https://github.com/nocodevit/hive/compare/v2.42.11...v2.42.12) (2026-11-11)
+
+
+### Bug Fixes
+
+* **butler:** Sessions reads as grouped lists with clear rows ([9eaf25e](https://github.com/nocodevit/hive/commit/9eaf25ec619b6b68f47f4aa4f8bf697f3fbd56ac))
+
 ## [2.42.11] — 2026-11-11
 
 ##### 🌐 Remote Butler
