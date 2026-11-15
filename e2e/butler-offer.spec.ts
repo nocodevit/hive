@@ -84,6 +84,6 @@ test('no dialog for someone without agents yet', async () => {
   if (existsSync(dataDir)) rmSync(dataDir, { recursive: true })
   mkdirSync(dataDir, { recursive: true })
   await launch(dataDir)
-  await expect(page.getByText('Add Project')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Add Project' })).toBeVisible()
   await expect(page.getByRole('dialog', { name: OFFER })).toHaveCount(0)
 })

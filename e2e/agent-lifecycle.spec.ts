@@ -51,7 +51,7 @@ test.beforeAll(async () => {
   }, projectFolder)
 
   // Seed: create a project so we have somewhere to put agents
-  await page.locator('text=Add Project').click()
+  await page.getByRole('button', { name: 'Add Project' }).click()
   await page.waitForTimeout(300)
   await page.locator('button:has-text("Browse")').first().click()
   await page.waitForTimeout(400)

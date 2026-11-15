@@ -23,6 +23,7 @@ import { join } from 'node:path'
 
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..')
 const APP_TSX = readFileSync(join(REPO_ROOT, 'src', 'renderer', 'src', 'App.tsx'), 'utf-8')
+const SIDEBAR_TSX = readFileSync(join(REPO_ROOT, 'src', 'renderer', 'src', 'components', 'SidebarTree.tsx'), 'utf-8')
 
 describe('typography — agent name vs role visual distinction', () => {
   it('every agent-name render carries strong text style (medium+ weight, primary color, no uppercase)', () => {
@@ -33,10 +34,10 @@ describe('typography — agent name vs role visual distinction', () => {
     // selected-agent-row-layout.spec.ts).
     // v2.21.0 (unified card layout): plain font-semibold, family comes
     // from body (Inter Tight).
-    // v2.34: normal weight; semibold only for the selected agent (13px primary vs the 11px muted role).
-    expect(APP_TSX).toContain(
-      "text-[13px] ${selectedAgentId === agent.id ? 'font-semibold' : 'font-normal'} text-text-primary`}"
-    )
+    // v2.43: the sidebar is one tree (SidebarTree.tsx); 13px row, name semibold when
+    // selected, medium + primary otherwise, muted only for agents that are off.
+    expect(SIDEBAR_TSX).toContain("sel ? 'font-semibold text-text-primary' : off ? 'text-text-muted' : 'font-medium text-text-primary'")
+    expect(SIDEBAR_TSX).toMatch(/text-\[13px\]/)
     // Kanban card — v2.8.0 relaxed to font-medium (Inter Tight body weight)
     expect(APP_TSX).toMatch(
       /className="text-\[13px\] font-medium text-text-primary truncate"/
@@ -55,9 +56,10 @@ describe('typography — agent name vs role visual distinction', () => {
     // v2.21.0: the sidebar role reads as a quiet sub-line under the name
     // (11px muted, sentence case) instead of an uppercase label — the
     // distinction is weight + color + size, matching the approved mockup.
-    const sidebarRole = /text-\[11px\][^"]*text-text-muted[^"]*flex items-center gap-1\.5/
-    expect(APP_TSX, 'sidebar role span must be small + muted + flex layout').toMatch(sidebarRole)
-    expect(APP_TSX).not.toMatch(/text-\[11px\] mt-px[^"]*uppercase/)
+    // v2.43: the tree row shows status (needs you / working / time) instead of the
+    // role; the role stays reachable as the name's tooltip, never as an uppercase label.
+    expect(SIDEBAR_TSX, 'role is the tooltip on the name').toContain('title={agent.role}')
+    expect(SIDEBAR_TSX).not.toMatch(/uppercase[^"]*">\s*\{agent\.role\}/)
 
     // Task-group inbox role — unchanged
     expect(APP_TSX).toMatch(

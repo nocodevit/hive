@@ -93,7 +93,7 @@ test('restart offers the chats left open, ticked by default; Resume brings them 
 
   // ── First run: nothing to offer on a fresh install. ────────────────
   await launch()
-  await page.getByText('Add Project').click()
+  await page.getByRole('button', { name: 'Add Project' }).click()
   await expect(dialog()).toHaveCount(0)
   await page.getByRole('button', { name: 'Browse' }).first().click()
   await page.getByPlaceholder('My Project').fill('Relaunch E2E')
@@ -166,7 +166,7 @@ test('restart offers the chats left open, ticked by default; Resume brings them 
 
   await quit()
   await launch()
-  await expect(page.getByText('Add Project')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByRole('button', { name: 'Add Project' })).toBeVisible({ timeout: 15000 })
   await page.getByText('Relaunch E2E').first().click()
   await expect(page.getByText('Ava', { exact: true }).first()).toBeVisible()
   await expect(dialog()).toHaveCount(0)

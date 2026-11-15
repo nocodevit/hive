@@ -56,7 +56,7 @@ test.beforeAll(async () => {
     ipcMain.handle('dialog:selectFolder', async () => picked)
   }, FIXTURE)
 
-  await page.getByText('Add Project').click()
+  await page.getByRole('button', { name: 'Add Project' }).click()
   await page.getByRole('button', { name: 'Browse' }).first().click()
   await page.getByPlaceholder('My Project').fill('Butler E2E')
   await page.getByRole('button', { name: 'Create Project' }).click()

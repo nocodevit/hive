@@ -77,7 +77,7 @@ test.describe('Project lifecycle', () => {
     })
     expect(beforeCount).toBe(0)
 
-    await page.locator('text=Add Project').click()
+    await page.getByRole('button', { name: 'Add Project' }).click()
     await page.waitForTimeout(300)
     await expect(page.locator('text=New Project')).toBeVisible()
 

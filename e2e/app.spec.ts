@@ -49,11 +49,11 @@ test.describe('App Launch', () => {
 
   test('three-column layout is visible', async () => {
     // Projects sidebar
-    const projects = page.locator('text=PROJECTS')
+    const projects = page.getByText('Projects', { exact: true })
     await expect(projects).toBeVisible()
 
     // Add Project button
-    const addProject = page.locator('text=Add Project')
+    const addProject = page.getByRole('button', { name: 'Add Project' })
     await expect(addProject).toBeVisible()
   })
 
@@ -93,7 +93,7 @@ test.describe('Theme Toggle', () => {
 
 test.describe('Project Creation', () => {
   test('Add Project opens modal', async () => {
-    await page.locator('text=Add Project').click()
+    await page.getByRole('button', { name: 'Add Project' }).click()
     await page.waitForTimeout(300)
 
     // Modal should appear with Project Name input

@@ -32,7 +32,7 @@ test.beforeAll(async () => {
     ipcMain.handle('dialog:selectFolder', async () => picked)
   }, projectFolder)
 
-  await page.getByText('Add Project').click()
+  await page.getByRole('button', { name: 'Add Project' }).click()
   await page.getByRole('button', { name: 'Browse' }).first().click()
   await page.getByPlaceholder('My Project').fill('Bubble E2E')
   await page.getByRole('button', { name: 'Create Project' }).click()
@@ -72,10 +72,11 @@ test('long word wraps inside the user bubble when the chat panel is narrow', asy
   await expect(page.getByText(LONG, { exact: true })).toBeVisible({ timeout: 90000 })
 
   // Narrow the chat panel the way a user does: drag the Files divider left.
-  await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setSize(1500, 900) })
-  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeGreaterThan(1400)
+  await app.evaluate(({ BrowserWindow }) => { BrowserWindow.getAllWindows()[0].setSize(1200, 900) })
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBeGreaterThan(1100)
   // Side panels grow to their 400px cap; the chat gets what is left.
-  for (let i = 0; i < 3; i++) {
+  // Two dividers since the sidebar became one tree (sidebar | chat | files).
+  for (let i = 0; i < 2; i++) {
     const handles = await page.evaluate(() => [...document.querySelectorAll('div')]
       .filter(d => getComputedStyle(d).cursor === 'col-resize')
       .map(d => { const r = d.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } }))

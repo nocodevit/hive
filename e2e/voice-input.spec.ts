@@ -68,7 +68,7 @@ test.beforeAll(async () => {
     ipcMain.handle('speech:stop', () => { g.__speechCalls.push({ op: 'stop' }); return { ok: true } })
   }, FIXTURE)
 
-  await page.getByText('Add Project').click()
+  await page.getByRole('button', { name: 'Add Project' }).click()
   await page.getByRole('button', { name: 'Browse' }).first().click()
   await page.getByPlaceholder('My Project').fill('Voice E2E')
   await page.getByRole('button', { name: 'Create Project' }).click()

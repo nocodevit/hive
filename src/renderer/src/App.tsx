@@ -30,6 +30,7 @@ import CreateProjectModal from './components/CreateProjectModal'
 import CreateAgentModal from './components/CreateAgentModal'
 import ProjectSettingsModal from './components/ProjectSettingsModal'
 import ResizeHandle from './components/ResizeHandle'
+import { SidebarTree } from './components/SidebarTree'
 import EditTemplateModal from './components/EditTemplateModal'
 import FilesPanel from './components/FilesPanel'
 import ResumeAgentsModal, { type UnclosedAgent } from './components/ResumeAgentsModal'
@@ -320,7 +321,7 @@ export default function App() {
     openaiApiKey: '' as string,
     voiceModel: 'gpt-4o-mini-transcribe' as string,
   })
-  const [panelWidths, setPanelWidths] = useState({ projects: 200, agents: 240, files: 220 })
+  const [panelWidths, setPanelWidths] = useState({ projects: 264, files: 220 })
   const [showFiles, setShowFiles] = useState(true)
   const [agentReports, setAgentReports] = useState<Record<string, { text: string; done: boolean }[]>>({})
   const [agentTasks, setAgentTasks] = useState<Record<string, { title?: string; summary?: string; active: boolean }>>({})
@@ -364,7 +365,6 @@ export default function App() {
     const iv = setInterval(() => setNowTick(Date.now()), 30000)
     return () => clearInterval(iv)
   }, [])
-  const [dragAgentId, setDragAgentId] = useState<string | null>(null)
   const [agentNames, setAgentNames] = useState<Record<string, string>>({})
   const [expandedSkill, setExpandedSkill] = useState<string | null>(null)
   const [skillContent, setSkillContent] = useState<string | null>(null)
@@ -464,7 +464,6 @@ export default function App() {
   }), [])
   const projectScan = selectedProjectId ? projectScans[selectedProjectId] || null : null
   const projectAgents = displayAgents.filter((a) => a.projectId === selectedProjectId).sort((a, b) => (a.order || 0) - (b.order || 0))
-  const departments = [...new Set(projectAgents.map((a) => a.department))]
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -946,7 +945,7 @@ export default function App() {
   butlerStartRef.current = butlerStart
   useEffect(() => window.api.butler.onStartAgent(p => butlerStartRef.current(p)), [])
 
-  const resizePanel = useCallback((panel: 'projects' | 'agents' | 'files', delta: number) => {
+  const resizePanel = useCallback((panel: 'projects' | 'files', delta: number) => {
     setPanelWidths((prev) => ({
       ...prev,
       [panel]: Math.max(150, Math.min(400, prev[panel] + delta))
@@ -982,7 +981,6 @@ export default function App() {
       />
     </div>
   )
-  const butlerInList = butlerPinned || (butlerOpen && butlerMode === 'page')
 
   return (
     <div className={`flex flex-col h-screen text-text-primary ${palette === 'botanic' ? '' : 'bg-sidebar-bg'}`}>
@@ -1000,132 +998,70 @@ export default function App() {
         {butlerButton}
       </div>
       <div className="hive-frame flex flex-1 min-h-0 pr-2.5 pb-2.5">
-      {/* Left: Projects */}
-      <div className="hive-sidebar flex flex-col flex-shrink-0 pl-2.5" style={{ width: panelWidths.projects }}>
-        <div className="drag-region flex items-center px-2 pt-1 pb-2.5 justify-between">
-          <h2 className="no-drag text-[14px] font-bold text-text-primary">
-            Hive<span className="ml-1.5 text-[11px] font-medium text-text-muted">v{__APP_VERSION__}</span>
-          </h2>
-          <ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />
-        </div>
-        <div className="flex-1 overflow-y-auto py-1 space-y-0.5">
-          {butlerInList && (
-            <div className={`group flex items-center gap-2.5 px-2.5 py-[7px] mb-1.5 rounded-[10px] text-[13px] ${butlerOpen && butlerMode === 'page' ? 'bg-bg-secondary text-text-primary font-semibold shadow-sm' : 'text-text-secondary hover:bg-bg-hover'}`}>
-              <button onClick={() => { setButlerMode('page'); setButlerOpen(true) }} aria-label="Open Butler page" className="flex-1 min-w-0 flex items-center gap-2.5 text-left cursor-pointer">
-                <span className="text-[14px]">🎩</span>Butler
-              </button>
-              {butlerPinned ? (
-                <span role="img" aria-label="Pinned" title="Pinned" className="text-[11px]">📌</span>
-              ) : (
-                <button
-                  aria-label="Close Butler page"
-                  onClick={() => setButlerOpen(false)}
-                  className="text-[11px] text-text-muted hover:text-text-primary cursor-pointer"
-                >✕</button>
-              )}
-            </div>
-          )}
-          {(() => {
-            const groups = [...new Set(projects.map(p => p.group || ''))]
-            // Put ungrouped ('') first, then alphabetical
-            groups.sort((a, b) => a === '' ? -1 : b === '' ? 1 : a.localeCompare(b))
-
-            const renderProject = (project: Project, idx: number) => (
-              <button
-                key={project.id}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData('projectId', project.id)}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
-                  const draggedId = e.dataTransfer.getData('projectId')
-                  if (!draggedId || draggedId === project.id) return
-                  // Move dragged project to same group + position
-                  setProjects(prev => {
-                    const fromIdx = prev.findIndex(p => p.id === draggedId)
-                    const toIdx = prev.findIndex(p => p.id === project.id)
-                    if (fromIdx < 0 || toIdx < 0) return prev
-                    const next = [...prev]
-                    const [moved] = next.splice(fromIdx, 1)
-                    moved.group = project.group // adopt target's group
-                    next.splice(toIdx, 0, moved)
-                    return next
-                  })
-                }}
-                onClick={() => {
-                  setSelectedProjectId(project.id)
-                  setSelectedAgentId(null)
-                  if (butlerMode === 'page') setButlerOpen(false)
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  setContextMenu({ x: e.clientX, y: e.clientY, projectId: project.id })
-                }}
-                className={`w-full text-left px-2.5 py-[7px] rounded-[10px] text-[13px] cursor-pointer
-                  transition-colors flex items-center gap-2.5 ${
-                  selectedProjectId === project.id
-                    ? 'hive-card !rounded-[10px] !overflow-visible text-text-primary font-semibold'
-                    : 'text-text-primary/75 font-medium hover:bg-bg-hover hover:text-text-primary'
-                }`}
-              >
-                {(() => {
-                  const projectAgents = agents.filter((a) => a.projectId === project.id)
-                  const hasWorking = projectAgents.some((a) => a.status === 'working')
-                  const hasWaiting = projectAgents.some((a) => a.status === 'waiting')
-                  if (projectAgents.length === 0) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 border border-text-muted/50" title="No agents" role="img" aria-label="No agents" />
-                  if (hasWorking) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-working" title="Agents working" role="img" aria-label="Agents working" />
-                  if (hasWaiting) return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-waiting" title="Agents idle" role="img" aria-label="Agents idle" />
-                  return <span className="w-1.5 h-1.5 rounded-full flex-shrink-0 bg-status-done" title="Agents offline" role="img" aria-label="Agents offline" />
-                })()}
-                <span className="truncate">{project.name}</span>
-                {(() => {
-                  const count = agents.filter((a) => a.projectId === project.id).length
-                  return count > 0 ? <span className="ml-auto text-[11px] text-text-muted flex-shrink-0">{count}</span> : null
-                })()}
-              </button>
-            )
-
-            return groups.map(grp => {
-              const grpProjects = projects.filter(p => (p.group || '') === grp)
-              const isCollapsed = collapsedProjectGroups.has(grp)
-              if (!grp) {
-                // Ungrouped projects — render flat
-                return grpProjects.map((p, i) => renderProject(p, i))
-              }
-              return (
-                <div key={grp} className="mb-1"
-                  onDragOver={(e) => e.preventDefault()}
-                  onDrop={(e) => {
-                    const draggedId = e.dataTransfer.getData('projectId')
-                    if (!draggedId) return
-                    setProjects(prev => prev.map(p => p.id === draggedId ? { ...p, group: grp } : p))
-                  }}
-                >
-                  <button
-                    onClick={() => setCollapsedProjectGroups(prev => {
-                      const next = new Set(prev)
-                      if (next.has(grp)) next.delete(grp); else next.add(grp)
-                      return next
-                    })}
-                    className="w-full px-2.5 py-1.5 text-[11px] font-heading font-semibold text-text-muted uppercase tracking-wider flex items-center gap-1.5 cursor-pointer hover:text-text-primary"
-                  >
-                    <span className="text-xs">{isCollapsed ? '▸' : '▾'}</span>
-                    {grp}
-                    <span className="ml-auto text-[10px] font-normal">{grpProjects.length}</span>
-                  </button>
-                  {!isCollapsed && grpProjects.map((p, i) => renderProject(p, i))}
-                </div>
-              )
-            })
-          })()}
-          {projectListState(projectsLoaded, projects.length) === 'loading' && (
-            <p className="text-xs text-text-muted text-center py-6 flex items-center justify-center gap-2">
-              <span className="inline-block w-3 h-3 rounded-full border-2 border-text-muted border-t-transparent animate-spin" />
-              Scanning projects…
-            </p>
-          )}
-          {projectListState(projectsLoaded, projects.length) === 'empty' && (
-            <p className="text-xs text-text-muted text-center py-6">No projects yet</p>
-          )}
+      {/* Left: one tree — Butler + Overview, then projects that open to show their agents */}
+      <SidebarTree
+        version={__APP_VERSION__}
+        width={panelWidths.projects}
+        themeToggle={<ThemeToggle theme={theme} onToggle={() => setTheme(theme === 'dark' ? 'light' : 'dark')} />}
+        projects={projects}
+        setProjects={setProjects}
+        agents={displayAgents}
+        setAgents={setAgents}
+        listState={projectListState(projectsLoaded, projects.length)}
+        selectedProjectId={selectedProjectId}
+        selectedAgentId={selectedAgentId}
+        onSelectProject={(id) => {
+          setSelectedProjectId(id)
+          setSelectedAgentId(null)
+          if (butlerMode === 'page') setButlerOpen(false)
+        }}
+        onSelectAgent={(agent) => {
+          if (agent.projectId !== selectedProjectId) setSelectedProjectId(agent.projectId)
+          setSelectedAgentId(agent.id)
+          setMainScreen('projects')
+          if (butlerMode === 'page') setButlerOpen(false)
+          if (!activeTerminals.has(agent.id)) startAgent(agent)
+        }}
+        butler={{
+          waiting: butlerWaiting,
+          pageOpen: butlerOpen && butlerMode === 'page',
+          pinned: butlerPinned,
+          onOpen: () => { setButlerMode('page'); setButlerOpen(true) },
+          onClose: () => setButlerOpen(false)
+        }}
+        overview={{ active: mainScreen === 'overview', onToggle: () => setMainScreen(mainScreen === 'overview' ? 'projects' : 'overview') }}
+        onAddProject={() => setShowCreateProject(true)}
+        onNewAgent={(pid) => {
+          if (pid !== selectedProjectId) { setSelectedProjectId(pid); setSelectedAgentId(null) }
+          setShowCreateAgent(true)
+        }}
+        onSettings={() => setShowAppSettings(true)}
+        collapsedGroups={collapsedProjectGroups}
+        setCollapsedGroups={setCollapsedProjectGroups}
+        onProjectMenu={(e, projectId) => setContextMenu({ x: e.clientX, y: e.clientY, projectId })}
+        onAgentMenu={(e, agentId) => setAgentContextMenu({ x: e.clientX, y: e.clientY, agentId })}
+        onEditAgent={(agent) => { setSelectedProjectId(agent.projectId); setSelectedAgentId(agent.id); setMainView('editor') }}
+        onDeleteAgent={(agent) => {
+          // Two-step confirm (AgentDeleteConfirmModal): a one-click delete once lost an agent + its worktree.
+          const zone = projects.find(pr => pr.id === agent.projectId)?.zones.find((z: Zone) => z.id === agent.zoneId)
+          setDeleteAgentConfirming({
+            agent,
+            impact: {
+              hasActiveTerminal: activeTerminals.has(agent.id),
+              worktreePath: agent.worktreePath,
+              worktreeBranch: agent.worktreeBranch,
+              definitionCwd: agent.worktreePath || zone?.path
+            }
+          })
+        }}
+        onAddTeam={(pid, dept) => {
+          if (pid !== selectedProjectId) { setSelectedProjectId(pid); setSelectedAgentId(null) }
+          setTeamPrompt({ dept }); setTeamNameInput(''); setTeamSelectedAgents(new Set())
+        }}
+        lastEventAt={lastEventAt}
+        nowTick={nowTick}
+        busyAgentIds={activeHandoffAgentIds}
+      >
           {/* Project context menu */}
           {contextMenu && (() => {
             const projAgents = agents.filter(a => a.projectId === contextMenu.projectId)
@@ -1329,319 +1265,9 @@ export default function App() {
               </div>
             </div>
           )}
-        </div>
-        <div className="hive-sidebar-foot py-2 space-y-0.5">
-          {/* v2.6.0: Overview toggle. Highlighted (accent bg) when active
-              so it reads as the currently-selected top-level view. */}
-          <button
-            onClick={() => setMainScreen(mainScreen === 'overview' ? 'projects' : 'overview')}
-            aria-pressed={mainScreen === 'overview'}
-            className={`w-full px-3 py-2 rounded-lg text-sm cursor-pointer transition-colors
-              flex items-center gap-2 ${
-                mainScreen === 'overview'
-                  ? 'bg-accent text-text-on-purple font-semibold'
-                  : 'text-text-muted hover:bg-bg-hover hover:text-text-primary'
-              }`}
-            title="Overview across all projects and agents"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" />
-              <rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" />
-            </svg>
-            Overview
-          </button>
-          <div className="flex gap-1">
-            <button
-              onClick={() => setShowCreateProject(true)}
-              className="flex-1 px-3 py-2 rounded-lg text-sm text-text-muted
-                hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer
-                flex items-center gap-2"
-            >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-              </svg>
-              Add Project
-            </button>
-            <button
-              onClick={() => setShowAppSettings(true)}
-              className="px-2 py-2 rounded-lg text-text-muted hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer"
-              title="App Settings"
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
+      </SidebarTree>
 
       <ResizeHandle onResize={(d) => resizePanel('projects', d)} />
-
-      {/* Middle: Agents */}
-      <div className="hive-card flex flex-col flex-shrink-0" style={{ width: panelWidths.agents }}>
-        <div className="drag-region hive-head">
-          <h2 className="no-drag hive-head-title truncate">
-            {selectedProject ? selectedProject.name : 'Agents'}
-            {selectedProject && <span className="hive-head-sub">{projectAgents.length} {projectAgents.length === 1 ? 'agent' : 'agents'}</span>}
-          </h2>
-        </div>
-        {selectedProject ? (
-          <>
-            <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-3">
-              {departments.map((dept) => {
-                const deptAgents = projectAgents.filter((a) => a.department === dept).sort((a, b) => (a.order || 0) - (b.order || 0))
-                const groups = [...new Set(deptAgents.map((a) => a.group || ''))].sort()
-
-                const handleDrop = (targetId: string, targetGroup: string) => {
-                  if (!dragAgentId || dragAgentId === targetId) return
-                  setAgents((prev) => {
-                    const dragged = prev.find((a) => a.id === dragAgentId)
-                    if (!dragged || dragged.department !== dept) return prev
-                    // Build ordered list for this dept, move dragged to before target
-                    const deptList = prev
-                      .filter((a) => a.projectId === dragged.projectId && a.department === dept)
-                      .sort((a, b) => (a.order || 0) - (b.order || 0))
-                    const without = deptList.filter((a) => a.id !== dragAgentId)
-                    const targetIdx = without.findIndex((a) => a.id === targetId)
-                    const updated = { ...dragged, group: targetGroup }
-                    const reordered = targetIdx >= 0
-                      ? [...without.slice(0, targetIdx), updated, ...without.slice(targetIdx)]
-                      : [...without, updated]
-                    // Assign clean sequential order
-                    const orderMap = new Map(reordered.map((a, i) => [a.id, i]))
-                    return prev.map((a) => {
-                      if (!orderMap.has(a.id)) return a
-                      const newOrder = orderMap.get(a.id)!
-                      if (a.id === dragAgentId) return { ...a, group: targetGroup, order: newOrder }
-                      return { ...a, order: newOrder }
-                    })
-                  })
-                  setDragAgentId(null)
-                }
-
-                return (
-                  <div key={dept}>
-                    <div className="px-2.5 pt-2.5 pb-1.5 text-[11px] font-semibold text-text-muted flex items-center gap-1.5">
-                      {dept}
-                      {/* v2.8.0: dropped the R&D-only "⟳ Rebase" action —
-                          crowded the dept header against "+ Team" and the
-                          same prompt is one right-click away. Rebase-on-
-                          restart preference in App Settings covers the
-                          scheduled case. */}
-                      <button
-                        onClick={() => { setTeamPrompt({ dept }); setTeamNameInput(''); setTeamSelectedAgents(new Set()) }}
-                        className="ml-auto text-[11px] font-semibold text-accent hover:text-accent-hover cursor-pointer"
-                        title="Add team"
-                      >+ Team</button>
-                    </div>
-                    {groups.map((grp) => {
-                      const grpAgents = deptAgents.filter((a) => (a.group || '') === grp).sort((a, b) => (a.order || 0) - (b.order || 0))
-                      return (
-                        <div
-                          key={grp || '_ungrouped'}
-                          className="space-y-0.5"
-                          onDragOver={(e) => e.preventDefault()}
-                          onDrop={() => {
-                            // Drop on empty group area
-                            if (dragAgentId) {
-                              const dragged = agents.find((a) => a.id === dragAgentId)
-                              if (dragged && dragged.department === dept) {
-                                setAgents((prev) => prev.map((a) => a.id === dragAgentId ? { ...a, group: grp, order: grpAgents.length } : a))
-                                setDragAgentId(null)
-                              }
-                            }
-                          }}
-                        >
-                          {grp && (
-                            <div className="px-4 py-1 text-[11px] font-semibold text-text-muted flex items-center">
-                              {grp}
-                              <button
-                                onClick={() => {
-                                  // Remove team — move all agents to ungrouped
-                                  setAgents((prev) => prev.map((a) => a.group === grp && a.department === dept ? { ...a, group: '' } : a))
-                                }}
-                                className="ml-auto text-text-muted/40 hover:text-red-400 cursor-pointer"
-                                title="Remove team"
-                              >
-                                <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                              </button>
-                            </div>
-                          )}
-                          {grpAgents.map((agent) => (
-                            <div
-                              key={agent.id}
-                              draggable
-                              onDragStart={() => setDragAgentId(agent.id)}
-                              onDragOver={(e) => { e.preventDefault(); e.stopPropagation() }}
-                              onDrop={(e) => { e.stopPropagation(); handleDrop(agent.id, grp) }}
-                              onDragEnd={() => setDragAgentId(null)}
-                              className={`group w-full text-left px-2.5 py-[9px] rounded-xl text-sm flex items-center gap-2.5 relative
-                                transition-colors cursor-grab active:cursor-grabbing ${
-                                /* v2.20.3: `ml-2` alone (in-group) made the row
-                                   10px asymmetric — 8px margin + 2px status
-                                   border on the left, nothing on the right,
-                                   compounded by note tags clipped by the
-                                   name-line's overflow-hidden. Add matching
-                                   `mr-2` so the row sits centered inside the
-                                   dept container. */
-                                grp ? 'ml-2 mr-2' : ''
-                              } ${
-                                dragAgentId === agent.id ? 'opacity-50' : ''
-                              } ${
-                                /* v2.8.0: status-driven left border. Selected wins
-                                   over status (users need to see WHICH agent is
-                                   picked). Idle rows fade to 60% opacity so the
-                                   working ones dominate the eye. */
-                                selectedAgentId === agent.id
-                                  ? 'bg-accent-subtle text-text-primary'
-                                  : 'text-text-primary hover:bg-bg-hover'
-                              }`}
-                              onClick={() => {
-                                if (agent.projectId !== selectedProjectId) setSelectedProjectId(agent.projectId)
-                                setSelectedAgentId(agent.id)
-                                if (!activeTerminals.has(agent.id)) startAgent(agent)
-                              }}
-                              onContextMenu={(e) => {
-                                e.preventDefault()
-                                setAgentContextMenu({ x: e.clientX, y: e.clientY, agentId: agent.id })
-                              }}
-                            >
-                              <div className="w-8 h-8 rounded-[10px] bg-sidebar-bg flex items-center justify-center flex-shrink-0 relative">
-                                <AvatarPreview config={agent.avatar} size={24} loopBusy={activeHandoffAgentIds.has(agent.id)} selected={selectedAgentId === agent.id} />
-                                <span className={`absolute -bottom-0.5 -right-0.5 w-[9px] h-[9px] rounded-full border-2 ${selectedAgentId === agent.id ? 'border-accent-subtle' : 'border-bg-secondary'} ${
-                                  agent.status === 'working' ? 'bg-status-working' :
-                                  agent.status === 'waiting' ? 'bg-status-waiting' : 'bg-status-done'
-                                }`} />
-                                {agent.taskGroupRole && (
-                                  <span className="absolute -top-1 -right-1 text-sm leading-none drop-shadow">
-                                    {agent.taskGroupRole === 'manager' ? '👑' :
-                                     agent.taskGroupRole === 'worker' ? '🔧' :
-                                     agent.taskGroupRole === 'qa' ? '🛡️' : '⚖️'}
-                                  </span>
-                                )}
-                              </div>
-                              <div className="flex flex-col min-w-0 flex-1">
-                                {/* v2.9.0: undo the v2.8.5 ml-auto — it was
-                                    pushing the note tag OUT of the row's
-                                    right edge (Playwright measured a
-                                    -26.8px "gap", i.e. 26px overflow).
-                                    Back to natural inline flow: tag right
-                                    after name; name truncates first when
-                                    space is tight, tag never spills. */}
-                                <span className={`flex items-center gap-1.5 min-w-0 whitespace-nowrap overflow-hidden text-[13px] ${selectedAgentId === agent.id ? 'font-semibold' : 'font-normal'} text-text-primary`}>
-                                  {agent.tagColor && (
-                                    <span className="inline-block w-2 h-2 rounded-full flex-shrink-0" style={{ background: agent.tagColor }} />
-                                  )}
-                                  <span className="truncate min-w-0 flex-shrink">{agent.name}</span>
-                                  {agent.note && <NoteTag id={agent.id} note={agent.note} color={agent.noteColor} solid={agent.noteSolid} />}
-                                </span>
-                                <span className="text-[11px] mt-px truncate group-hover:invisible text-text-muted flex items-center gap-1.5" title={agent.role}>
-                                  <span className="truncate">{agent.role}</span>
-                                  {/* v2.8.0: time-since chip. Fixed-width
-                                      mono cell so a row of chips lines up.
-                                      Hidden on hover to make room for
-                                      per-row action icons (edit/delete). */}
-                                  {(() => {
-                                    const ts = formatTimeSince(lastEventAt[agent.id], nowTick)
-                                    if (!ts) return null
-                                    return (
-                                      <span className="ml-auto tabular-nums text-[11px] text-text-muted shrink-0" title="Last activity">
-                                        {ts}
-                                      </span>
-                                    )
-                                  })()}
-                                </span>
-                              </div>
-                              <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity absolute right-2">
-                                <button
-                                  onClick={(e) => { e.stopPropagation(); setSelectedAgentId(agent.id); setMainView('editor') }}
-                                  className="w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-accent hover:bg-bg-active transition-colors cursor-pointer"
-                                  title="Edit"
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={(e) => {
-                                    // Open the two-step confirm modal instead of
-                                    // deleting immediately. Historical one-click
-                                    // path lost the David agent + worktree in
-                                    // 2026-08 on an accidental mis-click; see
-                                    // AgentDeleteConfirmModal for the reasoning.
-                                    e.stopPropagation()
-                                    const zone = selectedProject?.zones.find((z: Zone) => z.id === agent.zoneId)
-                                    setDeleteAgentConfirming({
-                                      agent,
-                                      impact: {
-                                        hasActiveTerminal: activeTerminals.has(agent.id),
-                                        worktreePath: agent.worktreePath,
-                                        worktreeBranch: agent.worktreeBranch,
-                                        definitionCwd: agent.worktreePath || zone?.path
-                                      }
-                                    })
-                                  }}
-                                  className="w-5 h-5 rounded flex items-center justify-center text-text-muted hover:text-red-400 hover:bg-red-400/10 transition-colors cursor-pointer"
-                                  title="Delete"
-                                >
-                                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                                    <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                  </svg>
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )
-                    })}
-                    {/* Drop zone to remove from team (ungrouped) */}
-                    <div
-                      className={`mx-1 mt-1 rounded-lg border border-dashed border-transparent text-center text-[13px] text-text-muted/40 transition-colors py-1 ${dragAgentId ? 'border-border !text-text-muted/70' : 'hidden'}`}
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={() => {
-                        if (dragAgentId) {
-                          const dragged = agents.find((a) => a.id === dragAgentId)
-                          if (dragged && dragged.department === dept) {
-                            setAgents((prev) => prev.map((a) => a.id === dragAgentId ? { ...a, group: '' } : a))
-                            setDragAgentId(null)
-                          }
-                        }
-                      }}
-                    >
-                      Drop here to ungroup
-                    </div>
-                  </div>
-                )
-              })}
-              {projectAgents.length === 0 && (
-                <p className="text-xs text-text-muted text-center py-6">
-                  No agents yet. Click + to create one.
-                </p>
-              )}
-            </div>
-            <div className="px-2 pt-1.5 pb-2.5">
-              <button
-                onClick={() => setShowCreateAgent(true)}
-                className="w-full px-2.5 py-[9px] rounded-xl text-[13px] text-text-muted
-                  hover:bg-bg-hover hover:text-text-primary transition-colors cursor-pointer
-                  flex items-center gap-2 font-medium"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" />
-                </svg>
-                New Agent
-              </button>
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <p className="text-xs text-text-muted">Select a project</p>
-          </div>
-        )}
-      </div>
-
-      <ResizeHandle onResize={(d) => resizePanel('agents', d)} />
 
       {/* Right: Main Panel */}
       <div className="hive-card flex-1 flex flex-col min-w-0">

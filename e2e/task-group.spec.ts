@@ -168,7 +168,7 @@ test.describe('Task Group Creation Flow', () => {
     // Role badges are small colored circles on avatar
     // Check that agents have taskGroupRole-related styling
     // The badge is a span with specific background colors
-    const badges = page.locator('span.absolute.-top-1.-right-1')
+    const badges = page.getByRole('img', { name: /^Task group:/ })
     const count = await badges.count()
     expect(count).toBeGreaterThanOrEqual(4) // 4 agents with badges
   })
@@ -198,7 +198,7 @@ test.describe('Task Group Creation Flow', () => {
   })
 
   test('after dissolve, sidebar badges are removed', async () => {
-    const badges = page.locator('span.absolute.-top-1.-right-1')
+    const badges = page.getByRole('img', { name: /^Task group:/ })
     const count = await badges.count()
     expect(count).toBe(0)
   })
