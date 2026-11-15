@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useBotanic } from './hive-chat/SucculentSend'
+import { backdropLabel, loadBackdrop, nextBackdrop, onBackdrop, saveBackdrop, type BackdropId } from '../lib/botanic-backdrop'
 import { FADE, SOUNDS, fadeCurve, loadSoundPrefs, nextSound, nextStart, saveSoundPrefs, seam, soundLabel, type SoundId, type SoundPrefs } from '../lib/botanic-sound'
 
 type Voice = { gain: GainNode; stop: () => void }
@@ -139,6 +140,33 @@ function GardenSound() {
   )
 }
 
+function useDark(): boolean {
+  const read = () => document.documentElement.dataset.theme === 'dark'
+  const [on, setOn] = useState(read)
+  useEffect(() => {
+    const mo = new MutationObserver(() => setOn(read()))
+    mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => mo.disconnect()
+  }, [])
+  return on
+}
+
+/** 🖼 Dark Botanic only: each click shows the next garden photo; the pick is remembered. */
+export function GardenBackdrop() {
+  const [id, setId] = useState<BackdropId>(loadBackdrop)
+  useEffect(() => onBackdrop(setId), [])
+  const next = nextBackdrop(id)
+  return (
+    <button onClick={() => saveBackdrop(next)} aria-label={`Garden photo: ${backdropLabel(id)}`} title={`Next photo: ${backdropLabel(next)}`}
+      className="no-drag h-[30px] pl-2 pr-2.5 rounded-full inline-flex items-center gap-1.5 bg-bg-secondary shadow-sm flex-shrink-0 text-[12px] font-medium text-text-primary hover:bg-bg-hover cursor-pointer">
+      <span aria-hidden className="text-[13px]">🖼</span>{backdropLabel(id)}
+    </button>
+  )
+}
+
 export function BotanicSound() {
-  return useBotanic() ? <GardenSound /> : null
+  const botanic = useBotanic()
+  const dark = useDark()
+  if (!botanic) return null
+  return <>{dark && <GardenBackdrop />}<GardenSound /></>
 }

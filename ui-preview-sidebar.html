@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hive Sidebar Tree</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f0a1a;--side:#130c20;--card:#1a1128;--tert:#231838;--hover:#241936;--active:#3b2a5e;
+  --tx:#f0ecf9;--tx2:#d4bcfa;--mut:#8d7fb0;--acc:#b794f6;--acc-sub:#2d1f48;
+  --work:#4ade80;--wait:#fbbf24;--off:#64748b;--bd:#2d1f48;--bd2:#211633;--onacc:#1a0f2e;
+}
+:root[data-theme="light"]{
+  --bg:#faf5ff;--side:#f3ecff;--card:#ffffff;--tert:#f1eafe;--hover:#ebe4fb;--active:#ddd6fe;
+  --tx:#1e1b4b;--tx2:#4c1d95;--mut:#7c6f9e;--acc:#7c3aed;--acc-sub:#ede9fe;
+  --work:#16a34a;--wait:#d97706;--off:#94a3b8;--bd:#e4dcf7;--bd2:#ece5fa;--onacc:#fff;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--tx);font:13px/1.4 "DM Sans",system-ui,sans-serif;padding:24px 16px 48px}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;text-align:left}
+.top{max-width:1200px;margin:0 auto 18px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.top h1{font:700 18px "Space Grotesk",sans-serif}
+.top p{color:var(--mut);flex:1;min-width:240px}
+.seg{display:inline-flex;background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:3px}
+.seg button{padding:5px 12px;border-radius:7px;color:var(--mut);font-weight:600;font-size:12px}
+.seg button[aria-pressed="true"]{background:var(--acc);color:var(--onacc)}
+.boards{max-width:1200px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(540px,1fr));gap:20px}
+.board h2{font:600 12px "Space Grotesk",sans-serif;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin:0 0 8px 4px}
+.win{display:flex;height:660px;border-radius:14px;overflow:hidden;border:1px solid var(--bd);background:var(--side)}
+.main{flex:1;min-width:0;background:var(--bg);border-left:1px solid var(--bd2);display:flex;flex-direction:column}
+.main .bar{height:40px;display:flex;align-items:center;gap:8px;padding:0 14px;border-bottom:1px solid var(--bd2);color:var(--mut);font-size:12px}
+.main .bar b{color:var(--tx)}
+.main .body{flex:1;display:grid;place-items:center;color:var(--mut);font:12px "JetBrains Mono",monospace}
+.dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;display:inline-block}
+.dot.work{background:var(--work)}.dot.wait{background:var(--wait)}.dot.off{background:var(--off)}
+.dot.none{border:1.5px solid var(--off);opacity:.6}
+
+/* ---------- NOW (3 panes) ---------- */
+.o-proj{width:168px;padding:10px 8px;display:flex;flex-direction:column;gap:1px}
+.o-h{padding:4px 6px 10px;font:700 14px "Space Grotesk"}
+.o-h small{font:500 11px "DM Sans";color:var(--mut);margin-left:6px}
+.o-row{display:flex;align-items:center;gap:8px;padding:7px 8px;border-radius:10px;color:color-mix(in srgb,var(--tx) 75%,transparent);font-weight:500;white-space:nowrap}
+.o-row.sel{background:var(--card);color:var(--tx);font-weight:600}
+.o-row .n{margin-left:auto;font-size:11px;color:var(--mut)}
+.o-grp{padding:6px 8px;font:600 11px "Space Grotesk";color:var(--mut);text-transform:uppercase;letter-spacing:.08em}
+.o-foot{margin-top:auto;border-top:1px solid var(--bd2);padding-top:8px;color:var(--mut)}
+.o-foot div{padding:6px 8px}
+.o-ag{width:200px;background:var(--card);display:flex;flex-direction:column;padding:10px 8px}
+.o-ag .t{font:700 13px "Space Grotesk";padding:4px 6px 10px}
+.o-dept{padding:10px 8px 6px;font-size:11px;font-weight:600;color:var(--mut);display:flex}
+.o-dept b{margin-left:auto;color:var(--acc);font-weight:600}
+.o-a{display:flex;gap:9px;align-items:center;padding:8px;border-radius:12px}
+.o-a.sel{background:var(--acc-sub)}
+.o-a small{display:block;font-size:11px;color:var(--mut)}
+.callout{position:relative}
+.tag{position:absolute;z-index:2;background:#f43f5e;color:#fff;font:700 10.5px "DM Sans";padding:2px 7px;border-radius:6px;white-space:nowrap}
+
+/* ---------- PROPOSED (1 tree) ---------- */
+.side{width:272px;display:flex;flex-direction:column;padding:8px 8px 10px}
+.brand{display:flex;align-items:center;gap:8px;padding:4px 8px 10px}
+.brand b{font:700 15px "Space Grotesk"}
+.brand small{font:500 10.5px "JetBrains Mono";color:var(--mut)}
+.ib{width:24px;height:24px;border-radius:7px;display:grid;place-items:center;color:var(--mut);flex-shrink:0}
+.ib:hover{background:var(--hover);color:var(--tx)}
+.brand .ib{margin-left:auto}
+
+/* Hive-level block: clearly not a project */
+.home{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:4px}
+.nav{display:flex;align-items:center;gap:10px;width:100%;height:34px;padding:0 8px;border-radius:9px;font-weight:600}
+.nav:hover{background:var(--hover)}
+.nav.sel{background:var(--acc-sub)}
+.nav .ic{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;font-size:13px;background:var(--tert)}
+.nav .sub{font-weight:400;font-size:11.5px;color:var(--mut)}
+.badge{margin-left:auto;height:18px;min-width:18px;padding:0 6px;border-radius:9px;display:grid;place-items:center;font:600 10.5px "JetBrains Mono";background:color-mix(in srgb,var(--wait) 20%,transparent);color:var(--wait)}
+
+.sec{display:flex;align-items:center;gap:6px;height:30px;margin:14px 0 2px;padding:0 4px 0 8px;font:600 10.5px "Space Grotesk";letter-spacing:.09em;text-transform:uppercase;color:var(--mut)}
+.sec .ib{margin-left:auto}
+.tree{flex:1;overflow:auto;margin:0 -4px;padding:0 4px;scrollbar-width:thin;scrollbar-color:var(--bd) transparent}
+.grp{display:flex;align-items:center;gap:6px;height:26px;width:100%;padding:0 8px;margin-top:8px;font-size:11px;font-weight:600;letter-spacing:.04em;color:var(--mut);border-radius:7px}
+.grp:hover{color:var(--tx)}
+.chev{transition:transform .15s;flex-shrink:0;color:var(--mut)}
+[aria-expanded="false"]>.chev{transform:rotate(-90deg)}
+.grp .c{margin-left:auto;font:500 10.5px "JetBrains Mono"}
+
+.proj{margin-top:2px}
+.prow{position:relative;display:flex;align-items:center;gap:7px;width:100%;height:32px;padding:0 6px 0 6px;border-radius:9px;font-weight:600}
+.prow:hover{background:var(--hover)}
+.prow .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.proj.cur>.prow{color:var(--tx)}
+.proj:not(.cur)>.prow .nm{opacity:.8}
+.pills{display:flex;gap:3px;flex-shrink:0}
+.pill{height:17px;padding:0 5px;border-radius:6px;display:inline-flex;align-items:center;font:500 10.5px "JetBrains Mono"}
+.pill.wait{background:color-mix(in srgb,var(--wait) 18%,transparent);color:var(--wait)}
+.pill.work{background:color-mix(in srgb,var(--work) 14%,transparent);color:var(--work)}
+.pill.n{color:var(--mut)}
+.prow .add{display:none}
+.prow:hover .add{display:grid}
+.prow:hover .pills{display:none}
+.kids{position:relative;margin:1px 0 6px 13px;padding-left:9px;border-left:1px solid var(--bd)}
+.dept{font:600 10px "Space Grotesk";letter-spacing:.09em;text-transform:uppercase;color:var(--mut);padding:7px 6px 3px;opacity:.85}
+.ag{position:relative;display:flex;align-items:center;gap:8px;width:100%;height:30px;padding:0 6px;border-radius:8px}
+.ag:hover{background:var(--hover)}
+.ag.sel{background:var(--acc-sub);box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--acc) 35%,transparent)}
+.ag.sel::before{content:"";position:absolute;left:-10px;top:7px;bottom:7px;width:2px;border-radius:2px;background:var(--acc)}
+.av{position:relative;width:20px;height:20px;border-radius:6px;background:var(--tert);display:grid;place-items:center;font-size:12px;flex-shrink:0}
+.av .dot{position:absolute;right:-2px;bottom:-2px;width:8px;height:8px;border:2px solid var(--side)}
+.ag.sel .av .dot{border-color:var(--acc-sub)}
+.ag .nm{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ag .st{margin-left:auto;font-size:11px;white-space:nowrap;color:var(--mut)}
+.ag .st.wait{color:var(--wait);font-weight:600}
+.ag .st.work{color:var(--work)}
+.ag.off .nm,.ag.off .av{opacity:.55}
+.ag .acts{display:none;margin-left:auto}
+.ag:hover .acts{display:flex}
+.ag:hover .st{display:none}
+.more{display:flex;align-items:center;gap:6px;height:26px;padding:0 6px;font-size:11.5px;color:var(--mut);border-radius:7px;width:100%}
+.more:hover{color:var(--tx);background:var(--hover)}
+
+.foot{display:flex;gap:4px;padding-top:8px;border-top:1px solid var(--bd2)}
+.foot .b{flex:1;height:32px;border-radius:9px;display:flex;align-items:center;gap:8px;padding:0 9px;color:var(--mut);font-weight:600}
+.foot .b:hover{background:var(--hover);color:var(--tx)}
+
+.notes{max-width:1200px;margin:22px auto 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.notes div{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px}
+.notes b{display:block;font:600 12.5px "Space Grotesk";margin-bottom:4px}
+.notes p{color:var(--mut);font-size:12px}
+@media (max-width:600px){.boards{grid-template-columns:1fr}.win{overflow-x:auto}}
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>Left sidebar: one tree instead of two panes</h1>
+  <p>Butler/Overview split off from projects. Projects open in place to show their agents. Click chevrons, projects, agents.</p>
+  <div class="seg" role="group" aria-label="Theme">
+    <button aria-pressed="true" data-t="dark">Dark</button>
+    <button aria-pressed="false" data-t="light">Light</button>
+  </div>
+</div>
+
+<div class="boards">
+  <section class="board">
+    <h2>Now · 2 panes</h2>
+    <div class="win">
+      <div class="o-proj">
+        <div class="o-h">Hive<small>v2.42.11</small></div>
+        <div class="o-row callout">🎩 Butler <span class="n">📌</span><span class="tag" style="left:70px;top:-6px">mixed in with projects</span></div>
+        <div class="o-row sel"><span class="dot work"></span>Hive<span class="n">5</span></div>
+        <div class="o-row"><span class="dot wait"></span>Garden Game<span class="n">3</span></div>
+        <div class="o-grp">▾ Work</div>
+        <div class="o-row"><span class="dot off"></span>Atlas<span class="n">4</span></div>
+        <div class="o-row"><span class="dot off"></span>Orbit<span class="n">2</span></div>
+        <div class="o-foot callout"><div>▦ Overview</div><div>＋ Add Project ⚙︎</div><span class="tag" style="left:70px;top:-10px">Overview hidden at bottom</span></div>
+      </div>
+      <div class="o-ag callout">
+        <span class="tag" style="left:40px;top:4px">a whole pane for one project</span>
+        <div class="t">Hive</div>
+        <div class="o-dept">R&amp;D <b>+ Team</b></div>
+        <div class="o-a sel">🧑‍💻<div>Bob<small>Engineering · 2m</small></div></div>
+        <div class="o-a">🧑‍🎨<div>Daisy<small>Design · 14m</small></div></div>
+        <div class="o-a">🧪<div>Drake<small>QA · 3h</small></div></div>
+        <div class="o-dept">Ops <b>+ Team</b></div>
+        <div class="o-a">📣<div>Missy<small>Release · 1m</small></div></div>
+        <div class="o-a">📊<div>Quinn<small>Data · 2d</small></div></div>
+      </div>
+      <div class="main"><div class="bar"><b>Bob</b> · Hive</div><div class="body">terminal</div></div>
+    </div>
+  </section>
+
+  <section class="board">
+    <h2>Proposed · 1 tree</h2>
+    <div class="win">
+      <nav class="side" aria-label="Sidebar">
+        <div class="brand"><b>Hive</b><small>2.42.12</small><button class="ib" aria-label="Toggle theme">☀︎</button></div>
+
+        <div class="home">
+          <button class="nav" data-nav><span class="ic">🎩</span>Butler<span class="badge" title="2 waiting for you">2</span></button>
+          <button class="nav" data-nav><span class="ic">▦</span>Overview<span class="sub" style="margin-left:auto">all projects</span></button>
+        </div>
+
+        <div class="sec">Projects<button class="ib" aria-label="Add project" title="Add project">＋</button></div>
+        <div class="tree">
+
+          <div class="proj cur">
+            <button class="prow" aria-expanded="true"><svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+              <span class="nm">Hive</span><span class="pills"><span class="pill wait">1</span><span class="pill work">2</span></span>
+              <span class="ib add" title="New agent in Hive">＋</span></button>
+            <div class="kids">
+              <div class="dept">R&amp;D</div>
+              <button class="ag sel"><span class="av">🧑‍💻<span class="dot work"></span></span><span class="nm">Bob</span><span class="st work">working</span><span class="acts"><span class="ib">⋯</span></span></button>
+              <button class="ag"><span class="av">🧑‍🎨<span class="dot wait"></span></span><span class="nm">Daisy</span><span class="st wait">needs you</span><span class="acts"><span class="ib">⋯</span></span></button>
+              <button class="ag off"><span class="av">🧪<span class="dot off"></span></span><span class="nm">Drake</span><span class="st">3h</span><span class="acts"><span class="ib">⋯</span></span></button>
+              <div class="dept">Ops</div>
+              <button class="ag"><span class="av">📣<span class="dot work"></span></span><span class="nm">Missy</span><span class="st work">working</span><span class="acts"><span class="ib">⋯</span></span></button>
+              <button class="ag off"><span class="av">📊<span class="dot off"></span></span><span class="nm">Quinn</span><span class="st">2d</span><span class="acts"><span class="ib">⋯</span></span></button>
+            </div>
+          </div>
+
+          <div class="proj">
+            <button class="prow" aria-expanded="true"><svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+              <span class="nm">Garden Game</span><span class="pills"><span class="pill wait">1</span></span>
+              <span class="ib add">＋</span></button>
+            <div class="kids">
+              <button class="ag"><span class="av">🎮<span class="dot wait"></span></span><span class="nm">Gus</span><span class="st wait">needs you</span><span class="acts"><span class="ib">⋯</span></span></button>
+              <button class="more">· 2 off</button>
+            </div>
+          </div>
+
+          <button class="grp" aria-expanded="true"><svg class="chev" width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>WORK<span class="c">3</span></button>
+          <div class="grp-body">
+            <div class="proj">
+              <button class="prow" aria-expanded="false"><svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="nm">Atlas</span><span class="pills"><span class="pill n">4 off</span></span><span class="ib add">＋</span></button>
+              <div class="kids" hidden>
+                <button class="ag off"><span class="av">🛰<span class="dot off"></span></span><span class="nm">Atlas</span><span class="st">1d</span></button>
+                <button class="ag off"><span class="av">🧾<span class="dot off"></span></span><span class="nm">Bill</span><span class="st">2d</span></button>
+              </div>
+            </div>
+            <div class="proj">
+              <button class="prow" aria-expanded="false"><svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="nm">Orbit</span><span class="pills"><span class="pill n">2 off</span></span><span class="ib add">＋</span></button>
+              <div class="kids" hidden>
+                <button class="ag off"><span class="av">🌌<span class="dot off"></span></span><span class="nm">Nova</span><span class="st">5d</span></button>
+              </div>
+            </div>
+            <div class="proj">
+              <button class="prow" aria-expanded="false"><svg class="chev" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="6 9 12 15 18 9"/></svg>
+                <span class="nm">Docs</span><span class="pills"><span class="pill n">no agents</span></span><span class="ib add">＋</span></button>
+              <div class="kids" hidden></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="foot"><button class="b">⚙︎ Settings</button></div>
+      </nav>
+      <div class="main"><div class="bar"><b id="crumb">Bob</b> · <span id="crumbP">Hive</span></div><div class="body">terminal — 200px wider than now</div></div>
+    </div>
+  </section>
+</div>
+
+<div class="notes">
+  <div><b>1 · Butler is not a project</b><p>Butler and Overview sit in their own card at the top: things for all of Hive. Butler shows how many items wait for you. The project tree starts below the "Projects" label.</p></div>
+  <div><b>2 · Projects open in place</b><p>Same as Claude: the chevron opens a project and its agents show under it. The Agents pane goes away, so the terminal gets about 200px more.</p></div>
+  <div><b>3 · What opens by itself</b><p>The current project, plus any project with an agent that needs you, starts open. A project where every agent is off starts closed and says "4 off". Inside an open project, off agents are dimmed.</p></div>
+  <div><b>4 · Status on one line</b><p>Each agent row shows avatar, dot, name, then "needs you" (amber) / "working" (green) / time since. Collapsed projects keep amber and green counts. Hover shows ＋ new agent on the project and ⋯ on the agent.</p></div>
+</div>
+
+<script>
+document.querySelectorAll('.seg button').forEach(b=>b.onclick=()=>{
+  document.documentElement.dataset.theme=b.dataset.t
+  document.querySelectorAll('.seg button').forEach(x=>x.setAttribute('aria-pressed',x===b))
+})
+document.querySelectorAll('.prow').forEach(p=>p.onclick=e=>{
+  if(e.target.closest('.add'))return
+  const open=p.getAttribute('aria-expanded')==='true'
+  p.setAttribute('aria-expanded',!open)
+  p.nextElementSibling.hidden=open
+})
+document.querySelectorAll('.grp').forEach(g=>g.onclick=()=>{
+  const open=g.getAttribute('aria-expanded')==='true';g.setAttribute('aria-expanded',!open)
+  g.nextElementSibling.style.display=open?'none':''
+})
+document.querySelectorAll('.side .ag').forEach(a=>a.onclick=()=>{
+  document.querySelectorAll('.side .ag,.nav').forEach(x=>x.classList.remove('sel'));a.classList.add('sel')
+  document.querySelectorAll('.proj').forEach(x=>x.classList.remove('cur'))
+  const pj=a.closest('.proj');pj.classList.add('cur')
+  document.getElementById('crumb').textContent=a.querySelector('.nm').textContent
+  document.getElementById('crumbP').textContent=pj.querySelector('.prow .nm').textContent
+})
+document.querySelectorAll('[data-nav]').forEach(n=>n.onclick=()=>{
+  document.querySelectorAll('.side .ag,.nav').forEach(x=>x.classList.remove('sel'));n.classList.add('sel')
+  document.getElementById('crumb').textContent=n.textContent.replace(/\d+|all projects/g,'').replace('🎩','').replace('▦','').trim()
+  document.getElementById('crumbP').textContent='Hive'
+})
+</script>
+</body>
+</html>

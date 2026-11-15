@@ -7,7 +7,7 @@ import { tmpdir } from 'os'
 
 /**
  * 🌿 Botanic: a calm green palette, easy on the eyes in light and dark, on a
- * greenhouse photo (dark: monstera leaves) behind frosted-glass cards.
+ * greenhouse photo (dark: one of four dark garden photos) behind frosted-glass cards.
  * Easy on the eyes = no pure white or pure black ground, and body text that
  * reads well (≥ 7:1) without glaring (≤ 15:1, pure black on white is 21:1).
  */
@@ -81,7 +81,7 @@ test('Settings › Theme palette › Botanic: comfortable in both light and dark
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.palette)).toBe('botanic')
 })
 
-test('the ground: greenhouse photo in light, monstera at night, behind frosted-glass cards and sidebar', async () => {
+test('the ground: greenhouse photo in light, a dark garden at night, behind frosted-glass cards and sidebar', async () => {
   await expect(page.getByTestId('botanic-fx')).toBeAttached()
   const ground = () => page.evaluate(() => {
     const card = getComputedStyle(document.querySelector('.hive-card')!)
@@ -107,8 +107,31 @@ test('the ground: greenhouse photo in light, monstera at night, behind frosted-g
   }
   expect(new Set(seen.values()).size).toBe(2)
   // Nothing drawn over the app: what's under the pointer is the app's own button.
-  const box = (await page.getByText('Add Project').boundingBox())!
+  const box = (await page.getByRole('button', { name: 'Add Project' }).boundingBox())!
   expect(await page.evaluate(([x, y]) => document.elementFromPoint(x, y)?.closest('.hive-sidebar') ? 'app' : 'other', [box.x + 10, box.y + box.height / 2])).toBe('app')
+})
+
+test('dark: the photo button shows the next garden photo on each click, and it is remembered', async () => {
+  if (await page.evaluate(() => document.documentElement.dataset.theme) !== 'dark') {
+    await page.getByRole('button', { name: /Switch to dark mode/ }).click()
+  }
+  const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundImage)
+  const photo = page.getByRole('button', { name: /^Garden photo:/ })
+  await expect(photo).toHaveAttribute('aria-label', 'Garden photo: Jungle')
+  const seen = new Set<string>()
+  for (let i = 0; i < 4; i++) {
+    seen.add(await bg())
+    const before = await photo.getAttribute('aria-label')
+    await photo.click()
+    await expect(photo).not.toHaveAttribute('aria-label', before!)
+  }
+  expect(seen.size).toBe(4)
+  await expect(photo).toHaveAttribute('aria-label', 'Garden photo: Jungle')
+  await photo.click()
+  expect(await page.evaluate(() => localStorage.getItem('hive:botanic-backdrop'))).toBe('understory')
+  await page.getByRole('button', { name: /Switch to light mode/ }).click()
+  await expect(photo).toHaveCount(0)
+  await page.getByRole('button', { name: /Switch to dark mode/ }).click()
 })
 
 test('switching away from Botanic takes the garden with it', async () => {
