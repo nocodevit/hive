@@ -7,6 +7,22 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.12] — 2026-11-16
+
+##### 🗂 Sidebar
+- **One sidebar instead of two panes.** Click a project's arrow and its agents show right under it. The separate Agents column is gone, so the terminal gets more room.
+- **Butler and Overview sit on top, apart from projects.** Butler shows how many things wait for you.
+- **Status at a glance.** Each agent row says **needs you**, **working**, or how long ago it was active; off agents are dimmed. A closed project shows its waiting and working counts. The current project and any project waiting on you open by themselves.
+- Hover a project for ＋ (new agent); hover an agent for edit, delete and ⋯.
+
+##### 📱 Butler
+- **Sessions is easy to read.** Agents are grouped under **Needs you**, **Working** and **Off** (a long Off list starts folded). Click a row to see what you asked and how the agent answered, and reply right there.
+
+##### 🌿 Botanic
+- **New dark backgrounds.** Four dark garden photos replace the monstera. In dark mode, the 🖼 button in the title bar switches to the next one; your pick is remembered.
+
+---
+
 ## [2.42.11] — 2026-11-11
 
 ##### 🌐 Remote Butler
