@@ -99,7 +99,22 @@ export function ApprovalsList({ items, onDiscuss }: { items: ApprovalCard[]; onD
   }
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<Record<string, string>>({})
+  // "✓ In Todo" comes from the todo store (an open todo for this card), so it survives the tab remounting.
   const [noted, setNoted] = useState<Record<string, boolean>>({})
+  useEffect(() => {
+    const t = window.api.todos
+    if (!t?.list) return
+    let live = true
+    const load = () => { void t.list().then((list: Array<{ status: string; refs?: { approvalId?: string } }>) => {
+      if (!live) return
+      const n: Record<string, boolean> = {}
+      for (const x of list ?? []) if (x.status === 'open' && x.refs?.approvalId) n[x.refs.approvalId] = true
+      setNoted(n)
+    }).catch(() => {}) }
+    load()
+    const off = t.onChange?.(load)
+    return () => { live = false; off?.() }
+  }, [])
   const [filter, setFilter] = useState<string>('all')
   // A card that just went out stays a moment to show ✓, then leaves (rows below slide up).
   const [held, setHeld] = useState<Record<string, ApprovalCard>>({})
