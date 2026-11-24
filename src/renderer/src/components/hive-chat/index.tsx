@@ -38,11 +38,19 @@ const TimelineList = React.memo(function TimelineList({ timeline, onChoose, onRe
     }
     return m
   }, [timeline])
+  // Only the open turn can still be running: a tool call before the last turn result, or a ⏳ line with
+  // a later system line, never gets an answer — it must not keep an animation going forever.
+  const { lastResult, lastSystem } = useMemo(() => {
+    let lastResult = -1, lastSystem = -1
+    timeline.forEach((e, i) => { if (e.kind === 'result') lastResult = i; else if (e.kind === 'system') lastSystem = i })
+    return { lastResult, lastSystem }
+  }, [timeline])
   return (
     <>
-      {timeline.map(entry => {
+      {timeline.map((entry, i) => {
         const result = entry.kind === 'tool_call' ? resultsByToolUseId.get(entry.toolUseId) : undefined
-        return <TimelineRow key={entry.id} entry={entry} result={result} onChoose={onChoose} onRecall={onRecall} onRespond={onRespond} />
+        const live = entry.kind === 'system' ? i === lastSystem && i > lastResult : i > lastResult
+        return <TimelineRow key={entry.id} entry={entry} result={result} live={live} onChoose={onChoose} onRecall={onRecall} onRespond={onRespond} />
       })}
     </>
   )
@@ -4673,7 +4681,7 @@ function SubagentBanner({ subs }: { subs: Record<string, {
             <span style={{
               display: 'inline-block',
               fontSize: 'var(--chat-fs, 13px)',
-              animation: isHealthy ? 'hg-flip 2s ease-in-out infinite' : 'none',
+              animation: isHealthy && !paused ? 'hg-flip 2s ease-in-out infinite' : 'none',
               color: isHealthy ? CRUSH.Charple : CRUSH.Zest
             }}>⏳</span>
             <span style={{ color: CRUSH.Charple, fontWeight: 700, letterSpacing: '0.02em' }}>
@@ -4681,7 +4689,7 @@ function SubagentBanner({ subs }: { subs: Record<string, {
             </span>
             <span style={{ color: CRUSH.Butter, flex: 1, minWidth: 0, overflow: 'hidden' as const, textOverflow: 'ellipsis', whiteSpace: 'nowrap' as const }}>
               {s.description ? redact(s.description) : 'thinking'}
-              {isHealthy
+              {isHealthy && !paused
                 ? <span className="hive-dots-loader" style={{ color: CRUSH.Charple, marginLeft: 1 }} />
                 : <span style={{ color: CRUSH.Zest, marginLeft: 1 }}>...</span>}
             </span>

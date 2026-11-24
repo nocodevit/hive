@@ -790,10 +790,11 @@ export function ToolResult({ content, isError }: { content: string; isError?: bo
  *  TOOL BLOCK — tool_call header + (optional) matched tool_result
  *  wrapped in a single Dolly-bordered container so the bar spans both.
  * ──────────────────────────────────────────────────────────── */
-export function ToolBlock({ name, input, result }: {
+export function ToolBlock({ name, input, result, live = true }: {
   name: string
   input: Record<string, unknown>
   result?: { content: string; isError?: boolean }
+  live?: boolean
 }) {
   const isError = result?.isError
   return (
@@ -810,7 +811,7 @@ export function ToolBlock({ name, input, result }: {
       <ToolHeader name={name} input={input} />
       {result
         ? <InlineResult content={result.content} isError={result.isError} tool={name} input={input} />
-        : <LongRunningTick toolName={name} />}
+        : live && <LongRunningTick toolName={name} />}
     </div>
   )
 }
@@ -844,6 +845,8 @@ function LongRunningTick({ toolName }: { toolName: string }) {
   }, [paused])
   const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000)
   if (elapsed < 5) return null
+  // Hidden chat or past the 10-min hard stop: hold still instead of animating forever.
+  const still = paused || elapsed > 600
   const gradStyle: React.CSSProperties = {
     background: `linear-gradient(90deg, ${CRUSH.Charple}, ${CRUSH.Dolly}, ${CRUSH.Charple}, ${CRUSH.Dolly})`,
     backgroundSize: '400% 100%',
@@ -851,7 +854,7 @@ function LongRunningTick({ toolName }: { toolName: string }) {
     backgroundClip: 'text',
     color: 'transparent',
     WebkitTextFillColor: 'transparent',
-    animation: 'thinking-grad 2s linear infinite',
+    animation: still ? 'none' : 'thinking-grad 2s linear infinite',
     fontWeight: 700
   }
   // toolName tells us why we're waiting — Bash 30s feels different
@@ -872,7 +875,7 @@ function LongRunningTick({ toolName }: { toolName: string }) {
           via CSS keyframe — gives a real "sand falling" feel instead
           of a static glyph. The Charple→Dolly gradient still applies
           to the verb text so motion + color both signal liveness. */}
-      <span style={{ ...gradStyle, fontSize: 14, display: 'inline-block', animation: 'hg-flip 2s ease-in-out infinite' }}>⏳</span>
+      <span style={{ ...gradStyle, fontSize: 14, display: 'inline-block', animation: still ? 'none' : 'hg-flip 2s ease-in-out infinite' }}>⏳</span>
       <span style={gradStyle}>{verb} still running…</span>
       <span style={{ color: CRUSH.Oyster }}>{elapsed}s</span>
     </div>
@@ -1828,13 +1831,14 @@ export function CompactSummaryHint({ transcriptPath, summaryChars }: {
   )
 }
 
-export function SystemLine({ text }: { text: string }) {
+export function SystemLine({ text, live = true }: { text: string; live?: boolean }) {
+  const paused = useContext(HiveChatPausedContext)
   // Detect "in-progress" lines that start with the hourglass + end with
   // an ellipsis. These represent ongoing background ops (compact, scrape,
   // pausing chat). Animate the ⏳ (rotation) and the ellipsis (cycling
   // dots) so the user sees the operation is alive — static text reads
   // like a frozen UI even while a 90s /compact is running.
-  const isInProgress = /^⏳\s/.test(text) && /[…\.]+\s*$/.test(text)
+  const isInProgress = live && /^⏳\s/.test(text) && /[…\.]+\s*$/.test(text)
   if (isInProgress) {
     // Strip the trailing ellipsis (whatever form: "...", "…", " ...")
     // and re-add it as a separate animated span so the dots cycle.
@@ -1845,11 +1849,11 @@ export function SystemLine({ text }: { text: string }) {
         <span style={{
           display: 'inline-block',
           fontSize: 'var(--chat-fs, 13px)',
-          animation: 'hg-flip 2s ease-in-out infinite',
+          animation: paused ? 'none' : 'hg-flip 2s ease-in-out infinite',
           color: CRUSH.Charple
         }}>⏳</span>
         <span>{redact(stripped.replace(/^⏳\s*/, ''))}</span>
-        <span className="hive-dots-loader" style={{ color: CRUSH.Charple }} />
+        {paused ? <span style={{ color: CRUSH.Charple }}>…</span> : <span className="hive-dots-loader" style={{ color: CRUSH.Charple }} />}
       </div>
     )
   }
@@ -2007,9 +2011,11 @@ export function ResultSummaryCard({ costUSD, durationMs, numTurns, inputTokens, 
 /** React.memo-wrapped row: skips re-render when entry / result / onChoose
  *  references are stable. Without this, typing in the input box re-renders
  *  every row (including any large Read panels) on every keystroke. */
-export const TimelineRow = React.memo(function TimelineRow({ entry, result, onChoose, onRecall, onRespond }: {
+export const TimelineRow = React.memo(function TimelineRow({ entry, result, live = true, onChoose, onRecall, onRespond }: {
   entry: TimelineEntry
   result?: { content: string; isError?: boolean }
+  /** False once the turn this row belongs to has ended: nothing on it is still running. */
+  live?: boolean
   onChoose?: (pick: string) => void
   onRecall?: (text: string) => void
   onRespond?: (item: string) => void
@@ -2030,9 +2036,9 @@ export const TimelineRow = React.memo(function TimelineRow({ entry, result, onCh
       break
     }
     case 'assistant': row = <AssistantMessage text={entry.text} onChoose={isSub ? undefined : onChoose} onRespond={isSub ? undefined : onRespond} />; break
-    case 'tool_call': row = <ToolBlock name={entry.name} input={entry.input} result={result} />; break
+    case 'tool_call': row = <ToolBlock name={entry.name} input={entry.input} result={result} live={live} />; break
     case 'tool_result': row = null; break
-    case 'system': row = <SystemLine text={entry.text} />; break
+    case 'system': row = <SystemLine text={entry.text} live={live} />; break
     case 'remote': row = entry.event.type === 'in'
       ? <RemoteCard dir="in" peerName={entry.event.peerName} login={entry.event.login} device={entry.event.device} text={entry.event.text} cardId={entry.event.cardId} />
       : <RemoteCard dir="out" peerName={entry.event.peerName} text={entry.event.text} ok={entry.event.ok} error={entry.event.error} />
