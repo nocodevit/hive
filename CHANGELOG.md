@@ -7,6 +7,16 @@ back-filled from git history at v1.7.28.
 
 ---
 
+## [2.42.13] — 2026-11-25
+
+##### ⚡ Speed
+- **Hive no longer keeps your Mac busy while it sits idle.** Old steps in chat history that never got an answer stopped spinning. The ⏳ now moves only for work that is really running, and it holds still in chats you aren't looking at, so typing feels quick again.
+
+##### 📱 Butler
+- **＋ Todo stays done.** Once you add an Approve card to Todo, it keeps saying **✓ In Todo** when you switch tabs or reopen Butler. It shows ＋ Todo again only after that todo is closed.
+
+---
+
 ## [2.42.12] — 2026-11-16
 
 ##### 🗂 Sidebar
